@@ -1,0 +1,10 @@
+.git
+node_modules
+*.db
+*.db-*
+*.store.json
+astera-logs
+kagura-logs
+*.zip
+*.tar.gz
+.env

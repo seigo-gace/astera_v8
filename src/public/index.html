@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Astera v8</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #1a1a1a; }
+    h1 { font-size: 1.9em; margin-bottom: 0; }
+    .sub { color: #666; margin-top: 4px; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 24px; margin: 16px 0; background: #fff; }
+    .plan { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    button { background: #1a1a1a; color: #fff; border: none; padding: 12px 22px; border-radius: 8px; cursor: pointer; font-size: 1em; }
+    button:hover { background: #333; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    .key { background: #f5f5f5; padding: 12px; border-radius: 8px; font-family: ui-monospace, monospace; word-break: break-all; }
+    .warn { color: #c0392b; font-size: 0.92em; }
+    input, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font: inherit; }
+    textarea { min-height: 92px; }
+    .pillar { display: inline-block; background: #eef; padding: 4px 10px; border-radius: 6px; margin: 2px; font-size: 0.86em; }
+    pre { background: #111; color: #f5f5f5; padding: 16px; border-radius: 10px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>Astera v8</h1>
+  <p class="sub">問いを星図に変える。Multi-Perspective Cognition Runtime（powered by V8 Worker threads）</p>
+
+  <div class="card">
+    <p>散らかった問いを <strong>5つの視点</strong> で整理し、危うさを見抜き、次の一手へつなげます。</p>
+    <span class="pillar">①真実</span><span class="pillar">②危機察知</span>
+    <span class="pillar">③多角度</span><span class="pillar">④反対思考</span>
+    <span class="pillar">⑤比較検証</span>
+  </div>
+
+  <div class="card">
+    <h3>1. アカウント登録（APIキー発行）</h3>
+    <button id="signup">無料で始める（BYOK）</button>
+    <div id="keyResult" style="display:none; margin-top:16px;">
+      <p>あなたのAPIキー（この画面でだけ表示されます）:</p>
+      <div class="key" id="apiKey"></div>
+      <p class="warn">⚠ 二度と表示されません。今すぐ安全な場所に保存してください。</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="plan">
+      <div>
+        <h3 style="margin:0;">2. Proプランにアップグレード</h3>
+        <p style="margin:4px 0; color:#666;">思考の幅を広げる・レート上限拡大</p>
+      </div>
+      <button id="upgrade" disabled>登録後に有効化</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>3. 試してみる</h3>
+    <textarea id="question" placeholder="例：新規事業のニッチを見つけたい。対象は小規模事業者、成功条件は低コストで初月から試せること。"></textarea>
+    <button id="run" style="margin-top:12px;" disabled>Astera v8で星図化する</button>
+    <pre id="output" style="display:none;"></pre>
+  </div>
+
+  <script>
+    let apiKey = null;
+    const $ = (id) => document.getElementById(id);
+
+    $('signup').onclick = async () => {
+      const res = await fetch('/signup', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'signup failed');
+      apiKey = data.apiKey;
+      $('apiKey').textContent = apiKey;
+      $('keyResult').style.display = 'block';
+      $('upgrade').disabled = false;
+      $('run').disabled = false;
+    };
+
+    $('upgrade').onclick = async () => {
+      const res = await fetch('/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({ successUrl: location.origin + '/?success=1', cancelUrl: location.origin + '/?cancel=1' })
+      });
+      const data = await res.json();
+      if (data.checkoutUrl) location.href = data.checkoutUrl;
+      else alert('決済の準備に失敗しました: ' + (data.error || 'unknown'));
+    };
+
+    $('run').onclick = async () => {
+      const question = $('question').value;
+      const out = $('output');
+      out.style.display = 'block';
+      out.textContent = '考え中...（5視点 + Hyperion/PCE が問いを星図化しています）';
+      const res = await fetch('/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({ question, llm: { chain: ['null'] } })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        out.textContent = JSON.stringify(data, null, 2);
+        return;
+      }
+      const r = data.result;
+      if (r.type === 'clarification_needed') {
+        out.textContent = '🤔 Astera v8からの問い返し:\n' + r.questions.map((x, i) => `  ${i + 1}. ${x}`).join('\n');
+      } else {
+        out.textContent =
+          `機嫌: ${r.mood?.label || '-'} confidence=${r.mood?.confidence}\n` +
+          `① 真実: 確認候補${r.facts?.confirmed?.length || 0} / 未確認${r.facts?.unconfirmed?.length || 0}\n` +
+          `② 危機: ${r.risks?.risk_count || 0}件\n` +
+          `③ 多角度: 推奨「${r.multi?.recommended}」\n` +
+          `④ 反対思考: ${r.inquiry?.problem_health?.healthy ? '健全' : '要検討'}\n` +
+          `⑤ 比較検証: score=${r.comparison?.score} / answer線距離=${r.comparison?.answer_line_distance}\n` +
+          `Hyperion/PCE: ${r.hyperion?.dialectic?.selected?.label || '-'} / ${r.hyperion?.dialectic?.selected?.angle || '-'} / score=${r.hyperion?.dialectic?.selected?.score || '-'}\n` +
+          `人読み: ${r.hyperion?.human_reading?.mode || '-'} / needs=${(r.hyperion?.human_reading?.likely_needs || []).join(' / ')}\n\n` +
+          `── AIに渡すプロンプト ──\n${data.prompt || ''}`;
+      }
+    };
+  </script>
+</body>
+</html>

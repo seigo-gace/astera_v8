@@ -1,0 +1,39 @@
+node_modules/
+.env
+*.db
+*.db-shm
+*.db-wal
+*.store.json
+*.broken-*
+kagura-logs/
+npm-debug.log*
+.DS_Store
+coverage/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+logs/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Keys / certificates
+*.pem
+*.key
+id_rsa
+id_ed25519

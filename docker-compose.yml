@@ -1,0 +1,27 @@
+services:
+  astera-v8:
+    build: .
+    container_name: astera-v8
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASTERA_HOST: 0.0.0.0
+      ASTERA_PORT: 7373
+      ASTERA_DB: /data/astera.db
+      ASTERA_LOG_DIR: /logs
+    ports:
+      - "127.0.0.1:7373:7373"
+    volumes:
+      - astera-data:/data
+      - astera-logs:/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7373/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  astera-data:
+  astera-logs:

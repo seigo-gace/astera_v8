@@ -1,0 +1,33 @@
+{
+  "name": "astera-v8-runtime",
+  "version": "1.1.1",
+  "description": "Astera v8 — Multi-Perspective Cognition Runtime. Hardened MVP with webhook idempotency, production CORS, and operations docs.",
+  "main": "start.js",
+  "type": "commonjs",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node start.js",
+    "test": "node --test",
+    "smoke": "bash scripts/smoke.sh",
+    "verify": "npm test && bash scripts/smoke.sh"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": [
+    "astera",
+    "astera-v8",
+    "multi-perspective-cognition-runtime",
+    "runtime",
+    "v8",
+    "worker-threads",
+    "cognitive-preprocessing",
+    "byok",
+    "pce",
+    "dialectic-engine",
+    "hyperion"
+  ]
+}
