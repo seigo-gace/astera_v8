@@ -6,15 +6,18 @@ services:
     env_file:
       - .env
     environment:
-      ASTERA_HOST: 0.0.0.0
+      ASTERA_HOST: 127.0.0.1
       ASTERA_PORT: 7373
       ASTERA_DB: /data/astera.db
-      ASTERA_LOG_DIR: /logs
-    ports:
-      - "127.0.0.1:7373:7373"
+      ASTERA_LOG_CACHE_DIR: /cache/outbox
+      ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
+      ASTERA_TGS_PROJECT_ID: P002
+    # TGserver binds only to host loopback. Host networking keeps both private
+    # and lets Astera deliver structured logs directly to it.
+    network_mode: host
     volumes:
       - astera-data:/data
-      - astera-logs:/logs
+      - /home/admin1/logs/astera-v8:/cache
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7373/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -24,4 +27,3 @@ services:
 
 volumes:
   astera-data:
-  astera-logs:

@@ -46,48 +46,107 @@ X-API-Key: kg_xxx
 
 ## POST /process
 
-質問を5本柱で認知前処理し、認知マップとLLM用プロンプトを返す。
+質問を自動Domain Routerで正規化し、用途テンプレートをユーザー選択なしで判定したうえで、5本柱で認知前処理する。
+
+HTTPレスポンスは通常 `text/plain; charset=utf-8` の8段Markdownで返す。内部では認知マップ、判断フレーム、LLM用プロンプトを生成するが、API利用者へは安全な材料テキストだけを返す。
 
 ### Request
 
 ```json
 {
   "question": "新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は低コストで初月から試せること。",
+  "language": "ja",
   "llm": {"chain": ["null"]},
   "moodAnswers": {"good": true, "urgent": false, "deepThink": true}
 }
 ```
 
-### Response 200: cognitive_map
+`language` / `outputLanguage` / `locale` は任意。未指定時はユーザー入力から表示言語を推定する。
 
-```json
-{
-  "result": {
-    "type": "cognitive_map",
-    "mood": {"code": "OK_GOOD", "label": "やや好調", "score": 1, "confidence": 0.85},
-    "facts": {"pillar": "fact", "confirmed": [], "unconfirmed": [], "opinions": []},
-    "risks": {"pillar": "risk", "risk_count": 0, "level": "low"},
-    "multi": {"pillar": "multi", "recommended": "balanced"},
-    "inquiry": {"pillar": "inquiry", "problem_health": {"healthy": true}},
-    "comparison": {"pillar": "compare", "score": 85, "answer_line_distance": 15}
-  },
-  "prompt": "# KAGURA 認知前処理済みプロンプト...",
-  "answer": {"provider": "null", "model": "rule-based", "text": "..."}
-}
+### Response 200: 8-section material
+
+```text
+01 本当の目的
+
+一言説明
+
+表面的な依頼の奥にある、本当に達成したいことを整理する。
+
+...
+
+02 前提不足
+
+...
+
+今回の整理
+
+目的・対象・成功条件が大きく欠けていない。 / auto_domain=Marketing / Growth / Brand / overlaysなし。 / meta_removed=0 ...
+
+...
+
+03 事実確認
+
+...
+
+エビデンス
+
+- ev_001 fact.confirmed: ...
+
+...
+
+04 危機察知
+
+...
+
+エビデンス
+
+- risk_ev_001 domain.marketing_growth.risk_lens: misleading claims
+
+...
+
+08 主役AIへの再指示
 ```
+
+### Auto Domain Router
+
+ユーザーに用途テンプレートを選ばせない。Asteraが入力から自動判定する。
+
+代表テンプレート:
+
+- General Judgment
+- Business / Executive Strategy
+- Finance / Investment / Capital Allocation
+- Legal / Compliance / Contract
+- Medical / Health / Clinical
+- Marketing / Growth / Brand
+- Product / UX / Roadmap
+- Engineering / Architecture / Implementation
+- Cybersecurity / Privacy / Trust
+- AI / ML / LLM Governance
+- Project / Program / Operations
+- HR / Organization / People
+- Sales / Customer Success / Negotiation
+- Research / Academic / Evidence Review
+- Education / Training / Learning Design
+- Procurement / Vendor / Build-vs-Buy
+- Crisis / Reputation / Public Communication
+- Policy / Public Sector / Nonprofit
+- Creative / Writing / Content
+- Personal Decision / Coaching / Life Planning
+- Data / Analytics / Experimentation
+
+高リスク領域では Legal / Medical / Current Information / Evidence Strict / Safety Abuse overlay を自動付与する。
 
 ### Response 200: clarification_needed
 
-```json
-{
-  "result": {
-    "type": "clarification_needed",
-    "mood": {"code": "NEUTRAL", "label": "通常"},
-    "questions": ["目的を一文で足してください。何を決めたいですか？"],
-    "rule": "normal_max_five_questions"
-  },
-  "prompt": ""
-}
+```text
+確認が必要です
+
+Asteraが5本柱で判断する前に、もう少し前提が必要です。
+
+確認したいこと
+
+- 目的を一文で足してください。何を決めたいですか？
 ```
 
 ## POST /billing/checkout
@@ -98,11 +157,13 @@ Stripe Checkout Sessionを作る。`STRIPE_SECRET_KEY` が未設定の場合は5
 
 ```json
 {
-  "priceId": "price_xxx_pro",
+  "plan": "pro",
   "successUrl": "https://example.com/success",
   "cancelUrl": "https://example.com/cancel"
 }
 ```
+
+`plan` は `pro` または `business`。価格IDはサーバー側の `STRIPE_PRO_PRICE_ID` / `STRIPE_BUSINESS_PRICE_ID` から選び、クライアント指定の任意価格による不正アップグレードを拒否する。
 
 ### Response 200
 
@@ -120,5 +181,6 @@ Stripe webhookを受け取る。raw bodyと`Stripe-Signature`で署名検証す�
 対応イベント:
 
 - `checkout.session.completed`
+- `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`

@@ -1,7 +1,7 @@
 'use strict';
 
 const SECRET_KEY_RE = /(api[_-]?key|authorization|secret|token|password|stripe|bearer|webhook|client_secret|access[_-]?key)/i;
-const SECRET_VALUE_RE = /(sk_(live|test)_[A-Za-z0-9_\-]+|whsec_[A-Za-z0-9_\-]+|kg_[A-Za-z0-9_\-]+|Bearer\s+[A-Za-z0-9._\-]+)/g;
+const SECRET_VALUE_RE = /(sk_(live|test)_[A-Za-z0-9_\-]+|sk-(?:proj-|ant-)?[A-Za-z0-9_\-]{8,}|whsec_[A-Za-z0-9_\-]+|kg_[A-Za-z0-9_\-]+|Bearer\s+[A-Za-z0-9._\-]+)/g;
 
 function maskValue(value) {
   if (typeof value !== 'string') return value;
@@ -23,11 +23,16 @@ function sanitize(value, seen = new WeakSet()) {
   if (typeof value !== 'object') return value;
   if (seen.has(value)) return '[Circular]';
   seen.add(value);
-  if (Array.isArray(value)) return value.map((v) => sanitize(v, seen));
+  if (Array.isArray(value)) {
+    const out = value.map((v) => sanitize(v, seen));
+    seen.delete(value);
+    return out;
+  }
   const out = {};
   for (const [key, item] of Object.entries(value)) {
     out[key] = SECRET_KEY_RE.test(key) ? maskValue(String(item ?? '')) : sanitize(item, seen);
   }
+  seen.delete(value);
   return out;
 }
 

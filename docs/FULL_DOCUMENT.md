@@ -52,11 +52,13 @@ Compare（全結果を統合）
 
 ## 第4部｜使い方
 
-### 起動
+### 短時間のローカル検証
 
 ```bash
 node start.js
 ```
+
+本番常駐はDocker / Docker Composeのみを使用する。
 
 ### APIキー発行
 
@@ -113,37 +115,7 @@ curl -X POST http://127.0.0.1:7373/process \
 
 ## 第7部｜ファイル構成
 
-```text
-kagura-runtime/
-├── start.js
-├── package.json
-├── src/
-│   ├── server.js
-│   ├── kagura-engine.js
-│   ├── worker-pool.js
-│   ├── safe-json.js
-│   ├── logger.js
-│   ├── mood-detector.js
-│   ├── auth/tenant.js
-│   ├── guard/rate-limiter.js
-│   ├── billing/key-vault.js
-│   ├── billing/meter.js
-│   ├── billing/stripe-client.js
-│   ├── billing/subscription-sync.js
-│   ├── store/sqlite-store.js
-│   ├── llm/adapter-base.js
-│   ├── llm/adapters.js
-│   ├── llm/llm-client.js
-│   ├── pillars/pool-runner.js
-│   ├── pillars/fact-worker.js
-│   ├── pillars/risk-worker.js
-│   ├── pillars/multi-worker.js
-│   ├── pillars/inquiry-worker.js
-│   ├── pillars/compare-worker.js
-│   └── public/index.html
-├── docs/
-└── test/
-```
+構成図の唯一の正本はProjectルートの `STRUCTURE.md` とする。本書へ複製せず、配置・依存方向・outbox契約は同ファイルを参照する。
 
 ## 第8部｜ロードマップ
 

@@ -55,6 +55,48 @@ test('SubscriptionSync maps subscription.deleted back to tenant by subscription 
     assert.equal(result.handled, true);
     assert.equal(result.canceled, true);
     assert.equal(updated.plan, 'free');
-    assert.equal(updated.status, 'canceled');
+    assert.equal(updated.status, 'active');
+  });
+});
+
+test('SubscriptionSync applies subscription.updated and keeps paid access active', async () => {
+  await withStore(async (store) => {
+    const sync = new SubscriptionSync(store, {});
+    const tenant = store.createTenant({ apiKeyHash: 'hash3', keyPrefix: 'kg_test3', plan: 'free', status: 'active' });
+    store.updateTenant(tenant.id, { stripe_customer_id: 'cus_3' });
+
+    const result = await sync.handleEvent({
+      id: 'evt_update',
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_3', customer: 'cus_3', status: 'active', metadata: {} } }
+    });
+    const updated = store.getTenantById(tenant.id);
+
+    assert.equal(result.handled, true);
+    assert.equal(updated.plan, 'pro');
+    assert.equal(updated.status, 'active');
+    assert.equal(updated.stripe_subscription_id, 'sub_3');
+  });
+});
+
+test('SubscriptionSync rejects events without an id', async () => {
+  await withStore(async (store) => {
+    const sync = new SubscriptionSync(store, {});
+    await assert.rejects(() => sync.handleEvent({ type: 'checkout.session.completed' }), /event id is required/);
+  });
+});
+
+test('SubscriptionSync preserves a business plan from Stripe metadata', async () => {
+  await withStore(async (store) => {
+    const sync = new SubscriptionSync(store, {});
+    const tenant = store.createTenant({ apiKeyHash: 'hash4', keyPrefix: 'kg_test4', plan: 'free', status: 'active' });
+    const result = await sync.handleEvent({
+      id: 'evt_business',
+      type: 'checkout.session.completed',
+      data: { object: { client_reference_id: tenant.id, metadata: { plan: 'business' }, subscription: 'sub_business' } }
+    });
+    const updated = store.getTenantById(tenant.id);
+    assert.equal(result.handled, true);
+    assert.equal(updated.plan, 'business');
   });
 });

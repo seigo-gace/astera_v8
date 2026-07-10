@@ -49,20 +49,22 @@ function scoreCandidate(candidate, context) {
   };
 }
 
-async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi = {}, mood = {}, human = {} }) {
+async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi = {}, mood = {}, human = {}, domain = {} }) {
   const riskKeys = baseRisks(risks);
   const recommended = multi.recommended || 'balanced';
   const highPressure = human.mode === 'high_pressure' || mood.score < 0;
+  const domainChecks = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect.slice(0, 3) : [];
+  const domainName = domain.primary?.name || 'General Judgment / Default';
 
   const candidates = [
     makeCandidate({
       id: 'mainline',
       label: '主案',
       angle: recommended,
-      thesis: '現状の5本柱分析に沿って、最短で成果に近い案を選ぶ。',
+      thesis: `自動判定された${domainName}レンズと5本柱分析に沿って、最短で成果に近い案を選ぶ。`,
       strengths: ['実装しやすい', '既存の認知マップと整合する', '説明コストが低い'],
       failure_modes: ['既存前提の誤りを引きずる', '大胆さが不足する'],
-      required_checks: ['目的', '対象', '成功条件'] ,
+      required_checks: ['目的', '対象', '成功条件', ...domainChecks],
       base: 86
     }),
     makeCandidate({
@@ -79,7 +81,7 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
       id: 'opposition',
       label: '反対案',
       angle: 'opposition',
-      thesis: 'いったん止めて、未確認・矛盾・運用負荷を潰してから進める。',
+      thesis: `いったん止めて、${domainName}で必要な未確認・矛盾・運用負荷を潰してから進める。`,
       strengths: ['事故耐性が高い', '法務・決済・認証に強い'],
       failure_modes: ['前進速度が落ちる', '過剰防衛で価値が薄まる'],
       required_checks: ['未確認情報', 'リスク上位', '依存関係'],
@@ -89,7 +91,7 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
       id: 'third_way',
       label: '第三案',
       angle: 'third_way',
-      thesis: 'MVPは維持しつつ、Hyperion/PCEの強い心臓だけを追加モジュール化する。',
+      thesis: `核は維持しつつ、${domainName}で必要な専門チェックだけを追加して段階的に進める。`,
       strengths: ['完成速度と独自性の両立', '既存基盤を壊しにくい', 'Phase拡張しやすい'],
       failure_modes: ['設計文書と実装の二重管理', 'Compareが複雑化する'],
       required_checks: ['dialectic出力', 'Compare統合', 'テスト追加'],
@@ -114,7 +116,8 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
     pillar: 'dialectic',
     engine: 'Hyperion-Core v2 / PCE-DCE',
     mode: 'max_firepower',
-    description: '主案・悪手案・反対案・第三案・人読み最適案を並列候補として生成し、Compareへ渡す。',
+    description: '自動選択された用途テンプレートを前提に、主案・悪手案・反対案・第三案・人読み最適案を並列候補として生成し、Compareへ渡す。',
+    domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null,
     selected: ranked[0],
     candidates: ranked,
     bad_hand_lessons: ranked.find((x) => x.id === 'bad_hand')?.failure_modes || [],

@@ -5,6 +5,7 @@ node_modules
 *.store.json
 astera-logs
 kagura-logs
+archive
 *.zip
 *.tar.gz
 .env

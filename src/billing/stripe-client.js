@@ -35,7 +35,7 @@ class StripeClient {
     return Boolean(this.secretKey);
   }
 
-  async createCheckoutSession({ tenant, priceId, successUrl, cancelUrl }) {
+  async createCheckoutSession({ tenant, priceId, plan = 'pro', successUrl, cancelUrl }) {
     if (!this.secretKey) {
       const err = new Error('Stripe is disabled: STRIPE_SECRET_KEY is not set');
       err.status = 503;
@@ -55,15 +55,32 @@ class StripeClient {
     params.set('line_items[0][price]', priceId);
     params.set('line_items[0][quantity]', '1');
     params.set('metadata[tenant_id]', tenant.id);
+    params.set('metadata[plan]', plan);
+    params.set('subscription_data[metadata][tenant_id]', tenant.id);
+    params.set('subscription_data[metadata][plan]', plan);
 
-    const res = await fetch(`${this.apiBase}/checkout/sessions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: params
-    });
+    const controller = new AbortController();
+    const timeoutMs = Math.max(1000, Number(process.env.ASTERA_STRIPE_TIMEOUT_MS || 30_000));
+    const timer = setTimeout(() => controller.abort(new Error('Stripe request timeout')), timeoutMs);
+    timer.unref?.();
+    let res;
+    try {
+      res = await fetch(`${this.apiBase}/checkout/sessions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params,
+        signal: controller.signal
+      });
+    } catch (error) {
+      const upstream = new Error(error?.name === 'AbortError' ? 'Stripe request timeout' : 'Stripe request failed');
+      upstream.status = 502;
+      throw upstream;
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const message = data?.error?.message || `Stripe error ${res.status}`;

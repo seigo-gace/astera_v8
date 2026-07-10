@@ -8,16 +8,47 @@ const RULES = [
   { key: 'data', re: /ログ|保存|個人情報|プライバシ|履歴|DB|SQLite/i, weight: 18, why: '保存データのマスキング・削除方針・アクセス制御が必要。' }
 ];
 
-async function run({ question = '' }) {
+function domainRiskChecks(domain = {}) {
+  const primary = domain.primary || {};
+  const overlays = Array.isArray(domain.overlays) ? domain.overlays : [];
+  const checks = [];
+  for (const item of primary.risk_lens || []) {
+    checks.push({
+      source: `domain.${primary.id || 'general'}.risk_lens`,
+      check: item,
+      confidence: 0.6,
+      weight: 6
+    });
+  }
+  for (const overlay of overlays) {
+    for (const item of overlay.risk_lens || []) {
+      checks.push({
+        source: `overlay.${overlay.id}.risk_lens`,
+        check: item,
+        confidence: 0.7,
+        weight: 8
+      });
+    }
+  }
+  return checks.slice(0, 12);
+}
+
+async function run({ question = '', domain = {} }) {
   const risks = [];
   for (const rule of RULES) {
     if (rule.re.test(question)) risks.push({ key: rule.key, weight: rule.weight, why: rule.why });
   }
   risks.sort((a, b) => b.weight - a.weight);
+  const checks = domainRiskChecks(domain);
   return {
     pillar: 'risk',
     risk_count: risks.length,
     risks,
+    domain_checks: checks,
+    safety_gates: [
+      ...(Array.isArray(domain.primary?.safety_gate) ? domain.primary.safety_gate : []),
+      ...(Array.isArray(domain.overlays) ? domain.overlays.flatMap((overlay) => overlay.safety_gate || []) : [])
+    ],
     highest: risks[0] || null,
     level: risks.length >= 3 ? 'high' : risks.length >= 1 ? 'medium' : 'low'
   };

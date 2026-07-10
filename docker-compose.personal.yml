@@ -1,0 +1,26 @@
+services:
+  astera-v8-personal:
+    build: .
+    container_name: astera-v8-personal
+    env_file:
+      - .env.personal
+    environment:
+      ASTERA_HOST: 127.0.0.1
+      ASTERA_PORT: 7374
+      ASTERA_DB: /data/astera-personal.db
+      ASTERA_LOG_CACHE_DIR: /cache/outbox
+      ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
+      ASTERA_TGS_PROJECT_ID: P003
+    network_mode: host
+    volumes:
+      - astera-data-personal:/data
+      - /home/admin1/logs/astera-v8-personal:/cache
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7374/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  astera-data-personal:

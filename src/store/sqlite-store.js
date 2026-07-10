@@ -29,6 +29,7 @@ class SQLiteStore {
     try {
       const { DatabaseSync } = require('node:sqlite');
       this.db = new DatabaseSync(this.dbPath, { timeout: 5000 });
+      try { fs.chmodSync(this.dbPath, 0o600); } catch (_) {}
       this.mode = 'sqlite';
       this.db.exec(`
         PRAGMA journal_mode = WAL;
@@ -45,6 +46,7 @@ class SQLiteStore {
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_tenants_stripe_subscription_id ON tenants(stripe_subscription_id);
+        CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer_id ON tenants(stripe_customer_id);
         CREATE TABLE IF NOT EXISTS usage (
           id TEXT PRIMARY KEY,
           tenant_id TEXT NOT NULL,
@@ -146,6 +148,14 @@ class SQLiteStore {
     return this.data.tenants.find((tenant) => tenant.stripe_subscription_id === subscriptionId) || null;
   }
 
+  findTenantByStripeCustomerId(customerId) {
+    if (!customerId) return null;
+    if (this.mode === 'sqlite') {
+      return this.db.prepare('SELECT * FROM tenants WHERE stripe_customer_id = ?').get(customerId) || null;
+    }
+    return this.data.tenants.find((tenant) => tenant.stripe_customer_id === customerId) || null;
+  }
+
   updateTenant(tenantId, patch) {
     const existing = this.getTenantById(tenantId);
     if (!existing) return null;
@@ -202,6 +212,7 @@ class SQLiteStore {
     const eid = String(eventId || '').trim();
     if (!eid) return { firstTime: true, event: null, reason: 'event_id_missing' };
     const now = nowIso();
+    const staleMs = Math.max(60_000, Number(process.env.ASTERA_WEBHOOK_PROCESSING_STALE_MS || 300_000));
 
     if (this.mode === 'sqlite') {
       const inserted = this.db.prepare(`
@@ -211,10 +222,12 @@ class SQLiteStore {
       if (inserted.changes > 0) return { firstTime: true, event: this.getProcessedEvent(eid) };
 
       const existing = this.getProcessedEvent(eid);
-      if (existing?.status === 'failed') {
+      const stale = existing?.status === 'processing'
+        && Date.now() - Date.parse(existing.updated_at) >= staleMs;
+      if (existing?.status === 'failed' || stale) {
         this.db.prepare(`UPDATE processed_events SET status = 'processing', attempts = attempts + 1, error_message = NULL, updated_at = ? WHERE id = ?`)
           .run(now, eid);
-        return { firstTime: true, event: this.getProcessedEvent(eid), retry: true };
+        return { firstTime: true, event: this.getProcessedEvent(eid), retry: true, stale };
       }
       return { firstTime: false, event: existing, reason: existing?.status || 'duplicate' };
     }
@@ -226,13 +239,15 @@ class SQLiteStore {
       this._saveJson();
       return { firstTime: true, event: row };
     }
-    if (existing.status === 'failed') {
+    const stale = existing.status === 'processing'
+      && Date.now() - Date.parse(existing.updated_at) >= staleMs;
+    if (existing.status === 'failed' || stale) {
       existing.status = 'processing';
       existing.attempts = Number(existing.attempts || 0) + 1;
       existing.error_message = null;
       existing.updated_at = now;
       this._saveJson();
-      return { firstTime: true, event: existing, retry: true };
+      return { firstTime: true, event: existing, retry: true, stale };
     }
     return { firstTime: false, event: existing, reason: existing.status };
   }

@@ -18,12 +18,13 @@ function normalizeChain(value) {
 
 class KeyVault {
   resolveRequestLLM(body = {}) {
-    const llm = body.llm || {};
+    const llm = body.llm && typeof body.llm === 'object' && !Array.isArray(body.llm) ? body.llm : {};
+    const allowRequestBaseUrl = process.env.ASTERA_ALLOW_REQUEST_LLM_BASE_URL === '1';
     return {
       chain: normalizeChain(llm.chain),
-      apiKey: typeof llm.apiKey === 'string' ? llm.apiKey : '',
-      baseUrl: typeof llm.baseUrl === 'string' ? llm.baseUrl : '',
-      model: typeof llm.model === 'string' ? llm.model : '',
+      apiKey: typeof llm.apiKey === 'string' ? llm.apiKey.slice(0, 4096) : '',
+      baseUrl: allowRequestBaseUrl && typeof llm.baseUrl === 'string' ? llm.baseUrl.slice(0, 2048) : '',
+      model: typeof llm.model === 'string' ? llm.model.slice(0, 256) : '',
       masked: maskSecrets(llm)
     };
   }

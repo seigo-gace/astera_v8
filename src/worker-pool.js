@@ -16,7 +16,7 @@ class WorkerPool {
 
   _spawn() {
     const worker = new Worker(path.join(__dirname, 'pillars', 'pool-runner.js'));
-    const slot = { worker, busy: false, current: null };
+    const slot = { worker, busy: false, current: null, dead: false };
     worker.on('message', (message) => this._onMessage(slot, message));
     worker.on('error', (error) => this._onCrash(slot, error));
     worker.on('exit', (code) => {
@@ -43,14 +43,17 @@ class WorkerPool {
   }
 
   _onCrash(slot, error) {
-    if (this.shuttingDown) return;
+    if (this.shuttingDown || slot.dead) return;
+    slot.dead = true;
     const idx = this.workers.indexOf(slot);
     if (idx >= 0) this.workers.splice(idx, 1);
     if (slot.current) {
       if (slot.current.timer) clearTimeout(slot.current.timer);
       slot.current.reject(error);
+      slot.current = null;
     }
-    try { slot.worker.terminate(); } catch (_) {}
+    slot.busy = false;
+    void slot.worker.terminate().catch(() => {});
     this._spawn();
     this._drain();
   }
@@ -72,14 +75,7 @@ class WorkerPool {
       slot.current = job;
       job.timer = setTimeout(() => {
         const err = new Error(`Worker timeout: ${job.workerName}`);
-        const idx = this.workers.indexOf(slot);
-        if (idx >= 0) this.workers.splice(idx, 1);
-        try { slot.worker.terminate(); } catch (_) {}
-        job.reject(err);
-        slot.current = null;
-        slot.busy = false;
-        if (!this.shuttingDown) this._spawn();
-        this._drain();
+        this._onCrash(slot, err);
       }, this.timeoutMs);
       slot.worker.postMessage({ id: job.id, workerName: job.workerName, payload: job.payload });
     }

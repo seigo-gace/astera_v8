@@ -27,8 +27,10 @@
 - HTTPS必須。
 - CORSを`*`から本番ドメインへ限定。
 - `ASTERA_KEY_PEPPER`を長いランダム値へ変更。
-- DBとログのバックアップ導線を作る。
-- systemdまたはDockerで再起動管理を行う。
+- DBのバックアップ導線を作る。ログ正本はTGserver配下のTelegramとする。
+- Docker Composeで再起動管理を行う。
 - Nginx/Caddy/Cloudflare側にもRateLimitを置く。
 - 本番Stripe webhook endpoint secretをテスト用と混ぜない。
 - 利用規約・プライバシーポリシーを公開する。
+
+本番のNode直接常駐、systemd、pm2、nohup、screen、tmuxはServer Core規約により使用しない。

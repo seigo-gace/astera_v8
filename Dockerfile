@@ -1,23 +1,24 @@
 FROM node:22-slim
 
 ENV NODE_ENV=production \
-    ASTERA_HOST=0.0.0.0 \
+    ASTERA_HOST=127.0.0.1 \
     ASTERA_PORT=7373 \
     ASTERA_DB=/data/astera.db \
-    ASTERA_LOG_DIR=/logs \
+    ASTERA_LOG_CACHE_DIR=/cache/outbox \
     LLM_CHAIN=null
 
 WORKDIR /app
 
 COPY package.json start.js ./
+COPY STRUCTURE.md README.md ./
 COPY src ./src
 COPY docs ./docs
 COPY scripts ./scripts
 COPY .env.example ./
 
 RUN chmod +x scripts/*.sh \
-    && mkdir -p /data /logs \
-    && chown -R node:node /app /data /logs
+    && mkdir -p /data /cache/outbox \
+    && chown -R node:node /app /data /cache
 
 USER node
 EXPOSE 7373

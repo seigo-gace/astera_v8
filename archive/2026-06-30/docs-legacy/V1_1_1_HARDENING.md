@@ -1,5 +1,7 @@
 # Astera v8 v1.1.1 Hardening Notes
 
+> Archived 2026-06-30: v1.1.1時点の履歴。現在仕様ではない。
+
 ## 目的
 
 レビューで指摘された「条件付き合格」状態から、v1.1.1では商用化前の穴を優先して潰す。
@@ -27,7 +29,7 @@
 ## まだ本番前に残る項目
 
 - 本番Stripe実機検証
-- logrotate/systemd/journald設定
+- TGserver実機の継続監視とoutbox期限切れアラート
 - バックアップ/リストア手順の実地検証
 - PostgreSQL移行判断
 - 利用規約/プライバシーポリシー

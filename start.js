@@ -4,8 +4,10 @@ const KaguraServer = require('./src/server');
 const SQLiteStore = require('./src/store/sqlite-store');
 const StripeClient = require('./src/billing/stripe-client');
 const SubscriptionSync = require('./src/billing/subscription-sync');
+const Logger = require('./src/logger');
 
 const store = new SQLiteStore(process.env.ASTERA_DB || process.env.KAGURA_DB || 'astera.db');
+const logger = new Logger();
 const stripe = new StripeClient({
   secretKey: process.env.STRIPE_SECRET_KEY || '',
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || ''
@@ -18,28 +20,48 @@ const server = new KaguraServer({
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
   store,
   stripe,
-  subSync
+  subSync,
+  logger
 });
 
 server.start();
 
-console.log(`
-╔════════════════════════════════════════════════════════╗
-║  Astera v8 — Multi-Perspective Cognition Runtime      ║
-║  問いを星図に変える。                                 ║
-║  powered by V8 Worker threads                         ║
-╠════════════════════════════════════════════════════════╣
-║  5視点: 真実 / 危機 / 多角 / 反対 / 比較              ║
-║  LLM: provider-independent / BYOK                     ║
-║  Store: ${store.mode.padEnd(40, ' ')}║
-╚════════════════════════════════════════════════════════╝
-`);
-
-process.on('SIGINT', async () => {
-  await server.stop();
-  process.exit(0);
+logger.write({
+  type: 'runtime_initialized',
+  text: 'Astera v8 — Multi-Perspective Cognition Runtime initialized',
+  payload: {
+    store: store.mode,
+    sqlite_error: store.sqliteError || null,
+    tgserver_logging: logger.tgsEnabled,
+    tgserver_project: logger.projectId
+  }
 });
-process.on('SIGTERM', async () => {
-  await server.stop();
-  process.exit(0);
+
+let stopping = false;
+async function shutdown(signal, exitCode = 0) {
+  if (stopping) return;
+  stopping = true;
+  logger.write({ type: 'shutdown_requested', text: `Shutdown requested by ${signal}`, payload: { signal } });
+  try {
+    await server.stop();
+  } catch (error) {
+    logger.write({ type: 'shutdown_failed', severity: 'error', text: 'Graceful shutdown failed', payload: { error } });
+    await logger.flush(5000);
+    exitCode = 1;
+  }
+  process.exit(exitCode);
+}
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('uncaughtException', (error) => {
+  logger.write({ type: 'uncaught_exception', severity: 'error', text: 'Uncaught exception', payload: { error } });
+  void shutdown('uncaughtException', 1);
+});
+process.on('unhandledRejection', (reason) => {
+  logger.write({ type: 'unhandled_rejection', severity: 'error', text: 'Unhandled promise rejection', payload: { reason } });
+  void shutdown('unhandledRejection', 1);
+});
+process.on('warning', (warning) => {
+  logger.write({ type: 'runtime_warning', severity: 'warn', text: warning.message, payload: { warning } });
 });

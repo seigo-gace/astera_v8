@@ -1,8 +1,10 @@
 # Astera v8 v1.1.1 — 即デプロイ手順
 
+> Archived 2026-06-30: デプロイ正本を `docs/DEPLOYMENT_VPS.md` に統合。
+
 このZIPは、VPSへアップロードしてそのまま起動できるデプロイ用パッケージです。
 
-## 推奨: Docker Compose
+## 本番方式: Docker Compose
 
 【サーバー側 Ubuntu Bash】
 
@@ -34,21 +36,6 @@ docker compose ps
 curl http://127.0.0.1:7373/healthz
 ```
 
-## Node.js単体 + systemd
-
-【サーバー側 Ubuntu Bash】
-
-```bash
-node -v
-npm test
-bash scripts/smoke.sh
-bash scripts/verify-deploy.sh
-sudo cp deploy/systemd/astera-v8.service /etc/systemd/system/astera-v8.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now astera-v8
-sudo systemctl status astera-v8 --no-pager
-```
-
 ## Nginx
 
 `deploy/nginx/astera-v8.conf` の `astera.example.com` を本番ドメインに変更して使ってください。
@@ -58,4 +45,5 @@ sudo systemctl status astera-v8 --no-pager
 - `.env` はGitへ入れないでください。
 - Stripeを使う場合は `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRO_PRICE_ID` を設定してください。
 - Webhook URLは `https://あなたのドメイン/billing/webhook` です。
+- 本番常駐はDocker / Docker Composeだけを使用します。
 - v1.1.1ではStripe webhookのイベントID冪等性、CORS allowlist、HTTPS要求オプション、HSTS、追加テストを入れています。

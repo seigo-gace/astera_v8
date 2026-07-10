@@ -15,7 +15,7 @@ function detectContradictions({ facts = {}, risks = {}, inquiry = {}, dialectic 
   return contradictions;
 }
 
-async function run({ question = '', mood = {}, facts = {}, risks = {}, multi = {}, inquiry = {}, dialectic = {} }) {
+async function run({ question = '', mood = {}, facts = {}, risks = {}, multi = {}, inquiry = {}, dialectic = {}, domain = {} }) {
   const deductions = [];
   const riskPenalty = (risks.risk_count || 0) * 10;
   if (riskPenalty) deductions.push({ key: 'risk', points: riskPenalty, why_bad: '検出リスク数に比例して減点。' });
@@ -27,6 +27,9 @@ async function run({ question = '', mood = {}, facts = {}, risks = {}, multi = {
   const dialecticSelected = dialectic.selected || null;
   if (dialecticSelected && dialecticSelected.score < 70) {
     deductions.push({ key: 'dialectic_weak_best', points: 10, why_bad: '多重案競争の最高案でも70点未満。前提の追加確認が必要。' });
+  }
+  if ((domain.overlays || []).some((overlay) => ['high_stakes_legal', 'medical_safety', 'safety_abuse'].includes(overlay.id))) {
+    deductions.push({ key: 'high_stakes_overlay', points: 8, why_bad: '高リスク領域のオーバーレイが発火。専門確認または安全ゲートが必要。' });
   }
 
   const score = Math.max(0, 100 - deductions.reduce((sum, item) => sum + item.points, 0));
@@ -54,6 +57,11 @@ async function run({ question = '', mood = {}, facts = {}, risks = {}, multi = {
     candidate_ranking: Array.isArray(dialectic.candidates)
       ? dialectic.candidates.map((c) => ({ id: c.id, label: c.label, angle: c.angle, score: c.score, answer_line_distance: c.answer_line_distance }))
       : [],
+    domain_template: domain.primary ? {
+      id: domain.primary.id,
+      name: domain.primary.name,
+      compare_lens: domain.primary.compare_lens || []
+    } : null,
     verdict: {
       decision,
       angle: dialecticSelected?.angle || multi.recommended || 'balanced',

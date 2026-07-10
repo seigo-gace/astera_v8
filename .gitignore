@@ -6,6 +6,7 @@ node_modules/
 *.store.json
 *.broken-*
 kagura-logs/
+astera-logs/
 npm-debug.log*
 .DS_Store
 coverage/

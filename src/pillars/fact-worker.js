@@ -7,11 +7,14 @@ function splitSentences(text) {
     .filter(Boolean);
 }
 
-async function run({ question = '' }) {
+async function run({ question = '', domain = {} }) {
   const sentences = splitSentences(question);
   const confirmed = [];
   const unconfirmed = [];
   const opinions = [];
+  const evidenceToCollect = Array.isArray(domain.primary?.evidence_to_collect)
+    ? domain.primary.evidence_to_collect
+    : [];
 
   for (const sentence of sentences) {
     if (/\d|円|%|％|GB|RAM|vCPU|Node|Stripe|API|VPS/i.test(sentence)) {
@@ -28,6 +31,15 @@ async function run({ question = '' }) {
     confirmed,
     unconfirmed,
     opinions,
+    evidence_gaps: evidenceToCollect.map((item) => ({
+      item,
+      reason: 'domain template requires this material before high-confidence judgment'
+    })),
+    domain_template: domain.primary ? {
+      id: domain.primary.id,
+      name: domain.primary.name,
+      evidence_to_collect: evidenceToCollect
+    } : null,
     summary: `確認候補${confirmed.length} / 未確認${unconfirmed.length} / 意見${opinions.length}`
   };
 }

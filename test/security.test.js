@@ -17,6 +17,22 @@ test('safe-json masks keys and secret-looking values deeply', () => {
   assert.doesNotMatch(out.text, /whsec_abcdefghijklmnop/);
 });
 
+test('safe-json preserves repeated references while still marking real cycles', () => {
+  const shared = { id: 'third_way', label: '第三案' };
+  const cyclic = { id: 'cycle' };
+  cyclic.self = cyclic;
+
+  const out = maskSecrets({
+    selected: shared,
+    candidates: [shared],
+    cyclic
+  });
+
+  assert.deepEqual(out.selected, { id: 'third_way', label: '第三案' });
+  assert.deepEqual(out.candidates[0], { id: 'third_way', label: '第三案' });
+  assert.equal(out.cyclic.self, '[Circular]');
+});
+
 test('parseJsonStrict returns HTTP 400 error metadata on bad JSON', () => {
   assert.throws(() => parseJsonStrict('{bad'), (err) => err.status === 400 && /Invalid JSON/.test(err.message));
 });

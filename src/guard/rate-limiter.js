@@ -12,6 +12,11 @@ class RateLimiter {
       if (now >= bucket.resetAt) this.buckets.delete(key);
       if (this.buckets.size < this.maxBuckets) break;
     }
+    while (this.buckets.size >= this.maxBuckets) {
+      const oldest = this.buckets.keys().next().value;
+      if (oldest === undefined) break;
+      this.buckets.delete(oldest);
+    }
   }
 
   check({ key, limit, windowMs = 60_000 }) {
