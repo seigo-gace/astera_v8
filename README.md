@@ -1,38 +1,41 @@
-# Astera v8 — Multi-Perspective Cognition Runtime
+# Astera v8 — AIコグニションランタイム
 
-**問いを星図に変える。**
+## 概要
 
-Astera v8 は、真実・危機・多角・反対・比較の五つの視点で問いを整理し、実行可能な答えへ導く Multi-Perspective Cognition Runtime です。
+Astera v8は、問いを多角的に分析し、実行可能な結論へ導くAIコグニションランタイムです。
+真実、危機、多角的な視点、反対意見、比較といった5つの視点から情報を整理し、意思決定をサポートします。
+単一の答えを急ぐのではなく、複雑な問題を体系的に解き明かし、次の行動へと繋げるための基盤として機能します。
 
-Astera v8 は、ひとつの答えを急いで出すためのものではありません。散らかった問いを見える形に整え、危うさを先に見抜き、異なる視点を並べ、最後に比較して、次の一手へつなげるための認知実行基盤です。
+## 主な機能
 
-> 旧称/系譜: KAGURA Runtime v1.1.0 Hyperion Max。v1.1.1 では正式名称を Astera v8 に統一し、KAGURA は履歴名として扱います。
+*   **V8並列処理**: Node.jsのWorker threadsを活用し、高速な並列処理を実現。
+*   **5つの視点**: Fact (事実), Risk (危機), Multi (多角的), Inquiry (問い), Compare (比較) のフレームワークで分析。
+*   **自動Domain Router / Template Lens**: ユーザーの入力内容から最適な分析テンプレートを自動選択。
+*   **8セクション出力**: 以下の8つのセクションで、深く、安全で、目的に合った回答を生成します。
+    1.  **01 本当の目的**: 表面的な依頼の裏にある真の目標を整理。
+    2.  **02 前提不足**: 答えを作るために不足している情報や条件を特定。
+    3.  **03 事実確認**: 情報の事実、推測、未確認情報を明確に区別し、必要に応じてエビデンスを提示。
+    4.  **04 危機察知**: 実行によって生じうるリスクや潜在的な問題を事前に検出。
+    5.  **05 反対視点**: 異なる立場からの意見や批判的な視点を取り入れ、多角的な検討を促す。
+    6.  **06 比較案**: 複数の選択肢を提示し、それぞれのメリット・デメリットを比較。
+    7.  **07 推奨判断**: 総合的な分析に基づき、現時点で最も合理的な判断を提示。
+    8.  **08 主役AIへの再指示**: 上記の分析結果を基に、より精度の高いAI指示文を生成。
+*   **多言語対応**: 内部処理は英語Canonicalで安定性を確保し、表示はユーザーの言語に自動追従。
+*   **Human Reader**: ユーザーの感情や意図（急ぎ、怒り、混乱など）を検出し、分析に反映。
+*   **堅牢な運用**: APIキー、テナント分離、レート制限、Stripe連携、ログ集約など、本番環境に必要な機能を標準搭載。
+*   **npm依存ゼロ**: 外部ライブラリへの依存を最小限に抑え、シンプルで安定した動作。
 
-## 何が入っているか
+## 導入と起動 (Docker Compose)
 
-- Node.js Worker threads によるV8並列処理
-- 5つの視点: Fact / Risk / Multi / Inquiry / Compare
-- ユーザー選択なしの自動Domain Router / Template Lens
-- 8段出力: 本当の目的 / 前提不足 / 事実確認 / 危機察知 / 反対視点 / 比較案 / 推奨判断 / 主役AIへの再指示
-- 事実確認・危機察知のエビデンスカード出力
-- 内部canonicalは英語、表示はユーザー言語に自動追従
-- Human Reader: 急ぎ・怒り・混乱・正確性要求・全部入り要求などを検出
-- PCE-DCE Dialectic Worker: 主案・悪手案・反対案・第三案・人読み最適案を生成して比較
-- APIキー発行 / テナント分離 / レート制限
-- Stripe checkout / webhook署名検証 / webhookイベント冪等性
-- 本番CORS固定 / HTTPS要求オプション / HSTSオプション
-- SQLite または JSON fallback
-- npm依存ゼロ
-- フロントUI / API / テスト / smoke script / VPS手順
-- 全HTTP・推論・課金・障害ログのTGserver集約（秘密値マスク、一時outbox、再試行）
-
-## 本番起動（Docker Composeのみ）
+本番環境での稼働はDocker Composeを推奨します。
 
 ```bash
 docker compose up -d --build
 ```
 
-ブラウザ:
+### ブラウザアクセス
+
+Astera v8は以下のURLでアクセス可能です。
 
 ```text
 http://127.0.0.1:7373
@@ -40,118 +43,60 @@ http://127.0.0.1:7373
 
 ## テスト
 
+開発中のテストには以下のコマンドを使用します。
+
 ```bash
 npm test
 bash scripts/smoke.sh
 npm run verify
 ```
 
-## API例
+## API利用例
+
+### ユーザー登録 (APIキー取得)
 
 ```bash
 curl -X POST http://127.0.0.1:7373/signup
 ```
+
+### 処理実行 (質問と応答)
+
+APIキー`kg_xxx`は`/signup`エンドポイントで取得したものを利用してください。
 
 ```bash
 curl -X POST http://127.0.0.1:7373/process \
   -H "Content-Type: application/json" \
   -H "X-API-Key: kg_xxx" \
   -d '{
-    "question":"最大火力でAstera v8を完成させたい。対象はAI開発者。成功条件はDL式で実行でき、リスクと悪手も残すこと。",
+    "question":"Astera v8をどう活用すべき？",
     "llm":{"chain":["null"]},
-    "moodAnswers":{"urgent":true,"deepThink":true}
+    "moodAnswers":{"deepThink":true}
   }'
 ```
 
-## レスポンスの見どころ
+## 主要な設定 (環境変数)
 
-`POST /process` は、通常利用では `text/plain; charset=utf-8` の8段Markdownを返します。
+Astera v8では`ASTERA_*`の環境変数が使用されます。旧`KAGURA_*`も後方互換として読み込まれます。
 
-```text
-01 本当の目的
-...
-02 前提不足
-...
-03 事実確認
-...
-04 危機察知
-...
-08 主役AIへの再指示
-```
+*   `ASTERA_HOST`, `ASTERA_PORT`: サービス稼働ホストとポート
+*   `ASTERA_DB`: データベースファイル（SQLite）
+*   `ASTERA_API_KEY`: APIキー設定
+*   `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: セキュリティ関連設定
+*   `ASTERA_TGS_ENABLED`, `ASTERA_TGS_URL`, `ASTERA_TGS_PROJECT_ID`: TGserverログ集約設定
+*   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Stripe連携設定
 
-Asteraは入力から用途を自動判定し、ユーザーにテンプレート選択を求めません。
+## ログ集約 (TGserver)
 
-```text
-auto_domain=Marketing / Growth / Brand
-```
+HTTPアクセス、認証失敗、推論結果、Stripeイベントなど、主要なランタイムイベントは構造化JSONとしてTGserverへ自動集約されます。APIキーやStripeシークレットなどの秘密情報はマスクされ、未送信イベントは一時的にローカルに保持されます。
 
-のように、8段出力内の `02 前提不足` に自動判定された用途レンズが入ります。
+## その他の重要ドキュメント
 
-### 自動Domain Router
-
-V8の5本柱は固定したまま、入力内容から用途テンプレートを自動選択します。
-
-```text
-User Input
-  -> Input Normalizer
-  -> Auto Domain Router
-  -> Template Lens
-  -> V8 Five Pillars
-  -> Evidence / Safety Gate
-  -> 8-Section Output
-```
-
-テンプレート説明文や過去の8段出力を貼り付けても、5本柱にそのまま混ぜず、分析対象の依頼文とメタ情報を分離します。
-
-## 本番向けの主要環境変数
-
-Astera v8 では `ASTERA_*` を正式名として使います。旧 `KAGURA_*` も後方互換として読めます。
-
-```text
-ASTERA_HOST=127.0.0.1
-ASTERA_PORT=7373
-ASTERA_DB=astera.db
-ASTERA_KEY_PEPPER=change-me-long-random
-ASTERA_API_KEY=
-ASTERA_CORS_ORIGINS=https://astera.example.com
-ASTERA_REQUIRE_HTTPS=1
-ASTERA_ENABLE_HSTS=1
-ASTERA_PUBLIC_BASE_URL=https://astera.example.com
-ASTERA_TGS_ENABLED=1
-ASTERA_TGS_URL=http://127.0.0.1:3000/ingest
-ASTERA_TGS_PROJECT_ID=P002
-ASTERA_LOG_CACHE_DIR=/home/admin1/logs/astera-v8/outbox
-ASTERA_LOG_CACHE_TTL_MS=604800000
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PRO_PRICE_ID=
-STRIPE_BUSINESS_PRICE_ID=
-```
-
-## v1.1.1で潰したレビュー指摘
-
-- Stripe webhookイベントIDによる冪等性処理
-- `customer.subscription.deleted` のsubscription id逆引き
-- CORS allowlist化
-- HTTPS必須化オプション
-- HSTSオプション
-- 401 / 413 / CORS / webhook重複の追加テスト
-- Astera v8への正式名称統一
-
-## TGserverログ集約
-
-起動・停止、正常な `GET /healthz` を除くHTTPアクセス、認証失敗、推論完了/失敗、LLMフォールバック、Stripe checkout/webhook、ランタイム警告を構造化JSONとしてTGserverへ送る。ヘルスチェックの失敗・切断は異常検知に必要なため送信対象とする。既定宛先はAstera/V8専用の `P002`。severityに応じて `P002_conversation_error`〜`P002_conversation_trace`へ振り分け、TGserver自身のP001とは混在させない。
-
-送信前にAPIキー・Bearer・Stripe secretなどを再帰的にマスクする。イベントはTGserver到達まで `/home/admin1/logs/astera-v8/outbox` に一時保持し、2xx受領直後に削除する。障害時は再試行し、再起動後も未送信イベントを再送する。保持期限は7日で、成功済みログのVPS複製は残さない。
-
-## 重要ドキュメント
-
-- `STRUCTURE.md`
-- `docs/BRAND_PHILOSOPHY.md`
-- `docs/DOMAIN_TEMPLATE_CATALOG.md`
-- `docs/FULL_DOCUMENT.md`
-- `docs/ARCHITECTURE.md`
-- `docs/API_REFERENCE.md`
-- `docs/PRODUCTION_CHECKLIST.md`
-- `docs/SECURITY_NOTES.md`
-- `docs/DEPLOYMENT_VPS.md`
+*   `STRUCTURE.md`: Astera v8のディレクトリ構造とコンポーネント間の依存関係
+*   `docs/BRAND_PHILOSOPHY.md`: ブランド理念
+*   `docs/DOMAIN_TEMPLATE_CATALOG.md`: ドメインごとのテンプレートカタログ
+*   `docs/FULL_DOCUMENT.md`: 詳細な仕様書
+*   `docs/ARCHITECTURE.md`: アーキテクチャ設計
+*   `docs/API_REFERENCE.md`: APIリファレンス
+*   `docs/PRODUCTION_CHECKLIST.md`: 本番運用チェックリスト
+*   `docs/SECURITY_NOTES.md`: セキュリティに関する注意点
+*   `docs/DEPLOYMENT_VPS.md`: VPSへのデプロイ手順
