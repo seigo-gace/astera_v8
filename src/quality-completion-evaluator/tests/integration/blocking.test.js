@@ -1,0 +1,4 @@
+"use strict";
+const test=require("node:test");const assert=require("node:assert/strict");const{evaluate}=require("../../index");const{baseDesignRequest}=require("../fixtures/factory");const{sha256Text}=require("../../utils/hash");
+test("secret blocks KB publication",async()=>{const request=baseDesignRequest();request.target.content+="\napi_key=abcdefghijklmnopqrstuvwxyz123456";request.target.content_hash=sha256Text(request.target.content);const result=await evaluate(request);assert.equal(result.status,"BLOCKED");assert.ok(result.blocking.some(item=>item.block_id==="KB-HB-006"));});
+test("mandatory requirement failure blocks",async()=>{const request=baseDesignRequest();request.requirements[0].fulfillment.status="unfulfilled";const result=await evaluate(request);assert.equal(result.status,"BLOCKED");assert.ok(result.blocking.some(item=>item.block_id==="KB-HB-001"));});
