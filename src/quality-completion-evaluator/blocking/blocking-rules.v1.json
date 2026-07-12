@@ -1,0 +1,20 @@
+{
+  "version": "blocking-rules.v1",
+  "rules": [
+    {"block_id":"KB-HB-001","name":"mandatory_requirement_unfulfilled"},
+    {"block_id":"KB-HB-002","name":"root_instruction_conflict"},
+    {"block_id":"KB-HB-003","name":"unsupported_completion_claim"},
+    {"block_id":"KB-HB-004","name":"evidence_integrity_failure"},
+    {"block_id":"KB-HB-005","name":"critical_technical_error"},
+    {"block_id":"KB-HB-006","name":"secret_exposure"},
+    {"block_id":"KB-HB-007","name":"purpose_mismatch"},
+    {"block_id":"KB-HB-008","name":"evaluation_component_failure"},
+    {"block_id":"KB-HB-009","name":"fixed_spec_unauthorized_change"},
+    {"block_id":"KB-HB-010","name":"evidence_target_mismatch"},
+    {"block_id":"KB-HB-011","name":"failed_test_with_completion_claim"},
+    {"block_id":"KB-HB-012","name":"criterion_not_evaluated"},
+    {"block_id":"KB-HB-013","name":"rubric_version_unknown"},
+    {"block_id":"KB-HB-014","name":"content_hash_mismatch"},
+    {"block_id":"KB-HB-015","name":"kb_prohibited_information"}
+  ]
+}

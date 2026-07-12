@@ -1,0 +1,16 @@
+{
+  "schema_version":"astera.quality-completion.result.v1",
+  "evaluation_id":"eval_sample_01",
+  "candidate_id":"candidate_sample_01",
+  "candidate_version":1,
+  "status":"KB_ELIGIBLE",
+  "evaluation_complete":true,
+  "scores":{"quality":100,"completion":100,"minimum":100},
+  "criteria":{"quality":[{"criterion_id":"quality.requirement_accuracy","score_0_to_5":5,"weight":30,"weighted_score":30,"status":"passed","reason":"すべての必須要求が明示的な対応箇所または証拠へ接続されている","evidence_refs":["REQ-001","REQ-002","REQ-003"],"deductions":[],"required_fixes":[]}],"completion":[{"criterion_id":"completion.requirement_coverage","score_0_to_5":5,"weight":30,"weighted_score":30,"status":"passed","reason":"すべての必須要求が充足している","evidence_refs":["REQ-001","REQ-002","REQ-003"],"deductions":[],"required_fixes":[]}]},
+  "requirements":{"total":3,"mandatory":3,"fulfilled":3,"partial":0,"unfulfilled":0,"not_applicable":0,"mandatory_failures":0,"evaluated":3},
+  "evidence":{"valid":0,"missing":0,"invalid":0,"not_required":1},
+  "evidence_details":[{"kind":"tgserver","evidence_id":null,"status":"NOT_REQUIRED","reason":"snapshot not supplied"}],
+  "blocking":[],
+  "judgment":{"status":"KB_ELIGIBLE","kb_eligible":true,"reason":"品質・完成度がともに95点以上で、重大欠陥・未達要求・証拠不整合が存在しない"},
+  "audit":{"module_version":"1.0.0","rubric_version":"quality-completion-rubric.v1","blocking_rule_version":"blocking-rules.v1","content_hash":"sha256:ca86b00677d0e22a3dbbcab45e94534971165b5f92192090732199b156bfc8d7","evaluated_at":"2026-07-11T03:04:31.807Z"}
+}

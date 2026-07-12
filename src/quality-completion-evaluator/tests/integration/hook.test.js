@@ -1,0 +1,3 @@
+"use strict";
+const test=require("node:test");const assert=require("node:assert/strict");const{createEvaluationPacket}=require("../../integration/create-evaluation-packet");const{sha256Text}=require("../../utils/hash");
+test("ASTERA integration helper creates valid hash and fixed versions",()=>{const packet=createEvaluationPacket({project_id:"astera-v8",artifact:{candidate_id:"c1",artifact_type:"other",content:"# 目的\nx"},requirements:[{requirement_id:"R1",text:"x",mandatory:true}]});assert.equal(packet.target.content_hash,sha256Text(packet.target.content));assert.equal(packet.evaluation_config.rubric_version,"quality-completion-rubric.v1");});
