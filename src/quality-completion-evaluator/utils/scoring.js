@@ -1,0 +1,2 @@
+"use strict";
+function clamp(value,min,max){return Math.min(max,Math.max(min,value));}function roundHalf(value){return Math.round(value*2)/2;}function ratioToFive(ratio){return roundHalf(clamp(ratio,0,1)*5);}function weightedScore(score0to5,weight){return Number(((score0to5*weight)/5).toFixed(2));}function normalizeScore100(value){if(!Number.isFinite(value))throw new TypeError("score must be finite");return Number(clamp(value,0,100).toFixed(2));}module.exports={clamp,roundHalf,ratioToFive,weightedScore,normalizeScore100};

@@ -1,0 +1,25 @@
+{
+  "schema_version": "astera.quality-completion.request.v1",
+  "evaluation_id": "eval_sample_01",
+  "project_id": "astera-v8",
+  "task_id": "task_sample_01",
+  "run_id": "run_sample_01",
+  "trace_id": "trace_sample_01",
+  "target": {
+    "candidate_id": "candidate_sample_01",
+    "candidate_version": 1,
+    "artifact_type": "design",
+    "title": "ASTERA 品質・完成度採点Module 設計",
+    "content": "# 目的\nASTERA内部で品質と完成度を固定Ruleにより個別採点し、両方95点以上の場合だけKB掲載候補にする。\n# 範囲\n品質採点、完成度採点、Blocking、KB Admissionまで。\n# 責任分担\nASTERAが入力を渡し、本Moduleが判定し、KB Systemが保存する。\n# 構成\nInputValidator、RequirementMapper、EvidenceVerifier、RuleEngine、AdmissionGate。\n# 入力\nEvaluation Packetを受け取る。\n# 出力\nEvaluation ResultとKB Recordを返す。\n# データ構造\nRequest、Result、KB RecordのSchemaを固定する。\n# 処理フロー\n入力検証、要求照合、証拠確認、採点、Blocking、95点Gateの順で処理する。\n# 判定条件\n品質95点以上かつ完成度95点以上、Blocking 0件。\n# 異常処理\n入力不正はINVALID_INPUT、処理失敗はEVALUATION_FAILEDとする。\n# テスト条件\n境界値、Hash不一致、Secret、未達要求、重複登録を検証する。\n# 完成条件\n全Test合格、同一入力で同一判定、95点未満を通過させない。\n# 実装順序\nSchema、Rule、基礎処理、採点、連携、検証の順で実装する。\n# 失敗時処理\n採点処理を停止しKB掲載を行わない。\n# 再試行\n入力または成果物を修正しcandidate_versionを更新して再評価する。\n# Rollback\n新Version不合格時は旧Versionをactiveのまま維持する。\n# Archive\n合格した新Version掲載時に旧VersionをArchiveへ移す。\n# Version\n1.0.0\n# 変更履歴\n初版。\n# 既知の制限\nASTERA既存分析結果は構造化入力として受け取る。\n# 再評価方法\n同一Rubric Versionで修正後Packetを再投入する。",
+    "content_hash": "sha256:ca86b00677d0e22a3dbbcab45e94534971165b5f92192090732199b156bfc8d7",
+    "declared_status": "design_complete"
+  },
+  "requirements": [
+    {"requirement_id":"REQ-001","text":"品質と完成度を個別採点する","mandatory":true,"source":"master_instruction","fulfillment":{"status":"fulfilled","locations":["target.content"],"evidence_refs":[]}},
+    {"requirement_id":"REQ-002","text":"両方95点以上の場合だけKB掲載候補にする","mandatory":true,"source":"master_instruction","fulfillment":{"status":"fulfilled","locations":["target.content"],"evidence_refs":[]}},
+    {"requirement_id":"REQ-003","text":"平均点判定を使用しない","mandatory":true,"source":"master_instruction","fulfillment":{"status":"fulfilled","locations":["target.content"],"evidence_refs":[]}}
+  ],
+  "evidence":{"repository":[],"tests":[],"artifacts":[]},
+  "analysis":{"technical_checks":[{"id":"TECH-001","status":"passed","evidence_refs":["REQ-001"]},{"id":"TECH-002","status":"passed","evidence_refs":["REQ-002"]},{"id":"TECH-003","status":"passed","evidence_refs":["REQ-003"]}],"logical_checks":[{"id":"LOGIC-001","status":"passed"},{"id":"LOGIC-002","status":"passed"}],"contradictions":[],"ambiguities":[],"boundary_checks":[{"id":"BOUNDARY-001","status":"passed"},{"id":"BOUNDARY-002","status":"passed"}],"boundary_violations":[],"purpose_mismatch":false},
+  "evaluation_config":{"rubric_version":"quality-completion-rubric.v1","blocking_rule_version":"blocking-rules.v1"}
+}

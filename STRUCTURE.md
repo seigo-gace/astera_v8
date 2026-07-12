@@ -11,6 +11,7 @@ Astera v8は問いの意味判定・認知前処理・推論を担当する。�
 - ログ送信失敗時の一時状態: `/home/admin1/logs/astera-v8/outbox`
 - テナント・使用量・Stripe webhook冪等性: `/data/astera.db`（アプリケーション状態。ログ正本ではない）
 - KB連携: 未実装。生ログ・推論結果の自動投入は禁止
+- 品質・完成度判定: `src/quality-completion-evaluator`。固定Ruleで評価し、KB掲載候補Recordを生成する。KB保存は担当しない
 
 ## ディレクトリ構造
 
@@ -48,6 +49,7 @@ astera_v8/
 │   │   └── providers/         # 1 provider = 1 Module
 │   ├── pillars/               # 認知処理Worker群
 │   ├── store/                 # アプリケーション状態
+│   ├── quality-completion-evaluator/ # 品質・完成度固定Rule採点／KB掲載候補判定
 │   └── public/                # 最小Web UI
 ├── test/                      # Node標準test
 ├── scripts/                   # 短時間の検証用。常駐禁止
@@ -68,10 +70,17 @@ start
           → llm adapters
           → logger → logging/tgs-client → TGserver
                    → logging/outbox → /home/admin1/logs/astera-v8/outbox
+
+evaluation caller（成果物・Requirement・Evidence確定後）
+  → quality-completion-evaluator
+      → KB System Adapter（publish明示時のみ）
 ```
 
 - `server`より下位のModuleは`server`をimportしない。
 - `kagura-engine`より下位のModuleは`kagura-engine`をimportしない。
+- `quality-completion-evaluator`は`server`・`kagura-engine`・KB DBをimportしない。
+- `quality-completion-evaluator`は成果物を修正せず、固定Ruleの評価結果とKB掲載候補Recordだけを返す。
+- 現行の`/process`へ自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
 - `logger`はTGserverのHTTP ingest契約だけに依存し、TGserver内部Moduleをimportしない。
 - TGserverはAsteraをimportせず、意味判定を行わない。
 
@@ -88,6 +97,7 @@ start
 | `llm/adapters` | provider名からadapterを生成するfactory |
 | `llm/http-client` | 外部HTTPのtimeout・response上限 |
 | `llm/providers/*` | 各provider固有のrequest/response変換 |
+| `quality-completion-evaluator` | 品質・完成度を個別採点し、95/95・Blocking・Requirement・Evidence条件からKB掲載候補を判定 |
 | `logger` | secret除去済みイベントの生成と配送順序の統合 |
 | `logging/tgs-client` | TGserver HTTP配送・timeout・再試行 |
 | `logging/outbox` | 未送信イベントの一時保存・復旧・期限削除 |

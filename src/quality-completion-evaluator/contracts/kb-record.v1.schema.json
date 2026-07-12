@@ -1,0 +1,7 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"astera.kb-record.v1",
+  "type":"object",
+  "required":["schema_version","idempotency_key","project_id","candidate_id","title","body","scores","source","versions","status"],
+  "properties":{"schema_version":{"const":"astera.kb-record.v1"},"idempotency_key":{"type":"string","pattern":"^sha256:[a-fA-F0-9]{64}$"},"project_id":{"type":"string"},"candidate_id":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"},"scores":{"type":"object"},"status":{"const":"active"}}
+}

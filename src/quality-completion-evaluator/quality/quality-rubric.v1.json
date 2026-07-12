@@ -1,0 +1,1 @@
+{"rubric_version":"quality-completion-rubric.v1","criteria":[{"criterion_id":"quality.requirement_accuracy","weight":30},{"criterion_id":"quality.technical_accuracy","weight":25},{"criterion_id":"quality.logical_consistency","weight":20},{"criterion_id":"quality.clarity_precision","weight":15},{"criterion_id":"quality.boundary_control","weight":10}]}
