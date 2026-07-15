@@ -28,4 +28,29 @@ Input
 
 現在のRuntimeは38専門ジャンルLensを選択します。ASTERA-KB完成後は、KBが返す完全4階層Pathを対応する`Gxx` Lensへ接続します。
 
+## 検証記録
+
+同一実装を配置したNode.js検証環境で次を実行した。
+
+```text
+38 Genre・Anchor Path回帰
+同一Input 100回の決定性
+空Inputの非分類
+短いASCII語の部分一致防止
+OverlayのPrimary非上書き
+医療・Software移行・脆弱性対応・前払Credit・家庭園芸の実例出力
+```
+
+結果:
+
+```text
+Test: 10
+Pass: 10
+Fail: 0
+```
+
+実例Testでは分類名だけでなく、Genre別のEvidence条件、Risk、立場、比較軸が5本柱と01〜08へ渡ることを検査した。
+
+GitHub上には同じTest定義を追加済み。ただし接続環境からRepository全体をCloneできず、GitHub ActionsもStatus未登録のため、Repository全体の`npm test`完了とは扱わない。
+
 旧21 Lens IDを現行仕様として参照・再実装しないでください。
