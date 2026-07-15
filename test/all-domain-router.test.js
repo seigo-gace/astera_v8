@@ -69,8 +69,18 @@ test('同一入力を100回処理して分類・候補・Overlay順が変化し�
   }
 });
 
-test('空入力は誤分類せずInput Errorになる', () => {
-  assert.throws(() => routeDomainTemplates({ question: '  ', context: '\n' }), /question\/context/);
+test('空入力は誤分類せずInput Error状態になる', () => {
+  const result = routeDomainTemplates({ question: '  ', context: '\n' });
+  assert.equal(result.input_valid, false);
+  assert.equal(result.input_error, 'ASTERA_LENS_INPUT_REQUIRED');
+  assert.equal(result.primary, null);
+  assert.deepEqual(result.secondary, []);
+});
+
+test('短いASCII分類語を単語途中で誤発火させない', () => {
+  const result = routeDomainTemplates({ question: 'Maintenance procedure and reliability review for industrial equipment' });
+  assert.notEqual(result.primary.id, 'G30');
+  assert.equal(result.primary.matched_signals.map((x) => String(x).toLowerCase()).includes('ai'), false);
 });
 
 test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => {
