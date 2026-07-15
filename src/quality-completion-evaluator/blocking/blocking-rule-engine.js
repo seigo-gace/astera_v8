@@ -42,6 +42,19 @@ function evaluateBlocking(context, qualityResult, completionResult) {
   if (context.evidence.failed_tests.length > 0 && context.evidence.claims_complete) {
     blocks.push(block("KB-HB-011", "failed_test_with_completion_claim", "Test失敗状態で完成宣言している", "evidence.tests", "失敗原因を修正して同一Artifactを再Testする", context.evidence.failed_tests.map((item) => item.evidence_id)));
   }
+  if (context.domain_lens?.enforce === true && context.domain_lens_assessment?.complete !== true) {
+    const assessment = context.domain_lens_assessment;
+    const missing = assessment.missing.map((item) => `${item.lens_type}:${item.lens_item}`);
+    const failed = assessment.failed.map((item) => `${item.lens_type}:${item.lens_item}`);
+    blocks.push(block(
+      "KB-HB-016",
+      "domain_lens_check_incomplete",
+      `${context.domain_lens.id} Lens固有のRisk・Evidence確認が未完了`,
+      "analysis.domain_checks",
+      `不足または失敗したLens確認をEvidenceへ接続する: ${[...missing, ...failed].join(", ")}`,
+      assessment.verified.flatMap((item) => item.evidence_refs || [])
+    ));
+  }
   const expectedQuality = 5;
   const expectedCompletion = 5;
   if (qualityResult.criteria.length !== expectedQuality || completionResult.criteria.length !== expectedCompletion) {
