@@ -3,91 +3,75 @@
 const { detectMood } = require('../mood-detector');
 const { readHumanState } = require('../hyperion-human-reader');
 
-function buildQuestions(question, mood) {
-  const qs = [];
-  const text = String(question || '').trim();
-  if (text.length < 12) qs.push('目的を一文で足してください。何を決めたいですか？');
-  if (!/(誰|対象|ユーザー|顧客|利用者|for|target)/i.test(text)) qs.push('対象者は誰ですか？');
-  if (!/(成功|ゴール|目的|goal|KPI|条件)/i.test(text)) qs.push('成功条件は何ですか？');
-  if (!/(期限|いつ|今日|明日|今週|deadline|date)/i.test(text)) qs.push('期限や優先度はありますか？');
-  if (!/(予算|コスト|無料|有料|price|cost)/i.test(text)) qs.push('コスト制約はありますか？');
-  const max = mood.score < 0 ? 1 : 5;
-  return qs.slice(0, max);
-}
+const DOMAIN_QUESTIONS = Object.freeze({
+  G08: ['適用法域と期限は？', '契約・通知・Evidenceは揃っている？'],
+  G10: ['成功指標・Budget・期限は？', '顧客Dataと競合Evidenceはある？'],
+  G11: ['適用する会計・税務基準と法域は？', '返金・失効・未使用残高の条件は？'],
+  G23: ['緊急のRed Flagはある？', '症状の経過・既往・現在の薬は？'],
+  G29: ['互換条件・依存関係・Rollbackは？', 'Testと合格条件は何？'],
+  G30: ['評価Setと品質基準は？', 'Human Reviewと失敗時の停止条件は？'],
+  G31: ['Asset・Trust Boundary・影響Versionは？', '悪用痕跡・Patch・隔離・復旧経路は？'],
+  G34: ['現場に継続中の危険はある？', 'Evidenceの保全と通報経路は？'],
+  G38: ['地域・季節・Space・Budgetは？', '手間と安全条件はどこまで許容できる？']
+});
 
-function buildDomainQuestions(domain = {}, text = '') {
-  const id = domain.primary?.id || 'general_judgment';
-  const q = [];
-  const has = (pattern) => pattern.test(text);
-  if (id === 'legal_compliance') {
-    if (!has(/管轄|国|都道府県|州|jurisdiction/i)) q.push('法域・管轄はどこですか？');
-    if (!has(/契約書|証拠|メール|書面|document|evidence/i)) q.push('確認できる書面・証拠はありますか？');
-  } else if (id === 'medical_health') {
-    if (!has(/症状|期間|いつから|duration|symptom/i)) q.push('症状・期間・緊急度は何ですか？');
-    if (!has(/医師|病院|薬|treatment|doctor|medication/i)) q.push('現在の治療・服薬・医師相談の有無は？');
-  } else if (id === 'business_strategy') {
-    if (!has(/売上|利益|KPI|指標|revenue|metric/i)) q.push('判断に使う主要指標は何ですか？');
-    if (!has(/撤退|期限|予算|runway|budget|deadline/i)) q.push('予算・期限・撤退条件は何ですか？');
-  } else if (id === 'marketing_growth') {
-    if (!has(/対象|顧客|ターゲット|segment|target/i)) q.push('対象顧客・セグメントは誰ですか？');
-    if (!has(/CV|コンバージョン|KPI|成約|conversion/i)) q.push('測りたいCV・KPIは何ですか？');
-  } else if (id === 'engineering_architecture') {
-    if (!has(/テスト|検証|test|verify/i)) q.push('何をテストすれば完了と言えますか？');
-    if (!has(/rollback|ロールバック|戻す|互換/i)) q.push('ロールバック・互換性条件は何ですか？');
-  } else if (id === 'cybersecurity_privacy') {
-    if (!has(/資産|データ|asset|data/i)) q.push('守るべき資産・データは何ですか？');
-    if (!has(/ログ|検知|incident|log|detect/i)) q.push('検知・監査に使えるログはありますか？');
-  } else if (id === 'ai_ml_governance') {
-    if (!has(/評価|eval|テスト|accuracy|精度/i)) q.push('品質を判断する評価データ・基準は何ですか？');
-    if (!has(/人間|承認|review|human/i)) q.push('人間の確認・差し戻し条件はありますか？');
+function domainQuestions(domain = {}) {
+  const primary = domain.primary || {};
+  const questions = [...(DOMAIN_QUESTIONS[primary.id] || [])];
+  for (const item of primary.inquiry_lens || []) {
+    const text = String(item || '').trim();
+    if (text && !questions.includes(text)) questions.push(text);
   }
-  return q;
+  return questions.slice(0, 8);
 }
 
-async function run({ mode = 'analysis', question = '', moodAnswers = {}, facts, risks, domain = {} } = {}) {
+async function run({ mode = 'analysis', question = '', moodAnswers = {}, domain = {} }) {
   const mood = detectMood(question, moodAnswers);
-  const human_reading = readHumanState(question, mood);
-  const questions = [
-    ...buildQuestions(question, mood),
-    ...buildDomainQuestions(domain, String(question || ''))
-  ];
+  const human = readHumanState(question, mood, moodAnswers);
+  const text = String(question || '').trim();
+  const tooShort = text.length < 4;
+  const missingObject = !/(対象|誰|何|どこ|いつ|which|what|who|where|when|system|service|app|API|契約|患者|製品|地域|市場|研究)/i.test(text);
+  const missingSuccess = !/(目的|成功|完了|条件|基準|どう|したい|goal|success|done|criteria|比較|判断|設計|移行|対策|選ぶ)/i.test(text);
+  const questions = [];
+  if (tooShort) questions.push('何を対象に、何を達成したいか具体化してください。');
+  if (missingObject) questions.push('対象は誰・何ですか？');
+  if (missingSuccess) questions.push('成功条件・完了条件は何ですか？');
+  questions.push(...domainQuestions(domain));
+  const uniqueQuestions = [...new Set(questions)];
 
   if (mode === 'preflight') {
-    const missingEnoughToStop = String(question || '').trim().length < 12 || /^(どう|何|なに|help|助けて)$/i.test(String(question || '').trim());
+    const blocked = tooShort || (missingObject && missingSuccess && text.length < 12);
     return {
       pillar: 'inquiry',
-      mode,
+      stage: 'preflight',
+      clarification_needed: blocked,
+      questions: blocked ? uniqueQuestions.slice(0, 5) : [],
+      rule: '追加質問は最小限。明確な問いは止めず、Lens固有の不足は分析結果へ渡す。',
       mood,
-      human_reading,
-      clarification_needed: missingEnoughToStop,
-      questions: missingEnoughToStop ? questions : [],
-      rule: mood.score < 0 ? 'bad_mood_max_one_question' : 'normal_max_five_questions'
+      human_reading: human,
+      domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null
     };
   }
 
-  const problemHealthy = questions.length <= 2;
   return {
     pillar: 'inquiry',
-    mode,
-    mood,
     problem_health: {
-      healthy: problemHealthy,
-      reason: problemHealthy ? '目的・対象・成功条件が大きく欠けていない。' : '問いの前提または成功条件が不足している。'
+      healthy: !(missingObject || missingSuccess),
+      reason: missingObject || missingSuccess ? '対象または成功条件が曖昧' : '最低限の対象と判断目的がある'
     },
-    human_reading,
+    missing_questions: uniqueQuestions,
     assumptions: [
-      '入力文のみを根拠にした一次分析である。',
-      '外部検索・外部検証はこのWorker単体では実行しない。',
-      `用途テンプレートはAsteraが自動判定した: ${domain.primary?.name || 'General Judgment / Default'}`
+      '入力本文に書かれていない事実は未確認として扱う。',
+      '変更・公開・課金・法務・医療・Securityは適用条件を確認してから確定する。'
     ],
-    missing_questions: questions,
+    inquiry_lens: domain.primary?.inquiry_lens || [],
+    mood,
+    human_reading: human,
     domain_template: domain.primary ? {
       id: domain.primary.id,
       name: domain.primary.name,
       inquiry_lens: domain.primary.inquiry_lens || []
-    } : null,
-    fact_summary: facts?.summary || null,
-    risk_level: risks?.level || null
+    } : null
   };
 }
 
