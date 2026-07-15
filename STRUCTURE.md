@@ -10,6 +10,7 @@ Astera v8は、入力の意味判定、38専門ジャンル分類、固定Rule�
 - 分類実行: `src/domain-template-router.js`
 - Taxonomy Version: `1.0.0`
 - Runtime分類: `G01`〜`G38`の専門ジャンルLens
+- 判定Module Lens接続: `src/quality-completion-evaluator/domain-lens-resolver.js`
 - 4階層連結: 各Genreの検証Anchor Pathを保持し、将来ASTERA-KBの完全Path結果へ接続する
 - ログ永続正本: TGserver経由のTelegram
 - ログ検索索引: TGserver配下のMeilisearch
@@ -55,7 +56,9 @@ astera_v8/
 │   │   └── providers/              # 1 Provider = 1 Module
 │   ├── pillars/                    # Fact / Risk / Multi / Inquiry / Compare Worker群
 │   ├── store/                      # Application状態
-│   ├── quality-completion-evaluator/ # 品質・完成度固定Rule採点／KB掲載候補判定
+│   ├── quality-completion-evaluator/
+│   │   ├── domain-lens-resolver.js # 同じG01〜G38 Lensの読込・分野別確認
+│   │   └── ...                     # 品質・完成度固定Rule採点／KB掲載候補判定
 │   └── public/                     # 最小Web UI
 ├── test/                           # Node標準Test
 ├── scripts/                        # 短時間の検証用。常駐禁止
@@ -81,6 +84,11 @@ start
 
 evaluation caller（成果物・Requirement・Evidence確定後）
   → quality-completion-evaluator
+      → domain-lens-resolver
+          → domain-template-router
+          → all-domain-lens-catalog
+      → Artifact Profile
+      → Requirement / Evidence / Blocking Rule
       → KB System Adapter（publish明示時のみ）
 ```
 
@@ -90,6 +98,8 @@ evaluation caller（成果物・Requirement・Evidence確定後）
 - `domain-template-router`は`all-domain-lens-catalog`だけを分類定義の正本として読む。
 - `pillars/*`は分類を再実行せず、Routerが返した同一Lensを参照する。
 - `quality-completion-evaluator`は`server`・`kagura-engine`・KB DBをImportしない。
+- `quality-completion-evaluator/domain-lens-resolver`は通常版と同じCatalog・Routerを参照し、別のLens定義を複製しない。
+- Artifact Profileは設計・実装・研究などの成果物種別を扱い、`G01`〜`G38` Lensは分野固有のRisk・Evidence・Safety条件を扱う。両者を混同しない。
 - `quality-completion-evaluator`は成果物を修正せず、固定Ruleの評価結果とKB掲載候補Recordだけを返す。
 - 現行の`/process`へ品質・完成度判定を自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
 - `logger`はTGserverのHTTP Ingest契約だけに依存し、TGserver内部ModuleをImportしない。
@@ -110,6 +120,7 @@ evaluation caller（成果物・Requirement・Evidence確定後）
 | `llm/http-client` | 外部HTTPのTimeout・Response上限 |
 | `llm/providers/*` | 各Provider固有のRequest・Response変換 |
 | `quality-completion-evaluator` | 品質・完成度を個別採点し、95/95・Blocking・Requirement・Evidence条件からKB掲載候補を判定 |
+| `quality-completion-evaluator/domain-lens-resolver` | 同じ38 Genre Lensを読込み、指定Path・分野別Risk・Evidence・Safety確認を採点Contextへ追加 |
 | `logger` | Secret除去済みEventの生成と配送順序の統合 |
 | `logging/tgs-client` | TGserver HTTP配送・Timeout・再試行 |
 | `logging/outbox` | 未送信Eventの一時保存・復旧・期限削除 |
@@ -135,6 +146,23 @@ Input
 - 弱い一致は`HYPOTHESIS_LAST_RESORT`、低Confidence、Review必須として返す。
 - `未分類`、`その他`、`不明`、`other`、`unknown`、`unclassified`を分類IDとして作らない。
 - 現行Runtimeは38 Genre Lensを選択する。ASTERA-KB完成後はKBが返す完全4階層Pathを同じ`Gxx`へ接続する。
+
+## 判定Module Lens契約
+
+```text
+Artifact + Requirement + Evidence
+  → domain_lens指定あり: 指定GxxとPathを使用
+  → domain_lens指定なし: 同一Routerで決定論的に補完
+  → Lens固有Risk / Evidence / Safety確認
+  → 固定Rule採点
+  → Blocking / KB掲載候補判定
+```
+
+- `domain_lens.enforce=false`または未指定時は、Lensを評価結果へ付与するが、未確認項目だけでBlockingしない。
+- `domain_lens.enforce=true`時は、Lens固有項目を`analysis.domain_checks`で確認する。
+- `passed`はEvaluatorが`VALID`と確認したEvidence IDへ接続されている場合だけ有効とする。
+- 任意文字列、存在しないEvidence ID、別CandidateのEvidenceでは合格させない。
+- 未確認・失敗時は`KB-HB-016`でKB掲載候補をBlockingする。
 
 ## HTTPアクセスログ契約
 
