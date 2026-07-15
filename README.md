@@ -51,6 +51,8 @@ Input
 
 ASTERA-KB完成後は、KBが返す完全4階層Pathを同じ`Gxx` Lensへ接続します。現在のRuntimeは、存在しないKB処理や未取得の完全Pathを装いません。
 
+品質・完成度判定Moduleも、通常版と同じCatalogとRouterを参照します。別のLens定義を複製せず、成果物へ選択された`G01`〜`G38` LensのRisk、Evidence、Safety条件を固定Rule判定へ渡します。
+
 ## 導入と起動
 
 本番環境はDocker Composeで起動します。
@@ -76,7 +78,19 @@ npm run verify
 Lens関連Test:
 
 - `test/all-domain-router.test.js`: 38 Genre、決定性、空Input、短語誤発火、Overlay
-- `test/lens-output-integration.test.js`: 実例を5本柱・8段出力まで検査
+- `test/lens-output-integration.test.js`: 医療、Software移行、CVE、前払Credit、家庭園芸の実例を5本柱・8段出力まで検査
+- `src/quality-completion-evaluator/tests/integration/domain-lens.test.js`: 判定Moduleへの共有Lens接続、Evidence、Blocking
+- `src/quality-completion-evaluator/tests/integration/domain-lens-real-examples.test.js`: 同じ5実例を通常版Routerへ通し、選択Lensを判定Moduleへ渡した実判定を検査
+
+実例検証では、各入力について次を確認します。
+
+1. 通常版Routerが期待する`Gxx`を選択する
+2. 必要なOverlayが選択される
+3. 同じTaxonomy VersionとAnchor Pathを判定Moduleへ渡す
+4. Lens固有RiskまたはEvidence項目が評価Resultへ残る
+5. 完成した評価対象は`KB_ELIGIBLE`、Lens強制確認不足は`KB-HB-016`でBlockingされる
+
+GitHub上では`.github/workflows/verify.yml`がNode.js 22で`npm run verify`を実行します。
 
 ## API利用例
 
