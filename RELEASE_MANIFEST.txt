@@ -10,6 +10,7 @@ docs/API_REFERENCE.md
 docs/ARCHITECTURE.md
 docs/BRAND_PHILOSOPHY.md
 docs/DOMAIN_TEMPLATE_CATALOG.md
+docs/LENS_GENRE_INDEX.md
 docs/DEPLOYMENT_VPS.md
 docs/FULL_DOCUMENT.md
 docs/HYPERION_PCE_INTEGRATION.md
@@ -25,6 +26,7 @@ src/billing/stripe-client.js
 src/billing/subscription-sync.js
 src/guard/rate-limiter.js
 src/hyperion-human-reader.js
+src/all-domain-lens-catalog.js
 src/domain-template-router.js
 src/kagura-engine.js
 src/llm/adapter-base.js
@@ -54,8 +56,10 @@ src/store/sqlite-store.js
 src/worker-pool.js
 start.js
 test/api.test.js
+test/all-domain-router.test.js
 test/billing.test.js
 test/engine.test.js
+test/lens-output-integration.test.js
 test/logger.test.js
 test/runtime-hardening.test.js
 test/security.test.js
