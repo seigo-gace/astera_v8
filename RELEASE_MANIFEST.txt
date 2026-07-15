@@ -1,5 +1,7 @@
 .dockerignore
 .env.example
+.github/workflows/test.yml
+.github/workflows/verify.yml
 .gitignore
 Dockerfile
 README.md
@@ -119,6 +121,7 @@ src/quality-completion-evaluator/tests/boundary/eligibility.test.js
 src/quality-completion-evaluator/tests/fixtures/factory.js
 src/quality-completion-evaluator/tests/integration/blocking.test.js
 src/quality-completion-evaluator/tests/integration/cli.test.js
+src/quality-completion-evaluator/tests/integration/domain-lens-real-examples.test.js
 src/quality-completion-evaluator/tests/integration/domain-lens.test.js
 src/quality-completion-evaluator/tests/integration/hook.test.js
 src/quality-completion-evaluator/tests/integration/http-adapter.test.js
