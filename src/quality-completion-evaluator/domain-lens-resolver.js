@@ -64,8 +64,9 @@ function checkKey(type, item) {
   return `${type}:${clean(item).toLowerCase()}`;
 }
 
-function assessDomainLens(request, lens) {
+function assessDomainLens(request, lens, evidence = null) {
   if (!lens) return null;
+  const validEvidenceIds = new Set((evidence?.items || []).filter((item) => item.status === "VALID" && item.evidence_id).map((item) => item.evidence_id));
   const declaredChecks = Array.isArray(request?.analysis?.domain_checks) ? request.analysis.domain_checks : [];
   const checks = [];
   for (const [index, item] of declaredChecks.entries()) {
@@ -101,8 +102,13 @@ function assessDomainLens(request, lens) {
       failed.push({ ...item, evidence_refs: check.evidence_refs });
       continue;
     }
-    if (lens.enforce && check.status === "passed" && check.evidence_refs.length === 0) {
-      missing.push({ ...item, reason: "evidence_ref_required" });
+    if (lens.enforce && check.status === "passed") {
+      const verifiedRefs = check.evidence_refs.filter((id) => validEvidenceIds.has(id));
+      if (verifiedRefs.length === 0) {
+        missing.push({ ...item, reason: "verified_evidence_ref_required" });
+        continue;
+      }
+      verified.push({ ...item, status: check.status, evidence_refs: verifiedRefs });
       continue;
     }
     verified.push({ ...item, status: check.status, evidence_refs: check.evidence_refs });
@@ -120,7 +126,8 @@ function assessDomainLens(request, lens) {
     verified,
     missing,
     failed,
-    invalid_checks: checks.filter((item) => !item.valid)
+    invalid_checks: checks.filter((item) => !item.valid),
+    valid_evidence_ids: [...validEvidenceIds].sort()
   };
 }
 
