@@ -1,115 +1,117 @@
 # Astera 共通レンズ・ジャンル一覧
 
-Status: 共有運用基準
-Document ID: `astera-lens-genre-index`
-Schema Version: `1.0`
+Status: 共有運用基準  
+Document ID: `astera-lens-genre-index`  
+Schema Version: `2.0`  
+Taxonomy Version: `1.0.0`
 
 ## 1. 目的
 
-この文書は、Astera v8とASTERA-KBの間で使用するレンズ・ジャンルの固定ID、役割、接続境界を共通管理するための索引です。
+この文書は、Astera v8本体とASTERA-KBが共通参照する38専門ジャンルの固定IDと接続境界を管理します。READMEへ一覧本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
 
-READMEへ全ジャンル本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
+## 2. 責務
 
-## 2. 両Repositoryでの役割
-
-| Repository | 使用目的 |
+| 対象 | 責務 |
 |---|---|
-| `astera_v8` | 入力内容に対して何を重点確認するかを選ぶ実行側Lens |
-| `astera-kb` | KB Taxonomy・検索結果をAsteraのLens IDへ接続するCrosswalk契約 |
+| Astera v8 | 入力を38専門ジャンルへ決定論的に分類し、Fact / Risk / Multi / Inquiry / CompareのLensを適用する |
+| ASTERA-KB | Knowledgeの4階層TaxonomyとEvidenceを保存・検索し、Asteraへ分類情報を返す |
+| 共通ID | `G01`〜`G38`をRuntime、KB Crosswalk、Log、Testの共通Keyとして使用する |
 
-KB TaxonomyとLensは同一ではありません。
+KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点確認するか」であり、同じ責務にはしません。
 
-- KB Taxonomy: 情報が何に属するか
-- Astera Lens: その情報をどの観点で検証・比較するか
+## 3. 現行Runtime
 
-## 3. 正本と同期
+- Primary Lens: 38専門ジャンルから1件
+- Secondary Lens: Score上位3件
+- Overlay Lens: Primaryを上書きせず追加
+- 分類優先: `CONTROLLED_TERM_MATCH → TEXT_SCORE_MATCH → HYPOTHESIS_LAST_RESORT`
+- 空入力: 誤分類せずInput Error
+- 弱い分類: 低Confidenceと`taxonomy_review_required=true`
+- 各Genreは、元Taxonomyとの整合確認用に4階層の`lens_anchor_path`を持つ
+- 4階層全Pathの検索結果は、将来ASTERA-KB接続時も同じ`G01`〜`G38`を入口として扱う
 
-- 実行時の判定語・処理内容: `astera_v8/src/domain-template-router.js`
-- 各Lensの詳細仕様: `astera_v8/docs/DOMAIN_TEMPLATE_CATALOG.md`
-- 共通ジャンル索引: 両Repositoryの `docs/LENS_GENRE_INDEX.md`
-- KB側の全分野Taxonomy: ASTERA-KBのTaxonomy文書・Data
+## 4. Primary Lens一覧
 
-両Repositoryの本ファイルは、`Document ID`と`Schema Version`を一致させます。Lens IDの追加・変更時は双方を同時更新します。
-
-## 4. 運用ルール
-
-- Primary Lensは原則1件を選択します。
-- 専門ジャンルが確定しない場合は `general_judgment` を使用します。
-- Overlay LensはPrimary Lensを置き換えず、安全・Evidence条件を追加します。
-- Lens IDは検索Script、KB Crosswalk、Log、Testの共通Keyとして使用します。
-- 既存Lens IDは名称変更時も安易に変更しません。
-- `other`、`unknown`、`unclassified`などの逃げ分類は作りません。
-- KB Taxonomyの全NodeをLens一覧へ複製しません。
-- 検索Score、Keyword重み、分類Logicは本ファイルへ記載しません。
-
-## 5. Primary Lens一覧
-
-| No. | Lens ID | 表示名 | 主な対象 |
-|---:|---|---|---|
-| 00 | `general_judgment` | 一般判断 / Default | 専門分野が支配的でない相談、判断、総合検討 |
-| 01 | `business_strategy` | 経営・事業戦略 | 経営判断、事業Model、価格、提携、市場参入 |
-| 02 | `finance_capital` | 金融・投資・資本配分 | 予算、投資評価、資金調達、収益性、資本配分 |
-| 03 | `legal_compliance` | 法律・Compliance・契約 | 法令、契約、紛争、知的財産、規制対応 |
-| 04 | `medical_health` | 医療・健康・Clinical | 症状、治療選択、医療情報、公衆衛生 |
-| 05 | `marketing_growth` | Marketing・成長・Brand | 集客、広告、Positioning、Conversion、Brand |
-| 06 | `product_ux` | Product・UX・Roadmap | 要件、機能優先順位、UX、Onboarding、Roadmap |
-| 07 | `engineering_architecture` | Engineering・Architecture・実装 | Software設計、API、DB、移行、性能、実装計画 |
-| 08 | `cybersecurity_privacy` | Cybersecurity・Privacy・Trust | 認証、認可、Secret、脅威、Privacy、Incident対応 |
-| 09 | `ai_ml_governance` | AI・ML・LLM Governance | AI採用、Model選定、評価、安全、Bias、運用統制 |
-| 10 | `project_operations` | Project・Program・Operations | 工程、納期、担当、依存関係、運用改善 |
-| 11 | `hr_organization` | HR・Organization・People | 採用、評価、報酬、Team設計、労務、組織運営 |
-| 12 | `sales_customer_success` | Sales・Customer Success・交渉 | 商談、提案、更新、解約、顧客対応、交渉 |
-| 13 | `research_evidence` | Research・Academic・Evidence Review | 論文、調査設計、仮説、引用、Evidence統合 |
-| 14 | `education_training` | Education・Training・Learning Design | 教育、研修、教材、Curriculum、Assessment |
-| 15 | `procurement_vendor` | Procurement・Vendor・Build-vs-Buy | Tool選定、SaaS、外注、調達、内製比較 |
-| 16 | `crisis_reputation` | Crisis・Reputation・Public Communication | 事故、炎上、謝罪、声明、緊急広報、信頼回復 |
-| 17 | `policy_public_sector` | Policy・Public Sector・Nonprofit | 公共政策、行政、非営利、Community、Governance |
-| 18 | `creative_writing` | Creative・Writing・Content | 文書、Mail、Speech、記事、Script、Tone設計 |
-| 19 | `personal_decision` | Personal Decision・Coaching・Life Planning | Career、習慣、進路、個人判断、生活設計 |
-| 20 | `data_analytics` | Data・Analytics・Experimentation | KPI、Dashboard、A/B Test、予測、因果、Data品質 |
-
-Primary Lens総数: **21**
-
-## 6. Overlay Lens一覧
-
-| Overlay ID | 表示名 | 追加条件 |
+| ID | 専門ジャンル | 検証Anchor Path |
 |---|---|---|
-| `high_stakes_legal` | High-Stakes Legal | 権利、責任、訴訟、解雇、刑事、重大な契約判断 |
-| `medical_safety` | Medical Safety | 救急、自傷、胸痛、呼吸、意識障害など緊急性の高い医療条件 |
-| `current_information` | Current Information | 最新情報、現在価格、法改正、現職者、変動する公開情報 |
-| `evidence_strict` | Evidence Strict | 根拠、証拠、正確性、検証、Fact Checkを強く要求する処理 |
-| `safety_abuse` | Safety / Abuse | 攻撃、Malware、詐欺、回避、侵入など悪用可能性のある処理 |
+| G01 | 一般知識・百科・情報資源 | `G01/G01-L03/G01-L03-M01/G01-L03-M01-S03` |
+| G02 | 哲学・倫理・宗教・思想 | `G02/G02-L03/G02-L03-M02/G02-L03-M02-S06` |
+| G03 | 心理・認知・行動科学 | `G03/G03-L02/G03-L02-M01/G03-L02-M01-S03` |
+| G04 | 歴史・考古・系譜 | `G04/G04-L04/G04-L04-M03/G04-L04-M03-S05` |
+| G05 | 地理・地図・人口・地域 | `G05/G05-L03/G05-L03-M02/G05-L03-M02-S04` |
+| G06 | 社会・人権・福祉・家族 | `G06/G06-L02/G06-L02-M01/G06-L02-M01-S01` |
+| G07 | 政治・行政・公共政策・国際関係 | `G07/G07-L03/G07-L03-M03/G07-L03-M03-S04` |
+| G08 | 法律・司法・規制 | `G08/G08-L04/G08-L04-M02/G08-L04-M02-S02` |
+| G09 | 経済・開発・貿易 | `G09/G09-L02/G09-L02-M03/G09-L02-M03-S05` |
+| G10 | Business・経営・Marketing・Entrepreneurship | `G10/G10-L02/G10-L02-M03/G10-L02-M03-S03` |
+| G11 | 金融・会計・税務・保険 | `G11/G11-L01/G11-L01-M01/G11-L01-M01-S04` |
+| G12 | 労働・職業・人材・Skill | `G12/G12-L03/G12-L03-M02/G12-L03-M02-S02` |
+| G13 | 教育・学習・資格 | `G13/G13-L04/G13-L04-M01/G13-L04-M01-S04` |
+| G14 | 言語・言語学・辞書・翻訳 | `G14/G14-L01/G14-L01-M02/G14-L01-M02-S02` |
+| G15 | 文学・出版・図書館・Archive | `G15/G15-L01/G15-L01-M01/G15-L01-M01-S02` |
+| G16 | 芸術・文化・音楽・Media | `G16/G16-L02/G16-L02-M01/G16-L02-M01-S02` |
+| G17 | Sports・Recreation・観光・Game | `G17/G17-L01/G17-L01-M01/G17-L01-M01-S02` |
+| G18 | 数学・統計・Logic | `G18/G18-L04/G18-L04-M01/G18-L04-M01-S02` |
+| G19 | 物理・天文・宇宙 | `G19/G19-L03/G19-L03-M03/G19-L03-M03-S03` |
+| G20 | 化学・物質・材料 | `G20/G20-L01/G20-L01-M01/G20-L01-M01-S04` |
+| G21 | 地球・環境・気候・災害 | `G21/G21-L03/G21-L03-M01/G21-L03-M01-S01` |
+| G22 | 生物・生命科学・生態 | `G22/G22-L04/G22-L04-M02/G22-L04-M02-S03` |
+| G23 | 医学・健康・薬学・医療 | `G23/G23-L01/G23-L01-M03/G23-L01-M03-S03` |
+| G24 | 農業・林業・水産・食品・獣医 | `G24/G24-L04/G24-L04-M02/G24-L04-M02-S03` |
+| G25 | 工学・製造・産業技術 | `G25/G25-L04/G25-L04-M02/G25-L04-M02-S05` |
+| G26 | 建築・建設・土木・BIM・都市 | `G26/G26-L04/G26-L04-M03/G26-L04-M03-S02` |
+| G27 | Energy・資源・Utility | `G27/G27-L01/G27-L01-M02/G27-L01-M02-S01` |
+| G28 | 交通・物流・Mobility | `G28/G28-L03/G28-L03-M01/G28-L03-M01-S04` |
+| G29 | IT・Computer・System・Application開発 | `G29/G29-L03/G29-L03-M03/G29-L03-M03-S04` |
+| G30 | AI・Data Science・Robot | `G30/G30-L03/G30-L03-M01/G30-L03-M01-S01` |
+| G31 | Cybersecurity・Privacy・暗号 | `G31/G31-L02/G31-L02-M03/G31-L02-M03-S05` |
+| G32 | 標準・特許・知的財産・Compliance・計量 | `G32/G32-L01/G32-L01-M01/G32-L01-M01-S04` |
+| G33 | 商品・Commerce・Consumer・製品安全 | `G33/G33-L04/G33-L04-M01/G33-L04-M01-S05` |
+| G34 | 公共安全・犯罪・Forensics・Emergency | `G34/G34-L02/G34-L02-M02/G34-L02-M02-S05` |
+| G35 | 防衛・軍事・海事・国家安全保障 | `G35/G35-L01/G35-L01-M02/G35-L01-M02-S06` |
+| G36 | 通信・Telecom・Internet・Broadcast | `G36/G36-L02/G36-L02-M03/G36-L02-M03-S02` |
+| G37 | 科学研究・Innovation・Knowledge Production | `G37/G37-L04/G37-L04-M01/G37-L04-M01-S01` |
+| G38 | 家庭・生活・Personal・Hobby | `G38/G38-L04/G38-L04-M01/G38-L04-M01-S05` |
 
-Overlay Lens総数: **5**
+Primary Lens総数: **38**
 
-## 7. KB・検索Scriptとの接続契約
+## 5. Overlay Lens
 
-KB Crosswalkまたは検索Scriptは、最終的に次の形へ正規化します。
+| ID | 用途 |
+|---|---|
+| `high_stakes_legal` | 訴訟、解雇、逮捕、損害賠償など重大な法的条件 |
+| `medical_safety` | 胸痛、呼吸異常、意識障害、自傷など緊急性の高い医療条件 |
+| `current_information` | 現在価格、法改正、最新仕様など時間で変化する情報 |
+| `evidence_strict` | 根拠、証拠、正確性、検証、引用を強く要求する処理 |
+| `safety_abuse` | 攻撃、Malware、詐欺、侵入、回避など悪用可能性がある処理 |
+
+## 6. 共通出力契約
 
 ```json
 {
-  "primary_lens_id": "engineering_architecture",
-  "overlay_lens_ids": ["evidence_strict", "current_information"],
-  "classification_source": "kb_taxonomy_crosswalk",
-  "confidence": 0.92,
-  "reason_codes": ["software_architecture", "current_specification"]
+  "router": "all_domain_lens_router_v1",
+  "taxonomy_version": "1.0.0",
+  "primary": {
+    "id": "G29",
+    "name": "IT・Computer・System・Application開発",
+    "classification": {
+      "specialized_genre": {"id": "G29", "name": "IT・Computer・System・Application開発"},
+      "lens_anchor_path": {
+        "path_key": "G29/G29-L03/G29-L03-M03/G29-L03-M03-S04"
+      },
+      "path_resolution": "GENRE_LENS_ANCHOR"
+    }
+  },
+  "classification_basis": "CONTROLLED_TERM_MATCH",
+  "confidence": 0.95,
+  "taxonomy_review_required": false
 }
 ```
 
-### 必須条件
+## 7. 更新規則
 
-- `primary_lens_id` はPrimary Lens IDから1件を返します。
-- `overlay_lens_ids` はOverlay Lens IDだけを返します。
-- 判断材料不足時は `general_judgment` を返し、Confidenceと理由を残します。
-- KB側はLensの判断処理を実行せず、Taxonomy結果とEvidenceを返します。
-- Astera側はKB Taxonomyを保存分類として上書きせず、Lens選択材料として使用します。
-
-## 8. 更新時チェック
-
-1. 両RepositoryのDocument IDとSchema Versionが一致していること。
-2. Lens ID、件数、表示名が一致していること。
-3. Astera Runtime実装に対応するIDが存在すること。
-4. 詳細Catalogに対応する定義が存在すること。
-5. Primary LensとOverlay Lensを混同していないこと。
-6. KB Taxonomyを直接複製していないこと。
-7. 両READMEには本ファイルへの参照だけを置くこと。
+1. 両RepositoryのDocument ID、Schema Version、38 IDを一致させる。
+2. Runtime変更時は`src/all-domain-lens-catalog.js`、`src/domain-template-router.js`、Test、本文書を同時更新する。
+3. KBの4階層Pathを38 Lensへ潰さず、`Gxx`と完全Pathを併記する。
+4. `other`、`unknown`、`unclassified`、`未分類`、`その他`を新設しない。
+5. READMEには本文を複製せず、本ファイルへの参照だけを置く。
