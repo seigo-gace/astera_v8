@@ -123,7 +123,9 @@ function scoreGenre(genre, text) {
   for (const rawTerm of genre.terms || []) {
     const term = normalize(rawTerm);
     if (!term) continue;
-    if (normalizedText.includes(term)) {
+    const shortAsciiToken = /^[a-z0-9.+#-]{1,3}$/.test(term);
+    const exactMatch = shortAsciiToken ? queryTokens.has(term) : normalizedText.includes(term);
+    if (exactMatch) {
       const compactLength = term.replace(/\s/g, '').length;
       score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
       exactHits += 1;
@@ -253,9 +255,22 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
   const routeText = `${normalized.core_request}\n${normalized.analysis_text}`.trim();
   if (!normalize(routeText)) {
-    const error = new Error('question/contextのいずれかが必要です');
-    error.code = 'ASTERA_LENS_INPUT_REQUIRED';
-    throw error;
+    return {
+      router: 'all_domain_lens_router_v1',
+      taxonomy_version: TAXONOMY_VERSION,
+      user_selection_required: false,
+      input_valid: false,
+      input_error: 'ASTERA_LENS_INPUT_REQUIRED',
+      classification_basis: null,
+      confidence: 0,
+      taxonomy_review_required: true,
+      primary: null,
+      secondary: [],
+      overlays: [],
+      normalized,
+      lens_text: '',
+      analysis_text: normalized.analysis_text
+    };
   }
 
   const scored = GENRE_LENSES
@@ -273,6 +288,8 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
     router: 'all_domain_lens_router_v1',
     taxonomy_version: TAXONOMY_VERSION,
     user_selection_required: false,
+    input_valid: true,
+    input_error: null,
     classification_basis: primary.classification_basis,
     confidence: primary.confidence,
     taxonomy_review_required: primary.taxonomy_review_required,
