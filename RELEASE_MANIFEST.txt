@@ -85,6 +85,7 @@ src/quality-completion-evaluator/contracts/evaluation-result.v1.schema.json
 src/quality-completion-evaluator/contracts/kb-record.v1.schema.json
 src/quality-completion-evaluator/docker-compose.example.yml
 src/quality-completion-evaluator/docs/ASTERA_品質完成度採点_KB掲載判定_総合設計書_v1.0.md
+src/quality-completion-evaluator/domain-lens-resolver.js
 src/quality-completion-evaluator/evaluation-result-builder.js
 src/quality-completion-evaluator/evaluator-engine.js
 src/quality-completion-evaluator/evidence-verifier.js
@@ -118,6 +119,7 @@ src/quality-completion-evaluator/tests/boundary/eligibility.test.js
 src/quality-completion-evaluator/tests/fixtures/factory.js
 src/quality-completion-evaluator/tests/integration/blocking.test.js
 src/quality-completion-evaluator/tests/integration/cli.test.js
+src/quality-completion-evaluator/tests/integration/domain-lens.test.js
 src/quality-completion-evaluator/tests/integration/hook.test.js
 src/quality-completion-evaluator/tests/integration/http-adapter.test.js
 src/quality-completion-evaluator/tests/integration/implementation-block.test.js
