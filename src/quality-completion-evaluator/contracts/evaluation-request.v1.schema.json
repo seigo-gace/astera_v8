@@ -1,19 +1,80 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "$id":"astera.quality-completion.request.v1",
-  "type":"object",
-  "required":["schema_version","evaluation_id","project_id","target","requirements","evaluation_config"],
-  "properties":{
-    "schema_version":{"const":"astera.quality-completion.request.v1"},
-    "evaluation_id":{"type":"string","minLength":1},
-    "project_id":{"type":"string","minLength":1},
-    "task_id":{"type":["string","null"]},
-    "run_id":{"type":["string","null"]},
-    "trace_id":{"type":["string","null"]},
-    "target":{"type":"object","required":["candidate_id","artifact_type","content","content_hash"],"properties":{"candidate_id":{"type":"string"},"candidate_version":{"type":"integer","minimum":1},"artifact_type":{"enum":["design","implementation","test_result","operation_document","research","incident_resolution","knowledge_document","configuration","other"]},"title":{"type":"string"},"content":{"type":"string","minLength":1},"content_hash":{"type":"string","pattern":"^sha256:[a-fA-F0-9]{64}$"},"declared_status":{"type":"string"}}},
-    "requirements":{"type":"array","minItems":1,"items":{"type":"object","required":["requirement_id","text","mandatory"],"properties":{"requirement_id":{"type":"string"},"text":{"type":"string"},"mandatory":{"type":"boolean"},"source":{"type":"string"},"keywords":{"type":"array","items":{"type":"string"}},"fulfillment":{"type":"object"}}}},
-    "evidence":{"type":"object"},
-    "analysis":{"type":"object"},
-    "evaluation_config":{"type":"object","required":["rubric_version","blocking_rule_version"],"properties":{"rubric_version":{"const":"quality-completion-rubric.v1"},"blocking_rule_version":{"const":"blocking-rules.v1"}}}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.quality-completion.request.v1",
+  "type": "object",
+  "required": ["schema_version", "evaluation_id", "project_id", "target", "requirements", "evaluation_config"],
+  "properties": {
+    "schema_version": {"const": "astera.quality-completion.request.v1"},
+    "evaluation_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": ["string", "null"]},
+    "run_id": {"type": ["string", "null"]},
+    "trace_id": {"type": ["string", "null"]},
+    "target": {
+      "type": "object",
+      "required": ["candidate_id", "artifact_type", "content", "content_hash"],
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "candidate_version": {"type": "integer", "minimum": 1},
+        "artifact_type": {"enum": ["design", "implementation", "test_result", "operation_document", "research", "incident_resolution", "knowledge_document", "configuration", "other"]},
+        "title": {"type": "string"},
+        "content": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+        "declared_status": {"type": "string"}
+      }
+    },
+    "domain_lens": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^G(0[1-9]|[12][0-9]|3[0-8])$"},
+        "taxonomy_version": {"const": "1.0.0"},
+        "path_key": {"type": "string", "minLength": 4},
+        "enforce": {"type": "boolean"}
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["requirement_id", "text", "mandatory"],
+        "properties": {
+          "requirement_id": {"type": "string"},
+          "text": {"type": "string"},
+          "mandatory": {"type": "boolean"},
+          "source": {"type": "string"},
+          "keywords": {"type": "array", "items": {"type": "string"}},
+          "fulfillment": {"type": "object"}
+        }
+      }
+    },
+    "evidence": {"type": "object"},
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "domain_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["lens_type", "lens_item", "status"],
+            "properties": {
+              "lens_type": {"enum": ["risk", "evidence", "safety"]},
+              "lens_item": {"type": "string", "minLength": 1},
+              "status": {"enum": ["passed", "failed", "not_applicable"]},
+              "evidence_refs": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "evaluation_config": {
+      "type": "object",
+      "required": ["rubric_version", "blocking_rule_version"],
+      "properties": {
+        "rubric_version": {"const": "quality-completion-rubric.v1"},
+        "blocking_rule_version": {"const": "blocking-rules.v1"}
+      }
+    }
   }
 }
