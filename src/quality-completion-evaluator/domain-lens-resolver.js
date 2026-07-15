@@ -22,7 +22,14 @@ function validateDeclaredDomainLens(value) {
   return errors;
 }
 
-function publicLens(genre, declared, source) {
+function runtimePrimaryForGenre(genre) {
+  const routed = routeDomainTemplates({ question: genre.anchor_title });
+  if (!routed.primary || routed.primary.id !== genre.id) throw new Error(`domain lens runtime mismatch: ${genre.id}`);
+  return routed.primary;
+}
+
+function publicLens(genre, declared, source, routedPrimary = null) {
+  const runtime = routedPrimary || runtimePrimaryForGenre(genre);
   const requestedPath = clean(declared?.path_key);
   return {
     id: genre.id,
@@ -30,15 +37,15 @@ function publicLens(genre, declared, source) {
     taxonomy_version: TAXONOMY_VERSION,
     source,
     enforce: declared?.enforce === true,
-    path_key: requestedPath || genre.anchor_path.path_key,
+    path_key: requestedPath || runtime.classification.lens_anchor_path.path_key,
     path_resolution: requestedPath ? "REQUESTED_TAXONOMY_PATH" : "GENRE_LENS_ANCHOR",
-    fact_lens: genre.fact_lens,
-    risk_lens: genre.risk_lens,
-    multi_lens: genre.multi_lens,
-    inquiry_lens: genre.inquiry_lens,
-    compare_lens: genre.compare_lens,
-    evidence_to_collect: genre.evidence_to_collect,
-    safety_gate: genre.safety_gate || []
+    fact_lens: runtime.fact_lens,
+    risk_lens: runtime.risk_lens,
+    multi_lens: runtime.multi_lens,
+    inquiry_lens: runtime.inquiry_lens,
+    compare_lens: runtime.compare_lens,
+    evidence_to_collect: runtime.evidence_to_collect,
+    safety_gate: runtime.safety_gate
   };
 }
 
@@ -50,7 +57,7 @@ function resolveDomainLens(request) {
     context: request?.target?.content || ""
   });
   if (!routed.primary) return null;
-  return publicLens(GENRE_BY_ID.get(routed.primary.id), null, "deterministic_router");
+  return publicLens(GENRE_BY_ID.get(routed.primary.id), null, "deterministic_router", routed.primary);
 }
 
 function checkKey(type, item) {
