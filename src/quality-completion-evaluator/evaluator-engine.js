@@ -19,7 +19,7 @@ async function evaluate(request) {
     const requirements = mapRequirements(request.requirements, request.target.content);
     const evidence = await verifyEvidence(request, profile);
     const domainLens = resolveDomainLens(request);
-    const domainLensAssessment = assessDomainLens(request, domainLens);
+    const domainLensAssessment = assessDomainLens(request, domainLens, evidence);
     const context = { request, profile, requirements, evidence, domain_lens: domainLens, domain_lens_assessment: domainLensAssessment };
     const qualityResult = evaluateQuality(context);
     const completionResult = evaluateCompletion(context);
