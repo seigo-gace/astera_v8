@@ -23,10 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-
-      - name: Install root package
-        run: npm ci --ignore-scripts
 
       - name: Run all tests and smoke verification
         run: npm run verify
