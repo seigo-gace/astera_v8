@@ -3,6 +3,7 @@
 const { validateEvaluationRequest, loadArtifactProfile } = require("./input-validator");
 const { mapRequirements } = require("./requirement-mapper");
 const { verifyEvidence } = require("./evidence-verifier");
+const { resolveDomainLens, assessDomainLens } = require("./domain-lens-resolver");
 const { evaluateQuality } = require("./quality/quality-rule-engine");
 const { evaluateCompletion } = require("./completion/completion-rule-engine");
 const { calculateScores } = require("./score-calculator");
@@ -17,7 +18,9 @@ async function evaluate(request) {
     const profile = loadArtifactProfile(request.target.artifact_type);
     const requirements = mapRequirements(request.requirements, request.target.content);
     const evidence = await verifyEvidence(request, profile);
-    const context = { request, profile, requirements, evidence };
+    const domainLens = resolveDomainLens(request);
+    const domainLensAssessment = assessDomainLens(request, domainLens);
+    const context = { request, profile, requirements, evidence, domain_lens: domainLens, domain_lens_assessment: domainLensAssessment };
     const qualityResult = evaluateQuality(context);
     const completionResult = evaluateCompletion(context);
     const scores = calculateScores(qualityResult, completionResult);
