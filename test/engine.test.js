@@ -168,13 +168,13 @@ test('Astera automatically selects a domain template without user choice', async
     }, { id: 'test', is_global: true, plan: 'admin' });
 
     assert.equal(out.result.domain.user_selection_required, false);
-    assert.equal(out.result.domain.primary.id, 'marketing_growth');
-    assert.equal(out.result.judgment.domain_template.primary.id, 'marketing_growth');
-    assert.match(out.result.judgment['02_premise'].items.join('\n'), /auto_domain=Marketing \/ Growth \/ Brand/);
-    assert.match(out.result.judgment['03_facts'].evidence_to_collect.join('\n'), /conversion data|customer research/);
-    assert.match(out.result.judgment['04_crisis'].domain_checks.map((x) => x.check).join('\n'), /misleading claims|brand mismatch/);
+    assert.equal(out.result.domain.primary.id, 'G10');
+    assert.equal(out.result.judgment.domain_template.primary.id, 'G10');
+    assert.match(out.result.judgment['02_premise'].items.join('\n'), /auto_domain=Business・経営・Marketing・Entrepreneurship/);
+    assert.match(out.result.judgment['03_facts'].evidence_to_collect.join('\n'), /顧客Data|市場調査/);
+    assert.match(out.result.judgment['04_crisis'].domain_checks.map((x) => x.check).join('\n'), /市場誤認|Brand毀損/);
     assert.match(out.prompt, /Auto Domain Template/);
-    assert.match(out.prompt, /marketing_growth/);
+    assert.match(out.prompt, /G10/);
   } finally {
     await engine.destroy();
   }
@@ -208,12 +208,12 @@ test('Astera strips pasted 8-section template before running five pillars', asyn
       moodAnswers: { deepThink: true, accuracy: true }
     }, { id: 'test', is_global: true, plan: 'admin' });
 
-    assert.equal(out.result.domain.primary.id, 'legal_compliance');
+    assert.equal(out.result.domain.primary.id, 'G08');
     assert.equal(out.result.domain.normalized.removed_meta_blocks, 1);
     assert.doesNotMatch(JSON.stringify(out.result.facts), /表面的な依頼の奥/);
-    assert.match(out.result.risks.domain_checks.map((x) => x.check).join('\n'), /wrong jurisdiction|missing facts/);
-    assert.equal(out.result.inquiry.domain_template.id, 'legal_compliance');
-    assert.match(out.result.inquiry.domain_template.inquiry_lens.join('\n'), /where it happened|documents available/);
+    assert.match(out.result.risks.domain_checks.map((x) => x.check).join('\n'), /法域違い|事実不足/);
+    assert.equal(out.result.inquiry.domain_template.id, 'G08');
+    assert.match(out.result.inquiry.domain_template.inquiry_lens.join('\n'), /どの法域か|契約・通知文はあるか/);
     assert.doesNotMatch(out.material.compact_text.split('\n')[0], /表面的な依頼の奥/);
   } finally {
     await engine.destroy();
