@@ -2,25 +2,29 @@
 
 Status: 共有運用基準  
 Document ID: `astera-lens-genre-index`  
-Schema Version: `2.0`  
+Schema Version: `2.1`  
 Taxonomy Version: `1.0.0`
 
 ## 1. 目的
 
-この文書は、Astera v8本体とASTERA-KBが共通参照する38専門ジャンルの固定IDと接続境界を管理します。READMEへ一覧本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
+この文書は、Astera v8通常版、品質・完成度判定Module、ASTERA-KBが共通参照する38専門ジャンルの固定IDと接続境界を管理します。READMEへ一覧本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
 
 ## 2. 責務
 
 | 対象 | 責務 |
 |---|---|
-| Astera v8 | 入力を38専門ジャンルへ決定論的に分類し、Fact / Risk / Multi / Inquiry / CompareのLensを適用する |
+| Astera v8通常版 | 入力を38専門ジャンルへ決定論的に分類し、Fact / Risk / Multi / Inquiry / CompareのLensを適用する |
+| 品質・完成度判定Module | 同じLensを読み込み、分野固有のRisk・Evidence・Safety条件を固定Rule採点へ追加する |
 | ASTERA-KB | Knowledgeの4階層TaxonomyとEvidenceを保存・検索し、Asteraへ分類情報を返す |
-| 共通ID | `G01`〜`G38`をRuntime、KB Crosswalk、Log、Testの共通Keyとして使用する |
+| 共通ID | `G01`〜`G38`をRuntime、判定Module、KB Crosswalk、Log、Testの共通Keyとして使用する |
 
-KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点確認するか」であり、同じ責務にはしません。
+KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点確認するか」、Artifact Profileは「どの種類の成果物を採点するか」であり、責務を混同しません。
 
-## 3. 現行Runtime
+## 3. 共通実装
 
+- Lens正本: `astera_v8/src/all-domain-lens-catalog.js`
+- 通常版分類: `astera_v8/src/domain-template-router.js`
+- 判定Module接続: `astera_v8/src/quality-completion-evaluator/domain-lens-resolver.js`
 - Primary Lens: 38専門ジャンルから1件
 - Secondary Lens: Score上位3件
 - Overlay Lens: Primaryを上書きせず追加
@@ -29,6 +33,7 @@ KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点�
 - 弱い分類: 低Confidenceと`taxonomy_review_required=true`
 - 各Genreは、元Taxonomyとの整合確認用に4階層の`lens_anchor_path`を持つ
 - 4階層全Pathの検索結果は、将来ASTERA-KB接続時も同じ`G01`〜`G38`を入口として扱う
+- 判定Moduleで`enforce=true`を指定した場合、Lens固有確認は`VALID` Evidenceへ接続されている場合だけ通過する
 
 ## 4. Primary Lens一覧
 
@@ -85,7 +90,7 @@ Primary Lens総数: **38**
 | `evidence_strict` | 根拠、証拠、正確性、検証、引用を強く要求する処理 |
 | `safety_abuse` | 攻撃、Malware、詐欺、侵入、回避など悪用可能性がある処理 |
 
-## 6. 共通出力契約
+## 6. 通常版出力契約
 
 ```json
 {
@@ -108,10 +113,29 @@ Primary Lens総数: **38**
 }
 ```
 
-## 7. 更新規則
+## 7. 判定Module入力契約
+
+```json
+{
+  "domain_lens": {
+    "id": "G29",
+    "taxonomy_version": "1.0.0",
+    "path_key": "G29/G29-L03/G29-L03-M03/G29-L03-M03-S04",
+    "enforce": true
+  }
+}
+```
+
+- Lens未指定時は通常版と同じRouterで補完する
+- `enforce=false`時は評価結果へLensを付与する
+- `enforce=true`時はLens固有Risk・Evidence・Safety確認をKB掲載条件へ加える
+- `passed`はEvaluatorが`VALID`と確認したEvidenceへ接続されている場合だけ有効
+- 未確認・失敗時は`KB-HB-016`
+
+## 8. 更新規則
 
 1. 両RepositoryのDocument ID、Schema Version、38 IDを一致させる。
-2. Runtime変更時は`src/all-domain-lens-catalog.js`、`src/domain-template-router.js`、Test、本文書を同時更新する。
+2. Runtime変更時は`src/all-domain-lens-catalog.js`、`src/domain-template-router.js`、判定Module接続、Test、本文書を同時更新する。
 3. KBの4階層Pathを38 Lensへ潰さず、`Gxx`と完全Pathを併記する。
 4. `other`、`unknown`、`unclassified`、`未分類`、`その他`を新設しない。
 5. READMEには本文を複製せず、本ファイルへの参照だけを置く。
