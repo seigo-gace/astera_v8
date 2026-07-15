@@ -93,7 +93,8 @@ HTTPアクセス、認証失敗、推論結果、Stripeイベントなど、主�
 
 *   `STRUCTURE.md`: Astera v8のディレクトリ構造とコンポーネント間の依存関係
 *   `docs/BRAND_PHILOSOPHY.md`: ブランド理念
-*   `docs/DOMAIN_TEMPLATE_CATALOG.md`: ドメインごとのテンプレートカタログ
+*   `docs/LENS_GENRE_INDEX.md`: レンズ・ジャンルの固定ID一覧、Primary / Overlayの運用境界、KB・検索Script接続契約
+*   `docs/DOMAIN_TEMPLATE_CATALOG.md`: 各レンズの5本柱別の詳細仕様
 *   `docs/FULL_DOCUMENT.md`: 詳細な仕様書
 *   `docs/ARCHITECTURE.md`: アーキテクチャ設計
 *   `docs/API_REFERENCE.md`: APIリファレンス
