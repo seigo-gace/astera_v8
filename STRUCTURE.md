@@ -4,59 +4,65 @@
 
 ## 責務
 
-Astera v8は問いの意味判定・認知前処理・推論を担当する。ログの永続保存、検索、KB登録は担当しない。
+Astera v8は、入力の意味判定、38専門ジャンル分類、固定Ruleによる5本柱処理、8段の判断材料生成を担当する。一般的な会話AIやKnowledge保存Systemではない。
 
+- 分類・Lens正本: `src/all-domain-lens-catalog.js`
+- 分類実行: `src/domain-template-router.js`
+- Taxonomy Version: `1.0.0`
+- Runtime分類: `G01`〜`G38`の専門ジャンルLens
+- 4階層連結: 各Genreの検証Anchor Pathを保持し、将来ASTERA-KBの完全Path結果へ接続する
 - ログ永続正本: TGserver経由のTelegram
 - ログ検索索引: TGserver配下のMeilisearch
 - ログ送信失敗時の一時状態: `/home/admin1/logs/astera-v8/outbox`
-- テナント・使用量・Stripe webhook冪等性: `/data/astera.db`（アプリケーション状態。ログ正本ではない）
-- KB連携: 未実装。生ログ・推論結果の自動投入は禁止
+- テナント・使用量・Stripe webhook冪等性: `/data/astera.db`（Application状態。ログ正本ではない）
+- KB連携: 未実装。生ログ・処理結果の自動投入は禁止
 - 品質・完成度判定: `src/quality-completion-evaluator`。固定Ruleで評価し、KB掲載候補Recordを生成する。KB保存は担当しない
 
 ## ディレクトリ構造
 
 ```text
 astera_v8/
-├── STRUCTURE.md               # 本ファイル（構成図・絶対）
-├── README.md                  # Project入口
-├── RELEASE_MANIFEST.txt       # 配布対象一覧
-├── start.js                   # Dockerコンテナのcomposition root
+├── STRUCTURE.md                    # 本ファイル（構成図・絶対）
+├── README.md                       # Project入口
+├── RELEASE_MANIFEST.txt            # 配布対象一覧
+├── start.js                        # Docker ContainerのComposition Root
 ├── package.json
 ├── Dockerfile
-├── docker-compose.yml         # 本番常駐の唯一の起動方式
+├── docker-compose.yml              # 本番常駐の唯一の起動方式
 ├── .env / .env.example
 ├── .gitignore / .dockerignore
 ├── src/
-│   ├── server.js              # HTTP境界・routing
-│   ├── kagura-engine.js       # 認知処理の統合
-│   ├── domain-template-router.js # 入力正規化・用途テンプレート自動判定
-│   ├── worker-pool.js         # Worker lifecycle
-│   ├── logger.js              # 構造化イベント生成・配送順序
+│   ├── server.js                   # HTTP境界・Routing
+│   ├── kagura-engine.js            # 5本柱・8段処理の順序統合
+│   ├── all-domain-lens-catalog.js  # G01〜G38 Lens定義・検証Anchor Path
+│   ├── domain-template-router.js   # 入力正規化・38 Genre分類・Overlay選択
+│   ├── worker-pool.js              # Worker Lifecycle
+│   ├── logger.js                   # 構造化Event生成・配送順序
 │   ├── logging/
-│   │   ├── tgs-client.js      # TGserver HTTP配送・再試行
-│   │   └── outbox.js          # 未送信イベントの一時状態
-│   ├── safe-json.js           # secret除去・安全なJSON処理
+│   │   ├── tgs-client.js           # TGserver HTTP配送・再試行
+│   │   └── outbox.js               # 未送信Eventの一時状態
+│   ├── safe-json.js                # Secret除去・安全なJSON処理
 │   ├── mood-detector.js
 │   ├── hyperion-human-reader.js
-│   ├── auth/                  # tenant認証
-│   ├── billing/               # 課金・使用量
-│   ├── guard/                 # rate limit
-│   ├── llm/
-│   │   ├── llm-client.js      # provider chain
-│   │   ├── adapter-base.js    # adapter契約
-│   │   ├── adapters.js        # provider factory
-│   │   ├── http-client.js     # timeout・response上限
-│   │   └── providers/         # 1 provider = 1 Module
-│   ├── pillars/               # 認知処理Worker群
-│   ├── store/                 # アプリケーション状態
+│   ├── auth/                       # Tenant認証
+│   ├── billing/                    # 課金・使用量
+│   ├── guard/                      # Rate Limit
+│   ├── llm/                        # 任意の外部出力Adapter境界
+│   │   ├── llm-client.js           # Provider Chain
+│   │   ├── adapter-base.js         # Adapter契約
+│   │   ├── adapters.js             # Provider Factory
+│   │   ├── http-client.js          # Timeout・Response上限
+│   │   └── providers/              # 1 Provider = 1 Module
+│   ├── pillars/                    # Fact / Risk / Multi / Inquiry / Compare Worker群
+│   ├── store/                      # Application状態
 │   ├── quality-completion-evaluator/ # 品質・完成度固定Rule採点／KB掲載候補判定
-│   └── public/                # 最小Web UI
-├── test/                      # Node標準test
-├── scripts/                   # 短時間の検証用。常駐禁止
+│   └── public/                     # 最小Web UI
+├── test/                           # Node標準Test
+├── scripts/                        # 短時間の検証用。常駐禁止
 ├── deploy/
-│   └── nginx/                 # Docker前段のHTTPS reverse proxy例
-├── docs/                      # 仕様・API・運用文書
-└── archive/                   # 廃止資材の退避先（削除禁止）
+│   └── nginx/                      # Docker前段のHTTPS Reverse Proxy例
+├── docs/                           # 仕様・API・運用文書
+└── archive/                        # 廃止資材の退避先（削除禁止）
 ```
 
 ## 依存方向
@@ -66,6 +72,8 @@ start
   → server
       → auth / guard / billing / store
       → kagura-engine
+          → domain-template-router
+              → all-domain-lens-catalog
           → worker-pool → pillars
           → llm adapters
           → logger → logging/tgs-client → TGserver
@@ -76,55 +84,79 @@ evaluation caller（成果物・Requirement・Evidence確定後）
       → KB System Adapter（publish明示時のみ）
 ```
 
-- `server`より下位のModuleは`server`をimportしない。
-- `kagura-engine`より下位のModuleは`kagura-engine`をimportしない。
-- `quality-completion-evaluator`は`server`・`kagura-engine`・KB DBをimportしない。
+- `server`より下位のModuleは`server`をImportしない。
+- `kagura-engine`より下位のModuleは`kagura-engine`をImportしない。
+- `all-domain-lens-catalog`はRuntime・Worker・KBをImportしない。
+- `domain-template-router`は`all-domain-lens-catalog`だけを分類定義の正本として読む。
+- `pillars/*`は分類を再実行せず、Routerが返した同一Lensを参照する。
+- `quality-completion-evaluator`は`server`・`kagura-engine`・KB DBをImportしない。
 - `quality-completion-evaluator`は成果物を修正せず、固定Ruleの評価結果とKB掲載候補Recordだけを返す。
-- 現行の`/process`へ自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
-- `logger`はTGserverのHTTP ingest契約だけに依存し、TGserver内部Moduleをimportしない。
-- TGserverはAsteraをimportせず、意味判定を行わない。
+- 現行の`/process`へ品質・完成度判定を自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
+- `logger`はTGserverのHTTP Ingest契約だけに依存し、TGserver内部ModuleをImportしない。
+- TGserverはAsteraをImportせず、意味判定を行わない。
 
 ## Module責務
 
 | Module | 単一責務 |
 |---|---|
-| `server` | HTTP受付・認証順序・response |
-| `kagura-engine` | 認知処理の順序統合 |
-| `domain-template-router` | 入力正規化・用途テンプレート自動判定 |
-| `worker-pool` | Workerの割当・timeout・再生成 |
-| `pillars/*` | 各認知観点の決定論的処理 |
-| `llm/llm-client` | provider chainとfallback順序 |
-| `llm/adapters` | provider名からadapterを生成するfactory |
-| `llm/http-client` | 外部HTTPのtimeout・response上限 |
-| `llm/providers/*` | 各provider固有のrequest/response変換 |
+| `server` | HTTP受付・認証順序・Response |
+| `kagura-engine` | 38 Genre Lens、5本柱、8段判断材料の順序統合 |
+| `all-domain-lens-catalog` | `G01`〜`G38`の固定ID、分類語、5本柱Lens、Evidence条件、検証Anchor Path |
+| `domain-template-router` | 入力正規化、決定論的Score、Primary・Secondary・Overlay選択、Confidence生成 |
+| `worker-pool` | Workerの割当・Timeout・再生成 |
+| `pillars/*` | 選択済みLensに基づく各認知観点の決定論的処理 |
+| `llm/llm-client` | 任意Provider ChainとFallback順序 |
+| `llm/adapters` | Provider名からAdapterを生成するFactory |
+| `llm/http-client` | 外部HTTPのTimeout・Response上限 |
+| `llm/providers/*` | 各Provider固有のRequest・Response変換 |
 | `quality-completion-evaluator` | 品質・完成度を個別採点し、95/95・Blocking・Requirement・Evidence条件からKB掲載候補を判定 |
-| `logger` | secret除去済みイベントの生成と配送順序の統合 |
-| `logging/tgs-client` | TGserver HTTP配送・timeout・再試行 |
-| `logging/outbox` | 未送信イベントの一時保存・復旧・期限削除 |
-| `store` | tenant・usage・webhook状態 |
-| `billing/*` | Stripe境界・subscription反映 |
+| `logger` | Secret除去済みEventの生成と配送順序の統合 |
+| `logging/tgs-client` | TGserver HTTP配送・Timeout・再試行 |
+| `logging/outbox` | 未送信Eventの一時保存・復旧・期限削除 |
+| `store` | Tenant・Usage・Webhook状態 |
+| `billing/*` | Stripe境界・Subscription反映 |
+
+## Lens分類契約
+
+```text
+Input
+  → Normalize
+  → G01〜G38 Score
+  → Primary 1件
+  → Secondary 最大3件
+  → Overlay 0〜5件
+  → 同一Lensを5本柱へ配布
+  → 8段の判断材料へ反映
+```
+
+- 同一Input・同一Taxonomy Versionは同じ分類順序を返す。
+- 空Inputは分類せず`ASTERA_LENS_INPUT_REQUIRED`状態を返す。
+- `AI`、`IT`等の短いASCII語は単語境界で照合し、別単語の一部で発火させない。
+- 弱い一致は`HYPOTHESIS_LAST_RESORT`、低Confidence、Review必須として返す。
+- `未分類`、`その他`、`不明`、`other`、`unknown`、`unclassified`を分類IDとして作らない。
+- 現行Runtimeは38 Genre Lensを選択する。ASTERA-KB完成後はKBが返す完全4階層Pathを同じ`Gxx`へ接続する。
 
 ## HTTPアクセスログ契約
 
-- 正常終了した `GET /healthz` は定期監視ノイズのため、TGserverへ送信しない。
-- `/healthz` の失敗応答・client切断は異常検知の対象として送信する。
-- その他のHTTPアクセスは従来どおり構造化イベントとして送信する。
+- 正常終了した `GET /healthz` は定期監視Noiseのため、TGserverへ送信しない。
+- `/healthz` の失敗Response・Client切断は異常検知の対象として送信する。
+- その他のHTTP Accessは従来どおり構造化Eventとして送信する。
 
-## ログ一時キャッシュ契約
+## ログ一時Cache契約
 
-ホスト上の `/home/admin1/logs/astera-v8/outbox` はTGserver配送の一時状態だけに使用する。
+Host上の `/home/admin1/logs/astera-v8/outbox` はTGserver配送の一時状態だけに使用する。
 
-- 書込条件: TGserver送信開始前に、secret除去済みイベントを1件1ファイルで置く。
-- 再送条件: 初回送信失敗時の規定回数再試行、およびプロセス再起動時。
+- 書込条件: TGserver送信開始前に、Secret除去済みEventを1件1Fileで置く。
+- 再送条件: 初回送信失敗時の規定回数再試行、およびProcess再起動時。
 - 削除条件: TGserverが2xxを返した直後。
-- 保持期限: 7日（`ASTERA_LOG_CACHE_TTL_MS`で変更可能）。期限超過ファイルは起動時に削除する。
-- 禁止: 成功済みログの複製、長期監査ログ、Telegram原本の複製、KB、仕様書。
+- 保持期限: 7日（`ASTERA_LOG_CACHE_TTL_MS`で変更可能）。期限超過Fileは起動時に削除する。
+- 禁止: 成功済みLogの複製、長期監査Log、Telegram原本の複製、KB、仕様書。
 - Project直下へ`logs/`や`astera-logs/`を作らない。
 
 ## 運用境界
 
 - 本番常駐はDocker / Docker Composeのみ。
-- `node start.js`と検証scriptは短時間検証に限る。
-- systemd / pm2 / nohup / screen / tmuxによるアプリ直接常駐は禁止。
+- `node start.js`と検証Scriptは短時間検証に限る。
+- systemd / pm2 / nohup / screen / tmuxによるApplication直接常駐は禁止。
 - 本番起動・再起動・切替は管理者の明示承認後に行う。
 - 不要資材は削除せず`archive/YYYY-MM-DD/`へ退避する。
