@@ -1,49 +1,71 @@
-# Astera v8 — AIコグニションランタイム
+# Astera v8 — コグニションランタイム
 
 ## 概要
 
-Astera v8は、問いを多角的に分析し、実行可能な結論へ導くAIコグニションランタイムです。
-真実、危機、多角的な視点、反対意見、比較といった5つの視点から情報を整理し、意思決定をサポートします。
-単一の答えを急ぐのではなく、複雑な問題を体系的に解き明かし、次の行動へと繋げるための基盤として機能します。
+Astera v8は、Node.js V8上のScriptと固定Ruleで、入力を信頼できる判断材料へ変換するコグニションランタイムです。
+
+一般的な会話AIや文章生成AIではありません。問い、資料、検索結果、ほかのAIの出力を受け取り、38専門ジャンルLensと5本柱で検証し、主役AIや利用者が判断・設計・実装へ使える8段の材料へ整形します。
 
 ## 主な機能
 
-*   **V8並列処理**: Node.jsのWorker threadsを活用し、高速な並列処理を実現。
-*   **5つの視点**: Fact (事実), Risk (危機), Multi (多角的), Inquiry (問い), Compare (比較) のフレームワークで分析。
-*   **自動Domain Router / Template Lens**: ユーザーの入力内容から最適な分析テンプレートを自動選択。
-*   **8セクション出力**: 以下の8つのセクションで、深く、安全で、目的に合った回答を生成します。
-    1.  **01 本当の目的**: 表面的な依頼の裏にある真の目標を整理。
-    2.  **02 前提不足**: 答えを作るために不足している情報や条件を特定。
-    3.  **03 事実確認**: 情報の事実、推測、未確認情報を明確に区別し、必要に応じてエビデンスを提示。
-    4.  **04 危機察知**: 実行によって生じうるリスクや潜在的な問題を事前に検出。
-    5.  **05 反対視点**: 異なる立場からの意見や批判的な視点を取り入れ、多角的な検討を促す。
-    6.  **06 比較案**: 複数の選択肢を提示し、それぞれのメリット・デメリットを比較。
-    7.  **07 推奨判断**: 総合的な分析に基づき、現時点で最も合理的な判断を提示。
-    8.  **08 主役AIへの再指示**: 上記の分析結果を基に、より精度の高いAI指示文を生成。
-*   **多言語対応**: 内部処理は英語Canonicalで安定性を確保し、表示はユーザーの言語に自動追従。
-*   **Human Reader**: ユーザーの感情や意図（急ぎ、怒り、混乱など）を検出し、分析に反映。
-*   **堅牢な運用**: APIキー、テナント分離、レート制限、Stripe連携、ログ集約など、本番環境に必要な機能を標準搭載。
-*   **npm依存ゼロ**: 外部ライブラリへの依存を最小限に抑え、シンプルで安定した動作。
+- **V8並列処理**: Node.js Worker Threadsで5本柱を並列実行
+- **38専門ジャンルLens**: `G01`〜`G38`からPrimaryを自動選択し、SecondaryとOverlayを付加
+- **決定論的分類**: 固定分類語、Score、Tie Break、ConfidenceをScriptで処理
+- **5本柱**: Fact / Risk / Multi / Inquiry / Compare
+- **8段の判断材料**:
+  1. **01 本当の目的**
+  2. **02 前提不足**
+  3. **03 事実確認**
+  4. **04 危機察知**
+  5. **05 反対視点**
+  6. **06 比較案**
+  7. **07 推奨判断**
+  8. **08 主役AIへの再指示**
+- **安全・検証Overlay**: 法律上の重大条件、医療上の緊急条件、現在情報、厳格な根拠確認、不正利用Riskを追加検査
+- **Human Reader**: 急ぎ、怒り、混乱、正確性要求などを検出し、確認順序へ反映
+- **運用境界**: API Key、Tenant分離、Rate Limit、Stripe境界、TGserver Log集約
+- **npm依存ゼロ**: Node.js標準機能を中心に構成
 
-## 導入と起動 (Docker Compose)
+## 38専門ジャンル
 
-本番環境での稼働はDocker Composeを推奨します。
+分類一覧、固定ID、4階層Anchor Pathは次を参照してください。
+
+- `docs/LENS_GENRE_INDEX.md`
+- `docs/DOMAIN_TEMPLATE_CATALOG.md`
+
+実行時の正本は次です。
+
+- `src/all-domain-lens-catalog.js`
+- `src/domain-template-router.js`
+
+## 処理経路
+
+```text
+Input
+  → Normalize
+  → G01〜G38分類
+  → Primary / Secondary / Overlay
+  → Fact / Risk / Multi / Inquiry / Compare
+  → 01〜08判断材料
+```
+
+ASTERA-KB完成後は、KBが返す完全4階層Pathを同じ`Gxx` Lensへ接続します。現在のRuntimeは、存在しないKB処理や未取得の完全Pathを装いません。
+
+## 導入と起動
+
+本番環境はDocker Composeで起動します。
 
 ```bash
 docker compose up -d --build
 ```
 
-### ブラウザアクセス
-
-Astera v8は以下のURLでアクセス可能です。
+ブラウザ:
 
 ```text
 http://127.0.0.1:7373
 ```
 
-## テスト
-
-開発中のテストには以下のコマンドを使用します。
+## Test
 
 ```bash
 npm test
@@ -51,53 +73,56 @@ bash scripts/smoke.sh
 npm run verify
 ```
 
+Lens関連Test:
+
+- `test/all-domain-router.test.js`: 38 Genre、決定性、空Input、短語誤発火、Overlay
+- `test/lens-output-integration.test.js`: 実例を5本柱・8段出力まで検査
+
 ## API利用例
 
-### ユーザー登録 (APIキー取得)
+### API Key取得
 
 ```bash
 curl -X POST http://127.0.0.1:7373/signup
 ```
 
-### 処理実行 (質問と応答)
-
-APIキー`kg_xxx`は`/signup`エンドポイントで取得したものを利用してください。
+### 判断材料生成
 
 ```bash
 curl -X POST http://127.0.0.1:7373/process \
   -H "Content-Type: application/json" \
   -H "X-API-Key: kg_xxx" \
   -d '{
-    "question":"Astera v8をどう活用すべき？",
+    "question":"現在のNode.js APIを互換性を保って段階移行する判断材料を出す",
     "llm":{"chain":["null"]},
-    "moodAnswers":{"deepThink":true}
+    "moodAnswers":{"deepThink":true,"accuracy":true}
   }'
 ```
 
-## 主要な設定 (環境変数)
+## 主要な設定
 
-Astera v8では`ASTERA_*`の環境変数が使用されます。旧`KAGURA_*`も後方互換として読み込まれます。
+Astera v8では`ASTERA_*`を正式な環境変数名として使用します。旧`KAGURA_*`は後方互換として読み込まれます。
 
-*   `ASTERA_HOST`, `ASTERA_PORT`: サービス稼働ホストとポート
-*   `ASTERA_DB`: データベースファイル（SQLite）
-*   `ASTERA_API_KEY`: APIキー設定
-*   `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: セキュリティ関連設定
-*   `ASTERA_TGS_ENABLED`, `ASTERA_TGS_URL`, `ASTERA_TGS_PROJECT_ID`: TGserverログ集約設定
-*   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Stripe連携設定
+- `ASTERA_HOST`, `ASTERA_PORT`: Service稼働HostとPort
+- `ASTERA_DB`: Application状態DB
+- `ASTERA_API_KEY`: API Key
+- `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: HTTP Security設定
+- `ASTERA_TGS_ENABLED`, `ASTERA_TGS_URL`, `ASTERA_TGS_PROJECT_ID`: TGserver接続
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Stripe境界
 
-## ログ集約 (TGserver)
+## Log集約
 
-HTTPアクセス、認証失敗、推論結果、Stripeイベントなど、主要なランタイムイベントは構造化JSONとしてTGserverへ自動集約されます。APIキーやStripeシークレットなどの秘密情報はマスクされ、未送信イベントは一時的にローカルに保持されます。
+HTTP Access、認証失敗、処理結果、Stripe Eventなどは、Secret除去後に構造化JSONとしてTGserverへ送ります。未送信Eventだけを一時Outboxへ保持します。
 
-## その他の重要ドキュメント
+## 重要ドキュメント
 
-*   `STRUCTURE.md`: Astera v8のディレクトリ構造とコンポーネント間の依存関係
-*   `docs/BRAND_PHILOSOPHY.md`: ブランド理念
-*   `docs/LENS_GENRE_INDEX.md`: レンズ・ジャンルの固定ID一覧、Primary / Overlayの運用境界、KB・検索Script接続契約
-*   `docs/DOMAIN_TEMPLATE_CATALOG.md`: 各レンズの5本柱別の詳細仕様
-*   `docs/FULL_DOCUMENT.md`: 詳細な仕様書
-*   `docs/ARCHITECTURE.md`: アーキテクチャ設計
-*   `docs/API_REFERENCE.md`: APIリファレンス
-*   `docs/PRODUCTION_CHECKLIST.md`: 本番運用チェックリスト
-*   `docs/SECURITY_NOTES.md`: セキュリティに関する注意点
-*   `docs/DEPLOYMENT_VPS.md`: VPSへのデプロイ手順
+- `STRUCTURE.md`: 構成図、依存方向、Module責務
+- `docs/LENS_GENRE_INDEX.md`: 38 Genre固定ID、Anchor Path、KB共有契約
+- `docs/DOMAIN_TEMPLATE_CATALOG.md`: 現行Lens実装の参照先と検証記録
+- `docs/BRAND_PHILOSOPHY.md`: Brand理念
+- `docs/FULL_DOCUMENT.md`: 詳細仕様
+- `docs/ARCHITECTURE.md`: Architecture
+- `docs/API_REFERENCE.md`: API契約
+- `docs/PRODUCTION_CHECKLIST.md`: 本番確認
+- `docs/SECURITY_NOTES.md`: Security注意事項
+- `docs/DEPLOYMENT_VPS.md`: VPS Deployment
