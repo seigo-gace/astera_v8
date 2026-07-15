@@ -2,6 +2,7 @@
 
 const { sha256Text, isSha256 } = require("./utils/hash");
 const { loadJson } = require("./utils/load-config");
+const { validateDeclaredDomainLens } = require("./domain-lens-resolver");
 const SUPPORTED_TYPES = new Set(["design","implementation","test_result","operation_document","research","incident_resolution","knowledge_document","configuration","other"]);
 
 function validateEvaluationRequest(request) {
@@ -17,6 +18,7 @@ function validateEvaluationRequest(request) {
   else if (sha256Text(request.target.content) !== request.target.content_hash) errors.push({ path: "target.content_hash", code: "CONTENT_HASH_MISMATCH", message: "target content hash does not match content" });
   if (request.evaluation_config?.rubric_version !== "quality-completion-rubric.v1") errors.push({ path: "evaluation_config.rubric_version", code: "UNSUPPORTED_RUBRIC", message: "rubric version must be quality-completion-rubric.v1" });
   if (request.evaluation_config?.blocking_rule_version !== "blocking-rules.v1") errors.push({ path: "evaluation_config.blocking_rule_version", code: "UNSUPPORTED_BLOCKING_RULES", message: "blocking rule version must be blocking-rules.v1" });
+  errors.push(...validateDeclaredDomainLens(request.domain_lens));
   if (errors.length === 0) {
     try {
       const quality = loadJson("quality/quality-rubric.v1.json");
