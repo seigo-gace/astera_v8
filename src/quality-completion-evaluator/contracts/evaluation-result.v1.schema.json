@@ -1,7 +1,26 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "$id":"astera.quality-completion.result.v1",
-  "type":"object",
-  "required":["schema_version","status","evaluation_complete","judgment"],
-  "properties":{"schema_version":{"const":"astera.quality-completion.result.v1"},"status":{"enum":["KB_ELIGIBLE","KB_PUBLISHED","REVISION_REQUIRED","BLOCKED","EVALUATION_FAILED","INVALID_INPUT"]},"evaluation_complete":{"type":"boolean"},"scores":{"type":"object"},"criteria":{"type":"object"},"blocking":{"type":"array"},"judgment":{"type":"object"}}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.quality-completion.result.v1",
+  "type": "object",
+  "required": ["schema_version", "status", "evaluation_complete", "judgment"],
+  "properties": {
+    "schema_version": {"const": "astera.quality-completion.result.v1"},
+    "status": {"enum": ["KB_ELIGIBLE", "KB_PUBLISHED", "REVISION_REQUIRED", "BLOCKED", "EVALUATION_FAILED", "INVALID_INPUT"]},
+    "evaluation_complete": {"type": "boolean"},
+    "scores": {"type": "object"},
+    "criteria": {"type": "object"},
+    "domain_lens": {
+      "type": ["object", "null"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^G(0[1-9]|[12][0-9]|3[0-8])$"},
+        "taxonomy_version": {"const": "1.0.0"},
+        "path_key": {"type": "string"},
+        "source": {"enum": ["request", "deterministic_router"]},
+        "enforce": {"type": "boolean"},
+        "assessment": {"type": ["object", "null"]}
+      }
+    },
+    "blocking": {"type": "array"},
+    "judgment": {"type": "object"}
+  }
 }
