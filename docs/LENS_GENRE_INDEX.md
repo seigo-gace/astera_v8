@@ -1,40 +1,53 @@
-# Astera v8 レンズ・ジャンル一覧
+# Astera 共通レンズ・ジャンル一覧
 
-Status: 運用基準
+Status: 共有運用基準
+Document ID: `astera-lens-genre-index`
+Schema Version: `1.0`
 
 ## 1. 目的
 
-この文書は、Astera v8のDomain Router / Template Lensで使用するジャンルを、固定ID付きで一覧管理するための索引です。
+この文書は、Astera v8とASTERA-KBの間で使用するレンズ・ジャンルの固定ID、役割、接続境界を共通管理するための索引です。
 
-READMEへ全レンズ定義を展開せず、READMEから本ファイルを参照します。各レンズの5本柱別の詳細定義、判定観点、収集Evidence、安全条件は `DOMAIN_TEMPLATE_CATALOG.md` で管理します。
+READMEへ全ジャンル本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
 
-## 2. 正本と役割分担
+## 2. 両Repositoryでの役割
 
-| 対象 | 正本 |
+| Repository | 使用目的 |
 |---|---|
-| 実行時のレンズID・判定語・処理内容 | `src/domain-template-router.js` |
-| レンズ・ジャンルの固定一覧と運用境界 | `docs/LENS_GENRE_INDEX.md` |
-| 各レンズの詳細仕様 | `docs/DOMAIN_TEMPLATE_CATALOG.md` |
-| KB側の全分野Taxonomy | Astera-KB側のTaxonomy文書・データ |
+| `astera_v8` | 入力内容に対して何を重点確認するかを選ぶ実行側Lens |
+| `astera-kb` | KB Taxonomy・検索結果をAsteraのLens IDへ接続するCrosswalk契約 |
 
-本ファイルはKBの分類Taxonomyそのものではありません。KBの分類結果をAstera v8の判断レンズへ接続するための、固定された接続先一覧です。
+KB TaxonomyとLensは同一ではありません。
 
-## 3. 運用ルール
+- KB Taxonomy: 情報が何に属するか
+- Astera Lens: その情報をどの観点で検証・比較するか
+
+## 3. 正本と同期
+
+- 実行時の判定語・処理内容: `astera_v8/src/domain-template-router.js`
+- 各Lensの詳細仕様: `astera_v8/docs/DOMAIN_TEMPLATE_CATALOG.md`
+- 共通ジャンル索引: 両Repositoryの `docs/LENS_GENRE_INDEX.md`
+- KB側の全分野Taxonomy: ASTERA-KBのTaxonomy文書・Data
+
+両Repositoryの本ファイルは、`Document ID`と`Schema Version`を一致させます。Lens IDの追加・変更時は双方を同時更新します。
+
+## 4. 運用ルール
 
 - Primary Lensは原則1件を選択します。
 - 専門ジャンルが確定しない場合は `general_judgment` を使用します。
-- Overlay LensはPrimary Lensを置き換えず、必要な安全・Evidence条件を追加します。
-- 1回の処理でOverlay Lensは0件以上を併用できます。
-- Lens IDは検索Script、KB Crosswalk、ログ、テストの共通キーとして使用するため、名称変更時も既存IDを安易に変更しません。
-- 新規ジャンル追加時は、本ファイル、`DOMAIN_TEMPLATE_CATALOG.md`、`src/domain-template-router.js`、関連テストを同時に更新します。
-- 本ファイルには検索Score、Keyword重み、Crosswalkロジックを記載しません。それらは後続の検索・接続実装で分離管理します。
+- Overlay LensはPrimary Lensを置き換えず、安全・Evidence条件を追加します。
+- Lens IDは検索Script、KB Crosswalk、Log、Testの共通Keyとして使用します。
+- 既存Lens IDは名称変更時も安易に変更しません。
+- `other`、`unknown`、`unclassified`などの逃げ分類は作りません。
+- KB Taxonomyの全NodeをLens一覧へ複製しません。
+- 検索Score、Keyword重み、分類Logicは本ファイルへ記載しません。
 
-## 4. Primary Lens一覧
+## 5. Primary Lens一覧
 
 | No. | Lens ID | 表示名 | 主な対象 |
 |---:|---|---|---|
 | 00 | `general_judgment` | 一般判断 / Default | 専門分野が支配的でない相談、判断、総合検討 |
-| 01 | `business_strategy` | 経営・事業戦略 | 経営判断、事業モデル、価格、提携、市場参入 |
+| 01 | `business_strategy` | 経営・事業戦略 | 経営判断、事業Model、価格、提携、市場参入 |
 | 02 | `finance_capital` | 金融・投資・資本配分 | 予算、投資評価、資金調達、収益性、資本配分 |
 | 03 | `legal_compliance` | 法律・Compliance・契約 | 法令、契約、紛争、知的財産、規制対応 |
 | 04 | `medical_health` | 医療・健康・Clinical | 症状、治療選択、医療情報、公衆衛生 |
@@ -57,7 +70,7 @@ READMEへ全レンズ定義を展開せず、READMEから本ファイルを参�
 
 Primary Lens総数: **21**
 
-## 5. Overlay Lens一覧
+## 6. Overlay Lens一覧
 
 | Overlay ID | 表示名 | 追加条件 |
 |---|---|---|
@@ -69,9 +82,9 @@ Primary Lens総数: **21**
 
 Overlay Lens総数: **5**
 
-## 6. KB・検索Scriptとの接続契約
+## 7. KB・検索Scriptとの接続契約
 
-後続のKB Crosswalkまたは検索Scriptは、最終的に少なくとも次の形へ正規化します。
+KB Crosswalkまたは検索Scriptは、最終的に次の形へ正規化します。
 
 ```json
 {
@@ -85,17 +98,18 @@ Overlay Lens総数: **5**
 
 ### 必須条件
 
-- `primary_lens_id` は本ファイルのPrimary Lens IDから1件を返します。
-- `overlay_lens_ids` は本ファイルのOverlay Lens IDだけを返します。
-- 該当なしを表す独自IDや `other`、`unknown`、`unclassified` は作りません。
-- 判断材料が不足する場合は `general_judgment` を返し、Confidenceと理由を明示します。
-- KBのTaxonomy IDとLens IDを同一化しません。Taxonomyは「情報が何か」、Lensは「何を重点確認するか」で責務が異なります。
+- `primary_lens_id` はPrimary Lens IDから1件を返します。
+- `overlay_lens_ids` はOverlay Lens IDだけを返します。
+- 判断材料不足時は `general_judgment` を返し、Confidenceと理由を残します。
+- KB側はLensの判断処理を実行せず、Taxonomy結果とEvidenceを返します。
+- Astera側はKB Taxonomyを保存分類として上書きせず、Lens選択材料として使用します。
 
-## 7. 更新時チェック
+## 8. 更新時チェック
 
-1. Lens IDが重複していないこと。
-2. Runtime実装と本一覧のID・件数が一致すること。
-3. 詳細Catalogに対応する定義が存在すること。
-4. Primary LensとOverlay Lensを混同していないこと。
-5. KB Taxonomyを直接Lens一覧へ複製していないこと。
-6. READMEには本ファイルへの参照だけを置き、一覧本文を重複掲載していないこと。
+1. 両RepositoryのDocument IDとSchema Versionが一致していること。
+2. Lens ID、件数、表示名が一致していること。
+3. Astera Runtime実装に対応するIDが存在すること。
+4. 詳細Catalogに対応する定義が存在すること。
+5. Primary LensとOverlay Lensを混同していないこと。
+6. KB Taxonomyを直接複製していないこと。
+7. 両READMEには本ファイルへの参照だけを置くこと。
