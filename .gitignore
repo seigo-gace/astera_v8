@@ -15,6 +15,7 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.gpg
 
 # Dependencies
 node_modules/
