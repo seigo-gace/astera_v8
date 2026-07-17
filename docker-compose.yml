@@ -32,6 +32,7 @@ services:
     network_mode: host
     restart: unless-stopped
     stop_grace_period: 30s
+    user: "1000:1000"
     depends_on:
       astera-v8:
         condition: service_healthy
