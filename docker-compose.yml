@@ -25,5 +25,35 @@ services:
       retries: 3
       start_period: 10s
 
+  astera-v8-cloudflared:
+    image: cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d
+    profiles:
+      - cloudflare
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 30s
+    depends_on:
+      astera-v8:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 127.0.0.1:20241
+      - run
+      - --token-file
+      - /run/secrets/astera_v8_cloudflare_tunnel_token
+    secrets:
+      - astera_v8_cloudflare_tunnel_token
+
 volumes:
   astera-data:
+
+secrets:
+  astera_v8_cloudflare_tunnel_token:
+    file: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/dev/null}
