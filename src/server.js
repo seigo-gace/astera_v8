@@ -11,6 +11,7 @@ const { UsageMeter } = require('./billing/meter');
 const RateLimiter = require('./guard/rate-limiter');
 const KeyVault = require('./billing/key-vault');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
+const { authenticateSkillApiKey, isSkillApiConfigured } = require('./auth/skill-api-key');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
@@ -44,7 +45,7 @@ class KaguraServer {
     this.engine = options.engine || new KaguraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
     this.tenants = new TenantManager(this.store);
     this.meter = new UsageMeter(this.store);
-    this.limiter = new RateLimiter();
+    this.limiter = options.limiter || new RateLimiter();
     this.vault = new KeyVault();
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
@@ -205,6 +206,47 @@ class KaguraServer {
     return this.tenants.resolve(key);
   }
 
+  async _authenticateSkill(req) {
+    return authenticateSkillApiKey(req.headers['x-api-key']);
+  }
+
+  async _processRequest(req, res, context, tenant, { unlimited = false, route = '/process' } = {}) {
+    context.tenantId = tenant.id;
+    if (!unlimited) {
+      const limits = this.tenants.limitsFor(tenant);
+      const rl = this.limiter.check({ key: `process:${tenant.id}`, limit: limits.perMinute, windowMs: 60_000 });
+      if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
+    }
+
+    const body = await this._readJsonObject(req);
+    if (typeof body.question !== 'string') {
+      const error = new Error('question must be a string');
+      error.status = 400;
+      throw error;
+    }
+    if (body.context !== undefined && typeof body.context !== 'string') {
+      const error = new Error('context must be a string');
+      error.status = 400;
+      throw error;
+    }
+    const maxQuestionChars = Math.max(1, Number(process.env.ASTERA_MAX_QUESTION_CHARS) || 100_000);
+    if (body.question.length > maxQuestionChars) {
+      const error = new Error(`question exceeds ${maxQuestionChars} characters`);
+      error.status = 413;
+      throw error;
+    }
+    const maxContextChars = Math.max(1, Number(process.env.ASTERA_MAX_CONTEXT_CHARS) || 500_000);
+    if (String(body.context || '').length > maxContextChars) {
+      const error = new Error(`context exceeds ${maxContextChars} characters`);
+      error.status = 413;
+      throw error;
+    }
+    body.llm = this.vault.resolveRequestLLM(body);
+    const out = await this.engine.process(body, tenant);
+    if (!unlimited) this.meter.record({ tenant, route, units: 1, status: 'ok', meta: { answerProvider: out.answer?.provider || null } });
+    return this._text(req, res, 200, out.material?.text || '');
+  }
+
   async _handle(req, res, context = { tenantId: 'anonymous' }) {
     try {
       if (this._requiresHttps(req)) {
@@ -242,6 +284,10 @@ class KaguraServer {
           store: this.store.mode,
           sqlite_error: this.store.sqliteError || null,
           tgserver_logging: this.logger.tgsEnabled,
+          skill_api: {
+            enabled: isSkillApiConfigured(),
+            process_endpoint: '/v1/skill/process'
+          },
           logging,
           runtime: {
             node: process.version,
@@ -319,38 +365,14 @@ class KaguraServer {
       if (req.method === 'POST' && url.pathname === '/process') {
         const tenant = await this._authenticate(req);
         if (!tenant) return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Use /signup first.' });
-        context.tenantId = tenant.id;
-        const limits = this.tenants.limitsFor(tenant);
-        const rl = this.limiter.check({ key: `process:${tenant.id}`, limit: limits.perMinute, windowMs: 60_000 });
-        if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
+        return await this._processRequest(req, res, context, tenant);
+      }
 
-        const body = await this._readJsonObject(req);
-        if (typeof body.question !== 'string') {
-          const error = new Error('question must be a string');
-          error.status = 400;
-          throw error;
-        }
-        if (body.context !== undefined && typeof body.context !== 'string') {
-          const error = new Error('context must be a string');
-          error.status = 400;
-          throw error;
-        }
-        const maxQuestionChars = Math.max(1, Number(process.env.ASTERA_MAX_QUESTION_CHARS) || 100_000);
-        if (body.question.length > maxQuestionChars) {
-          const error = new Error(`question exceeds ${maxQuestionChars} characters`);
-          error.status = 413;
-          throw error;
-        }
-        const maxContextChars = Math.max(1, Number(process.env.ASTERA_MAX_CONTEXT_CHARS) || 500_000);
-        if (String(body.context || '').length > maxContextChars) {
-          const error = new Error(`context exceeds ${maxContextChars} characters`);
-          error.status = 413;
-          throw error;
-        }
-        body.llm = this.vault.resolveRequestLLM(body);
-        const out = await this.engine.process(body, tenant);
-        this.meter.record({ tenant, route: '/process', units: 1, status: 'ok', meta: { answerProvider: out.answer?.provider || null } });
-        return this._text(req, res, 200, out.material?.text || '');
+      if (req.method === 'POST' && url.pathname === '/v1/skill/process') {
+        if (!isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
+        const tenant = await this._authenticateSkill(req);
+        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
+        return await this._processRequest(req, res, context, tenant, { unlimited: true, route: '/v1/skill/process' });
       }
 
       return this._json(req, res, 404, { error: 'not_found' });

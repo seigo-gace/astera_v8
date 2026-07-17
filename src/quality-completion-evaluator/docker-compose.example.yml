@@ -1,6 +1,8 @@
 services:
   astera-quality-completion-evaluator:
-    build: .
+    build:
+      context: ../../..
+      dockerfile: src/quality-completion-evaluator/Dockerfile
     image: astera-quality-completion-evaluator:1.0.0
     read_only: true
     security_opt:
@@ -9,5 +11,16 @@ services:
       - ALL
     tmpfs:
       - /tmp:size=16m,noexec,nosuid,nodev
-    stdin_open: true
-    network_mode: none
+    ports:
+      - "127.0.0.1:7374:7374"
+    environment:
+      ASTERA_EVALUATOR_API_HOST: 0.0.0.0
+      ASTERA_EVALUATOR_API_PORT: 7374
+      ASTERA_DB: /data/astera.db
+      ASTERA_SKILL_API_KEY: ${ASTERA_SKILL_API_KEY}
+      ASTERA_KEY_PEPPER: ${ASTERA_KEY_PEPPER}
+    volumes:
+      - astera-data:/data
+
+volumes:
+  astera-data:

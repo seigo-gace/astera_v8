@@ -113,6 +113,16 @@ curl -X POST http://127.0.0.1:7373/process \
   }'
 ```
 
+### アプリGPT Skill用PRIVATE APIと判定API
+
+`.env`の`ASTERA_SKILL_API_KEY`へ公開Tenant Keyと異なる32文字以上の乱数を設定する。あなたのアプリGPTがSkillから呼ぶ専用Keyである。
+
+- Astera本体 `POST /v1/skill/process`: 通常`/process`と同じ処理を公開Rate Limit・課金なしで実行する。
+- 判定Module別API `POST /v1/evaluate`: 一般ユーザーがAstera Tenant Keyで利用する。Plan別Rate Limitと利用計測を適用する。
+- 判定Module別API `POST /v1/skill/evaluate`: アプリGPT Skillが専用Keyで無制限利用する。
+
+判定APIは本体と別Process・別Port（既定`127.0.0.1:7374`）で`npm run start:evaluator-api`により起動する。判定だけを返し、KBや`modular-catalog`へ自動掲載しない。
+
 ## 主要な設定
 
 Astera v8では`ASTERA_*`を正式な環境変数名として使用します。旧`KAGURA_*`は後方互換として読み込まれます。
@@ -120,6 +130,8 @@ Astera v8では`ASTERA_*`を正式な環境変数名として使用します。�
 - `ASTERA_HOST`, `ASTERA_PORT`: Service稼働HostとPort
 - `ASTERA_DB`: Application状態DB
 - `ASTERA_API_KEY`: API Key
+- `ASTERA_SKILL_API_KEY`: あなたのアプリGPT Skill専用PRIVATE API Key。公開Keyと共有しない
+- `ASTERA_EVALUATOR_API_HOST`, `ASTERA_EVALUATOR_API_PORT`: 判定Module別APIのHostとPort
 - `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: HTTP Security設定
 - `ASTERA_TGS_ENABLED`, `ASTERA_TGS_URL`, `ASTERA_TGS_PROJECT_ID`: TGserver接続
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Stripe境界

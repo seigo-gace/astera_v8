@@ -1,6 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY . .
-RUN chmod +x /app/cli/evaluate.js /app/scripts-install.sh /app/scripts-verify.sh
+COPY package.json ./package.json
+COPY src ./src
 USER node
-ENTRYPOINT ["node", "/app/cli/evaluate.js"]
+EXPOSE 7374
+CMD ["node", "src/quality-completion-evaluator/api/start.js"]

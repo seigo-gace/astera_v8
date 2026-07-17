@@ -8,6 +8,7 @@
     "astera-qce": "./cli/evaluate.js"
   },
   "scripts": {
+    "start:api": "node api/start.js",
     "test": "node --test tests/**/*.test.js",
     "test:unit": "node --test tests/unit/*.test.js",
     "test:boundary": "node --test tests/boundary/*.test.js",

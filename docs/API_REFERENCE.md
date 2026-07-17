@@ -14,6 +14,8 @@ http://127.0.0.1:7373
 X-API-Key: kg_xxx
 ```
 
+アプリGPT Skill用PRIVATE APIは公開Keyと分離した32文字以上の`ASTERA_SKILL_API_KEY`を`X-API-Key`へ指定する。`ASTERA_API_KEY`との同一設定、短いKey、未設定は無効となる。Skill用APIに回数・課金上限は適用しないが、認証、HTTPS、CORS、Payload上限、Timeout、Secret Mask、監査Logは維持する。
+
 ## GET /healthz
 
 ヘルスチェック。
@@ -148,6 +150,52 @@ Asteraが5本柱で判断する前に、もう少し前提が必要です。
 
 - 目的を一文で足してください。何を決めたいですか？
 ```
+
+## POST /v1/skill/process
+
+あなたのアプリGPTがSkillから呼ぶPRIVATE実行入口。処理内容と`text/plain`の8段出力は`POST /process`と同一で、公開TenantのRate Limitと課金を適用しない。
+
+### Authentication
+
+```text
+X-API-Key: <ASTERA_SKILL_API_KEY>
+```
+
+未設定、欠落、不一致、公開Tenant Keyの使用は`401 unauthorized`を返す。
+
+## POST /v1/evaluate（判定Module別API）
+
+`QualityCompletionEvaluator`を本体とは別Process（既定Port `7374`）で呼ぶ一般ユーザー向けAPI。Astera本体が発行したTenant Keyを使用し、Plan別Rate Limitと利用計測を適用する。Request bodyは`astera.quality-completion.request.v1`、Response bodyは`astera.quality-completion.result.v1`を使用する。
+
+このEndpointは判定だけを行い、KBや`modular-catalog`へ自動掲載しない。`KB_ELIGIBLE`は掲載可能判定であり、保存完了を意味しない。
+
+### Authentication
+
+```text
+X-API-Key: kg_xxx
+Content-Type: application/json
+```
+
+## POST /v1/skill/evaluate（判定Module別API）
+
+同じ判定処理をアプリGPT Skill専用PRIVATE Keyで呼ぶ。Rate Limitと課金は適用しない。Request/Responseおよび非自動掲載の条件は`POST /v1/evaluate`と同一。
+
+```text
+X-API-Key: <ASTERA_SKILL_API_KEY>
+Content-Type: application/json
+```
+
+### Response 200
+
+主な`status`:
+
+- `KB_ELIGIBLE`: 掲載可能
+- `REVISION_REQUIRED`: 品質または完成度が95点未満
+- `BLOCKED`: Blocking、必須要求未達、証拠不整合などで掲載停止
+- `INVALID_INPUT`: Schema、Hash、Versionなどの入力不正
+- `EVALUATION_FAILED`: 採点処理未完了
+
+`KB_PUBLISHED`は保存Adapterを明示的に呼び出した別処理でのみ使用する。
 
 ## POST /billing/checkout
 

@@ -102,6 +102,9 @@ evaluation caller（成果物・Requirement・Evidence確定後）
 - Artifact Profileは設計・実装・研究などの成果物種別を扱い、`G01`〜`G38` Lensは分野固有のRisk・Evidence・Safety条件を扱う。両者を混同しない。
 - `quality-completion-evaluator`は成果物を修正せず、固定Ruleの評価結果とKB掲載候補Recordだけを返す。
 - 現行の`/process`へ品質・完成度判定を自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
+- 本体`server`は公開`/process`とアプリGPT Skill専用`/v1/skill/process`を提供する。後者は`ASTERA_SKILL_API_KEY`だけを受け付け、公開TenantのRate Limit・課金を適用しない。
+- 判定Moduleの`api/server`は本体から独立起動し、一般ユーザー用`/v1/evaluate`とSkill専用`/v1/skill/evaluate`を提供する。一般ユーザーには本体と同じTenant Key・Plan別Rate Limit・利用計測を適用する。
+- 両判定Endpointは`quality-completion-evaluator.evaluate`だけを呼び、KB DBや`modular-catalog`へ自動保存しない。
 - `logger`はTGserverのHTTP Ingest契約だけに依存し、TGserver内部ModuleをImportしない。
 - TGserverはAsteraをImportせず、意味判定を行わない。
 

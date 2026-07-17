@@ -11,9 +11,11 @@
   },
   "scripts": {
     "start": "node start.js",
-    "test": "npm run test:runtime && npm run test:evaluator",
+    "start:evaluator-api": "node src/quality-completion-evaluator/api/start.js",
+    "test": "npm run test:runtime && npm run test:evaluator && npm run test:evaluator-api",
     "test:runtime": "node --test test/*.test.js",
     "test:evaluator": "node --test src/quality-completion-evaluator/tests/**/*.test.js",
+    "test:evaluator-api": "node --test src/quality-completion-evaluator/api/*.test.js",
     "smoke": "bash scripts/smoke.sh",
     "verify": "npm test && bash scripts/smoke.sh"
   },
