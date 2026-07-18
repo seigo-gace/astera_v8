@@ -36,6 +36,7 @@ function basePayload() {
       minimum_service_fee_minor: 20
     },
     direct_variable_policy: {
+      pricing_version: 'direct-v1',
       currency: 'JPY',
       fixed_minor: 2,
       provider_cost_bps: 500
@@ -64,12 +65,16 @@ test('calculates usage and billable amount deterministically through the single 
 
   assert.equal(first.status, 'OK');
   assert.equal(first.operation, OPERATION);
+  assert.equal(first.result.provider_fixed_cost_minor, 5);
   assert.equal(first.result.provider_cost_minor, 38);
   assert.equal(first.result.direct_variable_cost_minor, 4);
   assert.equal(first.result.astera_service_fee_minor, 20);
   assert.equal(first.result.total_billable_minor, 62);
   assert.equal(first.result.report_id, second.result.report_id);
   assert.equal(first.result.report_hash, second.result.report_hash);
+  assert.match(first.result.provider_pricing_hash, /^[a-f0-9]{64}$/);
+  assert.match(first.result.astera_pricing_hash, /^[a-f0-9]{64}$/);
+  assert.match(first.result.direct_variable_policy_hash, /^[a-f0-9]{64}$/);
   assert.deepEqual(first, second);
 });
 
@@ -135,4 +140,11 @@ test('uses integer minor units and returns strings only above Number.MAX_SAFE_IN
   const response = await module.execute(request(payload));
   assert.equal(typeof response.result.provider_cost_minor, 'string');
   assert.match(response.result.provider_cost_minor, /^\d+$/);
+});
+
+test('rejects inconsistent minimum and maximum fee bounds', async () => {
+  const module = createEvidenceSearchModule();
+  const payload = basePayload();
+  payload.astera_pricing.maximum_service_fee_minor = 10;
+  await assert.rejects(module.execute(request(payload)), (error) => error.code === 'INVALID_PRICING_POLICY');
 });
