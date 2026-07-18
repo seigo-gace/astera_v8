@@ -1,6 +1,6 @@
 'use strict';
 
-const KaguraServer = require('./src/server');
+const AsteraServer = require('./src/server-with-evidence');
 const SQLiteStore = require('./src/store/sqlite-store');
 const StripeClient = require('./src/billing/stripe-client');
 const SubscriptionSync = require('./src/billing/subscription-sync');
@@ -14,7 +14,7 @@ const stripe = new StripeClient({
 });
 const subSync = new SubscriptionSync(store, stripe);
 
-const server = new KaguraServer({
+const server = new AsteraServer({
   port: Number(process.env.ASTERA_PORT || process.env.KAGURA_PORT || 7373),
   host: process.env.ASTERA_HOST || process.env.KAGURA_HOST || '127.0.0.1',
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
@@ -33,7 +33,8 @@ logger.write({
     store: store.mode,
     sqlite_error: store.sqliteError || null,
     tgserver_logging: logger.tgsEnabled,
-    tgserver_project: logger.projectId
+    tgserver_project: logger.projectId,
+    evidence_search_proxy: Boolean(server.evidenceClient)
   }
 });
 
