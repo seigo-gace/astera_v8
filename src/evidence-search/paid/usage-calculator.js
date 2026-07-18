@@ -60,6 +60,18 @@ function canonicalCurrency(value) {
   return currency;
 }
 
+function requiredVersion(value, field) {
+  const version = String(value || '').trim();
+  if (!version) fail(`${field} is required`, 'INVALID_PRICING_POLICY');
+  return version;
+}
+
+function validateBounds(minimum, maximum, field) {
+  if (minimum !== null && maximum !== null && maximum < minimum) {
+    fail(`${field} maximum must be greater than or equal to minimum`, 'INVALID_PRICING_POLICY');
+  }
+}
+
 function normalizeUsage(usage) {
   if (!usage || typeof usage !== 'object' || Array.isArray(usage)) fail('usage must be an object');
   const metrics = {};
@@ -73,9 +85,8 @@ function normalizeUsage(usage) {
 function normalizeProviderPricing(policy) {
   if (!policy || typeof policy !== 'object' || Array.isArray(policy)) fail('provider_pricing must be an object', 'INVALID_PRICING_POLICY');
   const providerId = String(policy.provider_id || '').trim();
-  const pricingVersion = String(policy.pricing_version || '').trim();
   if (!providerId) fail('provider_pricing.provider_id is required', 'INVALID_PRICING_POLICY');
-  if (!pricingVersion) fail('provider_pricing.pricing_version is required', 'INVALID_PRICING_POLICY');
+  const pricingVersion = requiredVersion(policy.pricing_version, 'provider_pricing.pricing_version');
   const currency = canonicalCurrency(policy.currency);
   const fixedCostMinor = toNonNegativeBigInt(policy.fixed_cost_minor || 0, 'provider_pricing.fixed_cost_minor');
   const rawComponents = Array.isArray(policy.components) ? policy.components : [];
@@ -102,37 +113,43 @@ function normalizeProviderPricing(policy) {
 
 function normalizeAsteraPricing(policy, currency) {
   if (!policy || typeof policy !== 'object' || Array.isArray(policy)) fail('astera_pricing must be an object', 'INVALID_PRICING_POLICY');
-  const pricingVersion = String(policy.pricing_version || '').trim();
-  if (!pricingVersion) fail('astera_pricing.pricing_version is required', 'INVALID_PRICING_POLICY');
+  const pricingVersion = requiredVersion(policy.pricing_version, 'astera_pricing.pricing_version');
   const policyCurrency = canonicalCurrency(policy.currency || currency);
   if (policyCurrency !== currency) fail('provider and ASTERA pricing currencies must match', 'CURRENCY_MISMATCH');
   const maximumRaw = policy.maximum_service_fee_minor;
+  const minimum = toNonNegativeBigInt(policy.minimum_service_fee_minor || 0, 'astera_pricing.minimum_service_fee_minor');
+  const maximum = maximumRaw === undefined || maximumRaw === null
+    ? null
+    : toNonNegativeBigInt(maximumRaw, 'astera_pricing.maximum_service_fee_minor');
+  validateBounds(minimum, maximum, 'astera_pricing.service_fee');
   return {
     pricing_version: pricingVersion,
     currency: policyCurrency,
     markup_bps: toBasisPoints(policy.markup_bps || 0, 'astera_pricing.markup_bps'),
-    minimum_service_fee_minor: toNonNegativeBigInt(policy.minimum_service_fee_minor || 0, 'astera_pricing.minimum_service_fee_minor'),
-    maximum_service_fee_minor: maximumRaw === undefined || maximumRaw === null
-      ? null
-      : toNonNegativeBigInt(maximumRaw, 'astera_pricing.maximum_service_fee_minor')
+    minimum_service_fee_minor: minimum,
+    maximum_service_fee_minor: maximum
   };
 }
 
 function normalizeDirectVariablePolicy(policy, currency) {
-  const source = policy || {};
-  if (typeof source !== 'object' || Array.isArray(source)) fail('direct_variable_policy must be an object', 'INVALID_PRICING_POLICY');
-  const policyCurrency = canonicalCurrency(source.currency || currency);
+  if (!policy || typeof policy !== 'object' || Array.isArray(policy)) fail('direct_variable_policy must be an object', 'INVALID_PRICING_POLICY');
+  const pricingVersion = requiredVersion(policy.pricing_version, 'direct_variable_policy.pricing_version');
+  const policyCurrency = canonicalCurrency(policy.currency || currency);
   if (policyCurrency !== currency) fail('direct variable cost currency must match provider currency', 'CURRENCY_MISMATCH');
+  const minimum = policy.minimum_minor === undefined || policy.minimum_minor === null
+    ? null
+    : toNonNegativeBigInt(policy.minimum_minor, 'direct_variable_policy.minimum_minor');
+  const maximum = policy.maximum_minor === undefined || policy.maximum_minor === null
+    ? null
+    : toNonNegativeBigInt(policy.maximum_minor, 'direct_variable_policy.maximum_minor');
+  validateBounds(minimum, maximum, 'direct_variable_policy');
   return {
+    pricing_version: pricingVersion,
     currency: policyCurrency,
-    fixed_minor: toNonNegativeBigInt(source.fixed_minor || 0, 'direct_variable_policy.fixed_minor'),
-    provider_cost_bps: toBasisPoints(source.provider_cost_bps || 0, 'direct_variable_policy.provider_cost_bps'),
-    minimum_minor: source.minimum_minor === undefined || source.minimum_minor === null
-      ? null
-      : toNonNegativeBigInt(source.minimum_minor, 'direct_variable_policy.minimum_minor'),
-    maximum_minor: source.maximum_minor === undefined || source.maximum_minor === null
-      ? null
-      : toNonNegativeBigInt(source.maximum_minor, 'direct_variable_policy.maximum_minor')
+    fixed_minor: toNonNegativeBigInt(policy.fixed_minor || 0, 'direct_variable_policy.fixed_minor'),
+    provider_cost_bps: toBasisPoints(policy.provider_cost_bps || 0, 'direct_variable_policy.provider_cost_bps'),
+    minimum_minor: minimum,
+    maximum_minor: maximum
   };
 }
 
@@ -190,6 +207,42 @@ function sha256(value) {
   return crypto.createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 
+function providerPolicyJson(policy) {
+  return {
+    provider_id: policy.provider_id,
+    pricing_version: policy.pricing_version,
+    currency: policy.currency,
+    fixed_cost_minor: minorToJson(policy.fixed_cost_minor),
+    components: policy.components.map((component) => ({
+      metric: component.metric,
+      unit_size: minorToJson(component.unit_size),
+      price_minor: minorToJson(component.price_minor),
+      rounding: component.rounding
+    }))
+  };
+}
+
+function asteraPolicyJson(policy) {
+  return {
+    pricing_version: policy.pricing_version,
+    currency: policy.currency,
+    markup_bps: minorToJson(policy.markup_bps),
+    minimum_service_fee_minor: minorToJson(policy.minimum_service_fee_minor),
+    maximum_service_fee_minor: policy.maximum_service_fee_minor === null ? null : minorToJson(policy.maximum_service_fee_minor)
+  };
+}
+
+function directPolicyJson(policy) {
+  return {
+    pricing_version: policy.pricing_version,
+    currency: policy.currency,
+    fixed_minor: minorToJson(policy.fixed_minor),
+    provider_cost_bps: minorToJson(policy.provider_cost_bps),
+    minimum_minor: policy.minimum_minor === null ? null : minorToJson(policy.minimum_minor),
+    maximum_minor: policy.maximum_minor === null ? null : minorToJson(policy.maximum_minor)
+  };
+}
+
 function calculateUsageReport(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('input must be an object');
   const requestId = String(input.request_id || '').trim();
@@ -213,14 +266,18 @@ function calculateUsageReport(input) {
   const totalBillable = provider.total + directVariableCost + asteraServiceFee;
 
   const usageJson = Object.fromEntries(Object.entries(usageMetrics).sort(([a], [b]) => a.localeCompare(b)).map(([metric, value]) => [metric, minorToJson(value)]));
+  const providerPricingHash = sha256(providerPolicyJson(providerPricing));
+  const asteraPricingHash = sha256(asteraPolicyJson(asteraPricing));
+  const directVariablePolicyHash = sha256(directPolicyJson(directPolicy));
   const fingerprintPayload = {
     request_id: requestId,
     tenant_id: tenantId,
     provider_id: providerId,
     mode,
     usage: usageJson,
-    provider_pricing_version: providerPricing.pricing_version,
-    astera_pricing_version: asteraPricing.pricing_version
+    provider_pricing_hash: providerPricingHash,
+    astera_pricing_hash: asteraPricingHash,
+    direct_variable_policy_hash: directVariablePolicyHash
   };
   const usageFingerprint = sha256(fingerprintPayload);
   const report = {
@@ -234,6 +291,11 @@ function calculateUsageReport(input) {
     usage: usageJson,
     provider_pricing_version: providerPricing.pricing_version,
     astera_pricing_version: asteraPricing.pricing_version,
+    direct_variable_policy_version: directPolicy.pricing_version,
+    provider_pricing_hash: providerPricingHash,
+    astera_pricing_hash: asteraPricingHash,
+    direct_variable_policy_hash: directVariablePolicyHash,
+    provider_fixed_cost_minor: minorToJson(providerPricing.fixed_cost_minor),
     provider_cost_minor: minorToJson(provider.total),
     direct_variable_cost_minor: minorToJson(directVariableCost),
     astera_service_fee_minor: minorToJson(asteraServiceFee),
@@ -244,10 +306,4 @@ function calculateUsageReport(input) {
   return Object.freeze({ ...report, report_hash: sha256(report) });
 }
 
-module.exports = {
-  REPORT_SCHEMA_VERSION,
-  calculateUsageReport,
-  calculateProviderCost,
-  calculateDirectVariableCost,
-  calculateAsteraServiceFee
-};
+module.exports = { calculateUsageReport };
