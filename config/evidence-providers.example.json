@@ -1,0 +1,56 @@
+{
+  "schema_version": "astera.evidence-providers.v1",
+  "providers": [
+    {
+      "provider_id": "specialist-projection-example",
+      "type": "JSON_PROJECTION",
+      "source_class": "FREE_PROJECTION",
+      "source_family_id": "specialist-projection-example",
+      "file_path": "../data/specialist-projection.json",
+      "priority": 10,
+      "domains": ["G29"],
+      "capabilities": ["NO_REINFORCEMENT"],
+      "enabled": false
+    },
+    {
+      "provider_id": "official-live-example",
+      "type": "FREE_OFFICIAL_HTTP",
+      "source_family_id": "official-live-example",
+      "priority": 20,
+      "domains": ["G29"],
+      "capabilities": ["NO_REINFORCEMENT"],
+      "allowed_hosts": ["api.official.example"],
+      "endpoints": [
+        {
+          "endpoint_id": "official-search",
+          "url_template": "https://api.official.example/search?q={query}&domain={domain}&as_of={as_of}",
+          "response_format": "JSON",
+          "records_path": "results",
+          "authority_id": "official-authority",
+          "publisher_name": "Official Authority",
+          "capability_id": "current_official",
+          "field_map": {
+            "canonical_record_id": "id",
+            "canonical_url": "url",
+            "title": "title",
+            "excerpt": "summary",
+            "updated_at": "updated_at",
+            "version": "version",
+            "revision_id": "revision_id",
+            "fields": { "path": "fields" },
+            "lineage_fingerprint": { "path": "lineage" }
+          },
+          "fixed_fields": {
+            "source_role": "OFFICIAL",
+            "language": "en",
+            "rights": {
+              "access": "public",
+              "reuse": "allowed"
+            }
+          }
+        }
+      ],
+      "enabled": false
+    }
+  ]
+}
