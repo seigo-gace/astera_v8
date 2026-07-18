@@ -54,9 +54,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
-        "astera_pricing": { "type": "object" },
-        "direct_variable_policy": { "type": "object" }
+        "enabled": { "const": false }
       }
     },
     "provider_allowlist": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
