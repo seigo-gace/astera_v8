@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.result.v1",
+  "title": "ASTERA Evidence Search Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "tenant_id",
+    "status",
+    "execution_time",
+    "effective_as_of",
+    "query_plan_hash",
+    "duration_ms",
+    "evidence",
+    "coverage",
+    "quality",
+    "provider_execution",
+    "paid_usage_reports",
+    "ai_used",
+    "payment_executed",
+    "result_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "astera.evidence-search.result.v1" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "execution_time": { "type": "string", "format": "date-time" },
+    "effective_as_of": { "type": "string" },
+    "query_plan_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "evidence": { "type": "array" },
+    "coverage": { "type": "object" },
+    "quality": { "type": "object" },
+    "provider_execution": { "type": "object" },
+    "paid_usage_reports": { "type": "array" },
+    "ai_used": { "const": false },
+    "payment_executed": { "const": false },
+    "result_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
