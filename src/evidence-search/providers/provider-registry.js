@@ -55,11 +55,7 @@ function normalizeProvider(provider, index) {
   }
 
   const certified = provider.certified !== false;
-  if (
-    sourceClass === 'PAID_PROVIDER'
-    && certified
-    && settlementMode === 'UNVERIFIABLE'
-  ) {
+  if (sourceClass === 'PAID_PROVIDER' && certified && settlementMode === 'UNVERIFIABLE') {
     throw new TypeError(`paid provider ${providerId} cannot be certified with UNVERIFIABLE settlement`);
   }
 
@@ -111,10 +107,10 @@ class ProviderRegistry {
     const deny = new Set(plan.source_policy.provider_denylist);
     return this.providers.filter((provider) => {
       if (!provider.certified) return false;
+      if (provider.source_class === 'PAID_PROVIDER') return false;
       if (allow.size && !allow.has(provider.provider_id)) return false;
       if (deny.has(provider.provider_id)) return false;
       if (provider.domains.length && !provider.domains.includes(plan.domain_lens.id)) return false;
-      if (provider.source_class === 'PAID_PROVIDER' && !plan.source_policy.paid_enabled) return false;
       if (provider.source_class === 'FREE_PROJECTION' && !plan.source_policy.free_projection) return false;
       if (provider.source_class === 'FREE_OFFICIAL_LIVE' && !plan.source_policy.free_current) return false;
       if (phase === 'INITIAL' && provider.capabilities.includes('REINFORCEMENT_ONLY')) return false;
@@ -130,9 +126,8 @@ class ProviderRegistry {
     return this.providers.map((provider) => ({
       provider_id: provider.provider_id,
       source_class: provider.source_class,
+      active_search_eligible: provider.source_class !== 'PAID_PROVIDER',
       certified: provider.certified,
-      interactive_eligible: provider.interactive_eligible,
-      billing_settlement_mode: provider.billing_settlement_mode,
       capabilities: provider.capabilities
     }));
   }
