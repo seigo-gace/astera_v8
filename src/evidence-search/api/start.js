@@ -2,16 +2,24 @@
 
 const Logger = require('../../logger');
 const EvidenceSearchApiServer = require('./server');
+const InformationQualityClient = require('./information-quality-client');
 const { loadEvidenceProviders } = require('../providers/config-loader');
 
 const logger = new Logger();
 const providers = loadEvidenceProviders();
+const informationQualityClient = new InformationQualityClient();
 const server = new EvidenceSearchApiServer({
   logger,
   moduleOptions: {
     providers,
-    globalConcurrency: Number(process.env.ASTERA_SEARCH_GLOBAL_CONCURRENCY || 8),
-    perProviderConcurrency: Number(process.env.ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY || 2)
+    globalConcurrency: Number(
+      process.env.ASTERA_SEARCH_GLOBAL_CONCURRENCY || 8
+    ),
+    perProviderConcurrency: Number(
+      process.env.ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY || 2
+    ),
+    informationQualityEvaluator: informationQualityClient,
+    informationQualityEvaluatorMode: 'EVALUATOR_API_7374'
   }
 });
 
@@ -22,7 +30,8 @@ logger.write({
   text: 'Astera evidence search runtime initialized',
   payload: {
     provider_count: providers.length,
-    active_search_mode: 'FREE_ONLY'
+    active_search_mode: 'FREE_ONLY',
+    evaluator_mode: 'EVALUATOR_API_7374'
   }
 });
 
