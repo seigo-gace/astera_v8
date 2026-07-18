@@ -130,28 +130,49 @@ function buildIndex(rawRecords, options) {
   });
 }
 
+function rankedCandidateIndexes(scores, maximumPool) {
+  return [...scores.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0] - right[0])
+    .slice(0, maximumPool)
+    .map(([recordIndex]) => recordIndex);
+}
+
 function candidateIndexes(index, queryTexts, maximumPool) {
-  const scores = new Map();
-  function hit(recordIndex, weight) {
-    scores.set(recordIndex, (scores.get(recordIndex) || 0) + weight);
+  const primaryScores = new Map();
+  const trigramScores = new Map();
+
+  function hit(target, recordIndex, weight) {
+    target.set(recordIndex, (target.get(recordIndex) || 0) + weight);
   }
 
   for (const rawQuery of queryTexts) {
     const query = normalize(rawQuery);
     if (!query) continue;
-    for (const recordIndex of index.exact_index.get(query) || []) hit(recordIndex, 10_000);
-    for (const token of tokens(query)) {
-      for (const recordIndex of index.token_index.get(token) || []) hit(recordIndex, 100);
+    for (const recordIndex of index.exact_index.get(query) || []) {
+      hit(primaryScores, recordIndex, 10_000);
     }
-    for (const gram of trigrams(query)) {
-      for (const recordIndex of index.trigram_index.get(gram) || []) hit(recordIndex, 1);
+    for (const token of tokens(query)) {
+      for (const recordIndex of index.token_index.get(token) || []) {
+        hit(primaryScores, recordIndex, 100);
+      }
     }
   }
 
-  return [...scores.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0] - right[0])
-    .slice(0, maximumPool)
-    .map(([recordIndex]) => recordIndex);
+  if (primaryScores.size) {
+    return rankedCandidateIndexes(primaryScores, maximumPool);
+  }
+
+  for (const rawQuery of queryTexts) {
+    const query = normalize(rawQuery);
+    if (!query) continue;
+    for (const gram of trigrams(query)) {
+      for (const recordIndex of index.trigram_index.get(gram) || []) {
+        hit(trigramScores, recordIndex, 1);
+      }
+    }
+  }
+
+  return rankedCandidateIndexes(trigramScores, maximumPool);
 }
 
 function scoreDocument(document, queryTexts, domainId) {
