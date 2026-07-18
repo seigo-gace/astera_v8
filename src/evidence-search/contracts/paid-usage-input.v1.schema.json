@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.paid-search-usage-input.v1",
+  "title": "ASTERA Paid Search Usage Calculation Input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "tenant_id",
+    "provider_id",
+    "mode",
+    "usage",
+    "provider_pricing",
+    "astera_pricing"
+  ],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "provider_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "mode": { "enum": ["ESTIMATE", "ACTUAL"] },
+    "usage": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+          { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+        ]
+      }
+    },
+    "provider_pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_id", "pricing_version", "currency", "components"],
+      "properties": {
+        "provider_id": { "type": "string", "minLength": 1 },
+        "pricing_version": { "type": "string", "minLength": 1 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "fixed_cost_minor": { "$ref": "#/$defs/nonNegativeInteger" },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metric", "unit_size", "price_minor"],
+            "properties": {
+              "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+              "unit_size": { "$ref": "#/$defs/positiveInteger" },
+              "price_minor": { "$ref": "#/$defs/nonNegativeInteger" },
+              "rounding": { "enum": ["CEIL", "FLOOR", "EXACT"] }
+            }
+          }
+        }
+      }
+    },
+    "astera_pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pricing_version", "currency", "markup_bps", "minimum_service_fee_minor"],
+      "properties": {
+        "pricing_version": { "type": "string", "minLength": 1 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "markup_bps": { "$ref": "#/$defs/nonNegativeInteger" },
+        "minimum_service_fee_minor": { "$ref": "#/$defs/nonNegativeInteger" },
+        "maximum_service_fee_minor": {
+          "oneOf": [
+            { "$ref": "#/$defs/nonNegativeInteger" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "direct_variable_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "fixed_minor": { "$ref": "#/$defs/nonNegativeInteger" },
+        "provider_cost_bps": { "$ref": "#/$defs/nonNegativeInteger" },
+        "minimum_minor": {
+          "oneOf": [
+            { "$ref": "#/$defs/nonNegativeInteger" },
+            { "type": "null" }
+          ]
+        },
+        "maximum_minor": {
+          "oneOf": [
+            { "$ref": "#/$defs/nonNegativeInteger" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonNegativeInteger": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" }
+      ]
+    },
+    "positiveInteger": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        { "type": "string", "pattern": "^[1-9][0-9]*$" }
+      ]
+    }
+  }
+}
