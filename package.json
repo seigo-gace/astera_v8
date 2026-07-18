@@ -16,6 +16,11 @@
     "test:runtime": "node --test test/*.test.js",
     "test:evaluator": "node --test src/quality-completion-evaluator/tests/**/*.test.js",
     "test:evaluator-api": "node --test src/quality-completion-evaluator/api/*.test.js",
+    "test:evidence": "node --test test/evidence-paid-usage.test.js test/evidence-search-core.test.js",
+    "test:evidence-user": "node --test test/evidence-search-user-journey.test.js",
+    "test:information-quality": "node --test src/quality-completion-evaluator/tests/unit/information-quality.test.js",
+    "check:evidence": "node --check src/evidence-search/module.js && node --check src/evidence-search/core/search-orchestrator.js && node --check src/evidence-search/core/query-plan-compiler.js && node --check src/evidence-search/core/bounded-scheduler.js && node --check src/quality-completion-evaluator/information-quality/engine.js",
+    "verify:evidence": "npm run check:evidence && npm run test:evidence && npm run test:evidence-user && npm run test:information-quality",
     "smoke": "bash scripts/smoke.sh",
     "verify": "npm test && bash scripts/smoke.sh"
   },
