@@ -10,14 +10,22 @@
     "entrypoint": "index.js",
     "public_methods": ["execute"]
   },
+  "active_search_mode": "FREE_ONLY",
+  "active_provider_classes": [
+    "FREE_PROJECTION",
+    "FREE_OFFICIAL_LIVE"
+  ],
   "responsibilities": [
-    "evidence_search",
+    "free_evidence_search",
     "information_quality_measurement",
-    "paid_provider_usage_calculation",
-    "provider_cost_calculation",
-    "astera_service_fee_calculation"
+    "provider_result_normalization",
+    "condition_matching",
+    "lineage_and_conflict_measurement",
+    "reinforcement_search",
+    "isolated_future_usage_calculation"
   ],
   "prohibited_actions": [
+    "paid_provider_execution",
     "payment_execution",
     "credit_balance_management",
     "charge_reservation",
