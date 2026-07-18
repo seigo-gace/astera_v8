@@ -1,0 +1,32 @@
+{
+  "module_id": "astera-evidence-search",
+  "display_name": "ASTERA V8 根拠検索Module",
+  "version": "2.4.0",
+  "runtime": "node>=22",
+  "entrypoint": "index.js",
+  "module_type": "internal",
+  "connection_contract": {
+    "entrypoint_count": 1,
+    "entrypoint": "index.js",
+    "public_methods": ["execute"]
+  },
+  "responsibilities": [
+    "evidence_search",
+    "information_quality_measurement",
+    "paid_provider_usage_calculation",
+    "provider_cost_calculation",
+    "astera_service_fee_calculation"
+  ],
+  "prohibited_actions": [
+    "payment_execution",
+    "credit_balance_management",
+    "charge_reservation",
+    "refund_execution",
+    "settlement_execution",
+    "ai_search",
+    "llm_query_generation",
+    "ai_reranking",
+    "ai_scoring",
+    "direct_internal_component_access"
+  ]
+}
