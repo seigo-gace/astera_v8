@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.module-response.v1",
+  "title": "ASTERA Evidence Search Module Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "module_id",
+    "module_version",
+    "operation",
+    "status",
+    "result"
+  ],
+  "properties": {
+    "schema_version": { "const": "astera.evidence-search.module-response.v1" },
+    "module_id": { "const": "astera-evidence-search" },
+    "module_version": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["CALCULATE_PAID_USAGE"] },
+    "status": { "const": "OK" },
+    "result": { "$ref": "paid-usage-report.v1.schema.json" }
+  }
+}
