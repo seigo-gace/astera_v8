@@ -23,18 +23,30 @@ function normalizeText(value) {
   return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
 
+function integerInRange(value, field, minimum, maximum, fallback) {
+  const parsed = value === undefined || value === null ? fallback : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
+    const error = new Error(`${field} must be an integer from ${minimum} to ${maximum}`);
+    error.code = 'INVALID_SEARCH_REQUEST';
+    throw error;
+  }
+  return parsed;
+}
+
 function normalizeCondition(raw, index) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     const error = new Error(`conditions[${index}] must be an object`);
     error.code = 'INVALID_CONDITION';
     throw error;
   }
+
   const cls = String(raw.class || 'CORE').toUpperCase();
   if (!Object.hasOwn(CONDITION_CLASS_WEIGHTS, cls)) {
     const error = new Error(`conditions[${index}].class is invalid`);
     error.code = 'INVALID_CONDITION_CLASS';
     throw error;
   }
+
   const field = normalizeText(raw.field || 'text');
   const operator = String(raw.operator || 'CONTAINS').toUpperCase();
   const allowed = new Set(['EQ', 'CONTAINS', 'IN', 'GTE', 'LTE', 'BETWEEN', 'EXISTS']);
@@ -43,13 +55,16 @@ function normalizeCondition(raw, index) {
     error.code = 'INVALID_CONDITION_OPERATOR';
     throw error;
   }
+
   return Object.freeze({
     condition_id: normalizeText(raw.condition_id || `condition_${index + 1}`),
     class: cls,
     field,
     operator,
     expected_value: raw.expected_value ?? null,
-    normalized_value: typeof raw.expected_value === 'string' ? normalizeText(raw.expected_value).toLowerCase() : raw.expected_value ?? null,
+    normalized_value: typeof raw.expected_value === 'string'
+      ? normalizeText(raw.expected_value).toLowerCase()
+      : raw.expected_value ?? null,
     weight: CONDITION_CLASS_WEIGHTS[cls],
     required: raw.required === undefined ? cls !== 'OPTIONAL' : raw.required === true
   });
@@ -61,36 +76,69 @@ function compileQueryPlan(payload, context = {}) {
     error.code = 'INVALID_SEARCH_REQUEST';
     throw error;
   }
+
+  if (payload.paid_search?.enabled === true) {
+    const error = new Error('paid provider execution is disabled; this module currently uses free providers only');
+    error.code = 'PAID_SEARCH_DISABLED';
+    throw error;
+  }
+
   const question = normalizeText(payload.question);
   if (!question) {
     const error = new Error('question is required');
     error.code = 'INVALID_SEARCH_REQUEST';
     throw error;
   }
+
   const domainId = String(payload.domain_lens?.id || 'G01').toUpperCase();
   if (!/^G(?:0[1-9]|[12][0-9]|3[0-8])$/.test(domainId)) {
     const error = new Error('domain_lens.id must be G01-G38');
     error.code = 'INVALID_DOMAIN_LENS';
     throw error;
   }
+
   const conditions = Array.isArray(payload.conditions) && payload.conditions.length
     ? payload.conditions.map(normalizeCondition)
-    : [normalizeCondition({ class: 'CORE', field: 'text', operator: 'CONTAINS', expected_value: question }, 0)];
+    : [normalizeCondition({
+      class: 'CORE',
+      field: 'text',
+      operator: 'CONTAINS',
+      expected_value: question
+    }, 0)];
+
   if (!conditions.some((item) => item.class === 'CORE')) {
     const error = new Error('at least one CORE condition is required');
     error.code = 'NO_CORE_CONDITION';
     throw error;
   }
+
   const aliases = [...new Set((payload.aliases || []).map(normalizeText).filter(Boolean))].sort();
   const identifiers = [...new Set((payload.identifiers || []).map(normalizeText).filter(Boolean))].sort();
-  const jurisdictions = [...new Set((payload.jurisdictions || []).map((v) => normalizeText(v).toUpperCase()).filter(Boolean))].sort();
-  const effectiveAsOf = context.effective_as_of || payload.as_of || context.execution_time || new Date().toISOString();
-  const baseQuery = Object.freeze({ query_id: 'primary_1', class: 'PRIMARY', text: question, domain_id: domainId, identifiers, aliases, jurisdictions });
+  const jurisdictions = [...new Set(
+    (payload.jurisdictions || []).map((value) => normalizeText(value).toUpperCase()).filter(Boolean)
+  )].sort();
+
+  const effectiveAsOf = context.effective_as_of
+    || payload.as_of
+    || context.execution_time
+    || new Date().toISOString();
+
+  const baseQuery = Object.freeze({
+    query_id: 'primary_1',
+    class: 'PRIMARY',
+    text: question,
+    domain_id: domainId,
+    identifiers,
+    aliases,
+    jurisdictions
+  });
+
   const reinforcement = [];
   for (const alias of aliases) reinforcement.push({ class: 'ALIAS_VARIANT', text: alias });
-  for (const id of identifiers) reinforcement.push({ class: 'IDENTIFIER_LOOKUP', text: id });
+  for (const identifier of identifiers) reinforcement.push({ class: 'IDENTIFIER_LOOKUP', text: identifier });
   reinforcement.push({ class: 'OFFICIAL_RECORD_LOOKUP', text: question });
   reinforcement.push({ class: 'INDEPENDENT_ORIGIN_LOOKUP', text: question });
+
   const reinforcementQueries = reinforcement.slice(0, 8).map((query, index) => Object.freeze({
     query_id: `reinforcement_${index + 1}`,
     class: query.class,
@@ -100,10 +148,14 @@ function compileQueryPlan(payload, context = {}) {
     aliases,
     jurisdictions
   }));
+
   const plan = {
     schema_version: 'astera.evidence-search.query-plan.v1',
     question,
-    domain_lens: { id: domainId, taxonomy_version: String(payload.domain_lens?.taxonomy_version || '1.0.0') },
+    domain_lens: {
+      id: domainId,
+      taxonomy_version: String(payload.domain_lens?.taxonomy_version || '1.0.0')
+    },
     effective_as_of: String(effectiveAsOf),
     conditions,
     primary_query_set: [baseQuery],
@@ -111,14 +163,24 @@ function compileQueryPlan(payload, context = {}) {
     source_policy: {
       free_projection: payload.search?.free_projection !== false,
       free_current: payload.search?.free_current !== false,
-      paid_enabled: payload.paid_search?.enabled === true,
-      provider_allowlist: [...new Set((payload.provider_allowlist || []).map(normalizeText).filter(Boolean))].sort(),
-      provider_denylist: [...new Set((payload.provider_denylist || []).map(normalizeText).filter(Boolean))].sort()
+      paid_enabled: false,
+      provider_allowlist: [...new Set(
+        (payload.provider_allowlist || []).map(normalizeText).filter(Boolean)
+      )].sort(),
+      provider_denylist: [...new Set(
+        (payload.provider_denylist || []).map(normalizeText).filter(Boolean)
+      )].sort()
     },
-    maximum_results: Math.min(128, Math.max(1, Number(payload.maximum_results || 32))),
-    deadline_ms: Math.min(60_000, Math.max(1000, Number(payload.deadline_ms || 8000)))
+    maximum_results: integerInRange(payload.maximum_results, 'maximum_results', 1, 128, 32),
+    deadline_ms: integerInRange(payload.deadline_ms, 'deadline_ms', 1000, 60_000, 8000)
   };
+
   return Object.freeze({ ...plan, plan_hash: sha256(plan) });
 }
 
-module.exports = { CONDITION_CLASS_WEIGHTS, REINFORCEMENT_CLASSES, compileQueryPlan, normalizeText };
+module.exports = {
+  CONDITION_CLASS_WEIGHTS,
+  REINFORCEMENT_CLASSES,
+  compileQueryPlan,
+  normalizeText
+};
