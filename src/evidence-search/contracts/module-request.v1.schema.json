@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.module-request.v1",
+  "title": "ASTERA Evidence Search Module Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation", "payload"],
+  "properties": {
+    "schema_version": { "const": "astera.evidence-search.module-request.v1" },
+    "operation": { "enum": ["CALCULATE_PAID_USAGE"] },
+    "payload": { "$ref": "paid-usage-input.v1.schema.json" }
+  }
+}
