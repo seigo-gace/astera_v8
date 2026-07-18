@@ -4,10 +4,36 @@
   "title": "ASTERA Evidence Search Module Request v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "operation", "payload"],
+  "required": ["schema_version", "operation"],
   "properties": {
     "schema_version": { "const": "astera.evidence-search.module-request.v1" },
-    "operation": { "enum": ["CALCULATE_PAID_USAGE"] },
-    "payload": { "$ref": "paid-usage-input.v1.schema.json" }
-  }
+    "operation": { "enum": ["SEARCH_EVIDENCE", "CALCULATE_PAID_USAGE", "HEALTH"] },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "execution_time": { "type": "string", "format": "date-time" },
+        "effective_as_of": { "type": "string", "format": "date-time" }
+      }
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "operation": { "const": "CALCULATE_PAID_USAGE" } } },
+      "then": {
+        "required": ["payload"],
+        "properties": { "payload": { "$ref": "paid-usage-input.v1.schema.json" } }
+      }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "SEARCH_EVIDENCE" } } },
+      "then": {
+        "required": ["payload"],
+        "properties": { "payload": { "$ref": "search-request.v1.schema.json" } }
+      }
+    }
+  ]
 }
