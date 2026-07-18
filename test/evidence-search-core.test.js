@@ -243,8 +243,8 @@ test('keeps future usage calculation isolated from provider execution and paymen
   });
 
   assert.equal(response.operation, 'CALCULATE_PAID_USAGE');
-  assert.equal(response.result.provider_cost_minor, '20');
-  assert.equal(response.result.astera_service_fee_minor, '20');
+  assert.equal(response.result.provider_cost_minor, 20);
+  assert.equal(response.result.astera_service_fee_minor, 20);
   assert.equal(Object.hasOwn(response.result, 'payment_status'), false);
   assert.equal(Object.hasOwn(response.result, 'credit_balance'), false);
   assert.equal(Object.hasOwn(response.result, 'reservation_id'), false);
