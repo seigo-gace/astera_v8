@@ -4,12 +4,22 @@ const Logger = require('../../logger');
 const EvidenceSearchApiServer = require('./server');
 const InformationQualityClient = require('./information-quality-client');
 const { loadEvidenceProviders } = require('../providers/config-loader');
+const { EvidenceJobStore } = require('../recovery/job-store');
+const { DurableEvidenceSpool } = require('../recovery/durable-spool');
+const { EvidenceJobManager } = require('../recovery/job-manager');
 
 const logger = new Logger();
 const providers = loadEvidenceProviders();
 const informationQualityClient = new InformationQualityClient();
+const jobStore = new EvidenceJobStore();
+const durableSpool = new DurableEvidenceSpool();
+const jobManager = new EvidenceJobManager({
+  store: jobStore,
+  spool: durableSpool
+});
 const server = new EvidenceSearchApiServer({
   logger,
+  jobManager,
   moduleOptions: {
     providers,
     globalConcurrency: Number(
@@ -31,7 +41,10 @@ logger.write({
   payload: {
     provider_count: providers.length,
     active_search_mode: 'FREE_ONLY',
-    evaluator_mode: 'EVALUATOR_API_7374'
+    evaluator_mode: 'EVALUATOR_API_7374',
+    durable_recovery: true,
+    evidence_db: jobStore.filePath,
+    durable_spool: durableSpool.root
   }
 });
 
