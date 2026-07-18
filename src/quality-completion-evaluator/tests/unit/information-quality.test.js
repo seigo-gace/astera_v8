@@ -7,7 +7,7 @@ const {
   loadInformationQualityProfiles,
   evaluate
 } = require('../..');
-const { createValidRequest } = require('../fixtures/factory');
+const { baseDesignRequest } = require('../fixtures/factory');
 
 function candidate(id, authority, role) {
   return {
@@ -87,7 +87,7 @@ test('core contradiction and critical conflict are blocking', () => {
 });
 
 test('existing artifact evaluate entrypoint remains callable', () => {
-  const existing = evaluate(createValidRequest());
+  const existing = evaluate(baseDesignRequest());
   assert.ok(existing);
   assert.equal(typeof existing, 'object');
 });
