@@ -7,6 +7,7 @@ const createEvidenceSearchModule = require('..');
 const {
   ReplayNonceGuard,
   loadInternalServiceSecret,
+  sha256,
   verifyInternalRequest
 } = require('./internal-auth');
 
@@ -26,6 +27,7 @@ function statusForError(error) {
     || code === 'INTERNAL_REQUEST_EXPIRED'
     || code === 'INTERNAL_BODY_HASH_MISMATCH'
   ) return 403;
+  if (code === 'EVIDENCE_JOB_LEASE_CONFLICT' || code === 'EVIDENCE_JOB_CAS_CONFLICT') return 409;
   if (
     code.startsWith('INVALID_')
     || code === 'NO_CORE_CONDITION'
@@ -51,6 +53,8 @@ class EvidenceSearchApiServer {
     });
     this.nonceGuard = options.nonceGuard || new ReplayNonceGuard();
     this.module = options.module || createEvidenceSearchModule(options.moduleOptions || {});
+    this.jobManager = options.jobManager || null;
+    this.closeJobManagerOnStop = options.closeJobManagerOnStop !== false;
 
     this.server = http.createServer((req, res) => {
       const startedAt = Date.now();
@@ -63,6 +67,7 @@ class EvidenceSearchApiServer {
           text: `${req.method} ${String(req.url || '').split('?')[0]} ${res.statusCode}`,
           payload: {
             request_id: req.verifiedRequestId || null,
+            job_id: req.evidenceJobId || null,
             status: res.statusCode,
             duration_ms: Date.now() - startedAt
           }
@@ -84,7 +89,11 @@ class EvidenceSearchApiServer {
       this.logger.write({
         type: 'evidence_search_api_started',
         text: `Astera evidence search API listening at http://${this.host}:${port}`,
-        payload: { host: this.host, port }
+        payload: {
+          host: this.host,
+          port,
+          durable_recovery: Boolean(this.jobManager)
+        }
       });
     });
     return this.server;
@@ -93,6 +102,9 @@ class EvidenceSearchApiServer {
   async stop() {
     if (this.server.listening) {
       await new Promise((resolve) => this.server.close(resolve));
+    }
+    if (this.jobManager && this.closeJobManagerOnStop) {
+      this.jobManager.close();
     }
     this.logger.write({
       type: 'evidence_search_api_stopped',
@@ -133,7 +145,23 @@ class EvidenceSearchApiServer {
     return Buffer.concat(chunks, total);
   }
 
+  _terminalReplay(job) {
+    const latest = this.jobManager.readLatestValidCheckpoint(job.job_id);
+    const value = latest.checkpoint?.value;
+    if (!value || !['FINAL_VALID', 'REJECTED'].includes(value.status)) {
+      const error = new Error('completed evidence job has no valid terminal checkpoint');
+      error.code = 'RECOVERY_ARTIFACT_INVALID';
+      throw error;
+    }
+    return Object.freeze({
+      ...value,
+      job_id: job.job_id,
+      idempotent_replay: true
+    });
+  }
+
   async _handle(req, res) {
+    let activeJob = null;
     try {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/healthz') {
@@ -145,6 +173,7 @@ class EvidenceSearchApiServer {
           ok: true,
           service: 'astera-evidence-search-api',
           active_search_mode: 'FREE_ONLY',
+          durable_recovery: Boolean(this.jobManager),
           module: health.result,
           time: new Date().toISOString()
         });
@@ -177,13 +206,43 @@ class EvidenceSearchApiServer {
         throw error;
       }
 
+      let lifecycle;
+      if (this.jobManager) {
+        const started = this.jobManager.begin({
+          tenantId: identity.tenant_id,
+          requestId: identity.request_id,
+          idempotencyKey: payload.idempotency_key || identity.request_id
+        });
+        activeJob = started.job;
+        req.evidenceJobId = activeJob.job_id;
+
+        if (started.reusedTerminal) {
+          return this._json(res, 200, this._terminalReplay(activeJob));
+        }
+
+        activeJob = this.jobManager.checkpoint(
+          activeJob,
+          'AUTHENTICATED',
+          {
+            request_id: identity.request_id,
+            tenant_id: identity.tenant_id,
+            body_sha256: sha256(rawBody),
+            domain_lens: payload.domain_lens || null,
+            free_projection: payload.search?.free_projection !== false,
+            free_current: payload.search?.free_current !== false
+          }
+        );
+        lifecycle = this.jobManager.lifecycle(activeJob);
+      }
+
       const response = await this.module.execute({
         schema_version: 'astera.evidence-search.module-request.v1',
         operation: 'SEARCH_EVIDENCE',
         context: {
           tenant_id: identity.tenant_id,
           request_id: identity.request_id,
-          execution_time: new Date().toISOString()
+          execution_time: new Date().toISOString(),
+          lifecycle
         },
         payload: {
           ...payload,
@@ -193,22 +252,52 @@ class EvidenceSearchApiServer {
         }
       });
 
+      let completedJob = null;
+      if (this.jobManager && activeJob) {
+        completedJob = this.jobManager.complete(activeJob, response.result);
+        activeJob = completedJob;
+      }
+
+      const result = Object.freeze({
+        ...response.result,
+        ...(completedJob ? { job_id: completedJob.job_id } : {})
+      });
+
       this.logger.write({
         tenantId: identity.tenant_id,
         type: 'evidence_search_completed',
-        text: `Evidence search returned ${response.result.status}`,
+        text: `Evidence search returned ${result.status}`,
         payload: {
           request_id: identity.request_id,
-          status: response.result.status,
-          evidence_count: response.result.evidence.length,
-          initial_score_bp: response.result.quality.initial.score_bp,
-          final_score_bp: response.result.quality.final.score_bp,
-          reinforcement_attempt_count: response.result.quality.reinforcement_attempt_count,
-          duration_ms: response.result.duration_ms
+          job_id: completedJob?.job_id || null,
+          status: result.status,
+          evidence_count: result.evidence.length,
+          initial_score_bp: result.quality.initial.score_bp,
+          final_score_bp: result.quality.final.score_bp,
+          reinforcement_attempt_count: result.quality.reinforcement_attempt_count,
+          duration_ms: result.duration_ms
         }
       });
-      return this._json(res, 200, response.result);
+      return this._json(res, 200, result);
     } catch (error) {
+      if (this.jobManager && activeJob && !['FINAL_VALID', 'REJECTED', 'ERROR'].includes(activeJob.state)) {
+        try {
+          activeJob = this.jobManager.fail(activeJob, error);
+        } catch (jobError) {
+          this.logger.write({
+            tenantId: req.verifiedTenantId || 'internal-unverified',
+            type: 'evidence_job_failure_record_failed',
+            severity: 'error',
+            text: 'Failed to persist evidence job error state',
+            payload: {
+              request_id: req.verifiedRequestId || null,
+              job_id: req.evidenceJobId || null,
+              error_code: jobError.code || 'EVIDENCE_JOB_ERROR'
+            }
+          });
+        }
+      }
+
       const status = statusForError(error);
       this.logger.write({
         tenantId: req.verifiedTenantId || 'internal-unverified',
@@ -217,6 +306,7 @@ class EvidenceSearchApiServer {
         text: `${req.method} ${String(req.url || '').split('?')[0]} failed`,
         payload: {
           request_id: req.verifiedRequestId || null,
+          job_id: req.evidenceJobId || null,
           status,
           error_code: error.code || 'INTERNAL_ERROR'
         }
@@ -225,7 +315,8 @@ class EvidenceSearchApiServer {
         error: status >= 500 ? 'internal_error' : error.message,
         code: error.code || 'INTERNAL_ERROR',
         status,
-        requestId: req.verifiedRequestId || null
+        requestId: req.verifiedRequestId || null,
+        jobId: req.evidenceJobId || null
       });
     }
   }
