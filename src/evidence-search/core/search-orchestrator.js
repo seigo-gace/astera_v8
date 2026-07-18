@@ -10,12 +10,13 @@ const { measureConditions } = require('../evidence/condition-matcher');
 const { analyzeLineage } = require('../evidence/lineage-matcher');
 const { detectConflicts } = require('../evidence/conflict-detector');
 const { measureFreshness } = require('../evidence/freshness-measurer');
-const { calculateUsageReport } = require('../paid/usage-calculator');
 const {
   evaluateInformationQuality,
   loadInformationQualityProfiles
 } = require('../../quality-completion-evaluator');
-const { stableStringify } = require('../../quality-completion-evaluator/utils/stable-json');
+const {
+  stableStringify
+} = require('../../quality-completion-evaluator/utils/stable-json');
 
 function sha256(value) {
   return crypto.createHash('sha256')
@@ -92,7 +93,13 @@ function resolveInformationProfile(plan, overlays) {
   return Object.freeze({ group_id: groupId, ...profile });
 }
 
-function buildMeasurements({ candidates, plan, executions, selectedProviders, informationProfile }) {
+function buildMeasurements({
+  candidates,
+  plan,
+  executions,
+  selectedProviders,
+  informationProfile
+}) {
   const lineageBase = analyzeLineage(candidates);
   const officialRecords = new Set(
     candidates
@@ -146,7 +153,14 @@ function buildProviderTasks(providers, phase, plan, context, querySet) {
   }));
 }
 
-async function executePhase({ providers, phase, plan, context, scheduler, querySet }) {
+async function executePhase({
+  providers,
+  phase,
+  plan,
+  context,
+  scheduler,
+  querySet
+}) {
   if (!providers.length) return [];
 
   const rawExecutions = await scheduler.run(
@@ -203,8 +217,12 @@ function noveltyKey(candidate) {
 
 function selectNewCorroboration(initialCandidates, reinforcementCandidates) {
   const initialKeys = new Set(initialCandidates.map(noveltyKey));
-  const initialFamilies = new Set(initialCandidates.map((item) => item.source_family_id));
-  const initialCapabilities = new Set(initialCandidates.map((item) => item.capability_id));
+  const initialFamilies = new Set(
+    initialCandidates.map((item) => item.source_family_id)
+  );
+  const initialCapabilities = new Set(
+    initialCandidates.map((item) => item.capability_id)
+  );
 
   return reinforcementCandidates.filter((candidate) => {
     if (initialKeys.has(noveltyKey(candidate))) return false;
@@ -236,61 +254,6 @@ function buildEvaluationRequest({
   });
 }
 
-function calculatePaidUsage(executions, payload, requestId, tenantId) {
-  const reports = [];
-
-  for (const execution of executions) {
-    if (
-      execution.status !== 'FULFILLED'
-      || execution.provider.source_class !== 'PAID_PROVIDER'
-    ) {
-      continue;
-    }
-
-    const normalized = execution.normalized;
-    if (!normalized.provider_pricing) {
-      reports.push(Object.freeze({
-        provider_id: execution.provider.provider_id,
-        status: 'USAGE_UNPRICED',
-        usage: normalized.usage
-      }));
-      continue;
-    }
-
-    if (!payload.paid_search?.astera_pricing) {
-      reports.push(Object.freeze({
-        provider_id: execution.provider.provider_id,
-        status: 'ASTERA_PRICING_MISSING',
-        usage: normalized.usage
-      }));
-      continue;
-    }
-
-    try {
-      reports.push(calculateUsageReport({
-        request_id: requestId,
-        tenant_id: tenantId,
-        provider_id: execution.provider.provider_id,
-        mode: 'ACTUAL',
-        usage: normalized.usage,
-        provider_pricing: normalized.provider_pricing,
-        astera_pricing: payload.paid_search.astera_pricing,
-        direct_variable_policy:
-          payload.paid_search.direct_variable_policy || undefined
-      }));
-    } catch (error) {
-      reports.push(Object.freeze({
-        provider_id: execution.provider.provider_id,
-        status: 'USAGE_CALCULATION_FAILED',
-        code: error.code || 'USAGE_CALCULATION_FAILED',
-        message: error.message
-      }));
-    }
-  }
-
-  return Object.freeze(reports);
-}
-
 function executionReports(executions) {
   return Object.freeze(executions.map((execution) => Object.freeze({
     provider_id: execution.provider.provider_id,
@@ -302,6 +265,29 @@ function executionReports(executions) {
       : 0,
     error_code: execution.error?.code || null
   })));
+}
+
+function normalizeEvaluator(evaluator) {
+  if (typeof evaluator === 'function') return evaluator;
+  if (evaluator && typeof evaluator.evaluate === 'function') {
+    return evaluator.evaluate.bind(evaluator);
+  }
+  throw new TypeError('informationQualityEvaluator must be a function or expose evaluate()');
+}
+
+async function invokeEvaluator(evaluator, request, context) {
+  const result = await evaluator(request, context);
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    const error = new Error('information quality evaluator returned an invalid result');
+    error.code = 'INFORMATION_QUALITY_RESPONSE_INVALID';
+    throw error;
+  }
+  if (!result.status || !Number.isInteger(result.score_bp)) {
+    const error = new Error('information quality evaluator result is incomplete');
+    error.code = 'INFORMATION_QUALITY_RESPONSE_INVALID';
+    throw error;
+  }
+  return result;
 }
 
 class SearchOrchestrator {
@@ -321,8 +307,13 @@ class SearchOrchestrator {
         || 2
     });
 
-    this.evaluator = options.informationQualityEvaluator
-      || evaluateInformationQuality;
+    this.evaluator = normalizeEvaluator(
+      options.informationQualityEvaluator || evaluateInformationQuality
+    );
+    this.evaluatorMode = String(
+      options.informationQualityEvaluatorMode
+      || (options.informationQualityEvaluator ? 'INJECTED' : 'IN_PROCESS')
+    );
   }
 
   health() {
@@ -331,6 +322,7 @@ class SearchOrchestrator {
       module: 'astera-evidence-search',
       provider_count: this.registry.providers.length,
       providers: this.registry.health(),
+      evaluator_mode: this.evaluatorMode,
       ai_used: false,
       payment_execution: false
     });
@@ -396,15 +388,19 @@ class SearchOrchestrator {
         informationProfile
       });
 
-      const initialQuality = this.evaluator(buildEvaluationRequest({
-        phase: 'INITIAL',
-        plan,
-        payload,
-        candidates: initialCandidates,
-        measurements: initialMeasurements,
-        reinforcementAttemptCount: 0,
-        newCorroborationCount: 0
-      }));
+      const initialQuality = await invokeEvaluator(
+        this.evaluator,
+        buildEvaluationRequest({
+          phase: 'INITIAL',
+          plan,
+          payload,
+          candidates: initialCandidates,
+          measurements: initialMeasurements,
+          reinforcementAttemptCount: 0,
+          newCorroborationCount: 0
+        }),
+        context
+      );
 
       const allExecutions = [...initialExecutions];
       let finalCandidates = initialCandidates;
@@ -455,23 +451,20 @@ class SearchOrchestrator {
           informationProfile
         });
 
-        finalQuality = this.evaluator(buildEvaluationRequest({
-          phase: 'FINAL',
-          plan,
-          payload,
-          candidates: finalCandidates,
-          measurements: finalMeasurements,
-          reinforcementAttemptCount: 1,
-          newCorroborationCount: newCorroboration.length
-        }));
+        finalQuality = await invokeEvaluator(
+          this.evaluator,
+          buildEvaluationRequest({
+            phase: 'FINAL',
+            plan,
+            payload,
+            candidates: finalCandidates,
+            measurements: finalMeasurements,
+            reinforcementAttemptCount: 1,
+            newCorroborationCount: newCorroboration.length
+          }),
+          context
+        );
       }
-
-      const paidUsageReports = calculatePaidUsage(
-        allExecutions,
-        payload,
-        requestId,
-        tenantId
-      );
 
       const result = {
         schema_version: 'astera.evidence-search.result.v1',
@@ -495,7 +488,7 @@ class SearchOrchestrator {
           initial: executionReports(initialExecutions),
           reinforcement: executionReports(reinforcementExecutions)
         }),
-        paid_usage_reports: paidUsageReports,
+        paid_usage_reports: Object.freeze([]),
         ai_used: false,
         payment_executed: false
       };
