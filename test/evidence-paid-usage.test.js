@@ -2,9 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calculateUsageReport } = require('../src/evidence-search/paid/usage-calculator');
+const createEvidenceSearchModule = require('../src/evidence-search');
 
-function baseInput() {
+const REQUEST_SCHEMA_VERSION = 'astera.evidence-search.module-request.v1';
+const OPERATION = 'CALCULATE_PAID_USAGE';
+
+function basePayload() {
   return {
     request_id: 'req_001',
     tenant_id: 'tenant_001',
@@ -40,54 +43,96 @@ function baseInput() {
   };
 }
 
-test('calculates provider usage, direct variable cost, ASTERA fee, and total deterministically', () => {
-  const input = baseInput();
-  const first = calculateUsageReport(input);
-  const second = calculateUsageReport(input);
+function request(payload = basePayload()) {
+  return {
+    schema_version: REQUEST_SCHEMA_VERSION,
+    operation: OPERATION,
+    payload
+  };
+}
 
-  assert.equal(first.provider_cost_minor, 38);
-  assert.equal(first.direct_variable_cost_minor, 4);
-  assert.equal(first.astera_service_fee_minor, 20);
-  assert.equal(first.total_billable_minor, 62);
-  assert.equal(first.report_id, second.report_id);
-  assert.equal(first.report_hash, second.report_hash);
+test('exposes exactly one official connection method', () => {
+  const module = createEvidenceSearchModule();
+  assert.deepEqual(Object.keys(module), ['execute']);
+  assert.equal(typeof module.execute, 'function');
+});
+
+test('calculates usage and billable amount deterministically through the single facade', async () => {
+  const module = createEvidenceSearchModule();
+  const first = await module.execute(request());
+  const second = await module.execute(request());
+
+  assert.equal(first.status, 'OK');
+  assert.equal(first.operation, OPERATION);
+  assert.equal(first.result.provider_cost_minor, 38);
+  assert.equal(first.result.direct_variable_cost_minor, 4);
+  assert.equal(first.result.astera_service_fee_minor, 20);
+  assert.equal(first.result.total_billable_minor, 62);
+  assert.equal(first.result.report_id, second.result.report_id);
+  assert.equal(first.result.report_hash, second.result.report_hash);
   assert.deepEqual(first, second);
 });
 
-test('supports estimate mode without implementing payment or credit operations', () => {
-  const report = calculateUsageReport({ ...baseInput(), mode: 'ESTIMATE' });
+test('supports estimate mode without payment, credit, reservation, refund, or settlement state', async () => {
+  const module = createEvidenceSearchModule();
+  const payload = { ...basePayload(), mode: 'ESTIMATE' };
+  const response = await module.execute(request(payload));
+  const report = response.result;
+
   assert.equal(report.mode, 'ESTIMATE');
-  assert.equal(Object.hasOwn(report, 'reservation_id'), false);
-  assert.equal(Object.hasOwn(report, 'payment_status'), false);
-  assert.equal(Object.hasOwn(report, 'credit_balance'), false);
+  for (const forbidden of [
+    'reservation_id',
+    'payment_status',
+    'credit_balance',
+    'refund',
+    'settlement_status'
+  ]) {
+    assert.equal(Object.hasOwn(report, forbidden), false);
+  }
 });
 
-test('rejects non-zero usage without an explicit price', () => {
-  const input = baseInput();
-  input.usage.unpriced_metric = 1;
-  assert.throws(() => calculateUsageReport(input), (error) => error.code === 'UNPRICED_USAGE_METRIC');
+test('rejects unsupported module schemas and operations at the facade', async () => {
+  const module = createEvidenceSearchModule();
+  await assert.rejects(
+    module.execute({ schema_version: 'wrong', operation: OPERATION, payload: basePayload() }),
+    (error) => error.code === 'UNSUPPORTED_MODULE_SCHEMA'
+  );
+  await assert.rejects(
+    module.execute({ schema_version: REQUEST_SCHEMA_VERSION, operation: 'DIRECT_COMPONENT_CALL', payload: basePayload() }),
+    (error) => error.code === 'UNSUPPORTED_MODULE_OPERATION'
+  );
 });
 
-test('rejects unsafe, negative, or mismatched inputs', () => {
-  const negative = baseInput();
+test('rejects non-zero usage without an explicit price', async () => {
+  const module = createEvidenceSearchModule();
+  const payload = basePayload();
+  payload.usage.unpriced_metric = 1;
+  await assert.rejects(module.execute(request(payload)), (error) => error.code === 'UNPRICED_USAGE_METRIC');
+});
+
+test('rejects unsafe, negative, provider-mismatched, and currency-mismatched input', async () => {
+  const module = createEvidenceSearchModule();
+
+  const negative = basePayload();
   negative.usage.requests = -1;
-  assert.throws(() => calculateUsageReport(negative), /non-negative/);
+  await assert.rejects(module.execute(request(negative)), /non-negative/);
 
-  const mismatched = baseInput();
+  const mismatched = basePayload();
   mismatched.provider_pricing.provider_id = 'provider_b';
-  assert.throws(() => calculateUsageReport(mismatched), (error) => error.code === 'PROVIDER_MISMATCH');
+  await assert.rejects(module.execute(request(mismatched)), (error) => error.code === 'PROVIDER_MISMATCH');
 
-  const currency = baseInput();
+  const currency = basePayload();
   currency.astera_pricing.currency = 'USD';
-  assert.throws(() => calculateUsageReport(currency), (error) => error.code === 'CURRENCY_MISMATCH');
+  await assert.rejects(module.execute(request(currency)), (error) => error.code === 'CURRENCY_MISMATCH');
 });
 
-test('uses integer minor units and returns strings only above Number.MAX_SAFE_INTEGER', () => {
-  const input = baseInput();
-  input.usage.requests = '9007199254740992';
-  input.usage.results = 0;
-  input.usage.bytes_downloaded = 0;
-  const report = calculateUsageReport(input);
-  assert.equal(typeof report.provider_cost_minor, 'string');
-  assert.match(report.provider_cost_minor, /^\d+$/);
+test('uses integer minor units and returns strings only above Number.MAX_SAFE_INTEGER', async () => {
+  const module = createEvidenceSearchModule();
+  const payload = basePayload();
+  payload.usage.requests = '9007199254740992';
+  payload.usage.results = 0;
+  payload.usage.bytes_downloaded = 0;
+  const response = await module.execute(request(payload));
+  assert.equal(typeof response.result.provider_cost_minor, 'string');
+  assert.match(response.result.provider_cost_minor, /^\d+$/);
 });
