@@ -30,6 +30,11 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+async function notifyLifecycle(context, state, value, patch = {}) {
+  if (typeof context.lifecycle !== 'function') return null;
+  return context.lifecycle(state, value, patch);
+}
+
 function buildCoverage(selectedProviders, executions) {
   if (!selectedProviders.length) {
     return Object.freeze({
@@ -357,10 +362,24 @@ class SearchOrchestrator {
       execution_time: executionTime,
       deadline_at: deadlineAt,
       signal: controller.signal,
+      lifecycle: outerContext.lifecycle,
       remaining_ms: () => Math.max(1, deadlineAt - Date.now())
     });
 
     try {
+      await notifyLifecycle(context, 'PLANNED', {
+        schema_version: plan.schema_version,
+        query_plan_hash: plan.plan_hash,
+        effective_as_of: plan.effective_as_of,
+        domain_lens: plan.domain_lens,
+        source_policy: plan.source_policy,
+        primary_query_count: plan.primary_query_set.length,
+        reinforcement_query_count: plan.reinforcement_query_set.length
+      }, {
+        effective_as_of: plan.effective_as_of,
+        query_plan_hash: plan.plan_hash
+      });
+
       const informationProfile = resolveInformationProfile(
         plan,
         payload.overlays || []
@@ -388,6 +407,12 @@ class SearchOrchestrator {
         informationProfile
       });
 
+      await notifyLifecycle(context, 'INITIAL_SEARCH_COMPLETED', {
+        candidates: initialCandidates,
+        measurements: initialMeasurements,
+        provider_execution: executionReports(initialExecutions)
+      });
+
       const initialQuality = await invokeEvaluator(
         this.evaluator,
         buildEvaluationRequest({
@@ -401,6 +426,10 @@ class SearchOrchestrator {
         }),
         context
       );
+
+      await notifyLifecycle(context, 'INITIAL_JUDGED', initialQuality, {
+        initial_score_bp: initialQuality.score_bp
+      });
 
       const allExecutions = [...initialExecutions];
       let finalCandidates = initialCandidates;
@@ -451,6 +480,15 @@ class SearchOrchestrator {
           informationProfile
         });
 
+        await notifyLifecycle(context, 'REINFORCEMENT_COMPLETED', {
+          candidates: finalCandidates,
+          measurements: finalMeasurements,
+          provider_execution: executionReports(reinforcementExecutions),
+          new_corroboration_count: newCorroboration.length
+        }, {
+          reinforcement_attempt_count: 1
+        });
+
         finalQuality = await invokeEvaluator(
           this.evaluator,
           buildEvaluationRequest({
@@ -464,6 +502,16 @@ class SearchOrchestrator {
           }),
           context
         );
+
+        await notifyLifecycle(context, 'FINAL_JUDGED', finalQuality, {
+          final_score_bp: finalQuality.score_bp,
+          reinforcement_attempt_count: 1
+        });
+      } else {
+        await notifyLifecycle(context, 'FINAL_JUDGED', finalQuality, {
+          final_score_bp: finalQuality.score_bp,
+          reinforcement_attempt_count: 0
+        });
       }
 
       const result = {
