@@ -22,8 +22,47 @@ jobs:
       - name: Syntax
         run: npm run check:evidence
       - name: Normal tests
-        run: npm run test:evidence
+        id: normal
+        continue-on-error: true
+        run: npm run test:evidence > evidence-normal.log 2>&1
+      - name: Upload normal test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-normal-log
+          path: evidence-normal.log
+          if-no-files-found: error
+          retention-days: 3
+      - name: Stop after normal test failure
+        if: steps.normal.outcome == 'failure'
+        run: exit 1
       - name: User journey tests
-        run: npm run test:evidence-user
+        id: user
+        continue-on-error: true
+        run: npm run test:evidence-user > evidence-user.log 2>&1
+      - name: Upload user journey log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-user-log
+          path: evidence-user.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Stop after user journey failure
+        if: steps.user.outcome == 'failure'
+        run: exit 1
       - name: Information quality tests
-        run: npm run test:information-quality
+        id: quality
+        continue-on-error: true
+        run: npm run test:information-quality > information-quality.log 2>&1
+      - name: Upload information quality log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: information-quality-log
+          path: information-quality.log
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Stop after information quality failure
+        if: steps.quality.outcome == 'failure'
+        run: exit 1
