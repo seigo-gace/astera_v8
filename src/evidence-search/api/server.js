@@ -171,6 +171,11 @@ class EvidenceSearchApiServer {
         error.code = 'INVALID_SEARCH_REQUEST';
         throw error;
       }
+      if (payload.paid_search?.enabled === true) {
+        const error = new Error('paid search is disabled; free providers only');
+        error.code = 'PAID_SEARCH_DISABLED';
+        throw error;
+      }
 
       const response = await this.module.execute({
         schema_version: 'astera.evidence-search.module-request.v1',
