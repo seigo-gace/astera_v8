@@ -11,58 +11,34 @@ permissions:
 jobs:
   evidence-search:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Syntax
-        run: npm run check:evidence
-      - name: Normal tests
-        id: normal
+
+      - name: Verify free evidence search module
+        id: verify
         continue-on-error: true
-        run: npm run test:evidence > evidence-normal.log 2>&1
-      - name: Upload normal test log
+        run: npm run verify:evidence > evidence-verification.log 2>&1
+
+      - name: Upload verification log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: evidence-normal-log
-          path: evidence-normal.log
+          name: evidence-verification-log
+          path: evidence-verification.log
           if-no-files-found: error
-          retention-days: 3
-      - name: Stop after normal test failure
-        if: steps.normal.outcome == 'failure'
-        run: exit 1
-      - name: User journey tests
-        id: user
-        continue-on-error: true
-        run: npm run test:evidence-user > evidence-user.log 2>&1
-      - name: Upload user journey log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: evidence-user-log
-          path: evidence-user.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Stop after user journey failure
-        if: steps.user.outcome == 'failure'
-        run: exit 1
-      - name: Information quality tests
-        id: quality
-        continue-on-error: true
-        run: npm run test:information-quality > information-quality.log 2>&1
-      - name: Upload information quality log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: information-quality-log
-          path: information-quality.log
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Stop after information quality failure
-        if: steps.quality.outcome == 'failure'
+          retention-days: 7
+
+      - name: Print verification failure
+        if: steps.verify.outcome == 'failure'
+        run: cat evidence-verification.log
+
+      - name: Stop after verification failure
+        if: steps.verify.outcome == 'failure'
         run: exit 1
