@@ -28,7 +28,7 @@
     {
       "id": "part.canonical-hash",
       "level": "PART",
-      "responsibility": "計画と結果をCanonical JSONからSHA-256へ変換する",
+      "responsibility": "計画・結果・ArtifactをCanonical JSONからSHA-256へ変換する",
       "inputs": ["structured_value"],
       "outputs": ["sha256"],
       "capabilities": ["canonical_hash"],
@@ -53,12 +53,48 @@
       "depends_on": []
     },
     {
+      "id": "part.internal-signature",
+      "level": "PART",
+      "responsibility": "内部Requestの本文Hash・HMAC署名・期限・Nonceを生成検証する",
+      "inputs": ["internal_envelope", "service_secret"],
+      "outputs": ["verified_internal_identity"],
+      "capabilities": ["verify_internal_service_request"],
+      "depends_on": []
+    },
+    {
+      "id": "part.encrypted-artifact",
+      "level": "PART",
+      "responsibility": "Checkpointを圧縮しAES-256-GCMで認証暗号化する",
+      "inputs": ["checkpoint", "spool_key"],
+      "outputs": ["encrypted_artifact"],
+      "capabilities": ["encrypt_checkpoint_artifact"],
+      "depends_on": []
+    },
+    {
+      "id": "part.state-cas",
+      "level": "PART",
+      "responsibility": "Job状態のVersion比較と原子的遷移を行う",
+      "inputs": ["current_version", "next_state"],
+      "outputs": ["transition_result"],
+      "capabilities": ["compare_and_swap_job_state"],
+      "depends_on": []
+    },
+    {
       "id": "feature.query-plan",
       "level": "FEATURE",
       "responsibility": "固定Ruleと入力条件からPrimaryおよびReinforcement検索計画を生成する",
       "inputs": ["search_request", "execution_context"],
       "outputs": ["query_plan"],
       "capabilities": ["compile_query_plan"],
+      "depends_on": ["part.normalize-text", "part.canonical-hash"]
+    },
+    {
+      "id": "feature.indexed-projection-search",
+      "level": "FEATURE",
+      "responsibility": "専門KBを事前Token・Trigram Indexから候補抽出して採点する",
+      "inputs": ["projection_records", "query_plan"],
+      "outputs": ["projection_candidates"],
+      "capabilities": ["search_indexed_projection"],
       "depends_on": ["part.normalize-text", "part.canonical-hash"]
     },
     {
@@ -107,6 +143,42 @@
       "depends_on": ["feature.evidence-measurement"]
     },
     {
+      "id": "feature.signed-evaluator-call",
+      "level": "FEATURE",
+      "responsibility": "7375から7374へ署名付きで情報品質判定を依頼する",
+      "inputs": ["quality_request", "internal_identity"],
+      "outputs": ["quality_response"],
+      "capabilities": ["call_isolated_quality_evaluator"],
+      "depends_on": ["part.internal-signature", "part.deadline-control"]
+    },
+    {
+      "id": "feature.durable-checkpoint",
+      "level": "FEATURE",
+      "responsibility": "検索Stageを暗号化FileへAtomic保存しHashを記録する",
+      "inputs": ["job_stage", "stage_value"],
+      "outputs": ["artifact_record"],
+      "capabilities": ["persist_durable_checkpoint"],
+      "depends_on": ["part.encrypted-artifact", "part.canonical-hash"]
+    },
+    {
+      "id": "feature.job-lifecycle",
+      "level": "FEATURE",
+      "responsibility": "Lease・CAS・Idempotencyを用いて検索Job状態を進める",
+      "inputs": ["job", "lifecycle_event"],
+      "outputs": ["updated_job"],
+      "capabilities": ["manage_evidence_job_lifecycle"],
+      "depends_on": ["part.state-cas"]
+    },
+    {
+      "id": "feature.checkpoint-recovery",
+      "level": "FEATURE",
+      "responsibility": "新しいArtifactからHash・認証を確認し最後の有効Checkpointを選ぶ",
+      "inputs": ["artifact_records"],
+      "outputs": ["latest_valid_checkpoint"],
+      "capabilities": ["recover_latest_valid_checkpoint"],
+      "depends_on": ["part.encrypted-artifact", "part.canonical-hash"]
+    },
+    {
       "id": "feature.future-usage-report",
       "level": "FEATURE",
       "responsibility": "検索本体から分離して将来Providerの使用量と請求予定額だけを算出する",
@@ -125,13 +197,22 @@
       "depends_on": ["feature.query-plan", "feature.free-provider-selection"]
     },
     {
+      "id": "component.projection-provider",
+      "level": "COMPONENT",
+      "responsibility": "専門KB ProjectionのIndex構築・更新検出・高速候補抽出を担当する",
+      "inputs": ["projection_source", "provider_plan"],
+      "outputs": ["projection_result"],
+      "capabilities": ["provide_indexed_specialist_search"],
+      "depends_on": ["feature.indexed-projection-search"]
+    },
+    {
       "id": "component.search-execution",
       "level": "COMPONENT",
       "responsibility": "初回検索と追加検索をBounded Schedulerで実行する",
       "inputs": ["executable_search_plan"],
       "outputs": ["provider_execution_report"],
       "capabilities": ["execute_free_search_phases"],
-      "depends_on": ["feature.bounded-provider-execution"]
+      "depends_on": ["feature.bounded-provider-execution", "component.projection-provider"]
     },
     {
       "id": "component.evidence-analysis",
@@ -145,11 +226,29 @@
     {
       "id": "component.quality-evaluation",
       "level": "COMPONENT",
-      "responsibility": "既存QCE内部の情報品質入口を通して採否を確定する",
+      "responsibility": "既存QCEの情報品質入口を7374分離Processとして呼び出して採否を確定する",
       "inputs": ["evidence_analysis"],
       "outputs": ["quality_decision"],
       "capabilities": ["apply_information_quality_gates"],
-      "depends_on": ["feature.information-quality-gate"]
+      "depends_on": ["feature.information-quality-gate", "feature.signed-evaluator-call"]
+    },
+    {
+      "id": "component.job-recovery",
+      "level": "COMPONENT",
+      "responsibility": "Job状態・暗号化Artifact・復旧・Idempotent再応答を一貫管理する",
+      "inputs": ["search_lifecycle"],
+      "outputs": ["recoverable_job"],
+      "capabilities": ["manage_durable_search_recovery"],
+      "depends_on": ["feature.durable-checkpoint", "feature.job-lifecycle", "feature.checkpoint-recovery"]
+    },
+    {
+      "id": "component.internal-api-boundary",
+      "level": "COMPONENT",
+      "responsibility": "Main・Evidence・Evaluator間の認証済み内部通信を提供する",
+      "inputs": ["internal_http_request"],
+      "outputs": ["verified_internal_response"],
+      "capabilities": ["provide_signed_internal_api_boundary"],
+      "depends_on": ["feature.signed-evaluator-call"]
     },
     {
       "id": "component.future-usage-calculation",
@@ -171,8 +270,18 @@
         "component.search-planning",
         "component.search-execution",
         "component.evidence-analysis",
-        "component.quality-evaluation"
+        "component.quality-evaluation",
+        "component.internal-api-boundary"
       ]
+    },
+    {
+      "id": "system.recovery-and-audit",
+      "level": "SYSTEM",
+      "responsibility": "検索Jobの永続化・Crash復旧・Idempotent再応答を検索本体から分離して提供する",
+      "inputs": ["search_lifecycle", "recovery_request"],
+      "outputs": ["persisted_job_state", "recovered_result"],
+      "capabilities": ["run_evidence_recovery_system"],
+      "depends_on": ["component.job-recovery"]
     },
     {
       "id": "system.future-usage-calculation",
@@ -186,12 +295,13 @@
     {
       "id": "application-system.astera-evidence-search",
       "level": "APPLICATION_SYSTEM",
-      "responsibility": "ASTERA V8内部の単一接続口から無料根拠検索と分離済み使用量算出を提供する",
+      "responsibility": "ASTERA V8内部の単一接続口から無料根拠検索・永続復旧・分離済み使用量算出を提供する",
       "inputs": ["module_request"],
       "outputs": ["module_response"],
       "capabilities": ["execute_astera_evidence_search_module"],
       "depends_on": [
         "system.free-evidence-search",
+        "system.recovery-and-audit",
         "system.future-usage-calculation"
       ]
     }
