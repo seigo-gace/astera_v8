@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.search-request.v1",
+  "title": "ASTERA Evidence Search Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["question", "domain_lens"],
+  "properties": {
+    "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "question": { "type": "string", "minLength": 1, "maxLength": 16384 },
+    "context": { "type": "string", "maxLength": 32768 },
+    "domain_lens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^G(?:0[1-9]|[12][0-9]|3[0-8])$" },
+        "taxonomy_version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "as_of": { "type": ["string", "null"] },
+    "aliases": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 512 } },
+    "identifiers": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 512 } },
+    "jurisdictions": { "type": "array", "maxItems": 32, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
+    "overlays": { "type": "array", "maxItems": 16, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+    "conditions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["class", "field", "operator"],
+        "properties": {
+          "condition_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "class": { "enum": ["CORE", "REQUIRED_CONTEXT", "OPTIONAL"] },
+          "field": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "operator": { "enum": ["EQ", "CONTAINS", "IN", "GTE", "LTE", "BETWEEN", "EXISTS"] },
+          "expected_value": {},
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "free_projection": { "type": "boolean" },
+        "free_current": { "type": "boolean" }
+      }
+    },
+    "paid_search": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "astera_pricing": { "type": "object" },
+        "direct_variable_policy": { "type": "object" }
+      }
+    },
+    "provider_allowlist": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+    "provider_denylist": { "type": "array", "maxItems": 64, "items": { "type": "string", "minLength": 1, "maxLength": 128 } },
+    "maximum_results": { "type": "integer", "minimum": 1, "maximum": 128 },
+    "deadline_ms": { "type": "integer", "minimum": 1000, "maximum": 60000 }
+  }
+}
