@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/evidence-search-v2-4
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
