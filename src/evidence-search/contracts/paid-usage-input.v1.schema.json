@@ -11,7 +11,8 @@
     "mode",
     "usage",
     "provider_pricing",
-    "astera_pricing"
+    "astera_pricing",
+    "direct_variable_policy"
   ],
   "properties": {
     "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
@@ -73,7 +74,9 @@
     "direct_variable_policy": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["pricing_version", "currency"],
       "properties": {
+        "pricing_version": { "type": "string", "minLength": 1 },
         "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
         "fixed_minor": { "$ref": "#/$defs/nonNegativeInteger" },
         "provider_cost_bps": { "$ref": "#/$defs/nonNegativeInteger" },
