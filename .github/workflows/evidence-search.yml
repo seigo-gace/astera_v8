@@ -1,0 +1,29 @@
+name: Evidence Search Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: npm run check:evidence
+      - name: Normal tests
+        run: npm run test:evidence
+      - name: User journey tests
+        run: npm run test:evidence-user
+      - name: Information quality tests
+        run: npm run test:information-quality
