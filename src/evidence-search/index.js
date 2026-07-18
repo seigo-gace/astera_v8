@@ -1,17 +1,5 @@
 'use strict';
 
-const {
-  REPORT_SCHEMA_VERSION,
-  calculateUsageReport,
-  calculateProviderCost,
-  calculateDirectVariableCost,
-  calculateAsteraServiceFee
-} = require('./paid/usage-calculator');
+const { createEvidenceSearchModule } = require('./module');
 
-module.exports = {
-  REPORT_SCHEMA_VERSION,
-  calculateUsageReport,
-  calculateProviderCost,
-  calculateDirectVariableCost,
-  calculateAsteraServiceFee
-};
+module.exports = createEvidenceSearchModule;
