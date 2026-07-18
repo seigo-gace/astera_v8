@@ -164,6 +164,7 @@ test('internal request replay is rejected after the first accepted request', asy
     const headers = createInternalHeaders({
       body,
       secret: SECRET,
+      service: 'astera-main',
       tenantId: 'tenant-replay-test',
       requestId: 'request-replay-test',
       nonce: 'fixed-replay-nonce',
@@ -197,6 +198,7 @@ test('tampered body is rejected before the search module runs', async () => {
     const headers = createInternalHeaders({
       body: signedBody,
       secret: SECRET,
+      service: 'astera-main',
       tenantId: 'tenant-tamper-test',
       requestId: 'request-tamper-test'
     });
