@@ -3,7 +3,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const createEvidenceSearchModule = require('../src/evidence-search');
-const { createJsonProjectionProvider } = require('../src/evidence-search/providers/json-projection-provider');
+const {
+  createJsonProjectionProvider
+} = require('../src/evidence-search/providers/json-projection-provider');
 
 const SCHEMA = 'astera.evidence-search.module-request.v1';
 const EXECUTION_TIME = '2026-07-18T01:30:00.000Z';
@@ -85,7 +87,12 @@ function completeProviders() {
       source_family_id: 'family-primary',
       capabilities: ['NO_REINFORCEMENT'],
       domains: ['G29'],
-      records: [record({ id: 'primary-record', authority: 'authority-primary', role: 'PRIMARY', family: 'family-primary' })]
+      records: [record({
+        id: 'primary-record',
+        authority: 'authority-primary',
+        role: 'PRIMARY',
+        family: 'family-primary'
+      })]
     }),
     createJsonProjectionProvider({
       provider_id: 'official-current',
@@ -93,7 +100,12 @@ function completeProviders() {
       source_family_id: 'family-official',
       capabilities: ['NO_REINFORCEMENT'],
       domains: ['G29'],
-      records: [record({ id: 'official-record', authority: 'authority-official', role: 'OFFICIAL', family: 'family-official' })]
+      records: [record({
+        id: 'official-record',
+        authority: 'authority-official',
+        role: 'OFFICIAL',
+        family: 'family-official'
+      })]
     }),
     createJsonProjectionProvider({
       provider_id: 'independent-reinforcement',
@@ -101,12 +113,18 @@ function completeProviders() {
       source_family_id: 'family-independent',
       capabilities: ['REINFORCEMENT_ONLY'],
       domains: ['G29'],
-      records: [record({ id: 'independent-record', authority: 'authority-independent', role: 'OFFICIAL', family: 'family-independent', capability: 'independent_origin' })]
+      records: [record({
+        id: 'independent-record',
+        authority: 'authority-independent',
+        role: 'OFFICIAL',
+        family: 'family-independent',
+        capability: 'independent_origin'
+      })]
     })
   ];
 }
 
-test('runs the complete evidence-search module through its single execute connection', async () => {
+test('runs the complete free evidence-search module through one execute connection', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });
   assert.deepEqual(Object.keys(module), ['execute']);
 
@@ -123,7 +141,7 @@ test('runs the complete evidence-search module through its single execute connec
   assert.equal(response.result.evidence.length, 3);
   assert.equal(response.result.ai_used, false);
   assert.equal(response.result.payment_executed, false);
-  assert.equal(response.result.paid_usage_reports.length, 0);
+  assert.deepEqual(response.result.paid_usage_reports, []);
   assert.match(response.result.query_plan_hash, /^[a-f0-9]{64}$/);
   assert.match(response.result.result_hash, /^[a-f0-9]{64}$/);
 });
@@ -141,8 +159,10 @@ test('does not run reinforcement when initial quality is below 8000', async () =
       fields: { claim: 'Node.js 22 is supported' }
     }]
   });
-  const reinforcement = completeProviders()[2];
-  const module = createEvidenceSearchModule({ providers: [incomplete, reinforcement] });
+
+  const module = createEvidenceSearchModule({
+    providers: [incomplete, completeProviders()[2]]
+  });
   const response = await module.execute(request());
 
   assert.equal(response.result.status, 'REJECTED_BLOCKING');
@@ -150,62 +170,86 @@ test('does not run reinforcement when initial quality is below 8000', async () =
   assert.deepEqual(response.result.provider_execution.reinforcement, []);
 });
 
-test('calculates paid-provider usage but never performs payment or credit operations', async () => {
-  const providers = completeProviders();
-  providers[0] = createJsonProjectionProvider({
-    provider_id: 'paid-primary',
+test('never invokes a paid provider during evidence search', async () => {
+  let paidProviderCalls = 0;
+  const paidProvider = {
+    provider_id: 'paid-provider-must-not-run',
     source_class: 'PAID_PROVIDER',
-    source_family_id: 'family-primary',
-    capabilities: ['NO_REINFORCEMENT'],
     domains: ['G29'],
-    maximum_cost_minor: 100,
-    provider_pricing: {
-      provider_id: 'paid-primary',
-      pricing_version: 'paid-primary-v1',
-      currency: 'JPY',
-      fixed_cost_minor: 5,
-      components: [
-        { metric: 'requests', unit_size: 1, price_minor: 10, rounding: 'CEIL' },
-        { metric: 'results', unit_size: 1, price_minor: 2, rounding: 'CEIL' },
-        { metric: 'records_scanned', unit_size: 1, price_minor: 1, rounding: 'CEIL' }
-      ]
-    },
-    records: [record({ id: 'paid-primary-record', authority: 'authority-primary', role: 'PRIMARY', family: 'family-primary' })]
-  });
+    capabilities: [],
+    certified: true,
+    search: async () => {
+      paidProviderCalls += 1;
+      throw new Error('paid provider must not be invoked');
+    }
+  };
 
-  const module = createEvidenceSearchModule({ providers });
-  const payload = searchPayload({
-    paid_search: {
-      enabled: true,
+  const module = createEvidenceSearchModule({
+    providers: [...completeProviders(), paidProvider]
+  });
+  const response = await module.execute(request());
+
+  assert.equal(response.result.status, 'FINAL_VALID');
+  assert.equal(paidProviderCalls, 0);
+  assert.equal(
+    response.result.provider_execution.initial.some(
+      (item) => item.provider_id === paidProvider.provider_id
+    ),
+    false
+  );
+});
+
+test('rejects attempts to enable paid search', async () => {
+  const module = createEvidenceSearchModule({ providers: completeProviders() });
+  await assert.rejects(
+    () => module.execute(request(searchPayload({ paid_search: { enabled: true } }))),
+    (error) => error.code === 'PAID_SEARCH_DISABLED'
+  );
+});
+
+test('keeps future usage calculation isolated from provider execution and payment', async () => {
+  const module = createEvidenceSearchModule({ providers: completeProviders() });
+  const response = await module.execute({
+    schema_version: SCHEMA,
+    operation: 'CALCULATE_PAID_USAGE',
+    payload: {
+      request_id: 'usage-only-001',
+      tenant_id: 'tenant-001',
+      provider_id: 'future-provider',
+      mode: 'ESTIMATE',
+      usage: { requests: 2 },
+      provider_pricing: {
+        provider_id: 'future-provider',
+        pricing_version: 'future-v1',
+        currency: 'JPY',
+        fixed_cost_minor: 0,
+        components: [
+          { metric: 'requests', unit_size: 1, price_minor: 10, rounding: 'CEIL' }
+        ]
+      },
       astera_pricing: {
-        pricing_version: 'astera-search-v1',
+        pricing_version: 'astera-v1',
         currency: 'JPY',
         markup_bps: 2500,
         minimum_service_fee_minor: 20
-      },
-      direct_variable_policy: {
-        currency: 'JPY',
-        fixed_minor: 2,
-        provider_cost_bps: 500
       }
     }
   });
 
-  const response = await module.execute(request(payload));
-  assert.equal(response.result.status, 'FINAL_VALID');
-  assert.equal(response.result.paid_usage_reports.length, 1);
-  const usage = response.result.paid_usage_reports[0];
-  assert.equal(usage.provider_id, 'paid-primary');
-  assert.ok(Number(usage.provider_cost_minor) > 0);
-  assert.ok(Number(usage.astera_service_fee_minor) >= 20);
-  assert.equal(Object.hasOwn(usage, 'payment_status'), false);
-  assert.equal(Object.hasOwn(usage, 'credit_balance'), false);
-  assert.equal(Object.hasOwn(usage, 'reservation_id'), false);
+  assert.equal(response.operation, 'CALCULATE_PAID_USAGE');
+  assert.equal(response.result.provider_cost_minor, '20');
+  assert.equal(response.result.astera_service_fee_minor, '20');
+  assert.equal(Object.hasOwn(response.result, 'payment_status'), false);
+  assert.equal(Object.hasOwn(response.result, 'credit_balance'), false);
+  assert.equal(Object.hasOwn(response.result, 'reservation_id'), false);
 });
 
 test('health reports no AI and no payment execution', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });
-  const response = await module.execute({ schema_version: SCHEMA, operation: 'HEALTH' });
+  const response = await module.execute({
+    schema_version: SCHEMA,
+    operation: 'HEALTH'
+  });
   assert.equal(response.result.status, 'OK');
   assert.equal(response.result.provider_count, 3);
   assert.equal(response.result.ai_used, false);
