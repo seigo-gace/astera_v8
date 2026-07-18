@@ -20,8 +20,8 @@ function record({ id, authority, role, family, capability = 'projection_search' 
     source_role: role,
     source_family_id: family,
     capability_id: capability,
-    title: 'Node.js 22 support evidence',
-    excerpt: 'Node.js 22 is supported by this verified record.',
+    title: `Node.js 22 support evidence from ${authority}`,
+    excerpt: `${authority} independently confirms Node.js 22 support in record ${id}.`,
     language: 'en',
     updated_at: EXECUTION_TIME,
     version: '22.0.0',
@@ -232,6 +232,12 @@ test('keeps future usage calculation isolated from provider execution and paymen
         currency: 'JPY',
         markup_bps: 2500,
         minimum_service_fee_minor: 20
+      },
+      direct_variable_policy: {
+        pricing_version: 'direct-v1',
+        currency: 'JPY',
+        fixed_minor: 0,
+        provider_cost_bps: 0
       }
     }
   });
