@@ -1,0 +1,25 @@
+name: Export current main
+
+on:
+  push:
+    branches:
+      - agent/replace-astera-v8-runtime
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: astera-v8-current-main
+          path: .
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
