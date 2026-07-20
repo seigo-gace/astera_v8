@@ -1,4 +1,4 @@
-name: Export current main
+name: Export evidence branch
 
 on:
   push:
@@ -18,10 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: feature/evidence-search-v2-4
       - uses: actions/upload-artifact@v4
         with:
-          name: astera-v8-current-main
+          name: astera-v8-evidence-branch
           path: .
           include-hidden-files: true
           if-no-files-found: error
