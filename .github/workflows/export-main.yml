@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/replace-astera-v8-runtime
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
