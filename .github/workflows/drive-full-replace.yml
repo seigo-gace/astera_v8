@@ -1,0 +1,319 @@
+name: One-time Drive canonical replacement (API only, no clone)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/drive-full-replace.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: astera-drive-canonical-replacement
+  cancel-in-progress: false
+
+jobs:
+  replace:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DRIVE_FOLDER_URL: https://drive.google.com/drive/folders/1vvUzH6D9T2Kw95_TU6GqolU2-DuQZFvc?usp=drive_link
+      TARGET_BRANCH: main
+      ARCHIVE_SOURCE_SHA: ${{ github.event.before }}
+    steps:
+      - name: Prepare Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download canonical Drive folder without cloning GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet gdown==5.2.0 requests==2.32.4
+          rm -rf /tmp/astera-drive
+          mkdir -p /tmp/astera-drive
+          python - <<'PY'
+          import gdown
+          result = gdown.download_folder(
+              url="${{ env.DRIVE_FOLDER_URL }}",
+              output="/tmp/astera-drive",
+              quiet=False,
+              use_cookies=False,
+              remaining_ok=True,
+          )
+          if not result:
+              raise SystemExit("Drive folder download returned no files")
+          PY
+          manifest="$(find /tmp/astera-drive -type f -name MANIFEST.sha256 -print -quit)"
+          test -n "$manifest"
+          source_dir="$(dirname "$manifest")"
+          echo "SOURCE_DIR=$source_dir" >> "$GITHUB_ENV"
+          echo "Canonical source: $source_dir"
+
+      - name: Verify Drive payload and isolate Google-native documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, os, shutil
+
+          root = Path(os.environ["SOURCE_DIR"])
+          manifest = root / "MANIFEST.sha256"
+          if not manifest.is_file():
+              raise SystemExit("MANIFEST.sha256 is missing")
+
+          native_docs = {
+              "README.md",
+              "STRUCTURE.md",
+              "TEST_REPORT.md",
+              "EXAMPLE_TEST_REPORT.md",
+              "IMPLEMENTATION_STATUS.md",
+              "RELEASE_MANIFEST.txt",
+          }
+
+          original = manifest.read_bytes()
+          (root / "MANIFEST.source.sha256").write_bytes(original)
+          failures = []
+          checked = 0
+          release_paths = []
+
+          for raw in original.decode("utf-8-sig").splitlines():
+              if not raw.strip():
+                  continue
+              expected, rel = raw.split("  ", 1)
+              release_paths.append(rel)
+              path = root / rel
+              if rel in native_docs:
+                  continue
+              if not path.is_file():
+                  failures.append(f"MISSING {rel}")
+                  continue
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual != expected:
+                  failures.append(f"HASH {rel}: {actual} != {expected}")
+              checked += 1
+
+          if failures:
+              raise SystemExit("Drive verification failed:\n" + "\n".join(failures))
+
+          for rel in native_docs:
+              for candidate in {
+                  root / rel,
+                  root / f"{rel}.docx",
+                  root / (Path(rel).stem + ".docx"),
+              }:
+                  if candidate.exists():
+                      candidate.unlink()
+
+          (root / ".release-paths.txt").write_text(
+              "\n".join(release_paths) + "\n", encoding="utf-8"
+          )
+          print(f"Verified {checked} non-native Drive files")
+          PY
+
+      - name: Install dependencies and run the complete validation suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run check
+
+      - name: Replace main through GitHub Git Data API without clone or fork
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import json
+          import os
+          from pathlib import Path, PurePosixPath
+          import requests
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GH_REPOSITORY"]
+          branch = os.environ["TARGET_BRANCH"]
+          trigger_sha = os.environ["TRIGGER_SHA"]
+          archive_sha = os.environ.get("ARCHIVE_SOURCE_SHA", "")
+          root = Path(os.environ["SOURCE_DIR"])
+          api = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def request(method: str, path: str, **kwargs):
+              response = requests.request(method, api + path, headers=headers, timeout=120, **kwargs)
+              if response.status_code >= 400:
+                  raise RuntimeError(
+                      f"GitHub API {method} {path} failed: "
+                      f"{response.status_code} {response.text[:2000]}"
+                  )
+              return response.json() if response.content else None
+
+          current_ref = request("GET", f"/git/ref/heads/{branch}")
+          current_sha = current_ref["object"]["sha"]
+          if current_sha != trigger_sha:
+              raise SystemExit(
+                  f"main moved during replacement: current={current_sha}, trigger={trigger_sha}"
+              )
+
+          if not archive_sha or set(archive_sha) == {"0"}:
+              trigger_commit = request("GET", f"/git/commits/{trigger_sha}")
+              parents = trigger_commit.get("parents", [])
+              if not parents:
+                  raise SystemExit("Cannot resolve pre-replacement commit")
+              archive_sha = parents[0]["sha"]
+
+          archive_commit = request("GET", f"/git/commits/{archive_sha}")
+          archive_tree_sha = archive_commit["tree"]["sha"]
+          old_tree = request("GET", f"/git/trees/{archive_tree_sha}?recursive=1")
+          if old_tree.get("truncated"):
+              raise SystemExit("Old repository tree listing was truncated")
+
+          release_paths = {
+              line.strip()
+              for line in (root / ".release-paths.txt").read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          }
+          native_docs = {
+              "README.md",
+              "STRUCTURE.md",
+              "TEST_REPORT.md",
+              "EXAMPLE_TEST_REPORT.md",
+              "IMPLEMENTATION_STATUS.md",
+              "RELEASE_MANIFEST.txt",
+          }
+          payload_paths = sorted((release_paths - native_docs) - {"MANIFEST.sha256"})
+          payload_paths.append("MANIFEST.source.sha256")
+
+          for rel in payload_paths:
+              path = root / rel
+              if not path.is_file():
+                  raise SystemExit(f"Canonical payload file is missing: {rel}")
+
+          allowed_extensions = {
+              ".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".tsv",
+              ".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".pdf",
+          }
+          stable_roots = {
+              "categories", "category", "taxonomy", "taxonomies", "materials",
+              "overview", "assets", "references", "brand", "branding",
+          }
+          stable_keywords = {
+              "category", "categories", "taxonomy", "classification", "overview",
+              "product", "service", "concept", "glossary", "brand", "logo",
+              "roadmap", "pricing", "plan", "feature", "use-case", "use_case",
+              "domain", "lens",
+          }
+
+          def is_stable_reference(path: str) -> bool:
+              p = PurePosixPath(path)
+              parts = [part.lower() for part in p.parts]
+              if not parts or parts[0] in {"archive", ".github", "src", "test", "tests", "e2e", "scripts"}:
+                  return False
+              if p.suffix.lower() not in allowed_extensions:
+                  return False
+              lowered = path.lower()
+              if parts[0] in stable_roots:
+                  return True
+              if parts[0] == "docs" and any(keyword in lowered for keyword in stable_keywords):
+                  return True
+              if len(parts) == 1 and any(keyword in lowered for keyword in stable_keywords):
+                  return True
+              return False
+
+          preserved = []
+          preserved_entries = []
+          occupied = set(payload_paths) | native_docs | {
+              "MANIFEST.sha256", "MIGRATION_REPORT.md"
+          }
+          for item in old_tree.get("tree", []):
+              path = item.get("path", "")
+              if item.get("type") != "blob":
+                  continue
+              if path in occupied or not is_stable_reference(path):
+                  continue
+              preserved.append(path)
+              occupied.add(path)
+              preserved_entries.append({
+                  "path": path,
+                  "mode": item.get("mode", "100644"),
+                  "type": "blob",
+                  "sha": item["sha"],
+              })
+
+          archive_path = f"Archive/pre-replacement-{archive_sha[:12]}"
+          report_lines = [
+              "# Astera v8 repository replacement report",
+              "",
+              f"- Canonical source: `{os.environ['DRIVE_FOLDER_URL']}`",
+              f"- Archived source commit: `{archive_sha}`",
+              f"- Archive path: `{archive_path}`",
+              f"- Trigger commit: `{trigger_sha}`",
+              "- GitHub repository clone/fork: not used",
+              "- Transfer method: Google Drive download + GitHub Git Data API",
+              "- Validation: `npm ci`, Playwright Chromium install, `npm run check` passed",
+              "- Google-native documents: six files intentionally finalized by connected APIs after replacement",
+              f"- Preserved missing stable overview/material/category assets: {len(preserved)}",
+              "",
+              "## Preserved files",
+              "",
+          ]
+          report_lines.extend(f"- `{path}`" for path in preserved)
+          if not preserved:
+              report_lines.append("- None")
+          report = "\n".join(report_lines) + "\n"
+          (root / "MIGRATION_REPORT.md").write_text(report, encoding="utf-8")
+          payload_paths.append("MIGRATION_REPORT.md")
+
+          tree_entries = [{
+              "path": archive_path,
+              "mode": "040000",
+              "type": "tree",
+              "sha": archive_tree_sha,
+          }]
+
+          for rel in sorted(payload_paths):
+              data = (root / rel).read_bytes()
+              blob = request("POST", "/git/blobs", json={
+                  "content": base64.b64encode(data).decode("ascii"),
+                  "encoding": "base64",
+              })
+              tree_entries.append({
+                  "path": rel,
+                  "mode": "100644",
+                  "type": "blob",
+                  "sha": blob["sha"],
+              })
+
+          tree_entries.extend(preserved_entries)
+          new_tree = request("POST", "/git/trees", json={"tree": tree_entries})
+          commit = request("POST", "/git/commits", json={
+              "message": "Replace Astera v8 with Drive canonical release (API only, no clone)",
+              "tree": new_tree["sha"],
+              "parents": [trigger_sha],
+          })
+          request("PATCH", f"/git/refs/heads/{branch}", json={
+              "sha": commit["sha"],
+              "force": False,
+          })
+          print(json.dumps({
+              "replacement_commit": commit["sha"],
+              "archive_path": archive_path,
+              "preserved": preserved,
+              "payload_file_count": len(payload_paths),
+          }, ensure_ascii=False, indent=2))
+          PY
