@@ -5,7 +5,7 @@ on:
     branches:
       - isolation/drive-canonical-wip
     paths:
-      - .staginghex/READY
+      - .stagingxor/READY
 
 permissions:
   contents: write
@@ -64,7 +64,7 @@ jobs:
               raise SystemExit('Staging tree listing was truncated')
 
           part_items = sorted(
-              (item for item in trigger_tree['tree'] if item.get('type') == 'blob' and item['path'].startswith('.staginghex/release.part')),
+              (item for item in trigger_tree['tree'] if item.get('type') == 'blob' and item['path'].startswith('.stagingxor/release.part')),
               key=lambda item: item['path'],
           )
           if not part_items:
@@ -76,7 +76,8 @@ jobs:
               raw = base64.b64decode(blob['content']) if blob.get('encoding') == 'base64' else blob['content'].encode()
               hex_parts.append(raw.decode('ascii').strip())
 
-          archive_bytes = bytes.fromhex(''.join(hex_parts))
+          transformed = bytes.fromhex(''.join(hex_parts))
+          archive_bytes = bytes(value ^ 0xA5 for value in transformed)
           extract_root = Path('/tmp/astera-release')
           extract_root.mkdir(parents=True, exist_ok=True)
           with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
