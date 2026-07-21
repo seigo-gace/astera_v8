@@ -6,6 +6,12 @@ on:
       - isolation/drive-canonical-wip
     paths:
       - .drive-import/READY
+  pull_request:
+    branches:
+      - isolation/drive-canonical-wip
+    types: [opened, synchronize, reopened]
+    paths:
+      - .drive-import/READY
 
 permissions:
   contents: write
