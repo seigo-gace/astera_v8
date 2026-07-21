@@ -1,0 +1,215 @@
+name: Import Astera canonical release into isolation
+
+on:
+  push:
+    branches:
+      - isolation/drive-canonical-wip
+    paths:
+      - .drive-import/READY
+  pull_request:
+    branches:
+      - isolation/drive-canonical-wip
+    types: [opened, synchronize, reopened]
+    paths:
+      - .drive-import/READY
+
+permissions:
+  contents: write
+
+concurrency:
+  group: astera-isolation-canonical-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Download and normalize the canonical Drive release
+        env:
+          DRIVE_FOLDER_URL: https://drive.google.com/drive/folders/1vvUzH6D9T2Kw95_TU6GqolU2-DuQZFvc?usp=drive_link
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet gdown==5.2.0
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pandoc
+          rm -rf /tmp/astera-drive /tmp/astera-release
+          mkdir -p /tmp/astera-drive /tmp/astera-release
+          python - <<'PY'
+          import gdown, os
+          result = gdown.download_folder(
+              url=os.environ['DRIVE_FOLDER_URL'],
+              output='/tmp/astera-drive',
+              quiet=False,
+              use_cookies=False,
+              remaining_ok=True,
+          )
+          if not result:
+              raise SystemExit('Drive folder download returned no files')
+          PY
+          manifest="$(find /tmp/astera-drive -type f -name MANIFEST.sha256 -print -quit)"
+          test -n "$manifest"
+          echo "SOURCE_DIR=$(dirname "$manifest")" >> "$GITHUB_ENV"
+
+      - name: Convert Google-native documents and verify the payload
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib, os, shutil, subprocess
+
+          source = Path(os.environ['SOURCE_DIR'])
+          output = Path('/tmp/astera-release')
+          original_manifest = source / 'MANIFEST.sha256'
+          original = original_manifest.read_bytes()
+          entries = []
+          for raw in original.decode('utf-8-sig').splitlines():
+              if not raw.strip():
+                  continue
+              expected, rel = raw.split('  ', 1)
+              entries.append((expected, rel))
+
+          converted = set()
+          for expected, rel in entries:
+              src = source / rel
+              dst = output / rel
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              if src.is_file():
+                  shutil.copy2(src, dst)
+                  continue
+
+              rel_path = Path(rel)
+              candidates = [
+                  source / f'{rel}.docx',
+                  source / rel_path.parent / f'{rel_path.stem}.docx',
+                  source / rel_path.parent / f'{rel_path.name}.docx',
+              ]
+              docx = next((path for path in candidates if path.is_file()), None)
+              if docx is None:
+                  raise SystemExit(f'Canonical file is missing: {rel}')
+              target_format = 'plain' if rel_path.suffix.lower() == '.txt' else 'gfm'
+              result = subprocess.run(
+                  ['pandoc', '--from=docx', f'--to={target_format}', str(docx)],
+                  check=True,
+                  stdout=subprocess.PIPE,
+              )
+              dst.write_bytes(result.stdout)
+              converted.add(rel)
+
+          failures = []
+          for expected, rel in entries:
+              path = output / rel
+              if not path.is_file():
+                  failures.append(f'MISSING {rel}')
+                  continue
+              if rel in converted:
+                  continue
+              actual = hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual != expected:
+                  failures.append(f'HASH {rel}: {actual} != {expected}')
+          if failures:
+              raise SystemExit('Drive verification failed:\n' + '\n'.join(failures))
+
+          (output / 'MANIFEST.source.sha256').write_bytes(original)
+          manifest_paths = sorted([rel for _, rel in entries] + ['MANIFEST.source.sha256'])
+          lines = []
+          for rel in manifest_paths:
+              digest = hashlib.sha256((output / rel).read_bytes()).hexdigest()
+              lines.append(f'{digest}  {rel}')
+          (output / 'MANIFEST.sha256').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+          files = [path for path in output.rglob('*') if path.is_file()]
+          if len(files) != len(entries) + 2:
+              raise SystemExit(f'Unexpected canonical file count: {len(files)}')
+          print(f'Canonical payload ready: {len(files)} files; converted documents: {len(converted)}')
+          PY
+
+      - name: Create four commits on the isolation branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: isolation/drive-canonical-wip
+          CLEAN_PARENT_SHA: 072f9e0d2ccf16fe4621c60c0118a8f31ea71948
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          import base64, json, os, urllib.request
+          from pathlib import Path, PurePosixPath
+
+          token = os.environ['GH_TOKEN']
+          repo = os.environ['REPOSITORY']
+          branch = os.environ['BRANCH']
+          parent_sha = os.environ['CLEAN_PARENT_SHA']
+          root = Path('/tmp/astera-release')
+          api = f'https://api.github.com/repos/{repo}'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+          }
+
+          def call(method: str, path: str, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              request = urllib.request.Request(api + path, data=data, method=method, headers=headers)
+              with urllib.request.urlopen(request, timeout=120) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else None
+
+          def group_for(rel: str) -> int:
+              first = PurePosixPath(rel).parts[0]
+              if first == 'src':
+                  parts = PurePosixPath(rel).parts
+                  if len(parts) > 1 and parts[1] in {'evidence-search', 'quality-completion-evaluator', 'runtime'}:
+                      return 3
+                  return 2
+              if first in {'test', 'tests', 'e2e', 'scripts', 'archive'}:
+                  return 4
+              return 1
+
+          groups = {1: [], 2: [], 3: [], 4: []}
+          for path in sorted(item for item in root.rglob('*') if item.is_file()):
+              rel = path.relative_to(root).as_posix()
+              groups[group_for(rel)].append((rel, path))
+
+          messages = {
+              1: 'chore(isolation): import Astera release foundation',
+              2: 'feat(isolation): import Astera core implementation',
+              3: 'feat(isolation): import Astera runtime modules',
+              4: 'test(isolation): import Astera tests and archive',
+          }
+
+          base_tree_sha = None
+          created = []
+          for number in (1, 2, 3, 4):
+              tree_entries = []
+              for rel, path in groups[number]:
+                  blob = call('POST', '/git/blobs', {
+                      'content': base64.b64encode(path.read_bytes()).decode('ascii'),
+                      'encoding': 'base64',
+                  })
+                  tree_entries.append({
+                      'path': rel,
+                      'mode': '100644',
+                      'type': 'blob',
+                      'sha': blob['sha'],
+                  })
+              payload = {'tree': tree_entries}
+              if base_tree_sha is not None:
+                  payload['base_tree'] = base_tree_sha
+              tree = call('POST', '/git/trees', payload)
+              commit = call('POST', '/git/commits', {
+                  'message': messages[number],
+                  'tree': tree['sha'],
+                  'parents': [parent_sha],
+              })
+              created.append({'commit': commit['sha'], 'files': len(tree_entries)})
+              parent_sha = commit['sha']
+              base_tree_sha = tree['sha']
+
+          call('PATCH', f'/git/refs/heads/{branch}', {
+              'sha': parent_sha,
+              'force': True,
+          })
+          print(json.dumps({'final_commit': parent_sha, 'commits': created}, indent=2))
+          PY
