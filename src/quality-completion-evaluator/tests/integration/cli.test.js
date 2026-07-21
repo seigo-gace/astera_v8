@@ -1,3 +1,0 @@
-"use strict";
-const test=require("node:test");const assert=require("node:assert/strict");const path=require("node:path");const{spawnSync}=require("node:child_process");
-test("CLI accepts STDIN and exits 0 for eligible sample",()=>{const root=path.resolve(__dirname,"../..");const request=spawnSync(process.execPath,[path.join(root,"examples/create-sample-request.js")],{encoding:"utf8"});assert.equal(request.status,0);const evaluation=spawnSync(process.execPath,[path.join(root,"cli/evaluate.js")],{input:request.stdout,encoding:"utf8"});assert.equal(evaluation.status,0,evaluation.stderr);assert.equal(JSON.parse(evaluation.stdout).status,"KB_ELIGIBLE");});

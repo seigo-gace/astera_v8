@@ -1,2 +1,0 @@
-"use strict";
-const crypto=require("node:crypto");const{stableStringify}=require("./stable-json");function sha256Text(value){return`sha256:${crypto.createHash("sha256").update(String(value),"utf8").digest("hex")}`;}function sha256Json(value){return sha256Text(stableStringify(value));}function isSha256(value){return typeof value==="string"&&/^sha256:[a-f0-9]{64}$/i.test(value);}module.exports={sha256Text,sha256Json,isSha256};

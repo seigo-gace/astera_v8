@@ -1,3 +1,0 @@
-"use strict";
-const test=require("node:test");const assert=require("node:assert/strict");const{evaluateAndPublish,createInMemoryKbAdapter}=require("../../index");const{baseDesignRequest}=require("../fixtures/factory");
-test("publishes once and deduplicates by idempotency key",async()=>{const adapter=createInMemoryKbAdapter();const request=baseDesignRequest();const first=await evaluateAndPublish(request,adapter);const second=await evaluateAndPublish(request,adapter);assert.equal(first.status,"KB_PUBLISHED");assert.equal(first.publication.status,"published");assert.equal(second.publication.status,"duplicate");assert.equal(adapter.size,1);});

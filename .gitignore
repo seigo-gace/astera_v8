@@ -1,41 +1,14 @@
 node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
 .env
+.env.*
+!.env.example
 *.db
 *.db-shm
 *.db-wal
 *.store.json
-*.broken-*
-kagura-logs/
-astera-logs/
-npm-debug.log*
-.DS_Store
-coverage/
-
-# Local secrets
-.env
-.env.*
-!.env.example
-!.env.gpg
-
-# Dependencies
-node_modules/
-
-# Build outputs
-dist/
-build/
-coverage/
-
-# Logs
+*.tmp
 *.log
-logs/
-
-# OS / Editor
-.DS_Store
-Thumbs.db
-.vscode/
-
-# Keys / certificates
-*.pem
-*.key
-id_rsa
-id_ed25519
