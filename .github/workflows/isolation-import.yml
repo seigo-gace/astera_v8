@@ -5,7 +5,7 @@ on:
     branches:
       - isolation/drive-canonical-wip
     paths:
-      - .staging2/READY
+      - .staginghex/READY
 
 permissions:
   contents: write
@@ -64,20 +64,19 @@ jobs:
               raise SystemExit('Staging tree listing was truncated')
 
           part_items = sorted(
-              (item for item in trigger_tree['tree'] if item.get('type') == 'blob' and item['path'].startswith('.staging2/release.part')),
+              (item for item in trigger_tree['tree'] if item.get('type') == 'blob' and item['path'].startswith('.staginghex/release.part')),
               key=lambda item: item['path'],
           )
           if not part_items:
               raise SystemExit('No release payload parts found')
 
-          encoded_parts = []
+          hex_parts = []
           for item in part_items:
               blob = call('GET', f"/git/blobs/{item['sha']}")
               raw = base64.b64decode(blob['content']) if blob.get('encoding') == 'base64' else blob['content'].encode()
-              encoded_parts.append(raw.decode('ascii').strip())
+              hex_parts.append(raw.decode('ascii').strip())
 
-          inner_base64 = base64.b64decode(''.join(encoded_parts), validate=True)
-          archive_bytes = base64.b64decode(inner_base64, validate=True)
+          archive_bytes = bytes.fromhex(''.join(hex_parts))
           extract_root = Path('/tmp/astera-release')
           extract_root.mkdir(parents=True, exist_ok=True)
           with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode='r:gz') as archive:
