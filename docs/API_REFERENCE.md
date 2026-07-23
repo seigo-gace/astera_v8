@@ -1,41 +1,131 @@
 # Astera v8 v1.1.1 API Reference
 
-## 共通
+Status: 現行実装同期
+Runtime: Node.js 22以上
 
-Base URL:
+## 1. ServiceとBase URL
 
-```text
-http://127.0.0.1:7373
+| Service | 既定Base URL | 起動 |
+|---|---|---|
+| Astera本体 | `http://127.0.0.1:7373` | `npm start`（短時間検証） |
+| QualityCompletionEvaluator API | `http://127.0.0.1:7374` | `npm run start:evaluator-api` |
+
+本番常駐はDocker Composeを使用し、外部公開時はReverse ProxyまたはCloudflare TunnelでHTTPS終端します。
+
+## 2. 認証方式
+
+| 方式 | Header | 対象 | Rate Limit・計測 |
+|---|---|---|---|
+| Tenant Key | `X-API-Key: kg_xxx` | `/process`, `/v1/evaluate`, `/billing/checkout` | あり |
+| Global Key | `X-API-Key: <ASTERA_API_KEY>` | Tenant認証Endpoint | Admin上限 |
+| Skill PRIVATE Key | `X-API-Key: <ASTERA_SKILL_API_KEY>` | `/v1/skill/process`, `/v1/skill/evaluate` | 公開Tenantの制限・課金なし |
+
+`ASTERA_SKILL_API_KEY`は32〜256文字で、Global Keyと同じ値にできません。公開Tenant KeyをSkill Endpointへ、Skill Keyを公開Endpointへ流用しません。
+
+`POST /signup`で発行したTenant KeyはResponseで一度だけ表示されます。現行APIには失効、再発行、Rotation専用Endpointはありません。`/signup`で別Tenantを作ることはKey Rotationと同義ではありません。
+
+## 3. 共通HTTP契約
+
+- Request: JSON Endpointは`Content-Type: application/json`
+- 最大Raw Payload: 1 MiB
+- Response security headers: `no-store`, `nosniff`, `DENY`, `no-referrer`
+- Trace: `X-Request-ID`
+- CORS: Allowlist方式
+- HTTPS: `ASTERA_REQUIRE_HTTPS=1`で強制
+
+既定Timeout:
+
+| 項目 | 既定値 | 設定 |
+|---|---:|---|
+| Headers | 10秒 | `ASTERA_HEADERS_TIMEOUT_MS` |
+| Request | 60秒 | `ASTERA_REQUEST_TIMEOUT_MS` |
+| Keep-Alive | 5秒 | `ASTERA_KEEPALIVE_TIMEOUT_MS` |
+| Worker | 10秒 | `ASTERA_WORKER_TIMEOUT_MS` |
+| 外部LLM | 30秒 | `ASTERA_LLM_TIMEOUT_MS` |
+
+## 4. Statusとエラー
+
+| HTTP | 意味 | 再試行 |
+|---:|---|---|
+| 200 | 成功。`clarification_needed`も現行は200 Text | 内容を確認 |
+| 204 | CORS Preflight成功 | 不要 |
+| 400 | JSON、型、Plan、署名等の入力不正 | 修正後のみ |
+| 401 | Key欠落・不一致・無効 | Key修正後のみ |
+| 403 | CORS Origin拒否 | 設定修正後のみ |
+| 404 | Endpointなし | URL修正後のみ |
+| 413 | Payloadまたは文字数上限超過 | 縮小後のみ |
+| 426 | HTTPS必須 | HTTPSへ切替 |
+| 429 | Rate Limit超過 | `rate.resetAt`以降 |
+| 500 | 内部エラー | Request IDを記録し限定的に |
+| 503 | Skill API、Stripe価格等の必須設定なし | 設定後のみ |
+
+一般的なJSONエラー:
+
+```json
+{
+  "error": "unauthorized"
+}
 ```
 
-認証:
+例外処理で返すJSON:
 
-```text
-X-API-Key: kg_xxx
+```json
+{
+  "error": "question must be a string",
+  "status": 400,
+  "requestId": "uuid"
+}
 ```
 
-アプリGPT Skill用PRIVATE APIは公開Keyと分離した32文字以上の`ASTERA_SKILL_API_KEY`を`X-API-Key`へ指定する。`ASTERA_API_KEY`との同一設定、短いKey、未設定は無効となる。Skill用APIに回数・課金上限は適用しないが、認証、HTTPS、CORS、Payload上限、Timeout、Secret Mask、監査Logは維持する。
+Rate Limit:
 
-## GET /healthz
+```json
+{
+  "error": "rate_limited",
+  "rate": {
+    "allowed": false,
+    "remaining": 0,
+    "resetAt": "2026-07-23T00:00:00.000Z",
+    "limit": 5
+  }
+}
+```
 
-ヘルスチェック。
+現行実装は`Retry-After` Headerを返しません。Clientは`rate.resetAt`を使用します。
 
-### Response 200
+## 5. GET /healthz
+
+### Astera本体
 
 ```json
 {
   "ok": true,
+  "service": "astera-v8",
+  "version": "1.1.1",
   "store": "sqlite",
-  "sqlite_error": null,
-  "time": "2026-06-28T00:00:00.000Z"
+  "skill_api": {
+    "enabled": true,
+    "process_endpoint": "/v1/skill/process"
+  },
+  "runtime": {
+    "node": "v22.x",
+    "uptime_seconds": 120,
+    "pid": 1
+  }
 }
 ```
 
-## POST /signup
+### Evaluator API
 
-無料プランのAPIキーを発行する。APIキーはレスポンスで一度だけ表示される。
+`publication_enabled`は常に`false`です。評価EndpointはKBへ自動掲載しません。
 
-### Response 200
+## 6. POST /signup
+
+IP単位で10回/分。無料Tenant Keyを発行します。
+
+```bash
+curl -X POST http://127.0.0.1:7373/signup
+```
 
 ```json
 {
@@ -46,162 +136,133 @@ X-API-Key: kg_xxx
 }
 ```
 
-## POST /process
-
-質問を自動Domain Routerで正規化し、用途テンプレートをユーザー選択なしで判定したうえで、5本柱で認知前処理する。
-
-HTTPレスポンスは通常 `text/plain; charset=utf-8` の8段Markdownで返す。内部では認知マップ、判断フレーム、LLM用プロンプトを生成するが、API利用者へは安全な材料テキストだけを返す。
+## 7. POST /process
 
 ### Request
 
 ```json
 {
-  "question": "新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は低コストで初月から試せること。",
+  "question": "Node.js APIを互換性を保って段階移行する判断材料を作る",
+  "context": "停止時間を作れない。Rollback経路が必要。",
   "language": "ja",
   "llm": {"chain": ["null"]},
-  "moodAnswers": {"good": true, "urgent": false, "deepThink": true}
+  "moodAnswers": {"deepThink": true, "accuracy": true}
 }
 ```
 
-`language` / `outputLanguage` / `locale` は任意。未指定時はユーザー入力から表示言語を推定する。
+制限:
 
-### Response 200: 8-section material
+- `question`: 必須String、既定100,000文字以下
+- `context`: 任意String、既定500,000文字以下
+- 上限は`ASTERA_MAX_QUESTION_CHARS`と`ASTERA_MAX_CONTEXT_CHARS`で変更可能
+
+### Response 200
+
+`text/plain; charset=utf-8`で01〜08の判断材料を返します。
 
 ```text
 01 本当の目的
-
-一言説明
-
-表面的な依頼の奥にある、本当に達成したいことを整理する。
-
 ...
-
-02 前提不足
-
-...
-
-今回の整理
-
-目的・対象・成功条件が大きく欠けていない。 / auto_domain=Marketing / Growth / Brand / overlaysなし。 / meta_removed=0 ...
-
-...
-
-03 事実確認
-
-...
-
-エビデンス
-
-- ev_001 fact.confirmed: ...
-
-...
-
-04 危機察知
-
-...
-
-エビデンス
-
-- risk_ev_001 domain.marketing_growth.risk_lens: misleading claims
-
-...
-
 08 主役AIへの再指示
+...
 ```
 
-### Auto Domain Router
+### clarification_needed
 
-ユーザーに用途テンプレートを選ばせない。Asteraが入力から自動判定する。
-
-代表テンプレート:
-
-- General Judgment
-- Business / Executive Strategy
-- Finance / Investment / Capital Allocation
-- Legal / Compliance / Contract
-- Medical / Health / Clinical
-- Marketing / Growth / Brand
-- Product / UX / Roadmap
-- Engineering / Architecture / Implementation
-- Cybersecurity / Privacy / Trust
-- AI / ML / LLM Governance
-- Project / Program / Operations
-- HR / Organization / People
-- Sales / Customer Success / Negotiation
-- Research / Academic / Evidence Review
-- Education / Training / Learning Design
-- Procurement / Vendor / Build-vs-Buy
-- Crisis / Reputation / Public Communication
-- Policy / Public Sector / Nonprofit
-- Creative / Writing / Content
-- Personal Decision / Coaching / Life Planning
-- Data / Analytics / Experimentation
-
-高リスク領域では Legal / Medical / Current Information / Evidence Strict / Safety Abuse overlay を自動付与する。
-
-### Response 200: clarification_needed
+重大な前提不足時も現行HTTP Statusは200です。Responseは8段ではなく次の形式で始まります。
 
 ```text
 確認が必要です
 
 Asteraが5本柱で判断する前に、もう少し前提が必要です。
-
-確認したいこと
-
-- 目的を一文で足してください。何を決めたいですか？
 ```
 
-## POST /v1/skill/process
+現行Responseには機械可読な`clarification_needed` JSON Fieldがありません。Clientは通常の8段出力と区別して利用者へ確認を返します。
 
-あなたのアプリGPTがSkillから呼ぶPRIVATE実行入口。処理内容と`text/plain`の8段出力は`POST /process`と同一で、公開TenantのRate Limitと課金を適用しない。
+## 8. POST /v1/skill/process
 
-### Authentication
+処理内容とText出力は`/process`と同一です。認証はSkill PRIVATE Keyのみで、公開TenantのRate Limitと利用計測を適用しません。Payload、Timeout、HTTPS、CORS、Secret Mask、監査Logは維持します。
 
-```text
-X-API-Key: <ASTERA_SKILL_API_KEY>
+未設定時:
+
+```json
+{"error":"skill_api_not_configured"}
 ```
 
-未設定、欠落、不一致、公開Tenant Keyの使用は`401 unauthorized`を返す。
+## 9. POST /v1/evaluate
 
-## POST /v1/evaluate（判定Module別API）
+Evaluator APIの一般Tenant入口です。Request Schema:
 
-`QualityCompletionEvaluator`を本体とは別Process（既定Port `7374`）で呼ぶ一般ユーザー向けAPI。Astera本体が発行したTenant Keyを使用し、Plan別Rate Limitと利用計測を適用する。Request bodyは`astera.quality-completion.request.v1`、Response bodyは`astera.quality-completion.result.v1`を使用する。
+`src/quality-completion-evaluator/contracts/evaluation-request.v1.schema.json`
 
-このEndpointは判定だけを行い、KBや`modular-catalog`へ自動掲載しない。`KB_ELIGIBLE`は掲載可能判定であり、保存完了を意味しない。
+最低限必要な構造:
 
-### Authentication
-
-```text
-X-API-Key: kg_xxx
-Content-Type: application/json
+```json
+{
+  "schema_version": "astera.quality-completion.request.v1",
+  "evaluation_id": "eval_001",
+  "project_id": "project_001",
+  "target": {
+    "candidate_id": "candidate_001",
+    "candidate_version": 1,
+    "artifact_type": "design",
+    "title": "設計書",
+    "content": "# 目的\n...",
+    "content_hash": "sha256:<64 hex>",
+    "declared_status": "design_complete"
+  },
+  "requirements": [
+    {
+      "requirement_id": "REQ-001",
+      "text": "目的を明示する",
+      "mandatory": true,
+      "fulfillment": {
+        "status": "fulfilled",
+        "locations": ["section:目的"],
+        "evidence_refs": []
+      }
+    }
+  ],
+  "evidence": {"repository":[],"tests":[],"artifacts":[]},
+  "analysis": {
+    "technical_checks": [],
+    "logical_checks": [],
+    "contradictions": [],
+    "ambiguities": [],
+    "boundary_checks": [],
+    "boundary_violations": [],
+    "purpose_mismatch": false,
+    "domain_checks": []
+  },
+  "evaluation_config": {
+    "rubric_version": "quality-completion-rubric.v1",
+    "blocking_rule_version": "blocking-rules.v1"
+  }
+}
 ```
 
-## POST /v1/skill/evaluate（判定Module別API）
+完全なRequest/Response例:
 
-同じ判定処理をアプリGPT Skill専用PRIVATE Keyで呼ぶ。Rate Limitと課金は適用しない。Request/Responseおよび非自動掲載の条件は`POST /v1/evaluate`と同一。
+- `src/quality-completion-evaluator/examples/evaluation-request.design.sample.json`
+- `src/quality-completion-evaluator/examples/evaluation-result.design.sample.json`
 
-```text
-X-API-Key: <ASTERA_SKILL_API_KEY>
-Content-Type: application/json
-```
+主なStatus:
 
-### Response 200
+- `KB_ELIGIBLE`
+- `REVISION_REQUIRED`
+- `BLOCKED`
+- `INVALID_INPUT`
+- `EVALUATION_FAILED`
 
-主な`status`:
+`KB_ELIGIBLE`は保存完了ではありません。
 
-- `KB_ELIGIBLE`: 掲載可能
-- `REVISION_REQUIRED`: 品質または完成度が95点未満
-- `BLOCKED`: Blocking、必須要求未達、証拠不整合などで掲載停止
-- `INVALID_INPUT`: Schema、Hash、Versionなどの入力不正
-- `EVALUATION_FAILED`: 採点処理未完了
+## 10. POST /v1/skill/evaluate
 
-`KB_PUBLISHED`は保存Adapterを明示的に呼び出した別処理でのみ使用する。
+評価内容は`/v1/evaluate`と同じです。Skill PRIVATE Keyだけを受け付け、公開TenantのRate Limitと利用計測を適用しません。KB自動掲載は行いません。
 
-## POST /billing/checkout
+## 11. POST /billing/checkout
 
-Stripe Checkout Sessionを作る。`STRIPE_SECRET_KEY` が未設定の場合は503を返す。
-
-### Request
+認証必須。Tenant単位10回/分。
 
 ```json
 {
@@ -211,24 +272,51 @@ Stripe Checkout Sessionを作る。`STRIPE_SECRET_KEY` が未設定の場合は5
 }
 ```
 
-`plan` は `pro` または `business`。価格IDはサーバー側の `STRIPE_PRO_PRICE_ID` / `STRIPE_BUSINESS_PRICE_ID` から選び、クライアント指定の任意価格による不正アップグレードを拒否する。
+- `plan`: `pro`または`business`
+- 価格は`STRIPE_PRO_PRICE_ID` / `STRIPE_BUSINESS_PRICE_ID`から選択
+- `ASTERA_ALLOW_CUSTOM_STRIPE_PRICE=0`では任意`priceId`を拒否
+- 価格未設定時は503
 
-### Response 200
+## 12. POST /billing/webhook
 
-```json
-{
-  "checkoutUrl": "https://checkout.stripe.com/...",
-  "sessionId": "cs_xxx"
-}
-```
+Stripe専用です。判断材料生成用の汎用Webhookではありません。Raw Bodyと`Stripe-Signature`で検証します。
 
-## POST /billing/webhook
-
-Stripe webhookを受け取る。raw bodyと`Stripe-Signature`で署名検証する。
-
-対応イベント:
+対応Event:
 
 - `checkout.session.completed`
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+
+## 13. Rate Limit
+
+| Plan / Route | Limit |
+|---|---:|
+| Free `/process`, `/v1/evaluate` | 5/分 |
+| Pro | 60/分 |
+| Business | 300/分 |
+| Admin Global Key | 1000/分 |
+| `/signup` | IP単位10/分 |
+| `/billing/checkout` | Tenant単位10/分 |
+| Skill PRIVATE Endpoint | 公開Tenant制限なし |
+
+Limiterは現行Process内Memory Mapです。複数Replica間で共有されません。
+
+## 14. CORS・HTTPS
+
+- 本体: `ASTERA_CORS_ORIGINS`
+- Evaluator: `ASTERA_EVALUATOR_CORS_ORIGINS`
+- HTTPS強制: `ASTERA_REQUIRE_HTTPS=1`
+- Proxy信頼: `ASTERA_TRUST_PROXY=1`
+- HSTS: `ASTERA_ENABLE_HSTS=1`
+
+`*`は本番で使用せず、利用元Originを列挙します。
+
+## 15. Version互換性
+
+- 本体の非Version Endpoint: `/process`, `/signup`, `/billing/*`
+- Version固定Endpoint: `/v1/skill/process`, `/v1/evaluate`, `/v1/skill/evaluate`
+- Evaluator Request: `astera.quality-completion.request.v1`
+- Evaluator Result: `astera.quality-completion.result.v1`
+
+現時点で廃止予定Endpointは定義されていません。将来の破壊的変更は新しいPathまたはSchema Versionで追加し、旧Contractを同時に書き換えません。

@@ -8,7 +8,7 @@ Astera v8は、Node.js V8上のScriptと固定Ruleで、入力を信頼できる
 
 ## 主な機能
 
-- **V8並列処理**: Node.js Worker Threadsで5本柱を並列実行
+- **V8並列処理**: Node.js Worker ThreadsでFact / Risk / Inquiryを並列実行し、依存するMulti / Compareを順序実行
 - **38専門ジャンルLens**: `G01`〜`G38`からPrimaryを自動選択し、SecondaryとOverlayを付加
 - **決定論的分類**: 固定分類語、Score、Tie Break、ConfidenceをScriptで処理
 - **5本柱**: Fact / Risk / Multi / Inquiry / Compare
@@ -142,13 +142,21 @@ HTTP Access、認証失敗、処理結果、Stripe Eventなどは、Secret除去
 
 ## 重要ドキュメント
 
+- `docs/DOCUMENTATION_INDEX.md`: 利用者別Document入口
 - `STRUCTURE.md`: 構成図、依存方向、Module責務
+- `docs/QUICK_START.md`: 最短起動・実行手順
+- `docs/USER_GUIDE.md`: 8段を主役AIへ渡す利用手順
 - `docs/LENS_GENRE_INDEX.md`: 38 Genre固定ID、Anchor Path、KB共有契約
 - `docs/DOMAIN_TEMPLATE_CATALOG.md`: 現行Lens実装の参照先と検証記録
 - `docs/BRAND_PHILOSOPHY.md`: Brand理念
 - `docs/FULL_DOCUMENT.md`: 詳細仕様
 - `docs/ARCHITECTURE.md`: Architecture
 - `docs/API_REFERENCE.md`: API契約
+- `docs/FAQ.md`: よくある質問
+- `docs/TROUBLESHOOTING.md`: 障害切り分け
+- `docs/GLOSSARY.md`: 用語
+- `docs/LIMITATIONS.md`: 保証外・未実装・運用制約
+- `docs/CHANGELOG.md`: Astera全体の変更履歴
 - `docs/PRODUCTION_CHECKLIST.md`: 本番確認
 - `docs/SECURITY_NOTES.md`: Security注意事項
 - `docs/DEPLOYMENT_VPS.md`: VPS Deployment

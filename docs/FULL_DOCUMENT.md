@@ -1,168 +1,194 @@
 # Astera v8 v1.1.1 完全ドキュメント
 
-## 第1部｜企画
+Status: 現行実装同期
+対象: `quarantine/pre-drive-replacement-2026-07-21`
+実装上の構成正本: `STRUCTURE.md`
 
-### 1.1 なぜ作るのか
+## 第1部｜役割と境界
 
-性能で大企業や巨大OSS本体と直接競争しない。Astera v8は「AI自身の入力を、実行環境が並列で賢くする」認知前処理というニッチで一点突破する。
+Astera v8は、主役AIや利用者へ渡す**判断材料を生成する外付けレイヤー**です。会話AI、生成AI、検索エンジン、Knowledge Baseそのものではありません。
 
-### 1.2 中核アイデア：認知前処理
+入力された問いを固定RuleとNode.js V8上のWorker Threadsで処理し、38専門ジャンルLens、5本柱、5 Overlayを通して8段の判断材料へ整形します。外部LLMは任意であり、`null` Providerでも中核処理は実行できます。
 
-通常は「質問 → AIに丸投げ → AIが全部処理」になる。Astera v8では「質問 → V8 Workerで下ごしらえ → AIは最終推論に集中」という形に変える。
+Asteraが担当しないもの:
 
-料理の比喩では、Astera v8はAIの下ごしらえ係。食材である質問を洗い、切り、分類してからLLMへ渡す。
+- 主役AIの置換
+- 外部情報の真偽保証
+- 医療・法律・投資等の専門家判断
+- KBへの自動掲載
+- 成果物の自動修正、Commit、Push、Deploy
 
-### 1.3 設計思想
+## 第2部｜入力と出力
 
-- 引き算：全部を負わない。本質だけ残す。
-- 一点突破：認知前処理を単一の差別化軸にする。
-- 悪手を捨てない：失敗も理由ごと記録する。
-- 最初は粗く、使うほど洗練：ルールベースからLLM強化へ段階移行する。
-- プロバイダ非依存：OpenAI/Anthropic/Ollama/OpenAI互換/Nullで動く。
+主な入力:
 
-## 第2部｜仕様概要
+- `question`: 判断材料を作る問い
+- `context`: 任意の補足情報
+- `language` / `outputLanguage` / `locale`: 任意の出力言語指定
+- `moodAnswers`: 急ぎ、精度要求、深い検討などの補助情報
+- `llm`: 任意の外部LLM Chain
 
-Astera v8は質問を5本柱で処理し、認知マップとAIへ渡すプロンプトを生成する。
+通常出力は`text/plain; charset=utf-8`の8段Markdownです。内部では認知Map、選択Lens、Evidence、Risk、比較候補、再指示を構成しますが、公開APIは利用者向けの判断材料Textを返します。
 
-1. 真実（Fact）：確認候補・未確認・意見を仕分ける。
-2. 危機察知（Risk）：リスクパターンを検出する。
-3. 多角度（Multi）：攻め・守り・会心/批判角度から推奨視点を出す。
-4. 反対思考（Inquiry）：問いの前提、ニーズ、機嫌を検出する。
-5. 比較検証（Compare）：全結果を統合し、原点100からanswer線距離で減点評価する。
+## 第3部｜38専門ジャンルLensと5 Overlay
 
-## 第3部｜処理順
-
-重要：5本柱すべてを完全同時並列にはしない。
+Primary Lensは`G01`〜`G38`から1件を決定論的に選びます。Secondaryは最大3件、Overlayは必要なものだけを追加します。
 
 ```text
-質問
- ▼
-Inquiry preflight（機嫌検出・問い返し判定）
- ├─ 問い返す：clarification_neededで停止
- └─ 続行
-      ▼
-Fact / Risk / Inquiry analysis を並列実行
-      ▼
-Multi（Fact/Risk/Inquiryを利用）
-      ▼
-Compare（全結果を統合）
-      ▼
-認知マップ + AIへ渡すプロンプト + 任意LLM回答
+Input
+  → Normalize
+  → G01〜G38 Score
+  → Primary / Secondary
+  → Overlay
+  → 5本柱
+  → 8段の判断材料
 ```
 
-## 第4部｜使い方
+Overlay:
 
-### 短時間のローカル検証
+- `high_stakes_legal`
+- `medical_safety`
+- `current_information`
+- `evidence_strict`
+- `safety_abuse`
+
+全Lens ID、名称、4階層Anchor Pathは`docs/LENS_GENRE_INDEX.md`、実行正本は`src/all-domain-lens-catalog.js`です。
+
+## 第4部｜5本柱と処理順
+
+5本柱:
+
+1. Fact: 確認済み、推測、未確認を分離する
+2. Risk: 実行前に危険、失敗条件、Evidence不足を検出する
+3. Multi: 攻め、守り、批判等の複数視点を作る
+4. Inquiry: 目的、前提不足、反対視点、Human Reader情報を扱う
+5. Compare: 候補を比較し、推奨判断へ統合する
+
+完全同時実行ではありません。
+
+```text
+Inquiry preflight
+  ├─ 前提不足が重大: clarification_neededで停止
+  └─ 続行
+      → Fact / Risk / Inquiryを並列
+      → Multi
+      → Dialectic候補
+      → Compare
+      → 8段出力
+```
+
+## 第5部｜8段の判断材料
+
+| 番号 | 名称 | 役割 |
+|---:|---|---|
+| 01 | 本当の目的 | 表面的な依頼の奥にある達成目的と成功条件 |
+| 02 | 前提不足 | 足りない条件、制約、確認事項 |
+| 03 | 事実確認 | 事実、推測、未確認情報、Evidence gap |
+| 04 | 危機察知 | Risk、失敗条件、先行対策 |
+| 05 | 反対視点 | 反論、弱点、別の立場 |
+| 06 | 比較案 | 主案、代替案、悪手、比較軸 |
+| 07 | 推奨判断 | 推奨案、理由、条件、次の一手 |
+| 08 | 主役AIへの再指示 | 判断材料を反映した再依頼文 |
+
+01〜08の名称と順序は出力契約です。変更時はRuntime、Test、API文書を同時に更新します。
+
+## 第6部｜利用入口
+
+Astera本体（既定`127.0.0.1:7373`）:
+
+- `GET /healthz`
+- `POST /signup`
+- `POST /process`
+- `POST /v1/skill/process`
+- `POST /billing/checkout`
+- `POST /billing/webhook`
+
+品質・完成度判定API（別Process、既定`127.0.0.1:7374`）:
+
+- `GET /healthz`
+- `POST /v1/evaluate`
+- `POST /v1/skill/evaluate`
+
+公開Tenant Keyと`ASTERA_SKILL_API_KEY`は別物です。Skill Keyは32文字以上かつ公開Global Keyと異なる必要があります。詳細は`docs/API_REFERENCE.md`を参照してください。
+
+## 第7部｜QualityCompletionEvaluator
+
+品質と完成度を別々に100点満点で固定Rule採点します。合格条件は次のすべてです。
+
+- 品質`95`以上
+- 完成度`95`以上
+- Blocking `0`
+- 必須Requirement未達`0`
+- Evidence不整合`0`
+- 評価処理完了
+
+平均点での合格は禁止です。`KB_ELIGIBLE`は「掲載可能」の判定であり、KB保存完了ではありません。通常の評価EndpointはKBや`modular-catalog`へ書き込みません。
+
+Artifact ProfileとDomain Lensは別責務です。
+
+- Artifact Profile: 設計、実装、Test結果、運用文書等の成果物種別
+- Domain Lens: `G01`〜`G38`の分野固有Risk、Evidence、Safety条件
+
+## 第8部｜認証・安全・運用
+
+- API KeyはPepper付きSHA-256 Hashで保存
+- Payload上限は1 MiB
+- `question`既定上限は100,000文字
+- `context`既定上限は500,000文字
+- CORS Allowlist、HTTPS強制、HSTSを環境変数で制御
+- Stripe WebhookはRaw Bodyと署名で検証
+- TGserver送信前にSecretを除去
+- 未送信LogだけをOutboxへ保持し、成功時に削除
+- 本番常駐はDocker Composeのみ
+
+本番値、Secret、価格IDは文書へ書かず環境変数から注入します。
+
+## 第9部｜利用方法
+
+最短手順は`docs/QUICK_START.md`、用途別の流れは`docs/USER_GUIDE.md`を参照してください。
+
+基本の利用順:
+
+1. 問いに目的、対象、成功条件、制約を含める
+2. Asteraへ入力する
+3. 01〜08とEvidence gapを確認する
+4. 不足前提があれば追加入力する
+5. 08の再指示を主役AIへ渡す
+6. 重要判断は一次情報や専門家で確認する
+
+## 第10部｜エラーと再試行
+
+- `400`: 入力形式を修正して再試行
+- `401`: Keyを確認。自動再試行しない
+- `403`: Origin設定を確認。自動再試行しない
+- `413`: Payload、question、contextを縮小
+- `426`: HTTPS経路へ切替
+- `429`: Responseの`rate.resetAt`以降に再試行
+- `500`: `X-Request-ID`を控え、同一入力の無制限連打を避ける
+- `503`: Skill Key、Stripe価格等の必須設定を確認
+
+## 第11部｜検証と完成条件
+
+Repository定義の検証:
 
 ```bash
-node start.js
+npm test
+bash scripts/smoke.sh
+npm run verify
 ```
 
-本番常駐はDocker / Docker Composeのみを使用する。
+検証はNode.js 22以上で実行します。Documentだけの変更でも、Markdown内のPath・Endpoint・環境変数が実装と一致すること、および`RELEASE_MANIFEST.txt`のPathが存在することを確認します。
 
-### APIキー発行
+過去のTest件数を固定値として本文へ転記しません。Test追加で陳腐化するため、最新結果は実行Logと`src/quality-completion-evaluator/TEST_REPORT.md`で確認します。
 
-```bash
-curl -X POST http://127.0.0.1:7373/signup
-```
+## 第12部｜正本、制限、変更管理
 
-### LLMなし
+正本の優先順位:
 
-```bash
-curl -X POST http://127.0.0.1:7373/process \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: kg_xxx" \
-  -d '{"question": "新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は低コストで初月から試せること。"}'
-```
+1. `STRUCTURE.md`: 責務、配置、依存方向、運用境界
+2. 実装とSchema: 実際のRuntime契約
+3. `docs/API_REFERENCE.md`: 外部HTTP契約
+4. `docs/LENS_GENRE_INDEX.md`: Lens共有契約
+5. 本書: 全体説明
 
-### LLM使用
-
-```bash
-curl -X POST http://127.0.0.1:7373/process \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: kg_xxx" \
-  -d '{
-    "question": "コスト削減策",
-    "llm": {"chain":["anthropic","null"], "apiKey":"sk-xxx"}
-  }'
-```
-
-### 機嫌を渡す
-
-```bash
-curl -X POST http://127.0.0.1:7373/process \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: kg_xxx" \
-  -d '{
-    "question": "次の一手を決めたい。対象は既存ユーザー。成功条件は離脱率を下げること。",
-    "moodAnswers": {"good":true, "urgent":false, "deepThink":true}
-  }'
-```
-
-## 第5部｜プラン
-
-| プラン | 月額 | レート | LLM | 対象 |
-|---|---:|---:|---|---|
-| Free | 0円 | 5/分 | BYOK | 個人・評価 |
-| Pro | 2,000円 | 60/分 | BYOK | スタートアップ |
-| Business | 9,800円 | 300/分 | お任せ可 | 中堅事業者 |
-
-## 第6部｜向く場面・向かない場面
-
-向く場面：意思決定支援、事業戦略、AIエージェント前処理、相談系、リスク分析。
-
-向かない場面：単純な事実検索、超低遅延、創作/雑談中心。
-
-## 第7部｜ファイル構成
-
-構成図の唯一の正本はProjectルートの `STRUCTURE.md` とする。本書へ複製せず、配置・依存方向・outbox契約は同ファイルを参照する。
-
-## 第8部｜ロードマップ
-
-- Phase 1：5本柱ルールベース、WorkerPool、認証、BYOK、Stripe基盤。
-- Phase 2：各柱をLLM/検索接続で高推論化。
-- Phase 3：暗黙知層をInquiryへ追加。
-- Phase 4：第2段思考ループ。
-- Phase 5：PostgreSQL移行とマルチサーバー対応。
-
-## 第9部｜3行要約
-
-Astera v8は、V8 Worker threadsでAIへの入力を5本柱に分解する認知前処理ランタイムである。
-AIを増やすのではなく、AIへ渡す前の問いを賢くすることで質とコストを改善する。
-従順に答えるだけでなく、問いを疑い、危機を検出し、比較検証してから最終プロンプトへ落とす。
-
----
-
-## 第12部｜v1.1.0 Hyperion Max 統合
-
-旧KAGURA v1.1.0では、V8-Hyperion / PCE構想を統合し、5本柱の認知前処理に加えて「人を読む」と「複数案を競わせる」を実装した。
-
-### 12.1 追加された人読み
-
-`src/hyperion-human-reader.js` により、以下の状態を検出する。
-
-- urgency: 急ぎ・時間圧
-- anger: 怒り・不満
-- fatigue: 疲労
-- confusion: 混乱
-- precision: 正確性要求
-- scope_pressure: 全部・完璧・最大火力要求
-- build_mode: コード・DL・起動・テスト要求
-
-この結果は `result.hyperion.human_reading` に入る。
-
-### 12.2 追加された多重案競争
-
-`src/pillars/dialectic-worker.js` により、以下の候補を生成する。
-
-- 主案
-- 悪手案
-- 反対案
-- 第三案
-- 人読み最適案
-
-各候補は score と answer_line_distance を持ち、`Compare` が `selected_candidate` と `candidate_ranking` として統合する。
-
-### 12.3 重要な判断
-
-v1.1.0は、各候補ごとに外部LLMを呼ぶ完全PCEではない。最終LLM呼び出しは1回に抑え、コスト・速度・安定性を守る。その代わり、ルールベースのPCE-DCEで主案・悪手・反対案・第三案・人読み最適案を競わせる。
+既知の制限は`docs/LIMITATIONS.md`、変更履歴は`docs/CHANGELOG.md`を参照してください。料金、Credit減算、返金、解約、法務文書等の未確定事項は、本書から推測して確定仕様として扱いません。
