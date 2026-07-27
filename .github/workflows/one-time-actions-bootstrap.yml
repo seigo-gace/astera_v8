@@ -1,0 +1,98 @@
+name: One-time Actions Bootstrap
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+
+concurrency:
+  group: one-time-actions-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Dispatch and verify GH Ready Check
+        id: gh_ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run gh-ready.yml --ref main
+
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --workflow gh-ready.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq ".[] | select(.createdAt >= \"${dispatched_at}\") | .databaseId" | head -n1)"
+            if [ -n "$run_id" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+          gh run view "$run_id" --log > /tmp/gh-ready.log
+          grep -F "GH_READY" /tmp/gh-ready.log
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch and verify Astera example generation
+        id: examples
+        shell: bash
+        run: |
+          set -euo pipefail
+          dispatched_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run astera-homepage-examples.yml --ref main
+
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --workflow astera-homepage-examples.yml --event workflow_dispatch --limit 10 --json databaseId,createdAt --jq ".[] | select(.createdAt >= \"${dispatched_at}\") | .databaseId" | head -n1)"
+            if [ -n "$run_id" ]; then break; fi
+            sleep 2
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Record verification and remove bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          test -s docs/homepage/astera-response-examples.md
+
+          mkdir -p docs/automation
+          cat > docs/automation/gh-ready-verification.md <<EOF
+          # GitHub CLI Ready Verification
+
+          - Workflow: \`.github/workflows/gh-ready.yml\`
+          - Result: passed
+          - Verified marker: \`GH_READY\`
+          - GH Ready run ID: \`${{ steps.gh_ready.outputs.run_id }}\`
+          - Astera example generation run ID: \`${{ steps.examples.outputs.run_id }}\`
+          - Verified at: \`$(date -u +%Y-%m-%dT%H:%M:%SZ)\`
+          EOF
+
+          rm -f .github/workflows/one-time-actions-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/automation/gh-ready-verification.md .github/workflows/one-time-actions-bootstrap.yml
+          git commit -m "chore: verify GitHub CLI and Astera example run"
+          git push origin HEAD:main
+
+          if gh issue view 9 --json state --jq .state 2>/dev/null | grep -qx OPEN; then
+            gh issue close 9 --reason completed --comment "Scheduled bootstrap completed the Astera example run."
+          fi
