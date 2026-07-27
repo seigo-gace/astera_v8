@@ -5,13 +5,17 @@ on:
   push:
     paths:
       - ".github/workflows/astera-homepage-examples.yml"
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
   actions: read
+  issues: write
 
 jobs:
   generate-examples:
+    if: github.event_name != 'issues' || github.event.issue.title == 'RUN_ASTERA_HOMEPAGE_EXAMPLES'
     runs-on: ubuntu-latest
 
     env:
@@ -32,6 +36,7 @@ jobs:
           gh --version
           gh auth status
           gh repo view "$GH_REPO"
+          echo "GH_READY"
 
       - name: Run Astera and generate homepage examples
         run: |
@@ -214,3 +219,8 @@ jobs:
           git add docs/homepage/astera-response-examples.md
           git commit -m "docs: generate Astera homepage response examples"
           git push
+
+      - name: Close trigger issue
+        if: github.event_name == 'issues'
+        run: |
+          gh issue close "${{ github.event.issue.number }}" --comment "Astera homepage examples generated."
