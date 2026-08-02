@@ -1,0 +1,44 @@
+name: Evidence Search Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify free evidence search module
+        id: verify
+        continue-on-error: true
+        run: npm run verify:evidence > evidence-verification.log 2>&1
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-verification-log
+          path: evidence-verification.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Print verification failure
+        if: steps.verify.outcome == 'failure'
+        run: cat evidence-verification.log
+
+      - name: Stop after verification failure
+        if: steps.verify.outcome == 'failure'
+        run: exit 1

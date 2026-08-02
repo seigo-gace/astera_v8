@@ -1,0 +1,91 @@
+{
+  "schema_version": "astera.information-quality-profiles.v1",
+  "profile_version": "1.0.0",
+  "criterion_weights": {
+    "accuracy": 2500,
+    "provenance": 1800,
+    "suitability": 1200,
+    "corroboration": 2000,
+    "freshness": 1500,
+    "conflict_coverage": 1000
+  },
+  "gates": {
+    "initial_minimum_bp": 8000,
+    "final_minimum_bp": 9500,
+    "reinforcement_exactly_once": true,
+    "additional_evidence_required": true
+  },
+  "profile_groups": {
+    "STANDARD": {
+      "freshness_policy": { "class": "REVISIONED", "current_required": false },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": []
+    },
+    "LEGAL_REGULATORY_STRICT": {
+      "freshness_policy": { "class": "FREQUENT", "current_required": true },
+      "corroboration_mode": "AUTHORITY_MULTI_RECORD_REQUIRED",
+      "required_source_roles": ["OFFICIAL"]
+    },
+    "FINANCIAL_STRICT": {
+      "freshness_policy": { "class": "FREQUENT", "current_required": true },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": ["PRIMARY"]
+    },
+    "SCIENTIFIC_EXACT": {
+      "freshness_policy": { "class": "REVISIONED", "current_required": false },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": ["PRIMARY"]
+    },
+    "PUBLIC_SAFETY_STRICT": {
+      "freshness_policy": { "class": "REALTIME", "current_required": true },
+      "corroboration_mode": "AUTHORITY_MULTI_RECORD_REQUIRED",
+      "required_source_roles": ["OFFICIAL"]
+    },
+    "MEDICAL_STRICT": {
+      "freshness_policy": { "class": "FREQUENT", "current_required": true },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": ["PRIMARY", "OFFICIAL"]
+    },
+    "TECHNICAL_SAFETY": {
+      "freshness_policy": { "class": "REVISIONED", "current_required": true },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": ["PRIMARY", "OFFICIAL"]
+    },
+    "TECHNICAL_CURRENT": {
+      "freshness_policy": { "class": "FREQUENT", "current_required": true },
+      "corroboration_mode": "INDEPENDENT_ORIGIN_REQUIRED",
+      "required_source_roles": ["PRIMARY", "OFFICIAL"]
+    },
+    "CYBERSECURITY_STRICT": {
+      "freshness_policy": { "class": "REALTIME", "current_required": true },
+      "corroboration_mode": "AUTHORITY_MULTI_RECORD_REQUIRED",
+      "required_source_roles": ["OFFICIAL"]
+    },
+    "PRODUCT_SAFETY": {
+      "freshness_policy": { "class": "FREQUENT", "current_required": true },
+      "corroboration_mode": "AUTHORITY_MULTI_RECORD_REQUIRED",
+      "required_source_roles": ["OFFICIAL"]
+    },
+    "NATIONAL_SECURITY_STRICT": {
+      "freshness_policy": { "class": "REALTIME", "current_required": true },
+      "corroboration_mode": "AUTHORITY_MULTI_RECORD_REQUIRED",
+      "required_source_roles": ["OFFICIAL"]
+    }
+  },
+  "domain_profile_map": {
+    "G01": "STANDARD", "G02": "STANDARD", "G03": "STANDARD", "G04": "STANDARD", "G05": "STANDARD", "G06": "STANDARD",
+    "G07": "LEGAL_REGULATORY_STRICT", "G08": "LEGAL_REGULATORY_STRICT", "G09": "STANDARD", "G10": "STANDARD",
+    "G11": "FINANCIAL_STRICT", "G12": "STANDARD", "G13": "STANDARD", "G14": "STANDARD", "G15": "STANDARD", "G16": "STANDARD", "G17": "STANDARD",
+    "G18": "SCIENTIFIC_EXACT", "G19": "SCIENTIFIC_EXACT", "G20": "SCIENTIFIC_EXACT", "G21": "PUBLIC_SAFETY_STRICT", "G22": "SCIENTIFIC_EXACT",
+    "G23": "MEDICAL_STRICT", "G24": "SCIENTIFIC_EXACT", "G25": "TECHNICAL_SAFETY", "G26": "TECHNICAL_SAFETY", "G27": "TECHNICAL_SAFETY", "G28": "TECHNICAL_SAFETY",
+    "G29": "TECHNICAL_CURRENT", "G30": "TECHNICAL_CURRENT", "G31": "CYBERSECURITY_STRICT", "G32": "LEGAL_REGULATORY_STRICT", "G33": "PRODUCT_SAFETY",
+    "G34": "PUBLIC_SAFETY_STRICT", "G35": "NATIONAL_SECURITY_STRICT", "G36": "TECHNICAL_CURRENT", "G37": "SCIENTIFIC_EXACT", "G38": "STANDARD"
+  },
+  "overlay_profiles": {
+    "current_information": { "freshness_policy": { "class": "REALTIME", "current_required": true } },
+    "evidence_strict": { "required_source_roles": ["PRIMARY", "OFFICIAL"] },
+    "high_stakes_legal": { "profile_group": "LEGAL_REGULATORY_STRICT" },
+    "medical_safety": { "profile_group": "MEDICAL_STRICT" },
+    "safety_abuse": { "profile_group": "CYBERSECURITY_STRICT" }
+  }
+}

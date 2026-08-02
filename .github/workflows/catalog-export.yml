@@ -1,0 +1,64 @@
+name: Catalog Export
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build verified source bundle
+        run: |
+          set -euo pipefail
+          mkdir -p catalog-export
+          cp --parents \
+            src/internal-service-auth.js \
+            src/server-with-evidence.js \
+            src/evidence-search/index.js \
+            src/evidence-search/module.js \
+            src/evidence-search/module.manifest.json \
+            src/evidence-search/architecture.v1.json \
+            src/evidence-search/api/client.js \
+            src/evidence-search/api/information-quality-client.js \
+            src/evidence-search/api/internal-auth.js \
+            src/evidence-search/api/server.js \
+            src/evidence-search/api/start.js \
+            src/evidence-search/contracts/*.json \
+            src/evidence-search/core/*.js \
+            src/evidence-search/evidence/*.js \
+            src/evidence-search/paid/*.js \
+            src/evidence-search/providers/*.js \
+            src/evidence-search/recovery/*.js \
+            src/evidence-search/utils/*.js \
+            src/quality-completion-evaluator/api/server-with-internal.js \
+            src/quality-completion-evaluator/information-quality/engine.js \
+            src/quality-completion-evaluator/information-quality/profiles.v1.json \
+            scripts/validate-evidence-modular-architecture.js \
+            config/evidence-providers.example.json \
+            docker-compose.evidence.yml \
+            Dockerfile \
+            .env.example \
+            package.json \
+            test/evidence-*.test.js \
+            src/quality-completion-evaluator/tests/unit/information-quality.test.js \
+            catalog-export/
+          printf '%s\n' '${{ github.sha }}' > catalog-export/SOURCE_COMMIT.txt
+          find catalog-export -type f -print0 | sort -z | xargs -0 sha256sum > catalog-export/SHA256SUMS
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: astera-evidence-search-catalog-export
+          path: catalog-export
+          if-no-files-found: error
+          retention-days: 7

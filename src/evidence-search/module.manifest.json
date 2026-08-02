@@ -1,0 +1,40 @@
+{
+  "module_id": "astera-evidence-search",
+  "display_name": "ASTERA V8 根拠検索Module",
+  "version": "2.4.0",
+  "runtime": "node>=22",
+  "entrypoint": "index.js",
+  "module_type": "internal",
+  "connection_contract": {
+    "entrypoint_count": 1,
+    "entrypoint": "index.js",
+    "public_methods": ["execute"]
+  },
+  "active_search_mode": "FREE_ONLY",
+  "active_provider_classes": [
+    "FREE_PROJECTION",
+    "FREE_OFFICIAL_LIVE"
+  ],
+  "responsibilities": [
+    "free_evidence_search",
+    "information_quality_measurement",
+    "provider_result_normalization",
+    "condition_matching",
+    "lineage_and_conflict_measurement",
+    "reinforcement_search",
+    "isolated_future_usage_calculation"
+  ],
+  "prohibited_actions": [
+    "paid_provider_execution",
+    "payment_execution",
+    "credit_balance_management",
+    "charge_reservation",
+    "refund_execution",
+    "settlement_execution",
+    "ai_search",
+    "llm_query_generation",
+    "ai_reranking",
+    "ai_scoring",
+    "direct_internal_component_access"
+  ]
+}

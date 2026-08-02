@@ -1,0 +1,164 @@
+services:
+  astera-v8:
+    build: .
+    container_name: astera-v8-evidence-main
+    command: ["node", "start.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASTERA_HOST: 0.0.0.0
+      ASTERA_PORT: 7373
+      ASTERA_HEALTH_PORT: 7373
+      ASTERA_DB: /data/astera.db
+      ASTERA_LOG_CACHE_DIR: /cache/outbox
+      ASTERA_EVIDENCE_URL: http://astera-evidence-search:7375
+      ASTERA_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/internal_service_secret
+      ASTERA_TGS_URL: ${ASTERA_TGS_URL:-http://host.docker.internal:3000/ingest}
+      ASTERA_TGS_PROJECT_ID: ${ASTERA_TGS_PROJECT_ID:-P002}
+    ports:
+      - "127.0.0.1:7373:7373"
+    expose:
+      - "7373"
+    volumes:
+      - astera-data:/data
+      - astera-log-cache:/cache
+      - type: bind
+        source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        target: /run/secrets/internal_service_secret
+        read_only: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - astera-evidence-network
+    depends_on:
+      astera-evidence-search:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1770,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7373/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  astera-evaluator:
+    build: .
+    container_name: astera-v8-evaluator
+    command: ["node", "src/quality-completion-evaluator/api/start.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASTERA_EVALUATOR_API_HOST: 0.0.0.0
+      ASTERA_EVALUATOR_API_PORT: 7374
+      ASTERA_HEALTH_PORT: 7374
+      ASTERA_DB: /data/astera.db
+      ASTERA_LOG_CACHE_DIR: /cache/outbox
+      ASTERA_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/internal_service_secret
+    expose:
+      - "7374"
+    volumes:
+      - astera-data:/data
+      - evaluator-log-cache:/cache
+      - type: bind
+        source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        target: /run/secrets/internal_service_secret
+        read_only: true
+    networks:
+      - astera-evidence-network
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1770,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7374/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  astera-evidence-search:
+    build: .
+    container_name: astera-v8-evidence-search
+    command: ["node", "src/evidence-search/api/start.js"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ASTERA_EVIDENCE_HOST: 0.0.0.0
+      ASTERA_EVIDENCE_PORT: 7375
+      ASTERA_HEALTH_PORT: 7375
+      ASTERA_EVALUATOR_API_URL: http://astera-evaluator:7374
+      ASTERA_EVIDENCE_DB: /data/evidence-search.db
+      ASTERA_EVIDENCE_DURABLE_SPOOL: /data/evidence-jobs
+      ASTERA_EVIDENCE_PROVIDER_CONFIG: /config/evidence-providers.json
+      ASTERA_INTERNAL_SERVICE_SECRET_FILE: /run/secrets/internal_service_secret
+      ASTERA_EVIDENCE_SPOOL_KEY_FILE: /run/secrets/evidence_spool_key
+      ASTERA_SEARCH_GLOBAL_CONCURRENCY: ${ASTERA_SEARCH_GLOBAL_CONCURRENCY:-8}
+      ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY: ${ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY:-2}
+    expose:
+      - "7375"
+    volumes:
+      - evidence-data:/data
+      - evidence-log-cache:/cache
+      - type: bind
+        source: ${ASTERA_EVIDENCE_PROVIDER_CONFIG_HOST:?Set ASTERA_EVIDENCE_PROVIDER_CONFIG_HOST}
+        target: /config/evidence-providers.json
+        read_only: true
+      - type: bind
+        source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        target: /run/secrets/internal_service_secret
+        read_only: true
+      - type: bind
+        source: ${ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST:?Set ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST}
+        target: /run/secrets/evidence_spool_key
+        read_only: true
+    networks:
+      - astera-evidence-network
+    depends_on:
+      astera-evaluator:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1770,uid=1000,gid=1000
+      - /dev/shm:size=256m,mode=1770,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7375/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  astera-evidence-network:
+    driver: bridge
+
+volumes:
+  astera-data:
+  astera-log-cache:
+  evaluator-log-cache:
+  evidence-data:
+  evidence-log-cache:
