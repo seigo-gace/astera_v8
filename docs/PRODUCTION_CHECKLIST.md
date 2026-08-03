@@ -1,47 +1,58 @@
-# Astera v8 v1.1.1 本番投入前チェックリスト
+# Astera v8 — Production Checklist
 
-## 必須
+## A. Responsibility
 
-- [ ] `ASTERA_KEY_PEPPER` を本番専用の長いランダム値に変更した。
-- [ ] HTTPS終端をNginx/Caddy/Cloudflare等で設定した。
-- [ ] `ASTERA_HOST=0.0.0.0` にする場合でも `/process` はAPIキー必須である。
-- [ ] `ASTERA_LOCAL_NO_AUTH=0` である。
-- [ ] Stripe Webhookは raw body を使って署名検証している。
-- [ ] `STRIPE_WEBHOOK_SECRET` はDashboard用/CLI用を混同していない。
-- [ ] APIキー、LLMキー、Stripeキーがログに平文で残らない。
-- [ ] CORSを本番ドメインへ限定した。
-- [ ] 利用規約・プライバシーポリシーを公開した。
-- [x] 成功済みログはVPSに残さず、outboxは成功時即削除・未送信は7日で失効する。
-- [x] `ASTERA_TGS_URL` が稼働中のTGserver `/ingest` を指し、Astera/V8専用`P002`の全severity topicがprovision済みである。
-- [x] TGserver停止時にoutboxが残り、再起動後に再送されることを確認した。
-- [ ] バックアップ/リストア手順を確認した。
-- [ ] レート制限がプラン別に効くことを確認した。
-- [ ] `/signup` の連打対策を確認した。
-- [ ] Node.jsの実行バージョンを固定した。
-- [ ] SQLite運用の限界を理解し、複数Replica・高書込負荷へ移る前の移行条件を決めた。
-- [x] `/process` はユーザー選択なしで用途テンプレートを自動判定し、8段Markdownを返す。
-- [x] 事実確認と危機察知はエビデンスカードまたはエビデンスギャップを出力する。
-- [x] 貼り付けられた8段テンプレートや旧出力を、5本柱の分析対象として誤読しない。
+- [ ] Astera v8 CoreとApp / Account / Commerce / Gateway / KBの責務を分離した
+- [ ] Account、Square、Credit、個人情報DBをRuntimeへ持ち込んでいない
+- [ ] Legacy Tenant / Stripe経路の移行計画とRollbackを用意した
+- [ ] Public docsがLegacy Codeを現行Core機能として宣伝していない
 
-## 推奨
+## B. Verification
 
-- [x] Docker Composeで常駐化し、P002固定の1コンテナへ切り替えた。
-- [ ] Nginxでbody sizeとtimeoutを制御した。
-- [x] structured logをTGserverへ出力し、未送信中だけ分離outboxへ保持する。
-- [ ] 監視用 `/healthz` を外部監視に接続した。
-- [ ] Stripe価格IDを環境変数で管理した。
-- [ ] Pro/Businessを販売する場合、両方のStripe価格IDを設定し、任意価格ID許可は無効のままにした。
-- [ ] OpenAI/Anthropic/Ollama等のモデル名を環境変数で管理した。
-- [x] Stripe webhook再送と重複イベントに備え、イベントID単位の冪等処理を追加した。
+- [ ] 対象Commit SHAを記録した
+- [ ] `npm test`が成功した
+- [ ] `bash scripts/smoke.sh`が成功した
+- [ ] `npm run verify`が成功した
+- [ ] GitHub Actionsが対象SHAで成功した
+- [ ] `KB-HB-016` Registry mismatchを解消し、再検証した
+- [ ] 01〜08の順序と内容をStory inputで確認した
+- [ ] clarification pathを確認した
+- [ ] Optional LLMなしでもCoreが動作した
 
-## v1.1.1 実装済み
+## C. Security
 
-- [x] Stripe webhook event id による冪等性処理
-- [x] subscription id 逆引きによる `customer.subscription.deleted` 反映
-- [x] 本番CORS allowlist
-- [x] HTTPS要求オプション
-- [x] HSTSオプション
-- [x] 401 / 413 / CORS / webhook重複 / 複数署名テスト
-- [x] 自動Domain Router / Template Lens
-- [x] 01-08判断フレームの日本語/英語出力
-- [x] clarification時の安全なtext/plain応答
+- [ ] HTTPS終端を設定した
+- [ ] CORSを許可Originへ限定した
+- [ ] Secretを本番専用値へ変更した
+- [ ] BrowserへServer Secretを埋め込んでいない
+- [ ] Input本文、個人情報、決済情報をLogへ送っていない
+- [ ] TGserver配送前のSecret removalを確認した
+- [ ] OutboxのRetry / TTL / success deletionを確認した
+- [ ] Backup / Restoreを実行確認した
+
+## D. Deployment
+
+- [ ] Docker Composeで起動した
+- [ ] `docker compose config`が成功した
+- [ ] `/healthz`が成功した
+- [ ] Runtime Portを直接公開していない
+- [ ] Reverse Proxy / Cloudflareのtimeoutとbody limitを設定した
+- [ ] Monitoringを接続した
+- [ ] Rollback先のCommit / Image / Configを確認した
+
+## E. External systems
+
+- [ ] Astera AppのAccount Contractを確認した
+- [ ] Square / Credit反映をCommerce側で確認した
+- [ ] Webhook Gatewayの受信・検証・再送を確認した
+- [ ] TGserverのProject / Topicを確認した
+- [ ] ASTERA-KBへ自動保存しないことを確認した
+- [ ] External LLM / Search / Translationは実Credential環境で個別検証した
+
+## F. Documentation
+
+- [ ] README、Public Pack、Architecture、API、Limitationsを同期した
+- [ ] Notion議事録・設計正本へCommit SHAと検証結果を記録した
+- [ ] 未実装・未検証・FutureをImplementedへ混ぜていない
+- [ ] 料金・Credit・法務をApp側正本へ一本化した
+- [ ] `archive/`を現行仕様として参照していない
