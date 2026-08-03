@@ -1,111 +1,82 @@
-# Astera v8 v1.1.1 統合仕様
+# Astera v8 — Human Reader and Dialectic Integration
 
-## 1. 結論
+Updated: 2026-08-03
 
-旧KAGURA v1.1.0 Hyperion Max は、旧KAGURA v1.0.1 の「起動可能なSaaS基盤」に、V8-Hyperion / PCE 構想の中核である「人を読む」と「複数案を競わせる」を統合した最大火力版である。
+## 1. Current position
 
-## 2. 統合した心臓
+この文書は、旧KAGURA / Hyperion Maxの製品説明ではありません。
 
-### 2.1 人を読む Hyperion Human Reader
+現行Astera v8に残る次の2機能を、現在の責務へ整理した技術資料です。
 
-追加ファイル:
+- `src/hyperion-human-reader.js`
+- `src/pillars/dialectic-worker.js`
 
-```text
-src/hyperion-human-reader.js
-```
+## 2. Human Reader
 
-検出する状態:
+Human ReaderはAIではなく、入力内の状態Signalを固定Ruleで検出します。
 
-```text
-urgency       急ぎ・時間圧
-anger         怒り・不満
-fatigue       疲労
-confusion     混乱
-precision     正確性要求
-scope_pressure 全部・完璧・最大火力要求
-build_mode    コード・DL・起動・テスト要求
-```
+主なSignal:
 
-出力:
+- urgency
+- anger
+- fatigue
+- confusion
+- precision
+- scope_pressure
+- build_mode
 
-```json
-{
-  "mode": "high_pressure | supportive | audit | builder | stable",
-  "load": 0,
-  "signals": [],
-  "likely_needs": [],
-  "response_policy": [],
-  "drift_watch": []
-}
-```
+目的:
 
-### 2.2 多重案競争 PCE-DCE
+- 問い返しの優先度を調整する
+- 急ぎと精度要求の衝突を露出する
+- Scope過大や混乱をRiskとして残す
+- 利用者の状態を最終判断の代替にしない
 
-追加ファイル:
+## 3. Dialectic
 
-```text
-src/pillars/dialectic-worker.js
-```
+Dialecticは、ひとつの案へ固定する前に候補を並べます。
 
-生成する候補:
-
-```text
-主案          mainline
-悪手案        bad_hand
-反対案        opposition
-第三案        third_way
-人読み最適案  human_fit
-```
-
-悪手案は採用するためではなく、事故パターンを保存し改善素材にするために残す。
-
-## 3. 処理フロー
-
-```text
-質問
- ▼
-Inquiry preflight + Human Reader
- ├─ 情報不足なら問い返し
- └─ 続行
-     ▼
-Fact / Risk / Inquiry を並列実行
-     ▼
-Multi を逐次実行
-     ▼
-Dialectic Worker が5候補を生成・採点
-     ▼
-Compare Worker が通常減点 + 候補ランキングを統合
-     ▼
-認知マップ + Hyperionランキング + LLMプロンプト
-```
-
-## 4. 実装上の変更点
-
-| ファイル | 変更 |
+| Candidate | Role |
 |---|---|
-| `src/hyperion-human-reader.js` | 人読み状態検出を追加 |
-| `src/pillars/dialectic-worker.js` | 主案・悪手・反対案・第三案・人読み最適案を生成 |
-| `src/pillars/pool-runner.js` | `dialectic` workerを許可 |
-| `src/pillars/inquiry-worker.js` | `human_reading` を出力 |
-| `src/pillars/compare-worker.js` | `selected_candidate` と `candidate_ranking` を統合 |
-| `src/kagura-engine.js` | Hyperion/PCE-DCEフローを統合 |
-| `src/public/index.html` | Hyperion候補と人読みを表示 |
-| `test/engine.test.js` | Hyperion統合テスト追加 |
-| `test/security.test.js` | 人読みテスト追加 |
+| mainline | 現実的な主案 |
+| bad_hand | 事故・失敗Patternを含む悪手 |
+| opposition | 主案への反対案 |
+| third_way | 二択を崩す第三案 |
+| human_fit | 利用者状態と制約へ適合する案 |
 
-## 5. v1.0.1との違い
+悪手案は採用候補ではなく、失敗を検出するための比較材料です。
 
-| 観点 | v1.0.1 | v1.1.0 Hyperion Max |
-|---|---|---|
-| 5本柱 | あり | あり |
-| 人読み | 機嫌中心 | 状態信号・必要対応・ズレ監視まで拡張 |
-| 多重案 | なし | 主案/悪手/反対/第三案/人読み最適案 |
-| Compare | 単一認知マップ採点 | 候補ランキング統合 |
-| プロンプト | 5本柱中心 | 5本柱 + Hyperionランキング |
-| 思想再現 | KAGURA MVP | KAGURA + V8-Hyperion/PCE統合 |
+## 4. Flow
 
-## 6. 注意
+```text
+Inquiry preflight
+  → Fact / Risk / Inquiry
+  → Multi
+  → Human Reader
+  → Dialectic candidates
+  → Compare ranking
+  → 01〜08 Judgment Material
+```
 
-この版は最大火力統合版だが、LLMを何度も呼び出して複数回答を生成する完全PCEではない。v1.1.0では、ルールベースで候補を生成・採点し、最終LLM呼び出しは1回に抑える。これにより、コストと速度を守りながら、Hyperion思想を実装へ落としている。
+## 5. What this is not
 
-将来のv1.2以降で、各候補を個別LLMに投げて本格的な多重回答競争に拡張できる。
+- 複数AIを同時実行するMulti-Agent Systemではない
+- 各候補を別LLMへ投げる仕組みではない
+- 感情診断や心理診断ではない
+- 利用者の機嫌だけで推奨を決めない
+- 将来のLLM多重競争を実装済みと扱わない
+
+## 6. Current files
+
+- `src/hyperion-human-reader.js`
+- `src/pillars/dialectic-worker.js`
+- `src/pillars/inquiry-worker.js`
+- `src/pillars/compare-worker.js`
+- `src/pillars/pool-runner.js`
+- `src/kagura-engine.js`
+- `test/engine.test.js`
+- `test/security.test.js`
+
+## 7. Naming
+
+Hyperion / PCEは歴史的な機能由来名として残ります。公開製品名はAstera v8であり、旧KAGURAを現行名称として使用しません。
