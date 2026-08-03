@@ -12,6 +12,7 @@ Astera v8のREADME、掲載資料、利用者文書、技術文書、運用文�
 - Notion `01｜Astera v8 議事録`
 - Notion `Astera v8｜実装正本（基本・詳細設計・Code）`
 - Notion `Astera公式HP｜公開本文・参照Source正本`
+- Notion `Astera v8｜Customer AI KB`
 
 ## Confirmed Core facts
 
@@ -32,7 +33,7 @@ Astera v8のREADME、掲載資料、利用者文書、技術文書、運用文�
 
 ### Fact
 
-`fact-worker.js`は外部Sourceを検索・検証しません。入力内の情報を分類し、Evidence gapを露出します。内部表現を外部検証済み事実と説明してはいけません。
+`fact-worker.js`は外部Sourceを検索・検証しません。入力内の情報を分類し、Evidence Gapを露出します。内部表現を外部検証済み事実と説明してはいけません。
 
 ### Current information
 
@@ -61,12 +62,13 @@ Astera v8のREADME、掲載資料、利用者文書、技術文書、運用文�
 
 これらは「存在しない機能」ではなく、**現行Codeに残るMigration Debt**です。説明文から消して分離済みに見せることも、正式Core機能として宣伝することも禁止します。
 
-## Updated files
+## Updated GitHub files
 
-### Root
+### Root / configuration
 
 - `README.md`
 - `STRUCTURE.md`
+- `.env.example`
 - `RELEASE_MANIFEST.txt`
 
 ### Public and publication documents
@@ -100,15 +102,30 @@ Astera v8のREADME、掲載資料、利用者文書、技術文書、運用文�
 - `docs/PRODUCTION_CHECKLIST.md`
 - `docs/TROUBLESHOOTING.md`
 - `docs/CHANGELOG.md`
+- `docs/DOCUMENTATION_AUDIT_2026-08-03.md`
+
+## Updated Notion sources
+
+- `01｜Astera v8 議事録`
+- `04｜Astera v8 本体`
+- `05｜Astera v8 GitHub反映・統合`
+- `README.md｜Repository Entry Reference`
+- `AST-M17｜Docs・Migration・Archive`
+- `Astera v8｜実装正本（基本・詳細設計・Code）`
+- `Astera v8｜全Code正本（main・Notion）`
+- `Astera公式HP｜公開本文・参照Source正本`
+- Customer AI KBのAstera定義、API入口、API Key、Rate Limit、Response、SQLite、Key Rotation、決済責務
 
 ## Applied classification
 
 - Core
 - Independent module
 - External system
-- Legacy compatibility
+- Legacy compatibility / Migration Debt
 - Known defect
 - Future / not implemented
+- Observed Contract
+- Internal Draft / Reference
 
 ## Intentionally not rewritten
 
@@ -141,8 +158,11 @@ npm run verify
 
 - Repository文書更新: 完了
 - Release Manifest同期: 完了
-- Stale wording search: 実施中
-- GitHub Actions on latest SHA: 確認中
+- Stale wording search: 実施済み。Code Search Indexが直前Commitを指す場合はFile再取得で現行内容を確認
+- GitHub File再取得: README、Structure、API Reference、Limitations、`.env.example`で実施済み
+- Latest checked Commit: `a2e62502e8cf49a25ac5e973fd041e198580b48a`
+- GitHub combined status: Status Checkなし。成功Evidence未取得
+- Local `npm test` / Smoke / Docker: Connector環境では未実行
 - Docker / external service E2E: 未実行
 - Responsibility migration: 未完了
 - QCE Defect fix: 未実施
