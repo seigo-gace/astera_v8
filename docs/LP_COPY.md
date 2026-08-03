@@ -1,28 +1,49 @@
 # Astera v8 — Landing Page Copy
 
-Status: 現行実装同期
+Status: 2026-08-03 public copy baseline
 
 ## Hero
 
 # 問いを星図に変える。
 
-あなたのAIを、あなたのAIのまま強くする。
+**答える前に、判断できる状態をつくる。**
 
-Astera v8は、主役AIを置き換えず、判断に必要な材料を外側から加える判断材料生成レイヤーです。
+Astera v8はAIではありません。固定RuleとScriptで、問い・資料・検索結果・他Systemの出力を、目的、前提、事実、危険、反対視点、比較案、推奨判断、次工程へ再構成するRuntimeです。
 
 ## Why
 
-AIの答えは速い。
-しかし重要な判断には、目的、前提、事実、Risk、反対視点、比較材料が必要です。
+速い回答と、判断に必要な材料が揃っていることは別です。
 
-Asteraは、問いを38専門ジャンルLensと5本柱で整理し、主役AIへ渡せる8段の判断材料へ変えます。
+表面上は自然な文章でも、本当の目的を外し、前提不足を隠し、未確認情報を事実として扱い、Riskや反対案を落としていることがあります。
+
+Asteraは、答えを生成する前に、その判断構造を検査します。
+
+## AI専用ではありません
+
+Asteraへの入力元は限定されません。
+
+- 人間の問い
+- Web Form
+- CLI / API
+- 業務System
+- MCP
+- 検索結果
+- 文書
+- 他AIの出力
+
+AIと組み合わせる場合は外側の判断材料生成層として使い、AIを使わない場合は人間やApplicationへ直接材料を渡します。
 
 ## Flow
 
-1. 主役AIまたは利用者が問いを入力
-2. AsteraがLens、5本柱、Overlayで判断材料化
-3. 01〜08のJudgment Materialを生成
-4. 主役AIが材料を受け取り最終回答を再構成
+```text
+Input
+  → 38 Domain Lens
+  → Fact / Risk / Inquiry
+  → Multi / Human Reader / Dialectic
+  → Compare
+  → 8段の判断材料
+  → Human / Application / Main AI
+```
 
 ## 8 Sections
 
@@ -35,21 +56,26 @@ Asteraは、問いを38専門ジャンルLensと5本柱で整理し、主役AI�
 - 07 推奨判断
 - 08 主役AIへの再指示
 
-## Features
+## Core Features
 
-- 38専門ジャンルLens
-- Legal / Medical / Current / Evidence / Safety Overlay
-- Node.js V8 Worker Threadsによる処理
-- 外部LLM任意、`null` Provider対応
-- QualityCompletionEvaluator
-- 一般APIと所有者Skill PRIVATE API
-- TGserver Log集約
+- 38 Domain Lens
+- 5本柱
+- Human Reader
+- 複数候補の比較
+- Safety / Evidence Overlay
+- Google V8 / Node.js Worker Threads
+- Optional LLM Adapter
+- Independent Quality Completion Evaluator
+- Structured Logging Boundary
 
 ## Boundaries
 
-AsteraはAI本体、検索エンジン、専門家、KB保存Systemではありません。`KB_ELIGIBLE`は保存済みではなく掲載可能判定です。
+Astera v8 Coreは、Account、Login、決済、Credit、財務DB、Webhook Gateway、KB保存を所有しません。
+
+それらはAstera App、Commerce、Webhook Gateway、ASTERA-KB等の別Systemへ分離します。Repositoryに残る旧Tenant / Stripe Codeは移行対象であり、Core機能として掲載しません。
 
 ## CTA
 
-問いを、答えの前に整える。
-Asteraを通し、主役AIへ判断の星図を渡す。
+**問いを、そのまま答えへ流さない。**
+
+不足、危険、反対、比較を先に見える形へ変え、次の判断へ渡す。
