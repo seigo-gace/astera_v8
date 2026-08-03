@@ -1,57 +1,73 @@
 # Astera v8 FAQ
 
-## AsteraはAIですか
+## Astera v8はAIですか
 
-いいえ。主役AIの外側で判断材料を生成するRuntimeです。外部LLMは任意であり、中核は固定RuleとNode.js V8 Workerで動きます。
+いいえ。固定RuleとScriptで入力を分類・検査・比較し、判断材料へ再構成する非AI Runtimeです。
+
+## AIがないと使えませんか
+
+使えます。01〜07は人間やApplicationが直接利用できます。08は主役AIへ渡す場合の再指示です。
 
 ## ChatGPT、Claude、Geminiを置き換えますか
 
-置き換えません。Asteraの08「主役AIへの再指示」を主役AIへ渡して使います。
+置き換えません。接続する場合は、AIの外側で目的、前提、事実、Risk、反対視点、比較案を整えます。
 
-## なぜ5本柱と8段が両方あるのですか
+## MCP専用ですか
 
-5本柱は内部の検査観点、8段は利用者と主役AIへ渡す出力契約です。
+違います。Web Form、CLI、API、業務System、MCP、文書、検索結果、他AI出力など、入力経路を限定しません。
+
+## 5本柱と8段の違いは何ですか
+
+5本柱は内部処理、8段は利用者・Application・主役AIへ渡す出力契約です。
 
 ## Lensはいくつありますか
 
-Primary候補は`G01`〜`G38`の38専門ジャンルです。別に5種類のOverlayがあります。
+現行Coreは`G01`〜`G38`の38 Domain Lensを持ち、必要に応じてSecondaryと5 Overlayを追加します。
 
-## 用途を手動選択しますか
+## 情報検索を自動で行いますか
 
-現行Runtimeは入力から決定論的に分類します。Primary、Secondary、Overlayの結果を確認できます。
+Astera Coreは検索エンジンではありません。外部検索ToolやServiceから受け取った結果を構造化できますが、取得や真偽を自動保証しません。
 
-## 情報検索も自動で行いますか
+## 翻訳AIやHF Modelを内蔵していますか
 
-Astera本体は検索エンジンではありません。03は事実、推測、未確認、Evidence gapを整理しますが、外部情報の取得・正しさを自動保証しません。
+内蔵していません。翻訳が必要な場合は外部Serviceの原文、翻訳文、Engine情報、検証情報を入力として受け取る境界です。
 
-## 前提不足時はどうなりますか
+## `確認が必要です`は故障ですか
 
-HTTP 200のTextで`確認が必要です`を返す場合があります。不足条件を追加して再実行します。
+必ずしも故障ではありません。重大な前提不足を検出して処理を止めた状態です。
 
-## `KB_ELIGIBLE`は掲載済みですか
+## Quality Completion Evaluatorは常に動きますか
 
-違います。QualityCompletionEvaluatorが掲載可能と判定した状態です。通常APIはKBや`modular-catalog`へ保存しません。
+いいえ。Runtime本体と独立して明示的に呼び出します。
 
-## 品質と完成度は平均95点でよいですか
+## `KB_ELIGIBLE`はKB保存済みですか
 
-いいえ。品質95以上、完成度95以上、Blocking 0、必須Requirement未達0、Evidence不整合0がすべて必要です。
+違います。掲載条件を満たした判定であり、保存完了ではありません。
 
-## Skill APIは一般利用できますか
+## Account、Login、Square、CreditはAstera v8の機能ですか
 
-所有者のアプリGPT用PRIVATE入口です。`ASTERA_SKILL_API_KEY`を公開配布しません。
+Astera全体には必要ですが、Astera v8 Coreの責務ではありません。Astera App / Commerce側が所有します。
 
-## API Keyを再表示できますか
+## RepositoryにStripe Codeがあるのはなぜですか
 
-できません。`/signup` Responseで一度だけ表示されます。現行APIに失効・再発行・Rotation専用Endpointはありません。
+旧実装の互換Code・移行負債として残っています。現行Codeの事実ですが、現在のCommerce正本やCore機能として宣伝しません。
 
-## 本番で`node start.js`を常駐できますか
+## Tenant KeyやSkill Keyは現行APIにありますか
 
-Repository運用規則ではできません。短時間検証に限り、本番常駐はDocker Composeを使用します。
+現行Codeにはあります。ただし、完成責務ではAccount / Gateway側へ移管する対象です。一般向けの製品価値説明には使用しません。
 
-## Webhookで問いを送れますか
+## 外部LLM AdapterがあるならAIではないのですか
 
-現行の`/billing/webhook`はStripe専用です。判断材料生成用の汎用Webhookは未実装です。
+Adapterを呼べることと、Astera自身がAIであることは別です。Coreは`null` Providerでも固定Rule処理を実行します。
 
-## 料金表はどこですか
+## 医療・法律・投資判断を任せられますか
 
-RuntimeにはPlan別Rate LimitとStripe接続境界がありますが、公開料金、Credit減算、返金、解約等の商用条件は本Repository文書だけでは確定しません。
+任せられません。Overlayは確認を強化しますが、専門家判断や外部事実の正しさを保証しません。
+
+## 現在の既知Defectはありますか
+
+`KB-HB-016`をEngineが使用する一方、Blocking Rule Registryが`KB-HB-015`までしか持たない不一致が確認されています。修正・再検証前に完成扱いしません。
+
+## 料金はどこで確認しますか
+
+Astera App側の最新プラン・料金ページを参照します。本Repositoryへ料金・Credit契約を重複保持しません。
