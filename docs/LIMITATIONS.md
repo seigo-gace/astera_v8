@@ -1,56 +1,66 @@
-# Astera v8 Known Limitations
+# Astera v8 — Known Limitations and Open Defects
+
+Updated: 2026-08-03
 
 ## 1. 保証しないもの
 
 - 外部情報の最新性・正確性
 - 医療、法律、税務、投資等の専門判断
-- 主役AIが生成する最終回答の完全性
+- 主役AIや外部Modelが作る最終回答の完全性
 - `KB_ELIGIBLE`後のKB保存
-- 未実装の外部System接続
+- 外部Search、翻訳、MCP、KB、Gatewayの可用性
+- Account、Square、Credit、法務契約
 
-## 2. 現行実装の制限
+## 2. Coreの制限
 
-- Rate LimiterはProcess内Memory Mapで、複数Replica間共有ではない
-- Application状態はSQLiteまたはFallback Storeを使用する
-- Evaluator APIは本体と別Process・別Port
-- RootのDocker ComposeはEvaluator APIを自動起動しない
-- 判断材料生成用の汎用Webhookはない
-- `clarification_needed`はHTTP 200 Textで、専用JSON Fieldはない
-- Tenant Keyの失効、再発行、Rotation専用公開Endpointはない
-- `Retry-After` Headerは返さず、429 Bodyの`rate.resetAt`を使う
-- 外部検索・一次情報取得はAstera本体の保証範囲外
-- ASTERA-KB接続は未実装
+- 外部検索を内蔵しない
+- 翻訳Modelを内蔵しない
+- ASTERA-KBへ自動保存しない
+- 汎用Webhook受信はWebhook Gatewayの責務
+- `clarification`は現行HTTPで専用JSON ContractではなくText Response
+- Optional LLM Adapterの品質・料金・可用性はProvider依存
 
-## 3. 運用制限
+## 3. 現行Repositoryの構造Debt
 
-- 本番常駐はDocker Composeのみ
-- `node start.js`、`npm start`は短時間検証用
-- HTTPS終端、CORS、Secret注入、Backup、監視は運用側で設定
-- TGserver停止中のLogはOutboxへ一時保持し、長期正本にしない
-- `ASTERA_SKILL_API_KEY`をBrowserや一般利用者へ配布しない
+- `src/kagura-engine.js`等に旧内部名称が残る
+- `src/auth`、`src/billing`、`src/store`がCore Repositoryへ混在する
+- Tenant / Rate Limit / Stripe Endpointが現行Serverに残る
+- これらは実装事実だが、完成責務や公開Core機能ではない
+- Account、Square、CreditはAstera App / Commerce側へ移管する
 
-## 4. 商用条件として確定していない項目
+## 4. Confirmed defect
 
-RuntimeにはFree / Pro / BusinessのRate LimitとStripe接続境界がありますが、次は本Repositoryの実装文書だけでは確定しません。
+### `KB-HB-016` Registry mismatch
 
-- 公開価格
-- Credit付与量と減算単位
-- 有料検索APIの追加減算
-- 未使用Credit、有効期限、天井設定
-- 解約、返金
-- 利用規約
-- Privacy Policy
-- 特定商取引法表記
-- Acceptable Use Policy
+`blocking-rule-engine.js`はLens固有Blockingに`KB-HB-016`を使用しますが、`blocking-rules.v1.json`は`KB-HB-015`までしか登録していません。
 
-確定前に旧文書や例示価格を公開仕様として転記しません。
+影響:
 
-## 5. 検証環境依存
+- Rule Registryと実行結果が一致しない
+- 文書だけでVerified扱いできない
+- Code修正、Unit / Integration / Regression Test、Workflow成功が必要
 
-- Docker Engineがない環境ではImage BuildとCompose起動を検証できない
-- Stripe、TGserver、Cloudflare、外部LLMは実Credentialと接続環境が必要
-- GitHub Actionsの過去成功は現在SHAの検証を自動的に意味しない
+## 5. API compatibility limitations
 
-## 6. 変更時の原則
+- Legacy Tenant Keyの失効・再発行・Rotation専用Endpointがない
+- Rate LimiterはProcess内MemoryでReplica間共有ではない
+- 429で`Retry-After` Headerを返さずBodyの`rate.resetAt`に依存する
+- Evaluator APIは本体と別Process
+- Root ComposeはEvaluatorを自動起動しない
+- Skill Key / Tenant Keyは移行完了まで公開しない
 
-制限を解消した場合は、Code、Test、`STRUCTURE.md`、`docs/API_REFERENCE.md`、本書、`RELEASE_MANIFEST.txt`を同じ作業Blockで同期します。
+## 6. Operation limitations
+
+- 本番常駐はDocker Compose
+- HTTPS、CORS、Secret注入、Backup、監視は運用側で設定
+- TGserver Outboxは長期Log正本ではない
+- 外部Serviceの実CredentialなしではE2E検証できない
+- GitHub Actionsの過去成功は最新Commitの成功を意味しない
+
+## 7. Commercial boundary
+
+本Repositoryは、価格、Credit付与、減算、解約、返金、利用規約、Privacy、特商法の正本ではありません。Astera App側の最新正本だけを参照します。
+
+## 8. Completion rule
+
+制限やDefectを解消した場合は、Code、Test、`STRUCTURE.md`、API Reference、Limitations、Notion議事録・正本を同じ作業Blockで同期します。
