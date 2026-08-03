@@ -1,39 +1,39 @@
 # Astera v8 Changelog
 
-この文書はAstera全体の変更履歴です。QualityCompletionEvaluator単体の履歴は`src/quality-completion-evaluator/CHANGELOG.md`を参照してください。
+## 2026-08-03 — Documentation responsibility reset
 
-## Unreleased
+- READMEをPrivate development repository向けに全面再構成
+- Astera v8を非AI Runtimeとして全公開文書へ統一
+- AI専用ではなく、人間、Application、API、MCP、文書、検索結果、他AI出力を扱えることを明記
+- Core、Independent Evaluator、External System、Legacy compatibilityを分離
+- Account、認証、Square、Credit、財務DBをAstera App / Commerce責務へ統一
+- Tenant、Skill Key、Stripe、Storeを現行Code上のMigration Debtとして明記
+- Human Reader / Dialectic資料から旧KAGURA製品説明と未実装LLM多重競争表現を除去
+- API ReferenceをCore / Evaluator / Legacy Endpointへ再分類
+- `KB-HB-016`とBlocking Rule Registryの不一致を既知Defectとして明記
+- Quick Start、User Guide、FAQ、Glossary、Limitations、Security、Deployment、Production Checklist、Troubleshootingを同期
+- Documentation Auditを追加
+- Notion議事録・Docs正本との同期を作業完了条件へ追加
 
-- 公開・利用者・開発者・運用者向けDocument導線を追加
-- Quick Start、User Guide、FAQ、Troubleshooting、Glossary、Known Limitationsを追加
-- API Referenceを現行Endpoint、上限、Status、再試行、認証方式へ同期
-- `FULL_DOCUMENT.md`の欠番と旧構成を解消
-- Public Document Packを現行38 Lens、5 Overlay、8段、Evaluatorへ同期
-- `RELEASE_MANIFEST.txt`へ稼働中のSkill認証・Evaluator API・追加Documentを反映
+## Historical implementation 1.1.1
 
-## 1.1.1
+現行Repositoryには次の実装が存在します。
 
-- 38専門ジャンルLensと5 Overlay
-- 5本柱から01〜08の判断材料生成
-- Human ReaderとDialectic候補
-- Tenant認証、Plan別Rate Limit、使用量計測
-- Skill PRIVATE Process API
-- QualityCompletionEvaluatorの一般・Skill API
-- TGserver Log配送と未送信Outbox
-- Stripe Checkout / Webhook境界
-- Docker Compose本番運用
+- 38 Domain Lens / 5 Overlay
+- Fact / Risk / Multi / Inquiry / Compare
+- Human Reader / Dialectic
+- 01〜08 Judgment Material
+- Optional LLM Adapter
+- Quality Completion Evaluator
+- TGserver logging / outbox
+- Legacy Tenant / Rate Limit / Stripe / Store
 
-## QualityCompletionEvaluator 1.0.0
+Historical implementationの存在は、完成責務または現在の公開製品Contractを意味しません。
 
-- 品質と完成度の個別100点採点
-- 両方95点以上、Blocking 0のAdmission Gate
-- Requirement、Evidence、Domain Lens固定Rule
-- KB Adapter境界とIdempotency
-- Unit、Boundary、Integration、Regression Test
+## Change rules
 
-## 変更記録ルール
-
-- 予定だけの機能を実装済みに書かない
-- Test件数を固定値で維持せず、実行結果へ結び付ける
-- 破壊的なAPI変更はPathまたはSchema Versionを上げる
-- Secret、価格ID、Tokenを記録しない
+- Names、Scope、Core Purposeを無断変更しない
+- Implemented / External / Legacy / Futureを分離する
+- Code変更時はTest、Docs、Notion正本を同期する
+- 未実行・未検証を完成扱いしない
+- 料金・Credit・法務をRuntime文書へ重複保持しない
