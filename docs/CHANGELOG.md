@@ -11,9 +11,28 @@
 - Human Reader / Dialectic資料から旧KAGURA製品説明と未実装LLM多重競争表現を除去
 - API ReferenceをCore / Evaluator / Legacy Endpointへ再分類
 - `KB-HB-016`とBlocking Rule Registryの不一致を既知Defectとして明記
+- Fact Workerが外部検索・一次Source検証を行わないことを明記
+- Current Overlayが最新情報を取得しないことを明記
+- Human Readerが固定Signal処理であり心理診断ではないことを明記
 - Quick Start、User Guide、FAQ、Glossary、Limitations、Security、Deployment、Production Checklist、Troubleshootingを同期
-- Documentation Auditを追加
-- Notion議事録・Docs正本との同期を作業完了条件へ追加
+- Repository内Public文書をInternal Draft / Referenceへ分類
+- `docs/DOCUMENTATION_AUDIT_2026-08-03.md`を追加・最終化
+- `.env.example`のTenant／Skill Key／Stripe変数を互換性維持のMigration Debtとして注記
+- Notion議事録、README参照、Docs Module、実装正本、親Project、GitHub反映ページ、公開本文正本を同期
+- Notion全Code正本をHistorical Snapshot／再生成必要へ訂正
+- Customer AI KBのAstera定義、API入口、API Key、Rate Limit、Response、SQLite、Key Rotation、決済責務を更新
+- Documentation AuditとNotion同期を作業完了条件へ追加
+
+## Validation status for this reset
+
+- GitHub File反映: 確認済み
+- Release Manifest: 監査File接続確認済み
+- Latest checked Commit: `d3d26162ddfdfa61d1df2ffa2f7772d5fef7a746`
+- GitHub Status Check: 成功Evidence未取得
+- Local Test / Smoke / Docker: 未実行
+- 機能Code変更: なし
+- Responsibility Migration: 未完了
+- QCE Defect修正: 未実施
 
 ## Historical implementation 1.1.1
 
