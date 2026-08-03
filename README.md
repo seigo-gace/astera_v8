@@ -1,162 +1,147 @@
-# Astera v8 — コグニションランタイム
+# Astera v8 — Multi-Perspective Cognition Runtime
 
-## 概要
+> **問いを星図に変える。**
+>
+> Astera v8は、AIではありません。固定Rule・Script・検証工程で、問い・資料・検索結果・他Systemの出力を、判断に使える8段の材料へ再構成する非AI Runtimeです。
 
-Astera v8は、Node.js V8上のScriptと固定Ruleで、入力を信頼できる判断材料へ変換するコグニションランタイムです。
+## Repository status
 
-一般的な会話AIや文章生成AIではありません。問い、資料、検索結果、ほかのAIの出力を受け取り、38専門ジャンルLensと5本柱で検証し、主役AIや利用者が判断・設計・実装へ使える8段の材料へ整形します。
+- Repository: private development repository
+- Runtime: Node.js / Google V8
+- Core dependency: Node.js標準機能中心
+- Public interfaces and names are preserved
+- Account、認証、決済、Credit、財務DBはAstera v8 Coreの責務ではありません
+- Repository内のTenant・Stripe関連Codeは、現行実装に残る移行対象です。現在の製品責務として宣伝しません
 
-## 主な機能
+## Astera v8が行うこと
 
-- **V8並列処理**: Node.js Worker ThreadsでFact / Risk / Inquiryを並列実行し、依存するMulti / Compareを順序実行
-- **38専門ジャンルLens**: `G01`〜`G38`からPrimaryを自動選択し、SecondaryとOverlayを付加
-- **決定論的分類**: 固定分類語、Score、Tie Break、ConfidenceをScriptで処理
-- **5本柱**: Fact / Risk / Multi / Inquiry / Compare
-- **8段の判断材料**:
-  1. **01 本当の目的**
-  2. **02 前提不足**
-  3. **03 事実確認**
-  4. **04 危機察知**
-  5. **05 反対視点**
-  6. **06 比較案**
-  7. **07 推奨判断**
-  8. **08 主役AIへの再指示**
-- **安全・検証Overlay**: 法律上の重大条件、医療上の緊急条件、現在情報、厳格な根拠確認、不正利用Riskを追加検査
-- **Human Reader**: 急ぎ、怒り、混乱、正確性要求などを検出し、確認順序へ反映
-- **運用境界**: API Key、Tenant分離、Rate Limit、Stripe境界、TGserver Log集約
-- **npm依存ゼロ**: Node.js標準機能を中心に構成
-
-## 38専門ジャンル
-
-分類一覧、固定ID、4階層Anchor Pathは次を参照してください。
-
-- `docs/LENS_GENRE_INDEX.md`
-- `docs/DOMAIN_TEMPLATE_CATALOG.md`
-
-実行時の正本は次です。
-
-- `src/all-domain-lens-catalog.js`
-- `src/domain-template-router.js`
-
-## 処理経路
+Astera v8は、入力をそのままAIへ渡したり、ひとつの答えへ急いでまとめたりしません。
 
 ```text
 Input
   → Normalize
-  → G01〜G38分類
-  → Primary / Secondary / Overlay
-  → Fact / Risk / Multi / Inquiry / Compare
-  → 01〜08判断材料
+  → Inquiry preflight
+  → G01〜G38 Domain Lens
+  → Fact / Risk / Inquiry
+  → Multi / Human Reader / Dialectic
+  → Compare
+  → 01〜08 Judgment Material
+  → Human / Application / Main AI
 ```
 
-ASTERA-KB完成後は、KBが返す完全4階層Pathを同じ`Gxx` Lensへ接続します。現在のRuntimeは、存在しないKB処理や未取得の完全Pathを装いません。
+入力元はAIに限定されません。人間、Web Form、CLI、業務System、API、MCP、検索結果、文書、他AIの出力などを受け取れます。Astera単体の固定Rule処理だけでも実行でき、外部LLMは任意のAdapterです。
 
-品質・完成度判定Moduleも、通常版と同じCatalogとRouterを参照します。別のLens定義を複製せず、成果物へ選択された`G01`〜`G38` LensのRisk、Evidence、Safety条件を固定Rule判定へ渡します。
+## 8段の判断材料
 
-## 導入と起動
+1. **01 本当の目的**
+2. **02 前提不足**
+3. **03 事実確認**
+4. **04 危機察知**
+5. **05 反対視点**
+6. **06 比較案**
+7. **07 推奨判断**
+8. **08 主役AIへの再指示**
 
-本番環境はDocker Composeで起動します。
+08はAI接続時に使う再指示です。AIを使わない利用経路では、01〜07を人間または別Systemの判断材料として使用できます。
 
-```bash
-docker compose up -d --build
-```
+## 現行Core
 
-ブラウザ:
+- **38 Domain Lens**: `G01`〜`G38`からPrimaryを決定論的に選択し、SecondaryとOverlayを付加
+- **5本柱**: Fact / Risk / Multi / Inquiry / Compare
+- **Human Reader**: 急ぎ、怒り、混乱、精度要求、Scope圧力等を固定Ruleで検出
+- **Dialectic**: 主案、悪手、反対案、第三案、人読み適合案を候補化
+- **Worker Threads**: 独立処理と順序依存処理を分離
+- **Safety Overlay**: 法律、医療、現在情報、厳格Evidence、不正利用Risk
+- **Structured Logging**: Secret除去済みEventをTGserverへ配送し、未送信分だけOutboxへ一時保持
+
+## 独立Module
+
+`src/quality-completion-evaluator`は、成果物の品質と完成度を固定Ruleで評価する独立Moduleです。
+
+- Runtime `/process`へ自動挿入しない
+- 成果物を自動修正しない
+- `KB_ELIGIBLE`は掲載可能判定であり、KB保存完了ではない
+- Domain Lensは本体と同じCatalog / Routerを参照する
+- `KB-HB-016`とRegistryの不一致は、現行Code上の既知Defectとして扱う
+
+## Astera全体での責務分離
 
 ```text
-http://127.0.0.1:7373
+Astera App / Account / Commerce
+  ├─ UI、Account、認証、Plan、Square、Credit
+  └─ 利用者との契約・決済・残高管理
+
+Astera v8
+  ├─ Input整形、分類、検査、比較
+  └─ 8段の判断材料生成
+
+Webhook Gateway
+  └─ 外部Event受信、検証、保存、配送、再送
+
+TGserver
+  └─ Secret除去済みSystem Logの集約
 ```
 
-## Test
+## 起動と検証
+
+短時間の開発検証:
 
 ```bash
 npm test
 bash scripts/smoke.sh
 npm run verify
+npm start
 ```
 
-Lens関連Test:
-
-- `test/all-domain-router.test.js`: 38 Genre、決定性、空Input、短語誤発火、Overlay
-- `test/lens-output-integration.test.js`: 医療、Software移行、CVE、前払Credit、家庭園芸の実例を5本柱・8段出力まで検査
-- `src/quality-completion-evaluator/tests/integration/domain-lens.test.js`: 判定Moduleへの共有Lens接続、Evidence、Blocking
-- `src/quality-completion-evaluator/tests/integration/domain-lens-real-examples.test.js`: 同じ5実例を通常版Routerへ通し、選択Lensを判定Moduleへ渡した実判定を検査
-
-実例検証では、各入力について次を確認します。
-
-1. 通常版Routerが期待する`Gxx`を選択する
-2. 必要なOverlayが選択される
-3. 同じTaxonomy VersionとAnchor Pathを判定Moduleへ渡す
-4. Lens固有RiskまたはEvidence項目が評価Resultへ残る
-5. 完成した評価対象は`KB_ELIGIBLE`、Lens強制確認不足は`KB-HB-016`でBlockingされる
-
-GitHub上では`.github/workflows/verify.yml`がNode.js 22で`npm run verify`を実行します。
-
-## API利用例
-
-### API Key取得
+本番常駐:
 
 ```bash
-curl -X POST http://127.0.0.1:7373/signup
+docker compose up -d --build
 ```
 
-### 判断材料生成
+既定Health endpoint:
 
-```bash
-curl -X POST http://127.0.0.1:7373/process \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: kg_xxx" \
-  -d '{
-    "question":"現在のNode.js APIを互換性を保って段階移行する判断材料を出す",
-    "llm":{"chain":["null"]},
-    "moodAnswers":{"deepThink":true,"accuracy":true}
-  }'
+```text
+http://127.0.0.1:7373/healthz
 ```
 
-### アプリGPT Skill用PRIVATE APIと判定API
+## Documentation
 
-`.env`の`ASTERA_SKILL_API_KEY`へ公開Tenant Keyと異なる32文字以上の乱数を設定する。あなたのアプリGPTがSkillから呼ぶ専用Keyである。
+### 最初に読む
 
-- Astera本体 `POST /v1/skill/process`: 通常`/process`と同じ処理を公開Rate Limit・課金なしで実行する。
-- 判定Module別API `POST /v1/evaluate`: 一般ユーザーがAstera Tenant Keyで利用する。Plan別Rate Limitと利用計測を適用する。
-- 判定Module別API `POST /v1/skill/evaluate`: アプリGPT Skillが専用Keyで無制限利用する。
+- `docs/DOCUMENTATION_INDEX.md`
+- `docs/QUICK_START.md`
+- `docs/USER_GUIDE.md`
+- `docs/FAQ.md`
 
-判定APIは本体と別Process・別Port（既定`127.0.0.1:7374`）で`npm run start:evaluator-api`により起動する。判定だけを返し、KBや`modular-catalog`へ自動掲載しない。
+### 仕様・構造
 
-## 主要な設定
+- `STRUCTURE.md`
+- `docs/ARCHITECTURE.md`
+- `docs/API_REFERENCE.md`
+- `docs/LENS_GENRE_INDEX.md`
+- `docs/DOMAIN_TEMPLATE_CATALOG.md`
+- `docs/HYPERION_PCE_INTEGRATION.md`
 
-Astera v8では`ASTERA_*`を正式な環境変数名として使用します。旧`KAGURA_*`は後方互換として読み込まれます。
+### 公開説明
 
-- `ASTERA_HOST`, `ASTERA_PORT`: Service稼働HostとPort
-- `ASTERA_DB`: Application状態DB
-- `ASTERA_API_KEY`: API Key
-- `ASTERA_SKILL_API_KEY`: あなたのアプリGPT Skill専用PRIVATE API Key。公開Keyと共有しない
-- `ASTERA_EVALUATOR_API_HOST`, `ASTERA_EVALUATOR_API_PORT`: 判定Module別APIのHostとPort
-- `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: HTTP Security設定
-- `ASTERA_TGS_ENABLED`, `ASTERA_TGS_URL`, `ASTERA_TGS_PROJECT_ID`: TGserver接続
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Stripe境界
+- `docs/README_PUBLIC.md`
+- `docs/PRESS_KIT.md`
+- `docs/LP_COPY.md`
+- `docs/BRAND_PHILOSOPHY.md`
 
-## Log集約
+### 制限・運用
 
-HTTP Access、認証失敗、処理結果、Stripe Eventなどは、Secret除去後に構造化JSONとしてTGserverへ送ります。未送信Eventだけを一時Outboxへ保持します。
+- `docs/LIMITATIONS.md`
+- `docs/SECURITY_NOTES.md`
+- `docs/DEPLOYMENT_VPS.md`
+- `docs/PRODUCTION_CHECKLIST.md`
+- `docs/TROUBLESHOOTING.md`
 
-## 重要ドキュメント
+## Documentation truth rules
 
-- `docs/DOCUMENTATION_INDEX.md`: 利用者別Document入口
-- `STRUCTURE.md`: 構成図、依存方向、Module責務
-- `docs/QUICK_START.md`: 最短起動・実行手順
-- `docs/USER_GUIDE.md`: 8段を主役AIへ渡す利用手順
-- `docs/LENS_GENRE_INDEX.md`: 38 Genre固定ID、Anchor Path、KB共有契約
-- `docs/DOMAIN_TEMPLATE_CATALOG.md`: 現行Lens実装の参照先と検証記録
-- `docs/BRAND_PHILOSOPHY.md`: Brand理念
-- `docs/FULL_DOCUMENT.md`: 詳細仕様
-- `docs/ARCHITECTURE.md`: Architecture
-- `docs/API_REFERENCE.md`: API契約
-- `docs/FAQ.md`: よくある質問
-- `docs/TROUBLESHOOTING.md`: 障害切り分け
-- `docs/GLOSSARY.md`: 用語
-- `docs/LIMITATIONS.md`: 保証外・未実装・運用制約
-- `docs/CHANGELOG.md`: Astera全体の変更履歴
-- `docs/PRODUCTION_CHECKLIST.md`: 本番確認
-- `docs/SECURITY_NOTES.md`: Security注意事項
-- `docs/DEPLOYMENT_VPS.md`: VPS Deployment
+1. 実装済み、設計確定、将来構想を混在させない。
+2. Core責務と周辺System責務を混在させない。
+3. Repositoryに残るLegacy Codeを現行製品機能として宣伝しない。
+4. Test未実行・外部接続未検証を完成扱いしない。
+5. 料金・Credit・法務はAstera App側の最新正本を参照し、本Repositoryへ重複保持しない。
