@@ -1,175 +1,144 @@
-# Astera v8 v1.1.1 完全ドキュメント
+# Astera v8 — Current System Document
 
-Status: 現行実装同期
-対象: `quarantine/pre-drive-replacement-2026-07-21`
-実装上の構成正本: `STRUCTURE.md`
+Updated: 2026-08-03
 
-## 第1部｜役割と境界
+## 1. Definition
 
-Astera v8は、主役AIや利用者へ渡す**判断材料を生成する外付けレイヤー**です。会話AI、生成AI、検索エンジン、Knowledge Baseそのものではありません。
+Astera v8は、固定Rule・Script・検証工程で入力を判断材料へ再構成する非AI Runtimeです。
 
-入力された問いを固定RuleとNode.js V8上のWorker Threadsで処理し、38専門ジャンルLens、5本柱、5 Overlayを通して8段の判断材料へ整形します。外部LLMは任意であり、`null` Providerでも中核処理は実行できます。
+入力は人間の問いに限らず、Application、API、MCP、文書、検索結果、他AIの出力などを含みます。外部LLMは任意であり、Core処理の前提ではありません。
 
-Asteraが担当しないもの:
+## 2. Purpose
 
-- 主役AIの置換
-- 外部情報の真偽保証
-- 医療・法律・投資等の専門家判断
-- KBへの自動掲載
-- 成果物の自動修正、Commit、Push、Deploy
+Asteraが作るのは「最終回答」ではなく、最終判断の前に確認すべき構造です。
 
-## 第2部｜入力と出力
+- 本当の目的
+- 前提不足
+- 事実・推測・未確認
+- Risk・失敗条件
+- 反対視点
+- 比較可能な複数案
+- 条件付き推奨
+- 必要な場合の主役AIへの再指示
 
-主な入力:
-
-- `question`: 判断材料を作る問い
-- `context`: 任意の補足情報
-- `language` / `outputLanguage` / `locale`: 任意の出力言語指定
-- `moodAnswers`: 急ぎ、精度要求、深い検討などの補助情報
-- `llm`: 任意の外部LLM Chain
-
-通常出力は`text/plain; charset=utf-8`の8段Markdownです。内部では認知Map、選択Lens、Evidence、Risk、比較候補、再指示を構成しますが、公開APIは利用者向けの判断材料Textを返します。
-
-## 第3部｜38専門ジャンルLensと5 Overlay
-
-Primary Lensは`G01`〜`G38`から1件を決定論的に選びます。Secondaryは最大3件、Overlayは必要なものだけを追加します。
+## 3. Runtime flow
 
 ```text
 Input
   → Normalize
-  → G01〜G38 Score
-  → Primary / Secondary
-  → Overlay
-  → 5本柱
-  → 8段の判断材料
+  → Inquiry preflight
+  → Domain Router
+  → Fact / Risk / Inquiry
+  → Multi
+  → Human Reader / Dialectic
+  → Compare
+  → 01〜08 Judgment Material
+  → Optional LLM / Human / Application
 ```
 
-Overlay:
+## 4. Domain Lens
 
-- `high_stakes_legal`
-- `medical_safety`
-- `current_information`
-- `evidence_strict`
-- `safety_abuse`
+- Primary: `G01`〜`G38`から1件
+- Secondary: 最大3件
+- Overlay: Legal / Medical / Current / Evidence / Safety
+- Taxonomy: `1.0.0`
 
-全Lens ID、名称、4階層Anchor Pathは`docs/LENS_GENRE_INDEX.md`、実行正本は`src/all-domain-lens-catalog.js`です。
+分類正本:
 
-## 第4部｜5本柱と処理順
+- `src/all-domain-lens-catalog.js`
+- `src/domain-template-router.js`
+- `docs/LENS_GENRE_INDEX.md`
 
-5本柱:
+## 5. Five pillars
 
-1. Fact: 確認済み、推測、未確認を分離する
-2. Risk: 実行前に危険、失敗条件、Evidence不足を検出する
-3. Multi: 攻め、守り、批判等の複数視点を作る
-4. Inquiry: 目的、前提不足、反対視点、Human Reader情報を扱う
-5. Compare: 候補を比較し、推奨判断へ統合する
+| Pillar | Responsibility |
+|---|---|
+| Fact | 事実、推測、未確認、Evidence gapの分離 |
+| Risk | 危険、失敗条件、先行対策 |
+| Inquiry | 目的、前提、不足条件、確認優先度 |
+| Multi | 異なる立場・方向性の展開 |
+| Compare | 比較軸、候補順位、推奨条件 |
 
-完全同時実行ではありません。
+Human ReaderとDialecticは、利用者状態と候補競争を追加します。
 
-```text
-Inquiry preflight
-  ├─ 前提不足が重大: clarification_neededで停止
-  └─ 続行
-      → Fact / Risk / Inquiryを並列
-      → Multi
-      → Dialectic候補
-      → Compare
-      → 8段出力
-```
+## 6. Eight outputs
 
-## 第5部｜8段の判断材料
-
-| 番号 | 名称 | 役割 |
+| No. | Name | Use |
 |---:|---|---|
-| 01 | 本当の目的 | 表面的な依頼の奥にある達成目的と成功条件 |
-| 02 | 前提不足 | 足りない条件、制約、確認事項 |
-| 03 | 事実確認 | 事実、推測、未確認情報、Evidence gap |
-| 04 | 危機察知 | Risk、失敗条件、先行対策 |
-| 05 | 反対視点 | 反論、弱点、別の立場 |
-| 06 | 比較案 | 主案、代替案、悪手、比較軸 |
-| 07 | 推奨判断 | 推奨案、理由、条件、次の一手 |
-| 08 | 主役AIへの再指示 | 判断材料を反映した再依頼文 |
+| 01 | 本当の目的 | 表面依頼と達成目的を分離 |
+| 02 | 前提不足 | 続行前に必要な条件を露出 |
+| 03 | 事実確認 | 事実・推測・未確認を分離 |
+| 04 | 危機察知 | 事故・失敗条件・対策 |
+| 05 | 反対視点 | 反論、弱点、別立場 |
+| 06 | 比較案 | 主案、代替案、悪手、第三案 |
+| 07 | 推奨判断 | 条件付き推奨と次の一手 |
+| 08 | 主役AIへの再指示 | AI接続時の再依頼文 |
 
-01〜08の名称と順序は出力契約です。変更時はRuntime、Test、API文書を同時に更新します。
+AIを使わない経路では01〜07をそのまま判断材料として使います。
 
-## 第6部｜利用入口
+## 7. System boundaries
 
-Astera本体（既定`127.0.0.1:7373`）:
+### Astera v8 Core
 
-- `GET /healthz`
-- `POST /signup`
-- `POST /process`
-- `POST /v1/skill/process`
-- `POST /billing/checkout`
-- `POST /billing/webhook`
+- Cognition processing
+- Domain routing
+- Judgment material generation
+- Optional LLM boundary
+- Runtime logging event generation
 
-品質・完成度判定API（別Process、既定`127.0.0.1:7374`）:
+### External systems
 
-- `GET /healthz`
-- `POST /v1/evaluate`
-- `POST /v1/skill/evaluate`
+- Astera App: UI、Account、Login、Plan、Square、Credit
+- Webhook Gateway: Webhook受信・検証・保存・配送
+- ASTERA-KB: Knowledge保存と検索
+- TGserver: System Log集約
+- 主役AI: 最終回答生成
 
-公開Tenant Keyと`ASTERA_SKILL_API_KEY`は別物です。Skill Keyは32文字以上かつ公開Global Keyと異なる必要があります。詳細は`docs/API_REFERENCE.md`を参照してください。
+### Legacy compatibility in this repository
 
-## 第7部｜QualityCompletionEvaluator
+Tenant、Rate Limit、Stripe、Application Store、Skill専用Key等のCodeが残っています。これらは現行実装事実としてAPI文書へ記録しますが、完成責務ではありません。
 
-品質と完成度を別々に100点満点で固定Rule採点します。合格条件は次のすべてです。
+## 8. Optional LLM
 
-- 品質`95`以上
-- 完成度`95`以上
-- Blocking `0`
-- 必須Requirement未達`0`
-- Evidence不整合`0`
-- 評価処理完了
+LLM Adapterは任意です。
 
-平均点での合格は禁止です。`KB_ELIGIBLE`は「掲載可能」の判定であり、KB保存完了ではありません。通常の評価EndpointはKBや`modular-catalog`へ書き込みません。
+- `null` ProviderでCore処理を確認できる
+- OpenAI、Anthropic、Ollama、互換Provider Adapterが現行Codeに存在する
+- Astera自身をAIと呼ぶ根拠にはならない
+- 外部Modelの回答品質や可用性はAstera Coreの保証外
 
-Artifact ProfileとDomain Lensは別責務です。
+## 9. Quality Completion Evaluator
 
-- Artifact Profile: 設計、実装、Test結果、運用文書等の成果物種別
-- Domain Lens: `G01`〜`G38`の分野固有Risk、Evidence、Safety条件
+独立Process / Moduleとして、成果物の品質と完成度を固定Ruleで評価します。
 
-## 第8部｜認証・安全・運用
+合格条件は平均点ではなく、品質、完成度、Blocking、Requirement、Evidenceを個別に満たすことです。
 
-- API KeyはPepper付きSHA-256 Hashで保存
-- Payload上限は1 MiB
-- `question`既定上限は100,000文字
-- `context`既定上限は500,000文字
-- CORS Allowlist、HTTPS強制、HSTSを環境変数で制御
-- Stripe WebhookはRaw Bodyと署名で検証
-- TGserver送信前にSecretを除去
-- 未送信LogだけをOutboxへ保持し、成功時に削除
-- 本番常駐はDocker Composeのみ
+注意:
 
-本番値、Secret、価格IDは文書へ書かず環境変数から注入します。
+- Runtimeへ自動挿入しない
+- 成果物を自動修正しない
+- KBへ自動保存しない
+- `KB_ELIGIBLE`は掲載可能判定
+- `KB-HB-016`とRegistryの不一致は既知Defect
 
-## 第9部｜利用方法
+## 10. Current implemented HTTP surface
 
-最短手順は`docs/QUICK_START.md`、用途別の流れは`docs/USER_GUIDE.md`を参照してください。
+現行Codeには、Core Endpoint、Evaluator Endpoint、Legacy Tenant / Billing Endpointが混在します。詳細は`docs/API_REFERENCE.md`を参照してください。
 
-基本の利用順:
+公開製品のAccount、決済、Credit契約は本Repositoryで確定しません。
 
-1. 問いに目的、対象、成功条件、制約を含める
-2. Asteraへ入力する
-3. 01〜08とEvidence gapを確認する
-4. 不足前提があれば追加入力する
-5. 08の再指示を主役AIへ渡す
-6. 重要判断は一次情報や専門家で確認する
+## 11. Security and logging
 
-## 第10部｜エラーと再試行
+- Payload上限
+- CORS / HTTPS / HSTS設定
+- Worker / external HTTP timeout
+- Secret masking
+- TGserver配送
+- 未送信Eventの一時Outbox
 
-- `400`: 入力形式を修正して再試行
-- `401`: Keyを確認。自動再試行しない
-- `403`: Origin設定を確認。自動再試行しない
-- `413`: Payload、question、contextを縮小
-- `426`: HTTPS経路へ切替
-- `429`: Responseの`rate.resetAt`以降に再試行
-- `500`: `X-Request-ID`を控え、同一入力の無制限連打を避ける
-- `503`: Skill Key、Stripe価格等の必須設定を確認
+Legacy Tenant / Stripe Secretも、移行完了までは保護対象です。
 
-## 第11部｜検証と完成条件
-
-Repository定義の検証:
+## 12. Verification
 
 ```bash
 npm test
@@ -177,18 +146,17 @@ bash scripts/smoke.sh
 npm run verify
 ```
 
-検証はNode.js 22以上で実行します。Documentだけの変更でも、Markdown内のPath・Endpoint・環境変数が実装と一致すること、および`RELEASE_MANIFEST.txt`のPathが存在することを確認します。
+Test Sourceが存在することと、最新Commitで成功したことは別です。完了報告では対象SHAとWorkflow結果を記録します。
 
-過去のTest件数を固定値として本文へ転記しません。Test追加で陳腐化するため、最新結果は実行Logと`src/quality-completion-evaluator/TEST_REPORT.md`で確認します。
+## 13. Known differences
 
-## 第12部｜正本、制限、変更管理
+- 内部`kagura-*`名称が残る
+- Tenant / Stripe / Store責務がCore Repositoryへ混在する
+- `KB-HB-016`がRegistry未登録
+- `clarification`が専用JSON ContractではなくText Response
+- 外部検索・翻訳・KB接続はCore内蔵ではない
+- Account / Square / Creditは別Systemへ移管する
 
-正本の優先順位:
+## 14. Documentation rule
 
-1. `STRUCTURE.md`: 責務、配置、依存方向、運用境界
-2. 実装とSchema: 実際のRuntime契約
-3. `docs/API_REFERENCE.md`: 外部HTTP契約
-4. `docs/LENS_GENRE_INDEX.md`: Lens共有契約
-5. 本書: 全体説明
-
-既知の制限は`docs/LIMITATIONS.md`、変更履歴は`docs/CHANGELOG.md`を参照してください。料金、Credit減算、返金、解約、法務文書等の未確定事項は、本書から推測して確定仕様として扱いません。
+実装済み、移行対象、外部責務、将来構想を必ず分離して記載します。
