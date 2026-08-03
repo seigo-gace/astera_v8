@@ -1,60 +1,51 @@
-# Astera v8 Quick Start
+# Astera v8 — Quick Start
 
-## 目的
+## Purpose
 
-5分程度でAstera本体を起動し、API Key発行、8段出力、Evaluator APIの入口まで確認します。Node.js直接起動は短時間検証用です。本番常駐はDocker Composeを使用します。
+開発環境でCore Runtimeと8段出力を確認します。Account、決済、Creditの構築手順ではありません。
 
-## 必要環境
+## Requirements
 
-- Node.js 22以上
+- Node.js 22+
 - Bash
 - `curl`
-- 外部npm Package不要
+- Docker / Docker Compose（本番相当確認時）
 
-## 1. 設定
+## 1. Prepare
 
 ```bash
 cp .env.example .env
 ```
 
-最低限、次を変更します。
+開発時の最小確認は外部LLMなしで行います。
 
 ```text
-ASTERA_KEY_PEPPER=<長いランダム値>
-ASTERA_LOCAL_NO_AUTH=0
 LLM_CHAIN=null
 ```
 
-`.env`はCommitしません。
+現行ServerがLegacy Tenant認証を要求する構成では、`.env.example`の開発用設定または現行`/signup`を使います。これはCore完成Contractではなく、現行Repository検証のための互換経路です。
 
-## 2. 検証
+## 2. Test
 
 ```bash
 npm test
 bash scripts/smoke.sh
+npm run verify
 ```
 
-## 3. Astera本体を起動
+## 3. Start runtime
 
 ```bash
 npm start
 ```
 
-別Terminalで確認します。
-
 ```bash
 curl http://127.0.0.1:7373/healthz
 ```
 
-## 4. API Keyを発行
+## 4. Generate judgment material
 
-```bash
-curl -X POST http://127.0.0.1:7373/signup
-```
-
-返された`kg_...`は再表示されないため保存します。
-
-## 5. 判断材料を生成
+現行認証設定に合わせて`X-API-Key`を付与します。
 
 ```bash
 curl -X POST http://127.0.0.1:7373/process \
@@ -62,42 +53,36 @@ curl -X POST http://127.0.0.1:7373/process \
   -H "X-API-Key: kg_xxx" \
   -d '{
     "question":"既存APIを停止せず段階移行する判断材料を作る",
-    "context":"互換性維持とRollback経路が必須",
+    "context":"互換性維持、Rollback可能、外部依存追加禁止",
     "llm":{"chain":["null"]},
     "moodAnswers":{"deepThink":true,"accuracy":true}
   }'
 ```
 
-確認項目:
+Check:
 
-- 01〜08が順番どおり出る
-- 03に事実・未確認・Evidence gapが分離される
-- 04にRiskが出る
-- 08に主役AIへの再指示が出る
+- 01〜08の順序
+- 02の不足条件
+- 03の事実 / 推測 / Evidence gap
+- 04のRisk
+- 06の比較候補
+- 07の条件付き推奨
+- 08の再指示
 
-`確認が必要です`が返った場合は、表示された不足前提を`question`または`context`へ追加して再実行します。
+## 5. Clarification
 
-## 6. Evaluator APIを起動
+`確認が必要です`が返った場合は、目的、対象、成功条件、制約、未確認事項を追加します。これは必ずしも障害ではありません。
 
-別Processで起動します。
+## 6. Evaluator
 
 ```bash
 npm run start:evaluator-api
 curl http://127.0.0.1:7374/healthz
 ```
 
-完全な評価Request例:
+Evaluatorは独立Moduleです。`KB_ELIGIBLE`はKB保存完了ではありません。既知の`KB-HB-016` Registry mismatchが解消・再検証されるまでは、Domain Lens Blockingを完全Verifiedと扱いません。
 
-```bash
-curl -X POST http://127.0.0.1:7374/v1/evaluate \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: kg_xxx" \
-  --data-binary @src/quality-completion-evaluator/examples/evaluation-request.design.sample.json
-```
-
-`KB_ELIGIBLE`は保存完了ではありません。
-
-## 7. 本番起動
+## 7. Docker
 
 ```bash
 docker compose up -d --build
