@@ -1,5 +1,8 @@
 # Astera v8 — Brand Philosophy
 
+> **Status: Internal Brand Reference**  
+> 技術仕様、提供範囲、料金、公開ページ本文の正本ではありません。公開時はNotionの最新公開本文正本と各専用正本を優先します。
+
 ## 正式名称
 
 **Astera v8 — Multi-Perspective Cognition Runtime**
@@ -48,3 +51,12 @@ AIを使う場合も、AsteraはAIの代替ではなく外側の検査・比較�
 Asteraという名前は、暗い場所で方向を失わないための星図を表します。
 
 派手な即答より、後から壊れない判断を優先する。人間の判断を奪うのではなく、判断できる状態を作る。それがAstera v8の役割です。
+
+## 技術説明との境界
+
+Brand表現だけで実装状態を判定しません。
+
+- 現行CoreとMigration Debt: `README.md`
+- 現行構造: `STRUCTURE.md`
+- Code・掲載資料監査: `docs/DOCUMENTATION_AUDIT_2026-08-03.md`
+- 制限と未実装: `docs/LIMITATIONS.md`
