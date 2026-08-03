@@ -1,39 +1,53 @@
 # Astera v8 — Public Document Pack
 
-**問いを星図に変える。**
+> **問いを星図に変える。**
 
-このDocument Packは、Astera v8の公開説明、広報、Landing Page、利用案内に使う文書をまとめたものです。Secret、DB、Log、Credentialは含みません。
+このDirectoryは、Astera v8を一般利用者、技術者、協力者へ説明するための公開文書をまとめます。Repository内部のSecret、Credential、個人情報、運用Logは含めません。
 
-## Asteraとは
+## Astera v8とは
 
-Astera v8は、主役AIを置き換えず、問いを38専門ジャンルLensと5本柱で検査し、8段の判断材料へ変換する外付けレイヤーです。
+Astera v8はAIではありません。
+
+問い、資料、検索結果、他Systemや他AIの出力を、目的、前提、事実、危険、反対視点、比較案、推奨判断、次工程へ整理する非AI Runtimeです。AIと組み合わせられますが、AI専用ではなく、人間、Application、API、MCP、業務Systemからも利用できます。
+
+## 公開説明の中心
+
+- 38 Domain Lens
+- Fact / Risk / Multi / Inquiry / Compare
+- Human Reader
+- Dialectic候補競争
+- 01〜08 Judgment Material
+- Model-independent / Optional LLM
+- 独立Quality Completion Evaluator
+- CoreとApp・Commerce・Gateway・Loggingの責務分離
 
 ## 収録物
 
-- `BRAND_PHILOSOPHY.md`: Brand理念
-- `PRESS_KIT.md`: 広報用説明
-- `LP_COPY.md`: Landing Page用Copy
-- `README_PUBLIC.md`: 本案内
-- `FULL_DOCUMENT.md`: 現行仕様の全体説明
-- `QUICK_START.md`: 最短利用手順
-- `USER_GUIDE.md`: 実用手順
-- `FAQ.md`: よくある質問
-- `GLOSSARY.md`: 用語
-- `LIMITATIONS.md`: 保証外・未実装
-- `MANIFEST.md`: 公開Document構成
+- `BRAND_PHILOSOPHY.md`: 名称、思想、タグライン
+- `PRESS_KIT.md`: 紹介文、掲載用要約、表現境界
+- `LP_COPY.md`: Landing Page向け本文構成
+- `FULL_DOCUMENT.md`: 一般・技術をつなぐ全体説明
+- `USER_GUIDE.md`: 利用手順
+- `FAQ.md`: 誤解しやすい点
+- `LIMITATIONS.md`: 保証外、既知Defect、未検証
+- `DOCUMENTATION_AUDIT_2026-08-03.md`: 今回の全面同期記録
 
-## 公開前確認
+## 公開時の禁止表現
 
-- 未実装機能を実装済みと書いていない
-- AsteraをAI本体と表現していない
-- 38 Lens、5 Overlay、8段の名称が正本と一致している
-- `KB_ELIGIBLE`を保存済みと書いていない
-- 未確定の料金、Credit、返金、法務条件を確定扱いしていない
-- Secret、Token、実Credentialを含んでいない
+- Asteraを生成AI、会話AI、AI Agentと呼ぶ
+- AIがなければ使えないと説明する
+- 外部情報の真偽や最新性を保証すると説明する
+- Account、Square、Credit、Stripe Legacy CodeをAstera Core機能として混在させる
+- `KB_ELIGIBLE`をKB保存済みと説明する
+- 未実装・未検証・将来構想を提供中機能として書く
+- 医療、法律、投資等の専門判断を代替すると説明する
 
-## 技術正本
+## 正本の優先順位
 
-- `../STRUCTURE.md`
-- `API_REFERENCE.md`
-- `LENS_GENRE_INDEX.md`
-- `SECURITY_NOTES.md`
+1. 現行Code / Schema / Test
+2. `STRUCTURE.md`
+3. `docs/API_REFERENCE.md`
+4. `docs/LENS_GENRE_INDEX.md`
+5. 公開説明文書
+
+公開文書と実装が矛盾する場合は、宣伝文で実装事実を上書きせず、差異を明示して修正対象にします。
