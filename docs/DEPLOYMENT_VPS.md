@@ -1,112 +1,100 @@
-# Astera v8 v1.1.1 VPS Deployment Guide
+# Astera v8 — VPS Deployment Guide
 
-## 前提
+Updated: 2026-08-03
 
-- サーバー側: Ubuntu Bash
+## 1. Scope
+
+このGuideはAstera v8 Runtimeの配備を扱います。Account、Square、Credit、Webhook Gateway、ASTERA-KBの配備は別Systemの手順です。
+
+## 2. Target
+
+- Ubuntu
 - Docker / Docker Compose
-- Astera v8本体は `127.0.0.1:7373` で起動し、Nginx / Caddy / Cloudflare Tunnel などでHTTPS終端する
-- 正式環境変数は `ASTERA_*`。旧 `KAGURA_*` は後方互換のみ
+- Runtime bind: private interface or localhost
+- Public ingress: Cloudflare Tunnel / Reverse Proxy
+- Logging: TGserver
+- Node.js direct process: short development verification only
 
----
-
-## A. Docker Composeでデプロイする（本番の唯一の方式）
-
-### 1. 配置
-
-【サーバー側 Ubuntu Bash】
+## 3. Prepare
 
 ```bash
-mkdir -p /home/admin1/projects
-cd /home/admin1/projects
-unzip astera-v8-runtime-v1.1.1.zip
-cd astera-v8-runtime-v1.1.1
-```
-
-### 2. 環境変数
-
-【サーバー側 Ubuntu Bash】
-
-```bash
+cd /home/admin1/projects/astera_v8
 cp .env.example .env
-nano .env
 ```
 
-最低限変更:
+設定Category:
 
 ```text
-ASTERA_KEY_PEPPER=長いランダム値に変更
-ASTERA_HOST=127.0.0.1
-ASTERA_PORT=7373
-ASTERA_TGS_ENABLED=1
-ASTERA_TGS_URL=http://127.0.0.1:3000/ingest
-ASTERA_TGS_PROJECT_ID=P002
-ASTERA_LOG_CACHE_DIR=/home/admin1/logs/astera-v8/outbox
-ASTERA_CORS_ORIGINS=https://astera.example.com
-ASTERA_REQUIRE_HTTPS=1
-ASTERA_ENABLE_HSTS=1
-ASTERA_PUBLIC_BASE_URL=https://astera.example.com
-LLM_CHAIN=null
+ASTERA_HOST
+ASTERA_PORT
+ASTERA_CORS_ORIGINS
+ASTERA_REQUIRE_HTTPS
+ASTERA_ENABLE_HSTS
+ASTERA_TGS_ENABLED
+ASTERA_TGS_URL
+ASTERA_TGS_PROJECT_ID
+ASTERA_LOG_CACHE_DIR
+LLM_CHAIN
 ```
 
-### 3. 起動
+Tenant / Skill / Stripe variableは現行Legacy互換Codeが必要な間だけ設定します。新しいAccount / Commerce正本として使用しません。
 
-【サーバー側 Ubuntu Bash】
+## 4. Validate before deployment
+
+```bash
+npm test
+bash scripts/smoke.sh
+npm run verify
+docker compose config
+```
+
+失敗した場合はDeployを続行しません。
+
+## 5. Deploy
 
 ```bash
 docker compose up -d --build
 docker compose ps
-```
-
-### 4. 確認
-
-【サーバー側 Ubuntu Bash】
-
-```bash
 curl http://127.0.0.1:7373/healthz
 ```
 
-正常例:
+## 6. Ingress
 
-```json
-{
-  "ok": true,
-  "store": "sqlite"
-}
+- Runtime Portを直接Internetへ公開しない
+- CloudflareまたはReverse ProxyでHTTPS終端
+- Client Originを限定
+- Body size / timeout / rate policyを外側でも設定
+- Account / Gatewayを経由する公開Contractを優先
+
+## 7. Logging
+
+```text
+Runtime
+  → secret removal
+  → TGserver
+  → success: outbox deletion
+  → failure: temporary outbox retry
 ```
 
-### 5. ログ
+Outboxは監査DBやKnowledge Baseではありません。
 
-アプリの構造化ログはTGserverのAstera/V8専用`P002`へ送られる。未送信中だけ`/home/admin1/logs/astera-v8/outbox`へ置き、TGserverの2xx受領直後に削除する。P002の全severity topicを事前にprovisionしておく。
+## 8. Evaluator
 
-【サーバー側 Ubuntu Bash】
+Evaluator APIを使用する場合は別Process / Serviceとして配備します。Root Composeが自動起動する前提にしません。
 
-```bash
-docker compose logs -f --tail=100 astera-v8
-```
+## 9. Rollback
 
----
+- Deploy前Commit SHAを記録
+- Image / configの戻し先を用意
+- DB / state schema変更は別Migrationとして扱う
+- Legacy Tenant / Stripe removalは代替Contract稼働後に行う
+- Rollback後にhealth、smoke、主要Storyを再確認
 
-## B. Nginx HTTPS終端例
+## 10. Prohibited
 
-`deploy/nginx/astera-v8.conf` をベースに、`astera.example.com` を本番ドメインへ変更する。
-
-【サーバー側 Ubuntu Bash】
-
-```bash
-sudo cp deploy/nginx/astera-v8.conf /etc/nginx/sites-available/astera-v8.conf
-sudo ln -sf /etc/nginx/sites-available/astera-v8.conf /etc/nginx/sites-enabled/astera-v8.conf
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
----
-
-## C. 重要
-
-- `.env` はGitに入れない
-- `ASTERA_KEY_PEPPER` は必ず本番専用の長いランダム値に変える
-- `ASTERA_CORS_ORIGINS` は本番ドメインへ固定する
-- `ASTERA_REQUIRE_HTTPS=1` はHTTPS終端後に有効化する
-- Stripeを使う場合は `STRIPE_WEBHOOK_SECRET` と `STRIPE_SECRET_KEY` を本番値にする
-- Stripe webhook URLは `https://<domain>/billing/webhook`
-- 本番のNode直接常駐、systemd、pm2、nohup、screen、tmuxは禁止
+- `.env` Commit
+- SecretのChat / README貼付
+- Runtime Portの無保護公開
+- Node direct processの本番常駐
+- Account / Square / Credit DBのRuntime内再構築
+- Test未実行状態の完成扱い
