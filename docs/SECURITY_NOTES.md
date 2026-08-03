@@ -1,36 +1,74 @@
-# Astera v8 v1.1.1 Security Notes
+# Astera v8 — Security Notes
 
-## 守るべき秘密情報
+Updated: 2026-08-03
 
-- `ASTERA_API_KEY`
-- `ASTERA_KEY_PEPPER`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- LLM API Key（OpenAI / Anthropic / OpenAI互換）
-- ユーザーがBYOKで渡したAPIキー
+## 1. Security boundary
 
-## 実装済みの防御
+Astera v8 Coreは判断材料生成を担当します。Account、個人情報、Square、Credit、財務DBは別Systemが所有します。
 
-- APIキーは平文保存せず、pepper付きSHA-256ハッシュで保存する。
-- レスポンスとログのsecret/apiKey/token/password/stripe系キーをマスクする。
-- secretらしい値（`sk_...`, `whsec_...`, `kg_...`, `Bearer ...`）を文字列内でもマスクする。
-- Stripe webhookはraw Bufferを使ってHMAC SHA-256で検証する。
-- Stripe webhookは5分許容のtimestamp検証を行う。
-- WorkerPoolにtimeoutを付け、Workerの固着を防ぐ。
-- LLM fetchにtimeoutを付け、外部API待ち固着を防ぐ。
-- JSON parse errorは400で返す。
-- payload上限は1MB。
-- RateLimitはプラン別に適用する。
+Coreへ不要な個人情報や決済情報を渡さないことが第一の防御です。
 
-## 本番で追加すること
+## 2. Secrets currently present in repository configuration
 
-- HTTPS必須。
-- CORSを`*`から本番ドメインへ限定。
-- `ASTERA_KEY_PEPPER`を長いランダム値へ変更。
-- DBのバックアップ導線を作る。ログ正本はTGserver配下のTelegramとする。
-- Docker Composeで再起動管理を行う。
-- Nginx/Caddy/Cloudflare側にもRateLimitを置く。
-- 本番Stripe webhook endpoint secretをテスト用と混ぜない。
-- 利用規約・プライバシーポリシーを公開する。
+- Runtime API secrets
+- Key pepper
+- Optional external LLM keys
+- TGserver connection secrets
+- Legacy Tenant / Skill keys
+- Legacy Stripe secrets
 
-本番のNode直接常駐、systemd、pm2、nohup、screen、tmuxはServer Core規約により使用しない。
+Legacy Secretも、移行完了までは保護対象です。
+
+## 3. Implemented protections
+
+- Secret / token / password pattern masking
+- Payload size protection
+- JSON parse validation
+- Worker timeout
+- External HTTP timeout
+- CORS allowlist option
+- HTTPS / HSTS option
+- Structured logging
+- Failed log delivery outbox
+- Legacy Stripe webhook signature verification
+- Legacy API key hashing
+
+## 4. Required production controls
+
+- Cloudflare / reverse proxyでHTTPS終端
+- CORSを許可Originへ限定
+- BrowserへServer Secretを埋め込まない
+- Input本文、個人情報、決済情報をLogへ送らない
+- TGserverへ送る前にSecret removalを検証
+- Outboxを長期Log DBとして使用しない
+- Container、Secret、Backup、Restore、Monitoringを検証
+- App / Account / CommerceとのContractを明示する
+
+## 5. Data minimization
+
+Asteraへ渡すのは判断に必要な範囲だけにします。
+
+- 不要な氏名、住所、電話、Card情報を除去
+- 文書は必要Sectionへ絞る
+- High-risk dataは識別子を置換する
+- Logには原文を無条件保存しない
+
+## 6. Legacy compatibility warning
+
+Tenant / Stripe / Store CodeはCore外へ移管する対象です。移管前に削除して認証やWebhookを破壊せず、代替Contract、Migration、Testを用意します。
+
+## 7. Known defect
+
+`KB-HB-016`とBlocking Rule Registryの不一致は、評価Integrityに影響するためSecurity / Quality上の未解消事項として扱います。
+
+## 8. Incident evidence
+
+障害報告では次を残します。
+
+- Commit SHA
+- Request ID
+- Timestamp
+- Endpoint
+- Secret除去済みError
+- Reproduction inputの最小化版
+- Container / workflow status
