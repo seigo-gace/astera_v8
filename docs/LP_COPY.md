@@ -1,6 +1,7 @@
 # Astera v8 — Landing Page Copy
 
-Status: 2026-08-03 public copy baseline
+> **Status: Internal Draft / Reference — 2026-08-03**  
+> 最終公開本文ではありません。公開時はNotionの`Astera公式HP｜公開本文・参照Source正本`、現在のRoute、提供範囲、料金導線へ統合します。
 
 ## Hero
 
@@ -37,7 +38,8 @@ AIと組み合わせる場合は外側の判断材料生成層として使い、
 
 ```text
 Input
-  → 38 Domain Lens
+  → Normalize / Inquiry Preflight
+  → 38 Domain Lens + Overlay
   → Fact / Risk / Inquiry
   → Multi / Human Reader / Dialectic
   → Compare
@@ -59,20 +61,28 @@ Input
 ## Core Features
 
 - 38 Domain Lens
-- 5本柱
+- 5 Safety / Evidence Overlay
+- Fact / Risk / Multi / Inquiry / Compare
 - Human Reader
-- 複数候補の比較
-- Safety / Evidence Overlay
+- 主案 / 悪手 / 反対案 / 第三案 / 人読み最適案
 - Google V8 / Node.js Worker Threads
 - Optional LLM Adapter
 - Independent Quality Completion Evaluator
 - Structured Logging Boundary
 
+## 誤解防止
+
+- Factは入力内の確認候補を分類し、外部情報を検証済みにしない
+- Current Overlayは最新情報を取得せず、確認が必要な条件を追加する
+- Human Readerは固定Signal処理であり心理診断ではない
+- `KB_ELIGIBLE`はKB保存完了ではない
+- Test Sourceの存在だけで現行SHAを検証済みにしない
+
 ## Boundaries
 
 Astera v8 Coreは、Account、Login、決済、Credit、財務DB、Webhook Gateway、KB保存を所有しません。
 
-それらはAstera App、Commerce、Webhook Gateway、ASTERA-KB等の別Systemへ分離します。Repositoryに残る旧Tenant / Stripe Codeは移行対象であり、Core機能として掲載しません。
+それらはAstera App、Commerce、Webhook Gateway、ASTERA-KB等の別Systemへ分離します。Repositoryに残るTenant / Stripe / Skill API Codeは移行対象であり、Core機能として掲載しません。
 
 ## CTA
 
