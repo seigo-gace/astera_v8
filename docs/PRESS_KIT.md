@@ -1,5 +1,8 @@
 # Astera v8 — Press Kit
 
+> **Status: Internal Draft / Reference**  
+> 最終掲載文ではありません。公開時はNotionの最新公開本文正本、提供範囲、法務、料金導線と再照合します。
+
 ## 正式名称
 
 **Astera v8 — Multi-Perspective Cognition Runtime**
@@ -34,17 +37,25 @@ AIと接続する場合は、主役AIを置き換えず、その外側で判断�
 - 比較軸なしで一案へ固定する
 - 次工程へ渡せる構造がない
 
-## 現行構成
+## 現行Core
 
 - `G01`〜`G38` Domain Lens
 - 5 Safety / Evidence Overlay
 - Fact / Risk / Multi / Inquiry / Compare
 - Human Reader
-- 主案 / 悪手 / 反対案 / 第三案 / 人読み適合案
+- 主案 / 悪手 / 反対案 / 第三案 / 人読み最適案
 - 01〜08 Judgment Material
 - Optional LLM Adapter
 - Independent Quality Completion Evaluator
 - TGserver Logging Boundary
+
+## 表現上の重要な制限
+
+- Fact Workerは外部検索や一次Source検証を行わない
+- Current Overlayは最新情報を取得せず、確認必要性を追加する
+- Human Readerは固定Signal処理であり心理診断ではない
+- Quality Completion EvaluatorはKBへ自動保存しない
+- 現在SHAのTest成功はWorkflow Evidenceを取得するまで未検証
 
 ## Astera全体での位置
 
@@ -54,6 +65,10 @@ AIと接続する場合は、主役AIを置き換えず、その外側で判断�
 - TGserver: System Log集約
 - ASTERA-KB: Knowledge管理。Astera v8 Coreとは別責務
 
+## 現行Repositoryに残る移行対象
+
+Tenant、Rate Limit、Usage Meter、Stripe、所有者Skill API、Application Store等のCodeが残っています。これらは現行実装事実ですが、Astera v8 Coreの正式機能として掲載しません。
+
 ## 掲載時の注意
 
 - AsteraをAI本体と表現しない
@@ -61,5 +76,6 @@ AIと接続する場合は、主役AIを置き換えず、その外側で判断�
 - Repositoryに残るTenant / Stripe Codeを現在のCore責務として説明しない
 - 外部情報の正しさを保証すると表現しない
 - `KB_ELIGIBLE`を保存済みと表現しない
-- 料金、Credit、法務はAstera App側の最新資料を参照する
+- 料金、Credit、法務はAstera App側の最新正本を参照する
 - Test未実行や既知Defectを完成済みと表現しない
+- 本DraftをNotion公開正本より優先しない
