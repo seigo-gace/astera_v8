@@ -15,7 +15,7 @@ const logger = {
   async flush() {}
 };
 
-async function startMain({ evidenceClient }) {
+async function startMain({ evidenceClient, engine }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-main-evidence-'));
   const store = new SQLiteStore(path.join(root, 'astera.db'));
   const server = new AsteraServer({
@@ -24,7 +24,7 @@ async function startMain({ evidenceClient }) {
     store,
     logger,
     evidenceClient,
-    engine: { async destroy() {} }
+    ...(engine ? { engine } : { engine: { async destroy() {} } })
   });
   const issued = server.tenants.issueKey({ plan: 'free' });
   server.start();
@@ -150,6 +150,74 @@ test('unauthenticated user cannot access the evidence route', async () => {
     });
     assert.equal(response.status, 401);
     assert.equal(calls, 0);
+  } finally {
+    await stopMain(runtime);
+  }
+});
+
+test('integrated process keeps evidence search separate and passes its result into deterministic judgment materials', async () => {
+  const evidenceCalls = [];
+  const engineCalls = [];
+  const evidenceResult = {
+    schema_version: 'astera.evidence-search.result.v1',
+    request_id: 'server-generated',
+    tenant_id: 'server-tenant',
+    status: 'FINAL_VALID',
+    evidence: [{
+      candidate_id: 'ev-1',
+      source_role: 'OFFICIAL',
+      source_id: 'official-test',
+      canonical_locator: { url: 'https://example.test/evidence', replayable: true },
+      fields: { claim: 'API compatibility is preserved' }
+    }],
+    coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE' },
+    quality: { final: { status: 'FINAL_VALID', score_bp: 9700 } },
+    ai_used: false,
+    payment_executed: false,
+    paid_usage_reports: []
+  };
+  const evidenceClient = {
+    async search(payload, context) {
+      evidenceCalls.push({ payload, context });
+      return { ...evidenceResult, request_id: context.requestId, tenant_id: context.tenantId };
+    }
+  };
+  const engine = {
+    async process(input, tenant) {
+      engineCalls.push({ input, tenant });
+      return {
+        result: { type: 'cognitive_map', non_ai: true, comparison: { verdict: { decision: 'recommend' } } },
+        material: { compact_text: 'decision-material' },
+        runtime: { ai_used: false, llm_called: false }
+      };
+    },
+    async destroy() {}
+  };
+  const runtime = await startMain({ evidenceClient, engine });
+  try {
+    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': runtime.apiKey
+      },
+      body: JSON.stringify({
+        question: 'APIを互換性を維持したまま段階移行する。成功条件はRollback可能であること。',
+        domain_lens: { id: 'G29' }
+      })
+    });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.schema_version, 'astera.integrated.result.v1');
+    assert.equal(result.non_ai, true);
+    assert.equal(result.evidence.status, 'FINAL_VALID');
+    assert.equal(result.decision_materials.runtime.ai_used, false);
+    assert.equal(result.decision_materials.runtime.llm_called, false);
+    assert.equal(evidenceCalls.length, 1);
+    assert.equal(engineCalls.length, 1);
+    assert.equal(engineCalls[0].input.evidencePacket.status, 'FINAL_VALID');
+    assert.equal(evidenceCalls[0].payload.paid_search.enabled, false);
+    assert.match(evidenceCalls[0].payload.domain_lens.id, /^G\d{2}$/);
   } finally {
     await stopMain(runtime);
   }
