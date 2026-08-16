@@ -226,14 +226,34 @@ function aggregateTaskResults(taskResults) {
   const riskWeight=allRisks.reduce((sum,item)=>sum+Number(item.weight||0),0);
   const risks={ pillar:'risk',risk_count:allRisks.length,risks:allRisks,highest:allRisks[0]||null,level:riskWeight>=55?'high':riskWeight>=20?'medium':'low',safety_gates:unique(taskResults.flatMap((r)=>r.risks.safety_gates||[])),domain_checks:taskResults.flatMap((r)=>r.risks.domain_checks||[]),per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.risks])) };
   const inquiry={ pillar:'inquiry',problem_health:{healthy:taskResults.every((r)=>r.inquiry.problem_health?.healthy),reason:join(taskResults.filter((r)=>!r.inquiry.problem_health?.healthy).map((r)=>`${r.task.id}:${r.inquiry.problem_health?.reason}`),'全Taskの前提条件は追跡可能')},missing_fields:unique(taskResults.flatMap((r)=>(r.inquiry.missing_fields||[]).map((x)=>`${r.task.id}:${x}`))),missing_questions:unique(taskResults.flatMap((r)=>r.inquiry.missing_questions||[])),inquiry_lens:unique(taskResults.flatMap((r)=>r.inquiry.inquiry_lens||[])),per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.inquiry])) };
-  const multi={ pillar:'multi',per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.multi])),perspectives:taskResults.flatMap((r)=>(r.multi.perspectives||[]).map((x)=>({task_id:r.task.id,...x}))),angles:taskResults.length===1?(taskResults[0].multi.angles||{}):{per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.multi.angles||{}]))},recommended:taskResults.map((r)=>`${r.task.id}:${r.multi.recommended}`).join(' / ') };
-  const dialectic={ pillar:'dialectic',engine:'Astera Deterministic Dialectic',mode:'decision_materials',per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.dialectic])),candidates:taskResults.flatMap((r)=>(r.dialectic.candidates||[]).map((x)=>({task_id:r.task.id,...x}))),selected:taskResults.length===1?taskResults[0].dialectic.selected:null,bad_hand_lessons:unique(taskResults.flatMap((r)=>r.dialectic.bad_hand_lessons||[])) };
+  const multi={ pillar:'multi',per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.multi])),perspectives:taskResults.flatMap((r)=>(r.multi.perspectives||[]).map((x)=>({task_id:r.task.id,...x}))),angles:taskResults.length===1?(taskResults[0].multi.angles||{}):{per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.multi.angles||{}]))},trade_off_map:taskResults.flatMap((r)=>(r.multi.trade_off_map||[]).map((x)=>({task_id:r.task.id,...x}))) };
+  const dialectic={ pillar:'dialectic',engine:'Astera Deterministic Dialectic',mode:'decision_materials',per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.dialectic])),candidates:taskResults.flatMap((r)=>(r.dialectic.candidates||[]).map((x)=>({task_id:r.task.id,...x}))),bad_hand_lessons:unique(taskResults.flatMap((r)=>r.dialectic.bad_hand_lessons||[])) };
   const taskComparisons=taskResults.map((r)=>({task_id:r.task.id,...r.comparison}));
   const bottleneck=[...taskComparisons].sort((a,b)=>a.score-b.score||a.task_id.localeCompare(b.task_id))[0]||null;
   const decisions=taskComparisons.map((c)=>c.verdict?.decision).filter(Boolean);
   const globalDecision=decisions.includes('hold_and_clarify')?'hold_and_clarify':decisions.includes('recommend_with_caution')?'recommend_with_caution':'recommend';
   const comparison={ pillar:'compare',score:bottleneck?.score||0,answer_line_distance:100-(bottleneck?.score||0),score_model:{aggregation:'MIN_TASK_SCORE_BOTTLENECK',reason:'弱いTaskを平均値で隠さず、多重Task全体を最弱成立TaskでGateする。'},score_breakdown:taskComparisons.map((c)=>({task_id:c.task_id,score:c.score,decision:c.verdict?.decision,breakdown:c.score_breakdown})),contradictions:taskComparisons.flatMap((c)=>(c.contradictions||[]).map((x)=>({task_id:c.task_id,...x}))),selected_candidate:bottleneck?.selected_candidate?{task_id:bottleneck.task_id,...bottleneck.selected_candidate}:null,candidate_ranking:taskComparisons.flatMap((c)=>(c.candidate_ranking||[]).map((x)=>({task_id:c.task_id,...x}))),rejected_candidates:taskComparisons.flatMap((c)=>(c.rejected_candidates||[]).map((x)=>({task_id:c.task_id,...x}))),uncertainty:{per_task:Object.fromEntries(taskComparisons.map((c)=>[c.task_id,c.uncertainty||{}])),bottleneck_task_id:bottleneck?.task_id||null},per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.comparison])),verdict:{decision:globalDecision,angle:bottleneck?.verdict?.angle||'task_graph',reason:`全TaskをMIN_TASK_SCORE_BOTTLENECKで統合。bottleneck=${bottleneck?.task_id||'-'} score=${bottleneck?.score||0}。`,objective:'Analysis Task Graph全体をHard Constraint・Dependency・Evidence Gate付きで成立させる。'} };
   return {facts,risks,inquiry,multi,dialectic,comparison};
+}
+
+function buildHyperionCompatibility(dialectic, comparison) {
+  const rankingByKey = new Map((comparison.candidate_ranking || []).map((candidate) => [`${candidate.task_id}:${candidate.id}`, candidate]));
+  return {
+    ...dialectic,
+    compatibility_contract: {
+      schema_version: 'astera.hyperion.dialectic.compat.v1',
+      score_source: 'compare.candidate_ranking',
+      decision_authority: 'compare'
+    },
+    candidates: (dialectic.candidates || []).map((candidate) => {
+      const ranked = rankingByKey.get(`${candidate.task_id}:${candidate.id}`);
+      return {
+        ...candidate,
+        score: Number.isInteger(ranked?.score) ? ranked.score : null,
+        answer_line_distance: Number.isInteger(ranked?.answer_line_distance) ? ranked.answer_line_distance : null
+      };
+    })
+  };
 }
 
 class KaguraEngine {
@@ -306,7 +326,8 @@ class KaguraEngine {
     const judgment=this.frame({request,context,taskResults,aggregate,lang}); const material=this.material(judgment);
     const fiveStage={schema_version:'astera.five-stage.v1',order:[...FIVE_STAGE],execution_waves:request.analysis_task_packet.execution_waves,tasks:taskResults.map((r)=>({task_id:r.task.id,lens_id:r.task.domain.primary?.id||null,evidence_state:r.evidence.state,evidence_quality:{score_bp:r.evidence.quality_score_bp,gate_bp:r.evidence.quality_gate_bp,authorities:r.evidence.distinct_authority_count||0,source_families:r.evidence.distinct_source_family_count||0,reinforcement:r.evidence.reinforcement_attempt_count||0,corroboration:r.evidence.new_corroboration_count||0},fact:r.facts,risk:r.risks,multi:r.multi,inquiry:r.inquiry,compare:r.comparison,dialectic:r.dialectic}))};
     const compatibilityDomain=taskResults.length===1?taskResults[0].task.domain:{taxonomy_version:taskResults[0]?.task.domain?.taxonomy_version||null,primary:null,secondary:[],overlays:[],per_task:Object.fromEntries(taskResults.map((r)=>[r.task.id,r.task.domain]))};
-    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',non_ai:true,request_model:request,analysis_task_packet:request.analysis_task_packet,five_stage:fiveStage,task_results:taskResults.map((r)=>({task:r.task,evidence:r.evidence,preflight:r.preflight,facts:r.facts,risks:r.risks,inquiry:r.inquiry,multi:r.multi,dialectic:r.dialectic,comparison:r.comparison})),domain:compatibilityDomain,facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,hyperion:{engine:'Astera Deterministic Dialectic',mode:'decision_materials',dialectic:aggregate.dialectic},comparison:aggregate.comparison,judgment};
+    const compatibilityDialectic=buildHyperionCompatibility(aggregate.dialectic, aggregate.comparison);
+    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',non_ai:true,request_model:request,analysis_task_packet:request.analysis_task_packet,five_stage:fiveStage,task_results:taskResults.map((r)=>({task:r.task,evidence:r.evidence,preflight:r.preflight,facts:r.facts,risks:r.risks,inquiry:r.inquiry,multi:r.multi,dialectic:r.dialectic,comparison:r.comparison})),domain:compatibilityDomain,facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,hyperion:{engine:'Astera Deterministic Dialectic',mode:'decision_materials',dialectic:compatibilityDialectic},comparison:aggregate.comparison,judgment};
     this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Decision graph completed: ${aggregate.comparison.verdict.decision}`,payload:{task_count:tasks.length,wave_count:request.analysis_task_packet.execution_waves.length,bottleneck_score:aggregate.comparison.score,decision:aggregate.comparison.verdict.decision,instruction_mode:request.instruction_understanding?.mode||'UNKNOWN',non_ai:true}});
     return {result,material,prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_deterministic_rules',instruction_mode:request.instruction_understanding?.mode||'UNKNOWN',task_count:tasks.length,wave_count:request.analysis_task_packet.execution_waves.length}};
   }

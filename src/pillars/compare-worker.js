@@ -64,10 +64,17 @@ async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry 
     : '比較可能な候補がない。';
 
   return {
-    pillar: 'compare', task_id: t.id || null, score, answer_line_distance: answerLineDistance,
+    pillar: 'compare',
+    task_id: t.id || null,
+    score,
+    answer_line_distance: answerLineDistance,
     score_model: { formula: 'objectiveFit*0.30 + evidenceFit*0.25 + riskControl*0.20 + constraintFit*0.15 + reversibility*0.10', weights: WEIGHTS },
     score_breakdown: selected ? Object.entries(WEIGHTS).map(([key, weight]) => ({ key, weight, raw: selected.metrics[key] ?? 0, contribution: Number(((selected.metrics[key] || 0) * weight).toFixed(2)) })) : [],
-    contradictions, dependency_blockers: dependencyBlockers, hard_blockers: hardBlockers, selected_candidate: selected, candidate_ranking: ranking,
+    contradictions,
+    dependency_blockers: dependencyBlockers,
+    hard_blockers: hardBlockers,
+    selected_candidate: selected,
+    candidate_ranking: ranking,
     rejected_candidates: ranking.filter((candidate) => candidate.id !== selected?.id).map((candidate) => ({ id: candidate.id, label: candidate.label, score: candidate.score, reason: candidate.id === 'bad_hand' ? '意図的悪手のため採用対象外。' : `首位との差=${selected ? selected.score - candidate.score : '-'} / failure=${candidate.failure_modes?.[0] || '明示なし'}` })),
     evidence_gate: {
       required: evidenceRequired,
@@ -96,7 +103,11 @@ async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry 
       selection_margin: margin
     },
     domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name, compare_lens: domain.primary.compare_lens || [] } : null,
-    verdict: { decision, angle: selected?.angle || multi.recommended || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
+    authority: {
+      stage: 'compare',
+      owns: ['score', 'candidate_ranking', 'selected_candidate', 'rejected_candidates', 'uncertainty', 'decision']
+    },
+    verdict: { decision, angle: selected?.angle || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
   };
 }
 
