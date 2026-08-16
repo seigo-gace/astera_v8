@@ -31,10 +31,24 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
     const trigger = (text.match(rule.re) || [''])[0];
     risks.push({ rule_id: rule.id, key: rule.key, weight: rule.weight, trigger, impact: rule.impact, why: `Task ${task?.id || '-'} の入力Signal「${trigger}」が${rule.impact}に関係する。`, mitigation: '対象条件・変更境界・検証証拠を明示してから確定する。' });
   }
-  if (evidence.state === 'REJECTED') risks.push({ rule_id: 'RISK-EVIDENCE-QUALITY', key: 'evidence_quality', weight: 24, trigger: evidence.source_status, impact: '根拠品質不足による誤判断', why: `Evidence Search status=${evidence.source_status} のため根拠を確定事実として利用できない。`, mitigation: '根拠不足を未解決として保持し追加根拠まで確定しない。' });
+
+  const evidenceRequired = Boolean(task?.evidence_need?.required);
+  if (evidenceRequired && evidence.state !== 'VALID') {
+    risks.push({
+      rule_id: 'RISK-REQUIRED-EVIDENCE-MISSING', key: 'required_evidence_missing', weight: 30,
+      trigger: `${evidence.state}:${evidence.source_status || 'none'}`,
+      impact: '必須根拠未成立のまま推奨・判断を確定する危険',
+      why: `Task ${task?.id || '-'} はEvidence必須だが state=${evidence.state}。${(evidence.eligibility_reasons || []).join(' / ')}`,
+      mitigation: 'FINAL_VALID契約を満たすEvidence Packetが得られるまで最終確定を禁止する。'
+    });
+  }
+  if (evidence.state === 'REJECTED') risks.push({ rule_id: 'RISK-EVIDENCE-QUALITY', key: 'evidence_quality', weight: 24, trigger: evidence.source_status, impact: '根拠品質不足による誤判断', why: `Evidence Search status=${evidence.source_status}。${(evidence.eligibility_reasons || []).join(' / ')}`, mitigation: '根拠不足を未解決として保持し追加根拠まで確定しない。' });
   if (evidence.conflict_detected) risks.push({ rule_id: 'RISK-EVIDENCE-CONFLICT', key: 'evidence_conflict', weight: 26, trigger: 'source conflict', impact: '相反する根拠による結論反転', why: 'Evidence SearchのSource Conflictが未解消。', mitigation: 'Authority・Version・Date・Scopeを揃えてConflictを解消する。' });
   if (/PARTIAL|UNKNOWN/.test(evidence.coverage_state) && !['NOT_PROVIDED', 'NOT_REQUIRED'].includes(evidence.state)) risks.push({ rule_id: 'RISK-EVIDENCE-COVERAGE', key: 'evidence_coverage', weight: 14, trigger: evidence.coverage_state, impact: '探索範囲不足による見落とし', why: `Evidence coverage=${evidence.coverage_state}。`, mitigation: 'Coverage不足を明示して必要Source範囲を追加する。' });
   if (evidence.provider_failures.length) risks.push({ rule_id: 'RISK-RETRIEVAL-FAILURE', key: 'retrieval_failure', weight: 16, trigger: evidence.provider_failures.map((item) => `${item.provider_id}:${item.error_code}`).join(', '), impact: '根拠取得失敗による判断材料欠落', why: `${evidence.provider_failures.length} Providerの取得失敗。`, mitigation: '取得失敗を未解決として保持する。' });
+  if (evidence.state === 'VALID' && Number(evidence.quality_score_bp || 0) < 9700) {
+    risks.push({ rule_id: 'RISK-EVIDENCE-MARGIN', key: 'evidence_margin', weight: 8, trigger: String(evidence.quality_score_bp), impact: '最終95点Gateは通過したが余裕が小さいEvidenceへの過信', why: `Evidence quality=${evidence.quality_score_bp}bp。95点Gate通過と完全性は同義ではない。`, mitigation: 'Coverage・Source多様性・未確認項目を別途保持する。' });
+  }
   if ((task?.prohibitions || []).length) risks.push({ rule_id: 'RISK-PROHIBITION-BREACH', key: 'prohibition_breach', weight: 30, trigger: (task.prohibitions || []).join(' / '), impact: 'Master明示禁止条件の違反', why: '禁止条件は候補Scoreより上位のHard Gate。', mitigation: '禁止条件に触れる候補を選択対象から除外する。' });
   if ((task?.hard_blockers || []).length) risks.push({ rule_id: 'RISK-HARD-BLOCKER', key: 'hard_blocker', weight: 40, trigger: task.hard_blockers.join(' / '), impact: 'Parser Guard・未解決意味・必須条件未成立のまま判断確定する危険', why: 'Hard BlockerはScore計算より上位のFail-Closed条件。', mitigation: 'Hard Blockerを解消するまでTaskの最終確定を禁止する。' });
 
@@ -42,11 +56,24 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
   const checks = domainRiskChecks(domain);
   const totalWeight = deduped.reduce((sum, item) => sum + item.weight, 0);
   const level = totalWeight >= 55 ? 'high' : totalWeight >= 20 ? 'medium' : 'low';
-  const safetyGates = unique([...(domain.primary?.safety_gate || []), ...(domain.overlays || []).flatMap((overlay) => overlay.safety_gate || []), ...(task?.prohibitions || []), ...(task?.hard_blockers || [])]);
+  const safetyGates = unique([...(domain.primary?.safety_gate || []), ...(domain.overlays || []).flatMap((overlay) => overlay.safety_gate || []), ...(task?.prohibitions || []), ...(task?.hard_blockers || []), ...(evidenceRequired && evidence.state !== 'VALID' ? ['required_evidence_must_be_valid'] : [])]);
   return {
     pillar: 'risk', task_id: task?.id || null, rule_ids: unique(deduped.map((item) => item.rule_id)), risk_count: deduped.length, risks: deduped,
     domain_checks: checks, safety_gates: safetyGates, highest: deduped[0] || null, level,
-    evidence_state: { state: evidence.state, quality_score_bp: evidence.quality_score_bp, coverage_state: evidence.coverage_state, conflict_detected: evidence.conflict_detected },
+    evidence_state: {
+      required: evidenceRequired,
+      state: evidence.state,
+      source_status: evidence.source_status,
+      eligibility_reasons: evidence.eligibility_reasons || [],
+      quality_score_bp: evidence.quality_score_bp,
+      quality_gate_bp: evidence.quality_gate_bp,
+      coverage_state: evidence.coverage_state,
+      conflict_detected: evidence.conflict_detected,
+      distinct_authority_count: evidence.distinct_authority_count || 0,
+      distinct_source_family_count: evidence.distinct_source_family_count || 0,
+      reinforcement_attempt_count: evidence.reinforcement_attempt_count || 0,
+      new_corroboration_count: evidence.new_corroboration_count || 0
+    },
     request_model: { target: request.target, action: request.action }, warnings: deduped.filter((risk) => risk.weight >= 20).map((risk) => risk.key)
   };
 }
