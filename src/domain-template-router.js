@@ -58,6 +58,10 @@ const DOMAIN_SAFETY_GATES = Object.freeze({
   G35: ['法・民間保護・Escalation Riskを必ず確認する']
 });
 
+const OVERLAY_PRIMARY_FALLBACKS = Object.freeze({
+  medical_safety: 'G23'
+});
+
 const MIN_CONTROLLED_PRIMARY_SCORE = 6;
 const MIN_TEXT_PRIMARY_SCORE = 8;
 const MIN_SECONDARY_SCORE = 6;
@@ -274,6 +278,23 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
   return lines.join('\n');
 }
 
+function overlayPrimaryFallback(scored, overlays) {
+  for (const overlay of overlays) {
+    const genreId = OVERLAY_PRIMARY_FALLBACKS[overlay.id];
+    if (!genreId) continue;
+    const scoredGenre = scored.find((item) => item.genre.id === genreId);
+    if (!scoredGenre) continue;
+    return {
+      ...scoredGenre,
+      classification_basis: 'SAFETY_OVERLAY_FALLBACK',
+      confidence: 0.9,
+      taxonomy_review_required: false,
+      matched_signals: [...new Set([...(scoredGenre.matched_signals || []), ...(overlay.matched_signals || [])])]
+    };
+  }
+  return null;
+}
+
 function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
   const routeText = normalized.core_request.trim();
@@ -303,6 +324,26 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   const best = scored[0];
 
   if (!qualifiedScore(best)) {
+    const fallback = overlayPrimaryFallback(scored, overlays);
+    if (fallback) {
+      const primary = publicGenre(fallback);
+      return {
+        router: 'all_domain_lens_router_v2',
+        taxonomy_version: TAXONOMY_VERSION,
+        user_selection_required: false,
+        input_valid: true,
+        input_error: null,
+        classification_basis: primary.classification_basis,
+        confidence: primary.confidence,
+        taxonomy_review_required: primary.taxonomy_review_required,
+        primary,
+        secondary: [],
+        overlays,
+        normalized,
+        lens_text: buildLensText(primary, overlays),
+        analysis_text: normalized.analysis_text
+      };
+    }
     const confidence = Math.max(0.1, Math.min(0.49, 0.15 + best.similarity * 0.5));
     return {
       router: 'all_domain_lens_router_v2',
