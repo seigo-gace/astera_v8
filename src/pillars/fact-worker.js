@@ -131,8 +131,10 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
 
   const domainEvidence = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect : [];
   const unresolvedClaims = unconfirmed.map((item) => item.text).slice(0, 8);
-  const evidenceGaps = unique([...(task?.evidence_need?.required ? domainEvidence : []), ...unresolvedClaims])
+  const evidenceNeed = unique([...(task?.evidence_need?.required ? domainEvidence : []), ...unresolvedClaims])
     .map((item) => ({ item, reason: '判断前に根拠または明示前提が必要。' }));
+  const evidenceGaps = unique([...domainEvidence, ...unresolvedClaims])
+    .map((item) => ({ item, reason: task?.evidence_need?.required ? '判断前に根拠または明示前提が必要。' : 'Genre Lensが収集候補として要求する判断材料。外部検索必須とは限らない。' }));
 
   return {
     pillar: 'fact',
@@ -143,7 +145,7 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
     opinions,
     not_applicable: notApplicable,
     corroborating_evidence: corroboratingEvidence,
-    evidence_need: evidenceGaps,
+    evidence_need: evidenceNeed,
     evidence_gaps: evidenceGaps,
     evidence_state: {
       state: evidence.state,
