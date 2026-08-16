@@ -1,260 +1,57 @@
 'use strict';
 
-const ACTIONS = Object.freeze([
-  { id: 'improve', re: /改善|改良|修正|直(?:す|せ|し)|最適化|強化|精度.{0,8}(?:上げ|向上)|improv|optimi[sz]e|fix|refactor/i },
-  { id: 'compare', re: /比較|比べ|選択肢|compare|versus|\bvs\b/i },
-  { id: 'decide', re: /判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/i },
-  { id: 'implement', re: /実装|作成|構築|開発|組み立て|implement|build|create|develop/i },
-  { id: 'verify', re: /検証|確認|監査|調査|分析|解析|評価|verify|validate|audit|investigat|analy[sz]|evaluate/i },
-  { id: 'integrate', re: /統合|接続|連携|組み込|当てはめ|integrat|connect|link|incorporat/i },
-  { id: 'migrate', re: /移行|置換|切替|入れ替|migrat|replace|switch/i },
-  { id: 'remove', re: /削除|除去|外す|remove|delete|eliminate/i },
-  { id: 'explain', re: /説明|教え|解説|explain|describe|tell me/i }
-]);
-
-const STOP_TERMS = new Set([
-  'これ', 'それ', 'あれ', 'ここ', 'そこ', 'もの', 'こと', 'ため', 'よう', 'について', 'として',
-  'する', 'した', 'して', 'いる', 'ある', 'ない', 'です', 'ます', 'the', 'and', 'for', 'with', 'from',
-  'this', 'that', 'what', 'how', 'please', 'into', 'using', 'use'
-]);
-
-function normalizeText(value) {
-  return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').trim();
-}
-
-function splitSentences(value) {
-  return normalizeText(value)
-    .split(/(?<=[。！？!?])|\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function unique(values) {
-  return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
-}
-
-function detectLanguage(text) {
-  return /[ぁ-んァ-ヶ一-龠々]/.test(String(text || '')) ? 'ja' : 'en';
-}
-
-function cleanClause(value) {
-  return normalizeText(value)
-    .replace(/^[「『\s]+|[」』\s]+$/g, '')
-    .replace(/^(?:まず|次に|さらに|あと|そして|また|please|could you|can you)\s*/i, '')
-    .replace(/[。！？!?]+$/g, '')
-    .trim();
-}
-
-function extractAction(text) {
-  for (const action of ACTIONS) {
-    const match = action.re.exec(text);
-    if (match) return { id: action.id, match: match[0], index: match.index };
-  }
-  return { id: 'analyze', match: '', index: -1 };
-}
-
-function extractTerms(text) {
-  const normalized = normalizeText(text);
-  const latin = normalized.match(/[A-Za-z][A-Za-z0-9_.:/-]{1,}|\d+(?:\.\d+){0,3}/g) || [];
-  const japanese = normalized.match(/[一-龠々ァ-ヶぁ-ん]{2,18}/g) || [];
-  return unique([...latin, ...japanese])
-    .map((term) => term.toLowerCase())
-    .filter((term) => !STOP_TERMS.has(term) && term.length >= 2)
-    .slice(0, 48);
-}
-
-function explicitTarget(text) {
-  const patterns = [
-    /(?:対象|target)(?:は|:|=)\s*([^。！？!?\n]{1,100})/i,
-    /([^。！？!?\n]{2,100}?)(?:を|について|に対して)(?:徹底的に|詳しく|詳細に)?\s*(?:改善|改良|修正|分析|解析|比較|検証|確認|実装|統合|接続|移行|判断)/i
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(text);
-    if (!match) continue;
-    const target = cleanClause(match[1])
-      .replace(/^(?:これ|それ|あれ)$/u, '')
-      .replace(/(?:全体)?(?:から|で)$/u, '')
-      .trim();
-    if (target.length >= 2) return target.slice(0, 120);
-  }
-  return '';
-}
-
-function fallbackTarget(text, action, domain) {
-  const first = splitSentences(text)[0] || text;
-  if (action.index > 0) {
-    const prefix = cleanClause(first.slice(0, action.index))
-      .replace(/(?:を|について|に対して|から|で|の)$/u, '')
-      .replace(/^(?:これ|それ|あれ)(?:を|について)?$/u, '')
-      .trim();
-    if (prefix.length >= 2 && prefix.length <= 100) return prefix;
-  }
-  const terms = extractTerms(text).filter((term) => !ACTIONS.some((item) => item.re.test(term)));
-  if (terms.length) return terms.slice(0, 3).join('・');
-  return String(domain?.primary?.name || '入力対象').trim();
-}
-
-function extractClauses(text, patterns) {
-  const values = [];
-  for (const sentence of splitSentences(text)) {
-    if (patterns.some((pattern) => pattern.test(sentence))) values.push(cleanClause(sentence));
-  }
-  return unique(values);
-}
-
-function explicitSuccessCriteria(text) {
-  const values = [];
-  const patterns = [
-    /(?:成功条件|完了条件|合格条件|acceptance(?: criteria)?|success(?: criteria)?)(?:は|:|=)\s*([^。！？!?\n]+)/ig,
-    /(?:必ず|must|without|〜ずに|せずに)[^。！？!?\n]*/ig
-  ];
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) values.push(cleanClause(match[1] || match[0]));
-  }
-  return unique(values);
-}
-
-function extractConstraints(text) {
-  return extractClauses(text, [
-    /禁止|しない|するな|使わない|残す|守る|維持|必ず|のみ|限定|別Module|分離|変更せず|非AI|without|must|must not|do not|keep|preserve|separate/i
-  ]).slice(0, 12);
-}
-
-function buildObjective({ target, action, language }) {
-  const t = target || (language === 'ja' ? '対象' : 'the target');
-  if (language === 'en') {
-    const templates = {
-      improve: `Identify the current defects in ${t}, define the improved state, and make the change conditions explicit.`,
-      compare: `Compare the viable options for ${t} under the same criteria and make the adoption conditions explicit.`,
-      decide: `Clarify the decision criteria, uncertainty, and selection rationale for ${t}.`,
-      implement: `Turn ${t} into an implementable plan that satisfies the stated requirements and acceptance conditions.`,
-      verify: `Verify the facts, uncertainty, and risks around ${t} until a defensible decision can be made.`,
-      integrate: `Integrate ${t} while preserving responsibility boundaries, constraints, and failure handling.`,
-      migrate: `Move ${t} to the intended state without losing required behavior or rollback ability.`,
-      remove: `Remove the identified part of ${t} without breaking required behavior or dependencies.`,
-      explain: `Explain ${t} in a way that exposes the actual mechanism, constraints, and decision implications.`,
-      analyze: `Turn ${t} into decision-ready material by separating facts, uncertainty, risks, and alternatives.`
-    };
-    return templates[action.id] || templates.analyze;
-  }
-  const templates = {
-    improve: `${t}の現状問題を特定し、改善後の状態・変更条件・検証条件を明確にする。`,
-    compare: `${t}の選択肢を同一基準で比較し、採用条件と不採用理由を明確にする。`,
-    decide: `${t}について判断基準・不確実性・選択根拠を整理し、判断可能な状態にする。`,
-    implement: `${t}を要求条件と合格条件を満たす実装可能な状態へ落とし込む。`,
-    verify: `${t}の事実・未確認・Riskを検証し、根拠付きで判断できる状態にする。`,
-    integrate: `${t}の責務境界・制約・失敗時処理を保ったまま統合可能な状態にする。`,
-    migrate: `${t}の必要機能とRollback可能性を維持しながら目的状態へ移行する。`,
-    remove: `${t}の必要動作と依存を壊さず、対象要素を除去できる状態にする。`,
-    explain: `${t}の実際の仕組み・制約・判断への影響が分かる形で説明する。`,
-    analyze: `${t}について事実・未確認・Risk・代替案を分離し、判断材料として成立させる。`
-  };
-  return templates[action.id] || templates.analyze;
-}
-
-function analyzeRequest({ question = '', context = '', domain = {} } = {}) {
-  const normalizedQuestion = normalizeText(question);
-  const normalizedContext = normalizeText(context);
-  const language = detectLanguage(normalizedQuestion);
-  const action = extractAction(normalizedQuestion);
-  const target = explicitTarget(normalizedQuestion) || fallbackTarget(normalizedQuestion, action, domain);
-  const successCriteria = explicitSuccessCriteria(normalizedQuestion);
-  const constraints = extractConstraints(normalizedQuestion);
-  const terms = extractTerms(`${normalizedQuestion}\n${normalizedContext}`).slice(0, 48);
-  return Object.freeze({
-    schema_version: 'astera.request-model.v1',
-    language,
-    normalized_question: normalizedQuestion,
-    target,
-    target_confidence: explicitTarget(normalizedQuestion) ? 'high' : (target && target !== domain?.primary?.name ? 'medium' : 'low'),
-    action: action.id,
-    objective: buildObjective({ target, action, language }),
-    success_criteria: Object.freeze(successCriteria),
-    constraints: Object.freeze(constraints),
-    query_terms: Object.freeze(terms),
-    context_present: Boolean(normalizedContext),
-    context_length: normalizedContext.length
-  });
-}
-
-function evidenceClaim(item) {
-  return cleanClause(item?.fields?.claim || item?.excerpt || item?.title || item?.canonical_record_id || '');
-}
-
-function normalizeEvidencePacket(packet) {
-  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) {
-    return Object.freeze({
-      schema_version: 'astera.evidence-packet.compact.v1',
-      state: 'NOT_PROVIDED',
-      source_status: null,
-      quality_score_bp: null,
-      coverage_state: 'UNKNOWN',
-      conflict_detected: false,
-      evidence: Object.freeze([]),
-      provider_failures: Object.freeze([])
-    });
-  }
-  const source = packet.result && packet.schema_version === 'astera.evidence-search.module-response.v1'
-    ? packet.result
-    : packet;
-  const sourceStatus = String(source.status || 'UNKNOWN');
-  const qualityFinal = source.quality?.final || {};
-  const qualityText = JSON.stringify(qualityFinal).toUpperCase();
-  const evidence = (Array.isArray(source.evidence) ? source.evidence : []).map((item) => Object.freeze({
-    id: String(item.candidate_id || item.canonical_record_id || ''),
-    claim: evidenceClaim(item),
-    source_role: String(item.source_role || '').toUpperCase(),
-    authority_id: String(item.authority_id || item.publisher?.id || ''),
-    source_id: String(item.source_id || item.provider_id || ''),
-    url: item.canonical_locator?.url || null,
-    replayable: item.canonical_locator?.replayable === true,
-    updated_at: item.updated_at || item.published_at || null,
-    version: item.version || null,
-    fields: Object.freeze({ ...(item.fields || {}) })
-  })).filter((item) => item.claim || item.id);
-  const initialExec = source.provider_execution?.initial || [];
-  const reinforcementExec = source.provider_execution?.reinforcement || [];
-  const failures = [...initialExec, ...reinforcementExec]
-    .filter((entry) => entry.status && entry.status !== 'FULFILLED')
-    .map((entry) => ({ provider_id: entry.provider_id || '', error_code: entry.error_code || 'PROVIDER_FAILED' }));
-  return Object.freeze({
-    schema_version: 'astera.evidence-packet.compact.v1',
-    state: sourceStatus === 'FINAL_VALID' ? 'VALID' : sourceStatus.startsWith('REJECTED') ? 'REJECTED' : 'PARTIAL',
-    source_status: sourceStatus,
-    quality_score_bp: Number.isInteger(qualityFinal.score_bp) ? qualityFinal.score_bp : null,
-    coverage_state: String(source.coverage?.discovery_scope_state || source.coverage?.registry_coverage_state || 'UNKNOWN'),
-    conflict_detected: /CONFLICT/.test(qualityText),
-    effective_as_of: source.effective_as_of || null,
-    evidence: Object.freeze(evidence),
-    provider_failures: Object.freeze(failures)
-  });
-}
-
-function tokenOverlap(left, right) {
-  const a = new Set(extractTerms(left));
-  const b = new Set(extractTerms(right));
-  if (!a.size || !b.size) return 0;
-  let hit = 0;
-  for (const token of a) if (b.has(token)) hit += 1;
-  return hit / Math.max(1, Math.min(a.size, b.size));
-}
-
-function matchingEvidence(text, packet, threshold = 0.25) {
-  const items = packet?.evidence || [];
-  return items
-    .map((item) => ({ item, overlap: tokenOverlap(text, item.claim) }))
-    .filter((entry) => entry.overlap >= threshold)
-    .sort((a, b) => b.overlap - a.overlap);
-}
-
-module.exports = {
-  analyzeRequest,
-  normalizeEvidencePacket,
-  normalizeText,
-  splitSentences,
-  extractTerms,
-  matchingEvidence,
-  tokenOverlap,
-  unique
+const ACTIONS=[
+ ['verify',/検証|確認|監査|調査|分析|解析|評価|verify|validate|audit|investigat|analy[sz]|evaluate/i],
+ ['compare',/比較|比べ|選択肢|compare|versus|\bvs\b/i],['decide',/判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/i],
+ ['improve',/改善|改良|修正|直(?:す|せ|し)|最適化|強化|精度.{0,8}(?:上げ|向上)|improv|optimi[sz]e|fix|refactor/i],
+ ['implement',/実装|作成|構築|開発|組み立て|追加|implement|build|create|develop|add/i],['integrate',/統合|接続|連携|組み込|当てはめ|integrat|connect|link|incorporat/i],
+ ['migrate',/移行|置換|切替|入れ替|migrat|replace|switch/i],['remove',/削除|除去|外す|remove|delete|eliminate/i],['preserve',/維持|保持|残す|壊さず|変えず|そのまま|keep|preserve|retain/i],['explain',/説明|教え|解説|explain|describe|tell me/i]
+].map(([id,re])=>({id,re}));
+const STOP=new Set(['これ','それ','あれ','ここ','そこ','もの','こと','ため','よう','について','として','する','した','して','いる','ある','ない','です','ます','から','まで','the','and','for','with','from','this','that','what','how','please','into','using','use','then']);
+const RX={
+ order:/^(?:その後|次に|続いて|最後に|完了後|終わったら|終えてから|してから|確認後|検証後|then|after|afterward|finally|next)\b/i, parallel:/^(?:並行して|並列で|同時に|parallel|concurrently|at the same time)\b/i,
+ condition:/(?:場合|とき|時に|なら|ならば|であれば|を条件に|if\b|when\b|provided that|unless)/i, exception:/(?:ただし|例外|除く|を除き|except|however|but only)/i,
+ deadline:/(?:期限|までに|今日中|明日まで|今週中|deadline|by\s+\w+|before\s+\w+)/i, priority:/(?:最優先|優先|先に|まず|第一に|priority|first|before)/i,
+ success:/(?:成功条件|完了条件|合格条件|acceptance(?: criteria)?|success(?: criteria)?)(?:は|:|=)?\s*(.*)/i, verify:/(?:検証|確認|test|verify|validate|assert|check)/i,
+ prohibit:/(?:禁止|するな|しない|しないで|してはいけ|勝手に|must not|do not|never|without changing)/i, preserve:/(?:維持|保持|残す|壊さず|変えず|そのまま|keep|preserve|retain|without breaking)/i,
+ replace:/(?:置換|差し替|入れ替|変更対象|変更|replace|swap|change)/i, evidence:/(?:根拠|証拠|Evidence|source|出典|公式|一次資料|事実確認|ファクトチェック|fact.?check|audit|current|latest|現在|最新|価格|料金|法令|規約|外部仕様)/i,
+ internalTest:/(?:テスト|試験|build|CI|lint|unit test|integration test|runtime test|smoke test)/i
 };
+
+const norm=v=>String(v||'').normalize('NFKC').replace(/\r\n?/g,'\n').replace(/[ \t]+/g,' ').trim();
+const unique=xs=>[...new Set((xs||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+const language=t=>/[ぁ-んァ-ヶ一-龠々]/.test(String(t||''))?'ja':'en';
+const clean=v=>norm(v).replace(/^[「『“"\s]+|[」』”"\s]+$/g,'').replace(/^(?:まず|次に|さらに|あと|そして|また|その後|最後に|please|could you|can you|then|next)\s*/i,'').replace(/^[、,;:\s]+/,'').replace(/[。！？!?]+$/g,'').trim();
+function terms(text){const n=norm(text),a=n.match(/[A-Za-z][A-Za-z0-9_.:/-]{1,}|\d+(?:\.\d+){0,3}/g)||[],j=n.match(/[一-龠々ァ-ヶぁ-ん]{2,18}/g)||[];return unique([...a,...j]).map(x=>x.toLowerCase()).filter(x=>!STOP.has(x)&&x.length>=2).slice(0,64);}
+
+function actionMatches(text){return ACTIONS.map(a=>{const m=a.re.exec(text);return m?{id:a.id,match:m[0],index:m.index}:null;}).filter(Boolean).sort((a,b)=>a.index-b.index||a.id.localeCompare(b.id));}
+function action(text){const ms=actionMatches(text);return ms.find(x=>x.id!=='preserve')||ms[0]||{id:'analyze',match:'',index:-1};}
+function clauseType(text){if(/訂正|撤回|前言|ではなく|じゃなく|違う|correct|withdraw|retract|instead/i.test(text))return'correction';if(RX.prohibit.test(text))return'prohibition';if(RX.preserve.test(text))return'preserve';if(RX.verify.test(text))return'verification';if(/決定|採用|選定|判断|decide|select|choose|adopt/i.test(text))return'decision';if(/[?？]$|教え|どう|何を|なぜ|why|how|what/i.test(text))return'question';if(/実装|作成|構築|変更|修正|改善|分析|解析|比較|移行|削除|統合|接続|行え|しろ|せよ|してください|implement|build|change|fix|analy[sz]|compare|migrate|remove|integrate/i.test(text))return'instruction';return'statement';}
+
+function segment(input){const t=String(input||''),base=[];let start=0,quote=null,code=false;const push=e=>{const r=t.slice(start,e),l=r.length-r.trimStart().length,rr=r.length-r.trimEnd().length,b=start+l,end=e-rr;if(end>b)base.push({start:b,end,text:t.slice(b,end)});start=e;};for(let i=0;i<t.length;i++){if(t.slice(i,i+3)==='```'){code=!code;i+=2;continue;}if(code)continue;const c=t[i];if(!quote&&['「','『','“','"'].includes(c))quote=c;else if(quote&&((quote==='「'&&c==='」')||(quote==='『'&&c==='』')||(quote==='“'&&c==='”')||(quote==='"'&&c==='"')))quote=null;if(!quote&&/[。！？!?\n;]/.test(c))push(i+1);}if(start<t.length)push(t.length);const out=[];for(const s of base){const raw=t.slice(s.start,s.end);let last=0;for(let i=0;i<raw.length;i++){if(!['、',','].includes(raw[i]))continue;const l=raw.slice(last,i),r=raw.slice(i+1);if(actionMatches(l).length&&(actionMatches(r).length||RX.order.test(r.trimStart())||RX.parallel.test(r.trimStart()))){out.push(spanPart(s,raw,last,i+1,t));last=i+1;}}out.push(spanPart(s,raw,last,raw.length,t));}return out.filter(x=>clean(x.text));}
+function spanPart(s,raw,a,b,src){const p=raw.slice(a,b),l=p.length-p.trimStart().length,r=p.length-p.trimEnd().length;return{start:s.start+a+l,end:s.start+b-r,text:src.slice(s.start+a+l,s.start+b-r)};}
+const splitSentences=v=>segment(norm(v)).map(x=>x.text);
+function collect(text,re){return unique(segment(norm(text)).filter(s=>re.test(s.text)).map(s=>clean(s.text))).slice(0,24);}
+function success(text){const out=[];for(const s of segment(norm(text))){const m=RX.success.exec(s.text);if(m&&clean(m[1]))out.push(clean(m[1]));else if(/(?:必ず|must\b|without\b|せずに|できること|であること)/i.test(s.text)&&!RX.prohibit.test(s.text))out.push(clean(s.text));}return unique(out);}
+const constraints=t=>unique([...collect(t,/必ず|のみ|限定|守る|責務分離|非AI|決定論|変更せず|without|must\b|only\b|separate|deterministic/i),...collect(t,RX.condition)]).slice(0,24);
+const prohibitions=t=>collect(t,RX.prohibit),preserves=t=>collect(t,RX.preserve),verifications=t=>collect(t,RX.verify),conditions=t=>collect(t,RX.condition),exceptions=t=>collect(t,RX.exception),deadlines=t=>collect(t,RX.deadline);
+const replacements=t=>segment(norm(t)).filter(s=>RX.replace.test(s.text)&&!RX.prohibit.test(s.text)).map(s=>clean(s.text)).slice(0,24);
+
+function target(text,a=action(text)){if(a.index>0){const before=text.slice(0,a.index),m=before.match(/([^。！？!?\n、,]{1,100}?)(?:を|について|に対して)\s*$/i);if(m){let c=clean(m[1]).split(/(?:したまま|のまま|ながら|つつ|してから|した上で)/i).pop();c=clean(c).replace(/^(?:これ|それ|あれ)$/u,'').replace(/(?:は|が|の)$/u,'').trim();if(c)return c;}}const x=/(?:対象|target)(?:は|:|=)\s*([^。！？!?\n]{1,140})/i.exec(text);if(x)return clean(x[1]);if(a.index>0){let p=clean(text.slice(0,a.index)).replace(/(?:を|について|に対して|から|で|の)$/u,'').replace(/^(?:これ|それ|あれ)(?:を|について)?$/u,'').replace(/を(?:公式)?根拠で$/u,'').replace(/(?:は|が|を|で|の)$/u,'').trim();if(p&&p.length<=120)return p;}const f=terms(text).filter(x=>!ACTIONS.some(z=>z.re.test(x))).slice(0,4).join('・');return(f|| (language(text)==='ja'?'入力対象':'input target')).replace(/(?:は|が|を|で|の)$/u,'');}
+function objective(t,a,l){const x=t||(l==='ja'?'対象':'the target');if(l==='en'){const m={verify:`Verify ${x} by separating supported facts, unresolved claims, risks, and evidence gaps.`,compare:`Compare viable options for ${x} under the same explicit criteria and preserve rejection reasons.`,decide:`Resolve ${x} from explicit criteria, evidence state, risk controls, and unresolved conditions.`,improve:`Improve ${x} while preserving stated constraints and acceptance conditions.`,implement:`Build ${x} while preserving constraints, dependencies, and verification conditions.`,integrate:`Integrate ${x} while preserving boundaries, dependencies, and failure handling.`,migrate:`Move ${x} without losing required behavior, compatibility, or rollback.`,remove:`Remove the identified element from ${x} without breaking preserved behavior or dependencies.`,preserve:`Preserve ${x} while other changes proceed.`,explain:`Explain ${x} using explicit facts, constraints, and decision implications.`,analyze:`Structure ${x} into facts, uncertainty, risks, and alternatives.`};return m[a]||m.analyze;}const m={verify:`${x}の確認済み事実・未確認・Risk・Evidence不足を分離して検証する。`,compare:`${x}の候補を同一基準で比較し、採用条件と不採用理由を保持する。`,decide:`${x}を明示基準・Evidence・Risk・未解決条件から機械的に判断する。`,improve:`${x}を改善し、制約・維持条件・合格条件を保持する。`,implement:`${x}を制約・依存・検証条件を守って実装する。`,integrate:`${x}の責務境界・依存・失敗処理を保って統合する。`,migrate:`${x}の機能・互換性・Rollbackを維持して移行する。`,remove:`${x}の必要動作と依存を壊さず除去する。`,preserve:`${x}の維持条件を固定して他変更で破壊しない。`,explain:`${x}の仕組み・制約・判断影響を明示根拠で説明する。`,analyze:`${x}の事実・未確認・Risk・代替案を判断材料へ構造化する。`};return m[a]||m.analyze;}
+
+function makeTask(s,i,l,globalSuccess){const text=clean(s.text),a=action(text),type=clauseType(text),tar=target(text,a),ok=a.id!=='analyze'||['verification','decision'].includes(type),sc=unique([...success(text),...globalSuccess.filter(x=>text.includes(x))]);return{id:`T${String(i+1).padStart(2,'0')}`,source_span:{start:s.start,end:s.end,text},raw_text:norm(s.text),clause_type:type,actionable:ok,action:a.id,target:tar,objective:objective(tar,a.id,l),deliverables:[],premises:[],constraints:constraints(text),prohibitions:prohibitions(text),preserve:preserves(text),replace:replacements(text),conditions:conditions(text),exceptions:exceptions(text),deadlines:deadlines(text),priority:RX.priority.test(text)?'high':'normal',order:i+1,depends_on:[],parallelizable:true,success_criteria:sc,verification:verifications(text),completion_criteria:sc,unresolved:[],evidence_need:{required:RX.evidence.test(text),reasons:[],queries:terms(text).slice(0,12)}};}
+function attach(tasks,others){if(!tasks.length)return;for(const c of others){const text=c.source_span.text,sc=success(text),cs=constraints(text),ps=prohibitions(text),pr=preserves(text),rp=replacements(text),co=conditions(text),ex=exceptions(text),ve=verifications(text),prem=['statement','question'].includes(c.clause_type)?[clean(text)]:[],global=ps.length||sc.length,targets=global?tasks:[tasks.slice().reverse().find(t=>t.source_span.start<c.source_span.start)||tasks[0]];for(const t of targets){t.success_criteria=unique([...t.success_criteria,...sc]);t.completion_criteria=unique([...t.completion_criteria,...sc]);t.constraints=unique([...t.constraints,...cs]);t.prohibitions=unique([...t.prohibitions,...ps]);t.preserve=unique([...t.preserve,...pr]);t.replace=unique([...t.replace,...rp]);t.conditions=unique([...t.conditions,...co]);t.exceptions=unique([...t.exceptions,...ex]);t.verification=unique([...t.verification,...ve]);t.premises=unique([...t.premises,...prem]);if(RX.evidence.test(text))t.evidence_need.required=true;}}}
+function resolveRefs(tasks){for(const t of tasks){if(!/^(?:入力対象|input target)$/.test(t.target||''))continue;const p=(t.premises||[]).find(x=>!RX.success.test(x)),m=p&&clean(p).match(/^(.{1,100}?)(?:は|が|について|を)/);if(m&&clean(m[1])){t.target=clean(m[1]);t.objective=objective(t.target,t.action,language(t.source_span.text));t.unresolved=t.unresolved.filter(x=>x!=='target');}}}
+function inferDeps(tasks){const d=[];for(let i=0;i<tasks.length;i++){const t=tasks[i],raw=t.raw_text||t.source_span.text;if(i>0&&(RX.order.test(raw)||/(?:後|終わったら|完了したら|してから|確認してから|検証してから|after|once .* complete)/i.test(raw))){t.depends_on.push(tasks[i-1].id);t.parallelizable=false;d.push({from:tasks[i-1].id,to:t.id,type:'ORDER_AFTER',reason:'explicit_order'});}if(RX.parallel.test(raw))t.parallelizable=true;}return d;}
+function buildExecutionWaves(tasks=[],deps=[]){const ids=new Set(tasks.map(t=>t.id)),inc=new Map(tasks.map(t=>[t.id,new Set()]));for(const d of deps)if(ids.has(d.from)&&ids.has(d.to))inc.get(d.to).add(d.from);const rem=new Set(ids),waves=[];while(rem.size){const ready=[...rem].filter(id=>[...inc.get(id)].every(p=>!rem.has(p))).sort();if(!ready.length){waves.push([...rem].sort());break;}waves.push(ready);ready.forEach(id=>rem.delete(id));}return waves;}
+function deriveEvidenceNeed(task={},domain={}){const overlays=(domain.overlays||[]).map(x=>x.id),reasons=[],text=task.source_span?.text||'',internal=RX.internalTest.test(text)&&!RX.evidence.test(text);if(task.evidence_need?.required)reasons.push('task_explicit_evidence_signal');if(task.action==='verify'&&!internal&&(domain.primary?.evidence_to_collect||[]).length)reasons.push('action:verify_external');if(['compare','decide'].includes(task.action)&&(RX.evidence.test(text)||overlays.includes('current_information')||overlays.includes('evidence_strict')))reasons.push(`action:${task.action}`);if(overlays.includes('current_information'))reasons.push('overlay:current_information');if(overlays.includes('evidence_strict'))reasons.push('overlay:evidence_strict');const required=reasons.length>0;return{required,reasons:unique(reasons),queries:unique([...(task.evidence_need?.queries||[]),...(required?(domain.primary?.evidence_to_collect||[]):[])]).slice(0,16)};}
+
+function analyzeRequest({question='',context=''}={}){const q=norm(question),ctx=norm(context),l=language(q),spans=segment(q),globalSuccess=success(q),clauses=spans.map((s,i)=>makeTask(s,i,l,globalSuccess));let tasks=clauses.filter(x=>x.actionable),others=clauses.filter(x=>!x.actionable);if(!tasks.length&&q){tasks=[makeTask(spans[0]||{start:0,end:q.length,text:q},0,l,globalSuccess)];tasks[0].actionable=true;}tasks=tasks.map((t,i)=>({...t,id:`T${String(i+1).padStart(2,'0')}`,order:i+1}));attach(tasks,others);resolveRefs(tasks);const deps=inferDeps(tasks),cs=constraints(q),ps=prohibitions(q),pr=preserves(q),rp=replacements(q),ve=verifications(q),conflicts=[];if(ps.some(p=>rp.some(r=>tokenOverlap(p,r)>=.5)))conflicts.push({type:'PROHIBITION_REPLACE_OVERLAP',note:'同一対象に禁止と変更指示が重なる可能性がある。'});for(const t of tasks){if(!t.target||/^(?:入力対象|input target)$/.test(t.target))t.unresolved.push('target');if(!t.success_criteria.length&&['implement','improve','migrate','integrate','remove'].includes(t.action))t.unresolved.push('completion_criteria');}const packet={schema_version:'astera.analysis-task-packet.v1',intent:tasks[0]?.action||'analyze',tasks,dependencies:deps,execution_waves:buildExecutionWaves(tasks,deps),constraints:cs,prohibitions:ps,preserve:pr,replace:rp,verification:ve,completion_criteria:globalSuccess,unresolved:unique(tasks.flatMap(t=>t.unresolved.map(x=>`${t.id}:${x}`))),conflicts,source_spans:tasks.map(t=>({task_id:t.id,...t.source_span}))};const p=tasks[0];return{schema_version:'astera.request-model.v2',language:l,normalized_question:q,target:p?.target||'',target_confidence:p?.unresolved?.includes('target')?'low':'high',action:p?.action||'analyze',objective:p?.objective||objective('', 'analyze',l),success_criteria:globalSuccess,constraints:cs,prohibitions:ps,preserve:pr,replace:rp,verification:ve,query_terms:terms(`${q}\n${ctx}`),context_present:Boolean(ctx),context_length:ctx.length,instruction_map:{clause_count:clauses.length,task_count:tasks.length,correction_count:clauses.filter(x=>x.clause_type==='correction').length,prohibition_count:ps.length,preserve_count:pr.length,verification_count:ve.length},analysis_task_packet:packet};}
+
+function evidenceClaim(i){return clean(i?.fields?.claim||i?.excerpt||i?.title||i?.canonical_record_id||'');}
+function normalizeEvidencePacket(packet){if(!packet||typeof packet!=='object'||Array.isArray(packet))return Object.freeze({schema_version:'astera.evidence-packet.compact.v1',state:'NOT_PROVIDED',source_status:null,quality_score_bp:null,coverage_state:'UNKNOWN',conflict_detected:false,evidence:Object.freeze([]),provider_failures:Object.freeze([])});const s=packet.result&&packet.schema_version==='astera.evidence-search.module-response.v1'?packet.result:packet,status=String(s.status||'UNKNOWN'),q=s.quality?.final||{},qt=JSON.stringify(q).toUpperCase(),ev=(Array.isArray(s.evidence)?s.evidence:[]).map(i=>Object.freeze({id:String(i.candidate_id||i.canonical_record_id||''),claim:evidenceClaim(i),source_role:String(i.source_role||'').toUpperCase(),authority_id:String(i.authority_id||i.publisher?.id||''),source_id:String(i.source_id||i.provider_id||''),url:i.canonical_locator?.url||null,replayable:i.canonical_locator?.replayable===true,updated_at:i.updated_at||i.published_at||null,version:i.version||null,fields:Object.freeze({...i.fields})})).filter(i=>i.claim||i.id),fails=[...(s.provider_execution?.initial||[]),...(s.provider_execution?.reinforcement||[])].filter(x=>x.status&&x.status!=='FULFILLED').map(x=>({provider_id:x.provider_id||'',error_code:x.error_code||'PROVIDER_FAILED'}));return Object.freeze({schema_version:'astera.evidence-packet.compact.v1',state:status==='FINAL_VALID'?'VALID':status.startsWith('REJECTED')?'REJECTED':status==='NOT_REQUIRED'?'NOT_REQUIRED':'PARTIAL',source_status:status,quality_score_bp:Number.isInteger(q.score_bp)?q.score_bp:null,coverage_state:String(s.coverage?.discovery_scope_state||s.coverage?.registry_coverage_state||'UNKNOWN'),conflict_detected:/CONFLICT/.test(qt),effective_as_of:s.effective_as_of||null,evidence:Object.freeze(ev),provider_failures:Object.freeze(fails)});}
+function tokenOverlap(a,b){const x=new Set(terms(a)),y=new Set(terms(b));if(!x.size||!y.size)return 0;let hit=0;for(const t of x)if(y.has(t))hit++;return hit/Math.max(1,Math.min(x.size,y.size));}
+function matchingEvidence(text,packet,threshold=.25){return(packet?.evidence||[]).map(item=>({item,overlap:tokenOverlap(text,item.claim)})).filter(x=>x.overlap>=threshold).sort((a,b)=>b.overlap-a.overlap);}
+
+module.exports={analyzeRequest,normalizeEvidencePacket,normalizeText:norm,splitSentences,segmentSource:segment,extractTerms:terms,matchingEvidence,tokenOverlap,unique,deriveEvidenceNeed,buildExecutionWaves};
