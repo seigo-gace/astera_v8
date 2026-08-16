@@ -16,6 +16,18 @@ function isJapaneseText(text) {
   return /[ぁ-んァ-ヶ一-龠々]/.test(String(text || ''));
 }
 
+// The current Astera contract routes every Japanese request through the
+// Deterministic Japanese Parser MCP. Keep the historical function name used by
+// KaguraEngine, but do not restore the former heuristic bypasses.
+function needsJapaneseParser(question) {
+  return isJapaneseText(question);
+}
+
+function isExternalActionHint(question, request = {}) {
+  if ((request.analysis_task_packet?.tasks || []).some((task) => ['implement', 'improve', 'integrate', 'migrate', 'remove'].includes(task.action))) return true;
+  return /実装|変更|修正|改善|削除|移行|統合|接続|反映|Push|公開|deploy|release|replace|modify|remove/i.test(String(question || ''));
+}
+
 function validateParserResult(value, expectedOriginalText) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw parserError('PARSER_SCHEMA_INVALID', 'Japanese Parser MCP returned a non-object result.');
   if (typeof value.original_text !== 'string') throw parserError('PARSER_SCHEMA_INVALID', 'Japanese Parser MCP result is missing original_text.');
@@ -209,5 +221,7 @@ module.exports = {
   MCP_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
   isJapaneseText,
+  needsJapaneseParser,
+  isExternalActionHint,
   validateParserResult
 };
