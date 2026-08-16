@@ -58,6 +58,10 @@ const DOMAIN_SAFETY_GATES = Object.freeze({
   G35: ['法・民間保護・Escalation Riskを必ず確認する']
 });
 
+const MIN_CONTROLLED_PRIMARY_SCORE = 6;
+const MIN_TEXT_PRIMARY_SCORE = 8;
+const MIN_SECONDARY_SCORE = 6;
+
 function cleanLine(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -82,8 +86,9 @@ function ngrams(value, n = 3) {
 
 function removeAsteraTemplateBlock(text) {
   const source = String(text || '');
-  const marker = source.search(/(^|\n)\s*01\s+(本当の目的|True Objective)\s*(\n|$)/i);
-  if (marker < 0) return { text: source.trim(), removed: 0 };
+  const markerMatch = /01\s+(本当の目的|True Objective)\s*(?:\n|$|[:：])/i.exec(source);
+  if (!markerMatch) return { text: source.trim(), removed: 0 };
+  const marker = markerMatch.index;
   const after = source.slice(marker);
   const looksLikeAsteraTemplate = /08\s+(主役AIへの再指示|Re-instruction to Main AI)/i.test(after)
     && /(回答がどう強くなるか|How This Improves the Answer)/i.test(after);
@@ -94,9 +99,10 @@ function removeAsteraTemplateBlock(text) {
 function normalizeInput({ question = '', context = '' } = {}) {
   const q = removeAsteraTemplateBlock(question);
   const c = removeAsteraTemplateBlock(context);
-  const cleanQuestion = q.text || String(question || '').trim();
+  const originalQuestion = String(question || '').trim();
+  const cleanQuestion = q.removed ? q.text : (q.text || originalQuestion);
   const cleanContext = c.text;
-  const core = cleanQuestion || cleanContext || String(question || context || '').trim();
+  const core = cleanQuestion || cleanContext || (q.removed || c.removed ? '' : String(question || context || '').trim());
   const analysisText = [core, cleanContext && cleanContext !== core ? `[context]\n${cleanContext}` : '']
     .filter(Boolean)
     .join('\n\n')
@@ -183,7 +189,7 @@ function publicGenre(item) {
 function classifyScores(scored) {
   const best = scored[0];
   const hasControlledTerm = best.exact_hits > 0;
-  const strongScore = best.score >= 8;
+  const strongScore = best.score >= MIN_TEXT_PRIMARY_SCORE;
   const basis = hasControlledTerm
     ? 'CONTROLLED_TERM_MATCH'
     : strongScore
@@ -197,6 +203,11 @@ function classifyScores(scored) {
     confidence: Number(confidence.toFixed(6)),
     taxonomy_review_required: basis === 'HYPOTHESIS_LAST_RESORT' || confidence < 0.72
   };
+}
+
+function qualifiedScore(item, secondary = false) {
+  const minimum = secondary ? MIN_SECONDARY_SCORE : MIN_CONTROLLED_PRIMARY_SCORE;
+  return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
 function applyOverlayScores(text) {
@@ -222,24 +233,36 @@ function applyOverlayScores(text) {
     }));
 }
 
-function buildLensText(primary, overlays) {
-  const anchor = primary.classification?.lens_anchor_path?.path_key || '-';
+function buildLensText(primary, overlays, classificationBasis = null, confidence = 0, taxonomyReviewRequired = true) {
   const lines = [
     '[all_domain_lens]',
-    `taxonomy_version=${TAXONOMY_VERSION}`,
-    `primary=${primary.id} (${primary.name})`,
-    `lens_anchor_path=${anchor}`,
-    `classification_basis=${primary.classification_basis}`,
-    `confidence=${primary.confidence}`,
-    `taxonomy_review_required=${primary.taxonomy_review_required}`,
-    `fact_lens=${primary.fact_lens.join(' / ')}`,
-    `risk_lens=${primary.risk_lens.join(' / ')}`,
-    `multi_lens=${primary.multi_lens.join(' / ')}`,
-    `inquiry_lens=${primary.inquiry_lens.join(' / ')}`,
-    `compare_lens=${primary.compare_lens.join(' / ')}`,
-    `evidence_to_collect=${primary.evidence_to_collect.join(' / ')}`,
-    `safety_gate=${primary.safety_gate.join(' / ')}`
+    `taxonomy_version=${TAXONOMY_VERSION}`
   ];
+  if (primary) {
+    const anchor = primary.classification?.lens_anchor_path?.path_key || '-';
+    lines.push(
+      `primary=${primary.id} (${primary.name})`,
+      `lens_anchor_path=${anchor}`,
+      `classification_basis=${primary.classification_basis}`,
+      `confidence=${primary.confidence}`,
+      `taxonomy_review_required=${primary.taxonomy_review_required}`,
+      `fact_lens=${primary.fact_lens.join(' / ')}`,
+      `risk_lens=${primary.risk_lens.join(' / ')}`,
+      `multi_lens=${primary.multi_lens.join(' / ')}`,
+      `inquiry_lens=${primary.inquiry_lens.join(' / ')}`,
+      `compare_lens=${primary.compare_lens.join(' / ')}`,
+      `evidence_to_collect=${primary.evidence_to_collect.join(' / ')}`,
+      `safety_gate=${primary.safety_gate.join(' / ')}`
+    );
+  } else {
+    lines.push(
+      'primary=ABSTAIN',
+      'lens_anchor_path=-',
+      `classification_basis=${classificationBasis || 'ABSTAIN_LOW_SIGNAL'}`,
+      `confidence=${confidence}`,
+      `taxonomy_review_required=${taxonomyReviewRequired}`
+    );
+  }
   if (overlays.length) {
     lines.push(`overlays=${overlays.map((overlay) => overlay.id).join(' / ')}`);
     for (const overlay of overlays) {
@@ -253,10 +276,10 @@ function buildLensText(primary, overlays) {
 
 function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
-  const routeText = `${normalized.core_request}\n${normalized.analysis_text}`.trim();
+  const routeText = normalized.core_request.trim();
   if (!normalize(routeText)) {
     return {
-      router: 'all_domain_lens_router_v1',
+      router: 'all_domain_lens_router_v2',
       taxonomy_version: TAXONOMY_VERSION,
       user_selection_required: false,
       input_valid: false,
@@ -276,16 +299,41 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   const scored = GENRE_LENSES
     .map((genre) => scoreGenre(genre, routeText))
     .sort((a, b) => b.score - a.score || b.exact_hits - a.exact_hits || a.genre.id.localeCompare(b.genre.id));
-  const classification = classifyScores(scored);
-  const primary = publicGenre({ ...scored[0], ...classification });
-  const secondary = scored.slice(1, 4).map((item) => {
-    const meta = classifyScores([item]);
-    return publicGenre({ ...item, ...meta });
-  });
   const overlays = applyOverlayScores(routeText).slice(0, 5);
+  const best = scored[0];
+
+  if (!qualifiedScore(best)) {
+    const confidence = Math.max(0.1, Math.min(0.49, 0.15 + best.similarity * 0.5));
+    return {
+      router: 'all_domain_lens_router_v2',
+      taxonomy_version: TAXONOMY_VERSION,
+      user_selection_required: false,
+      input_valid: true,
+      input_error: null,
+      classification_basis: 'ABSTAIN_LOW_SIGNAL',
+      confidence: Number(confidence.toFixed(6)),
+      taxonomy_review_required: true,
+      primary: null,
+      secondary: [],
+      overlays,
+      normalized,
+      lens_text: buildLensText(null, overlays, 'ABSTAIN_LOW_SIGNAL', Number(confidence.toFixed(6)), true),
+      analysis_text: normalized.analysis_text
+    };
+  }
+
+  const classification = classifyScores(scored);
+  const primary = publicGenre({ ...best, ...classification });
+  const secondary = scored.slice(1)
+    .filter((item) => qualifiedScore(item, true))
+    .slice(0, 3)
+    .map((item) => {
+      const meta = classifyScores([item]);
+      return publicGenre({ ...item, ...meta });
+    });
 
   return {
-    router: 'all_domain_lens_router_v1',
+    router: 'all_domain_lens_router_v2',
     taxonomy_version: TAXONOMY_VERSION,
     user_selection_required: false,
     input_valid: true,

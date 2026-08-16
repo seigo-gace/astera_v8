@@ -50,9 +50,9 @@ test('38ジャンルのID・件数・Anchor Pathが固定される', () => {
   assert.equal(new Set(TEMPLATES.map((item) => item.id)).size, 38);
   for (const [id, title, path] of CASES) {
     const result = routeDomainTemplates({ question: title });
-    assert.equal(result.primary.id, id, `${title}: ${result.primary.id}`);
+    assert.equal(result.primary.id, id, `${title}: ${result.primary?.id}`);
     assert.equal(result.primary.classification.lens_anchor_path.path_key, path);
-    assert.equal(result.router, 'all_domain_lens_router_v1');
+    assert.equal(result.router, 'all_domain_lens_router_v2');
     assert.equal(result.taxonomy_version, '1.0.0');
   }
 });
@@ -62,7 +62,7 @@ test('同一入力を100回処理して分類・候補・Overlay順が変化し�
   const expected = routeDomainTemplates(input);
   for (let i = 0; i < 100; i += 1) {
     const actual = routeDomainTemplates(input);
-    assert.equal(actual.primary.id, expected.primary.id);
+    assert.equal(actual.primary?.id, expected.primary?.id);
     assert.deepEqual(actual.secondary.map((x) => x.id), expected.secondary.map((x) => x.id));
     assert.deepEqual(actual.overlays.map((x) => x.id), expected.overlays.map((x) => x.id));
     assert.equal(actual.lens_text, expected.lens_text);
@@ -77,10 +77,37 @@ test('空入力は誤分類せずInput Error状態になる', () => {
   assert.deepEqual(result.secondary, []);
 });
 
+test('弱い一般語だけでは38 Genreへ強制分類せずABSTAINする', () => {
+  const result = routeDomainTemplates({ question: '判断材料を改善する' });
+  assert.equal(result.input_valid, true);
+  assert.equal(result.classification_basis, 'ABSTAIN_LOW_SIGNAL');
+  assert.equal(result.primary, null);
+  assert.deepEqual(result.secondary, []);
+  assert.match(result.lens_text, /primary=ABSTAIN/);
+});
+
 test('短いASCII分類語を単語途中で誤発火させない', () => {
   const result = routeDomainTemplates({ question: 'Maintenance procedure and reliability review for industrial equipment' });
-  assert.notEqual(result.primary.id, 'G30');
-  assert.equal(result.primary.matched_signals.map((x) => String(x).toLowerCase()).includes('ai'), false);
+  assert.notEqual(result.primary?.id, 'G30');
+  assert.equal((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('ai'), false);
+});
+
+test('会話ContextはGenre採点へ混ぜず現在Taskを優先する', () => {
+  const result = routeDomainTemplates({
+    question: 'APIサーバーのシステム開発を改善する',
+    context: '前回出力には有機化学と高分子材料という判断材料が含まれていた'
+  });
+  assert.equal(result.primary.id, 'G29');
+  assert.notEqual(result.primary.id, 'G20');
+  assert.equal(result.normalized.context_length > 0, true);
+});
+
+test('連結されたAstera Main8のStatic BlockをGenre信号へ再投入しない', () => {
+  const result = routeDomainTemplates({
+    question: '改良点をあげろ01 本当の目的: 改善する 03 事実確認: 判断材料 04 危機察知: 高分子材料 08 主役AIへの再指示: 続行 回答がどう強くなるか'
+  });
+  assert.equal(result.normalized.removed_meta, true);
+  assert.notEqual(result.primary?.id, 'G20');
 });
 
 test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => {
