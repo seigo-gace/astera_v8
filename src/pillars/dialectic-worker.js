@@ -1,186 +1,115 @@
 'use strict';
 
-const { analyzeRequest, normalizeEvidencePacket, unique } = require('../judgment-materials-analyzer');
+const { normalizeEvidencePacket, unique } = require('../judgment-materials-analyzer');
 
-function clamp(value) {
-  return Math.max(0, Math.min(100, Math.round(value)));
+function clamp(value) { return Math.max(0, Math.min(100, Math.round(value))); }
+
+const WEIGHTS = Object.freeze({ objectiveFit: 0.30, evidenceFit: 0.25, riskControl: 0.20, constraintFit: 0.15, reversibility: 0.10 });
+
+function metricScore(metrics) {
+  return clamp(Object.entries(WEIGHTS).reduce((sum, [key, weight]) => sum + Number(metrics[key] || 0) * weight, 0));
 }
 
-function metricScore({ objectiveFit, evidenceFit, riskControl, constraintFit, reversibility }) {
-  return clamp(
-    objectiveFit * 0.30
-    + evidenceFit * 0.25
-    + riskControl * 0.20
-    + constraintFit * 0.15
-    + reversibility * 0.10
-  );
-}
-
-function candidate({ id, label, angle, thesis, strengths, failureModes, requiredChecks, metrics, rationale }) {
+function candidate({ id, label, angle, thesis, strengths, failureModes, requiredChecks, metrics, rationale, ruleIds }) {
   const score = metricScore(metrics);
-  return {
-    id,
-    label,
-    angle,
-    thesis,
-    strengths: unique(strengths).slice(0, 6),
-    failure_modes: unique(failureModes).slice(0, 6),
-    required_checks: unique(requiredChecks).slice(0, 8),
-    metrics,
-    score,
-    answer_line_distance: 100 - score,
-    rationale
-  };
+  return { id, label, angle, thesis, strengths: unique(strengths).slice(0, 8), failure_modes: unique(failureModes).slice(0, 8), required_checks: unique(requiredChecks).slice(0, 10), metrics, weights: WEIGHTS, score, answer_line_distance: 100 - score, rationale, rule_ids: ruleIds };
 }
 
 function evidenceFit(evidence, unresolved) {
   if (evidence.state === 'VALID') return unresolved ? 78 : 92;
-  if (evidence.state === 'REJECTED') return 25;
-  if (evidence.state === 'PARTIAL') return 50;
-  return 42;
+  if (evidence.state === 'REJECTED') return 20;
+  if (evidence.state === 'PARTIAL') return 45;
+  if (evidence.state === 'NOT_REQUIRED') return 85;
+  return unresolved ? 45 : 70;
+}
+
+function constraintFit(task, mode) {
+  const hard = (task.prohibitions?.length || 0) + (task.preserve?.length || 0) + (task.constraints?.length || 0);
+  if (!hard) return mode === 'bad_hand' ? 20 : 82;
+  if (mode === 'bad_hand') return 5;
+  if (mode === 'opposition') return 95;
+  if (mode === 'third_way') return 94;
+  return 90;
 }
 
 async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi = {}, mood = {}, human = {}, domain = {}, task = null, evidence_packet = null }) {
-  const request = task || analyzeRequest({ question, domain });
   const evidence = normalizeEvidencePacket(evidence_packet);
+  const t = task || { id: null, target: '対象', objective: question, success_criteria: [], constraints: [], prohibitions: [], preserve: [], action: 'analyze' };
   const unresolved = facts.unconfirmed?.length || 0;
   const verified = facts.confirmed?.length || 0;
   const riskCount = risks.risk_count || 0;
   const highRisk = risks.level === 'high' || riskCount >= 3;
-  const constraints = request.constraints || [];
-  const success = request.success_criteria || [];
+  const constraints = unique([...(t.constraints || []), ...(t.prohibitions || []), ...(t.preserve || [])]);
+  const success = t.success_criteria || [];
   const missing = inquiry.missing_questions || [];
-  const topRisk = risks.highest?.impact || risks.highest?.why || '重大Riskは未特定';
-  const domainChecks = Array.isArray(domain.primary?.evidence_to_collect)
-    ? domain.primary.evidence_to_collect.slice(0, 4)
-    : [];
+  const topRisk = risks.highest?.impact || risks.highest?.why || '重大Riskなし';
+  const domainChecks = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect.slice(0, 5) : [];
   const pressure = human.mode === 'high_pressure' || Number(mood.score || 0) < 0;
   const baseEvidenceFit = evidenceFit(evidence, unresolved);
-  const constraintBase = constraints.length ? 90 : 76;
+  const baseReversibility = /rollback|戻|復元|revert/i.test([...success, ...constraints].join(' ')) ? 96 : 78;
+  const ja = /[ぁ-んァ-ヶ一-龠々]/.test(t.source_span?.text || question);
 
   const candidates = [
     candidate({
-      id: 'mainline',
-      label: '主案',
-      angle: multi.recommended || 'balanced',
-      thesis: `${request.objective} そのため、確認済みEvidenceを優先し、未確認は未確認のまま残して必要変更を実行単位へ分解する。`,
-      strengths: [
-        `対象を「${request.target}」に固定できる`,
-        `確認済み根拠${verified}件と未確認${unresolved}件を分離できる`,
-        constraints.length ? `明示Constraint ${constraints.length}件を保持できる` : '明示Constraintが少なく変更自由度がある'
-      ],
-      failureModes: [
-        unresolved ? `未確認${unresolved}件が残る` : '',
-        highRisk ? `最上位Risk「${topRisk}」を先に潰さないと事故化する` : '',
-        missing.length ? `不足条件${missing.length}件が残る` : ''
-      ],
+      id: 'mainline', label: ja ? '主案' : 'Mainline', angle: multi.recommended || 'balanced',
+      thesis: ja ? `Task ${t.id || '-'}「${t.objective}」を、確認済みFact・Risk・制約・Evidence状態に従って実行する。` : `Execute task ${t.id || '-'} from supported facts, risks, constraints, and evidence state.`,
+      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, constraints.length ? (ja ? `Hard Constraint ${constraints.length}件を評価対象に含める。` : `Includes ${constraints.length} hard constraints.`) : ''],
+      failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : `Fails if top risk is not controlled.`) : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
       requiredChecks: [...success, ...constraints, ...domainChecks],
-      metrics: {
-        objectiveFit: 96,
-        evidenceFit: baseEvidenceFit,
-        riskControl: highRisk ? 68 : 86,
-        constraintFit: constraintBase,
-        reversibility: 78
-      },
-      rationale: '目的適合を最大化しつつ、未確認を事実へ昇格しない標準案。'
+      metrics: { objectiveFit: 96, evidenceFit: baseEvidenceFit, riskControl: highRisk ? 68 : 86, constraintFit: constraintFit(t, 'mainline'), reversibility: baseReversibility },
+      rationale: ja ? '最短の主案だが、Evidence・Risk・Hard ConstraintのGateを全て満たす場合だけ採用可能。' : 'Shortest mainline; adopt only when evidence, risk, and hard-constraint gates pass.',
+      ruleIds: ['DIALECTIC-MAINLINE-OBJECTIVE', 'DIALECTIC-HARD-GATE']
     }),
     candidate({
-      id: 'opposition',
-      label: '反対案',
-      angle: 'opposition',
-      thesis: `「${request.target}」の変更を急がず、${evidence.state === 'VALID' ? '残る未確認とRisk' : 'Evidence不足'}を解消してから判断する。`,
-      strengths: [
-        `最上位Risk「${topRisk}」を先に処理できる`,
-        '未確認の確定扱いを防げる',
-        '誤った前提に基づく実装を止められる'
-      ],
-      failureModes: [
-        '停止条件を広げすぎると��進しない',
-        evidence.state === 'VALID' && !highRisk ? '十分な根拠がある場合は過剰防御になる' : ''
-      ],
-      requiredChecks: [...missing.slice(0, 4), ...domainChecks],
-      metrics: {
-        objectiveFit: highRisk || evidence.state !== 'VALID' ? 82 : 68,
-        evidenceFit: evidence.state === 'VALID' ? 88 : 72,
-        riskControl: 96,
-        constraintFit: constraintBase,
-        reversibility: 94
-      },
-      rationale: 'Evidence不足または高Risk時に、誤実装を避ける対抗案。'
+      id: 'opposition', label: ja ? '反対案' : 'Opposition', angle: 'opposition',
+      thesis: ja ? `${t.target}を直ちに進めず、未確認・Evidence不足・上位Riskを解消してから進める。` : `Do not advance ${t.target} until unresolved facts, evidence gaps, and top risks are controlled.`,
+      strengths: [ja ? `最上位Risk「${topRisk}」を優先できる。` : 'Prioritizes the top risk.', ja ? '未確認の事実化を防止する。' : 'Prevents unresolved claims from becoming facts.', ja ? 'Hard Constraint違反を抑える。' : 'Reduces hard-constraint violations.'],
+      failureModes: [ja ? 'Evidenceが十分でRiskが低い場合は過剰停止になる。' : 'Can over-block when evidence is sufficient and risk is low.'],
+      requiredChecks: [...missing.slice(0, 5), ...domainChecks, ...constraints],
+      metrics: { objectiveFit: highRisk || evidence.state === 'REJECTED' ? 86 : 70, evidenceFit: evidence.state === 'VALID' ? 88 : 74, riskControl: 97, constraintFit: constraintFit(t, 'opposition'), reversibility: 96 },
+      rationale: ja ? '誤断定・事故を防ぐ反対候補。停止自体を目的化せず、解除条件を保持する。' : 'Opposition candidate for error prevention; retain explicit release conditions.',
+      ruleIds: ['DIALECTIC-OPPOSITION-RISK', 'DIALECTIC-OPPOSITION-EVIDENCE']
     }),
     candidate({
-      id: 'third_way',
-      label: '第三案',
-      angle: 'third_way',
-      thesis: `「${request.target}」を一括変更せず、Evidenceで確定できる部分から小さなChange Unitに分け、未確認部分を後段へ隔離する。`,
-      strengths: [
-        '前進と安全性を両立しやすい',
-        'Rollback境界を作りやすい',
-        'Evidence不足を局所化できる'
-      ],
-      failureModes: [
-        'Change Unit分割が過剰だと統合コストが増える',
-        '依存関係を誤ると局所変更でも破綻する'
-      ],
-      requiredChecks: [...constraints, 'Change Unit間の依存関係', '各Change UnitのAcceptance Test'],
-      metrics: {
-        objectiveFit: 90,
-        evidenceFit: Math.min(95, baseEvidenceFit + 7),
-        riskControl: highRisk ? 90 : 86,
-        constraintFit: Math.min(98, constraintBase + 4),
-        reversibility: 96
-      },
-      rationale: '確定部分と未確定部分を分けて前進する段階案。'
+      id: 'third_way', label: ja ? '第三案' : 'Third way', angle: 'third_way',
+      thesis: ja ? `${t.target}を一括確定せず、依存・Evidence・検証条件で分割し、成立部分だけ進める。` : `Do not decide ${t.target} monolithically; split by dependencies, evidence, and verification gates.`,
+      strengths: [ja ? '前進と安全性を両立しやすい。' : 'Balances progress and safety.', ja ? 'Rollback単位を小さく保てる。' : 'Keeps rollback units small.', ja ? 'Evidence不足部分だけ保留できる。' : 'Can hold only evidence-deficient parts.'],
+      failureModes: [ja ? '分割境界が依存関係と一致しない場合は複雑化する。' : 'Complexity increases if partition boundaries conflict with dependencies.'],
+      requiredChecks: [...constraints, ...success, ...(t.depends_on || []).map((id) => `dependency:${id}`)],
+      metrics: { objectiveFit: 90, evidenceFit: Math.min(95, baseEvidenceFit + 7), riskControl: highRisk ? 91 : 87, constraintFit: constraintFit(t, 'third_way'), reversibility: 97 },
+      rationale: ja ? 'Task GraphとGateを使って成立部分だけ進める候補。' : 'Advances only graph segments whose gates are satisfied.',
+      ruleIds: ['DIALECTIC-THIRD-WAY-PARTITION', 'DIALECTIC-DEPENDENCY-GATE']
     }),
     candidate({
-      id: 'human_fit',
-      label: '実行負荷最適案',
-      angle: 'human_fit',
-      thesis: pressure
-        ? `「${request.target}」について問い返しを増やさず、確認済み・未確認・次の一手を一庠に提示する。`
-        : `「${request.target}」について、判断理由と次の一手を明示して実行時の迷いを減らす。`,
-      strengths: ['実行手順が分かりやすい', '判断理由を保持できる', pressure ? '高負荷時の追加往復を減らせる' : '説明量を適正化できる'],
-      failureModes: ['Human Signalは事実ではないため過信できない', '実装内容そのものの正しさはEvidenceとTestに依存する'],
-      requiredChecks: ['Human Signalを仕様決定に使わない', ...success],
-      metrics: {
-        objectiveFit: 80,
-        evidenceFit: baseEvidenceFit,
-        riskControl: 78,
-        constraintFit: constraintBase,
-        reversibility: 84
-      },
-      rationale: '内容ではなく伝達・実行負荷を最適化する補助案。'
+      id: 'human_fit', label: ja ? '人読み最適案' : 'Human-fit', angle: 'human_fit',
+      thesis: pressure ? (ja ? `${t.target}について、問い返しを増やさず、確認済み・未確認・次の実行条件を一括提示する。` : 'Minimize clarification turns and present supported, unresolved, and next-action conditions together.') : (ja ? `${t.target}の事実構造を変えず、説明量と次アクションだけをHuman Signalへ合わせる。` : 'Preserve facts and adjust only explanation density and next action to human signals.'),
+      strengths: [ja ? 'Human Signalを回答制御に使える。' : 'Uses human signals only for response control.', ja ? '事実・Risk・EvidenceをHuman Signalで上書きしない。' : 'Does not override facts, risks, or evidence with human signals.'],
+      failureModes: [ja ? 'Human Signal推定を事実判断へ使うと破綻する。' : 'Fails if human-signal inference changes factual judgment.'],
+      requiredChecks: ['human_signal_is_response_only', ...success],
+      metrics: { objectiveFit: 82, evidenceFit: baseEvidenceFit, riskControl: 80, constraintFit: constraintFit(t, 'human_fit'), reversibility: 86 },
+      rationale: ja ? '利用者状態は表示制御だけに使い、判断内容の根拠にはしない。' : 'Human state controls presentation only, never factual judgment.',
+      ruleIds: ['DIALECTIC-HUMAN-RESPONSE-ONLY']
     }),
     candidate({
-      id: 'bad_hand',
-      label: '悪手案',
-      angle: 'bad_hand',
-      thesis: `Evidence状態とConstraintを無視し、「${request.target}」を一括変更して検証前に完成扱いする。`,
-      strengths: ['短期的には速く見える', '事故パターンを対照例として可視化できる'],
-      failureModes: ['未確認を事実化する', '責務境界を壊す', 'Rollback不能になり得る', '未Testを完成扱いする'],
-      requiredChecks: ['採用しない', '他候補の事故防止材料としてのみ使う'],
-      metrics: {
-        objectiveFit: 35,
-        evidenceFit: 10,
-        riskControl: 5,
-        constraintFit: 5,
-        reversibility: 15
-      },
-      rationale: '採用候補ではなく、失敗条件を明示するための対照案。'
+      id: 'bad_hand', label: ja ? '悪手案' : 'Bad hand', angle: 'bad_hand',
+      thesis: ja ? `Evidence・Constraint・Testを無視して${t.target}を即時確定する。` : `Immediately decide ${t.target} while ignoring evidence, constraints, and tests.`,
+      strengths: [ja ? '短時間で結論だけは出る。' : 'Produces a fast conclusion.'],
+      failureModes: [ja ? '未確認を事実化する。' : 'Promotes unresolved claims.', ja ? 'Hard Constraint違反。' : 'Violates hard constraints.', ja ? 'Rollback不能化。' : 'Can remove rollback.', ja ? '未検証完成宣言。' : 'Can falsely claim completion.'],
+      requiredChecks: [ja ? '採用禁止。事故検出素材としてのみ保持。' : 'Never adopt; retain only as a failure reference.'],
+      metrics: { objectiveFit: 30, evidenceFit: 5, riskControl: 5, constraintFit: constraintFit(t, 'bad_hand'), reversibility: 10 },
+      rationale: ja ? '採用候補ではなく、失敗Patternの検出基準。' : 'Failure-reference candidate only.',
+      ruleIds: ['DIALECTIC-BAD-HAND-NEVER-SELECT']
     })
   ];
 
   const ranked = [...candidates].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
   return {
-    pillar: 'dialectic',
-    engine: 'Astera Deterministic Dialectic',
-    mode: 'decision_materials',
-    description: '入力目的・Constraint・Evidence・Riskから候補を構成し、固定文の選択ではなく候補固有MetricをCompareへ渡す。',
-    domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null,
-    selected: ranked[0],
-    candidates: ranked,
+    pillar: 'dialectic', task_id: t.id || null, engine: 'Astera Deterministic Dialectic', mode: 'decision_materials',
+    description: ja ? '主案・反対案・第三案・人読み最適案・悪手案を固定Ruleと同一Metricで比較可能なCandidateへ変換する。' : 'Generate five deterministic candidates under the same metrics.',
+    selected: ranked.find((item) => item.id !== 'bad_hand') || null, candidates: ranked,
     bad_hand_lessons: candidates.find((item) => item.id === 'bad_hand')?.failure_modes || [],
-    integration_rule: '悪手は採用せず、事故検出材料としてのみ保持する。'
+    integration_rule: ja ? '悪手案は採用禁止。Evidence・Hard Constraint・Dependency・Riskを満たさない候補はCompareで減点またはHoldする。' : 'Never select bad-hand; Compare must penalize or hold candidates that fail evidence, hard-constraint, dependency, or risk gates.',
+    score_model: { weights: WEIGHTS }
   };
 }
 
