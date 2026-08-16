@@ -31,12 +31,64 @@ async function stopMain(runtime) {
   await fs.rm(runtime.root, { recursive: true, force: true });
 }
 
+function evidenceResult(context, claim = 'API compatibility is preserved') {
+  return {
+    schema_version: 'astera.evidence-search.result.v1',
+    request_id: context.requestId,
+    tenant_id: context.tenantId,
+    status: 'FINAL_VALID',
+    result_hash: `result-${context.requestId}`,
+    evidence: [
+      {
+        candidate_id: 'ev-1',
+        canonical_record_id: 'official-record',
+        content_hash: 'official-hash',
+        source_role: 'OFFICIAL',
+        source_family_id: 'official-family',
+        source_id: 'official-test',
+        provider_id: 'official-provider',
+        authority_id: 'official-authority',
+        canonical_locator: { url: 'https://example.test/evidence', replayable: true },
+        fields: { claim },
+        excerpt: claim
+      },
+      {
+        candidate_id: 'ev-2',
+        canonical_record_id: 'corroboration-record',
+        content_hash: 'corroboration-hash',
+        source_role: 'SECONDARY',
+        source_family_id: 'corroboration-family',
+        source_id: 'corroboration-test',
+        provider_id: 'corroboration-provider',
+        authority_id: 'corroboration-authority',
+        canonical_locator: { url: 'https://corroboration.test/evidence', replayable: true },
+        fields: { claim },
+        excerpt: claim
+      }
+    ],
+    coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE' },
+    quality: {
+      initial: { status: 'REINFORCEMENT_REQUIRED', phase: 'INITIAL', score_bp: 8200, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] },
+      reinforcement_attempt_count: 1,
+      new_corroboration_count: 1,
+      final: { status: 'FINAL_VALID', phase: 'FINAL', score_bp: 9700, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] }
+    },
+    provider_execution: {
+      initial: [{ provider_id: 'official-provider', status: 'FULFILLED' }],
+      reinforcement: [{ provider_id: 'corroboration-provider', status: 'FULFILLED' }]
+    },
+    ai_used: false,
+    payment_executed: false,
+    paid_usage_reports: []
+  };
+}
+
 test('authenticated user reaches evidence search through the main runtime', async () => {
   const calls = [];
   const evidenceClient = {
     async search(payload, context) {
       calls.push({ payload, context });
-      return { schema_version: 'astera.evidence-search.result.v1', request_id: context.requestId, tenant_id: context.tenantId, status: 'FINAL_VALID', evidence: [{ candidate_id: 'ev-1' }], quality: { initial: { score_bp: 8200 }, final: { score_bp: 9600 }, reinforcement_attempt_count: 1, new_corroboration_count: 1 }, ai_used: false, payment_executed: false, paid_usage_reports: [] };
+      return evidenceResult(context, 'verified free evidence');
     }
   };
   const runtime = await startMain({ evidenceClient });
@@ -75,17 +127,13 @@ test('unauthenticated user cannot access the evidence route', async () => {
   } finally { await stopMain(runtime); }
 });
 
-test('integrated process decomposes first, searches Evidence only for required tasks, and passes task-indexed packets into non-AI V8 runtime', async () => {
+test('integrated process decomposes first, searches Evidence only for external-evidence tasks, and passes task-indexed packets into non-AI V8 runtime', async () => {
   const evidenceCalls = [];
   const engineCalls = [];
   const evidenceClient = {
     async search(payload, context) {
       evidenceCalls.push({ payload, context });
-      return {
-        schema_version: 'astera.evidence-search.result.v1', request_id: context.requestId, tenant_id: context.tenantId, status: 'FINAL_VALID',
-        evidence: [{ candidate_id: 'ev-1', source_role: 'OFFICIAL', source_id: 'official-test', canonical_locator: { url: 'https://example.test/evidence', replayable: true }, fields: { claim: 'API compatibility is preserved' } }],
-        coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE' }, quality: { final: { status: 'FINAL_VALID', score_bp: 9700 } }, provider_execution: { initial: [{ provider_id: 'official-test', status: 'FULFILLED' }], reinforcement: [] }, ai_used: false, payment_executed: false, paid_usage_reports: []
-      };
+      return evidenceResult(context);
     }
   };
   const engine = {
@@ -99,7 +147,7 @@ test('integrated process decomposes first, searches Evidence only for required t
   try {
     const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': runtime.apiKey },
-      body: JSON.stringify({ question: '現在のAPI互換性を公式根拠で検証する。その後APIを段階移行する。最後にテストで確認する。成功条件はRollback可能であること。' })
+      body: JSON.stringify({ question: 'Verify the current API compatibility using official evidence. Migrate the API in stages. Verify regression tests before completion. Success requires rollback capability.', language: 'en' })
     });
     assert.equal(response.status, 200);
     const result = await response.json();
@@ -122,6 +170,82 @@ test('integrated process decomposes first, searches Evidence only for required t
   } finally { await stopMain(runtime); }
 });
 
+test('integrated boundary uses Parser-resolved task target for Lens and Evidence Search query', async () => {
+  const evidenceCalls = [];
+  const engineCalls = [];
+  const preparedRequest = {
+    schema_version: 'astera.request-model.v2',
+    language: 'ja',
+    target: 'APIサーバーのシステム開発',
+    action: 'verify',
+    objective: 'APIサーバーの現行仕様を公式根拠で検証する。',
+    instruction_understanding: { mode: 'DEEP_PATH', parser: 'Deterministic-Japanese-Parser-MCP', execution_allowed: true, blocked_reasons: [], semantic_hash: 'resolved-ref' },
+    analysis_task_packet: {
+      schema_version: 'astera.analysis-task-packet.v1',
+      intent: 'verify',
+      tasks: [{
+        id: 'P-REF',
+        source_span: { start: 0, end: 10, text: 'それを検証して。' },
+        raw_text: 'それを検証して。',
+        clause_type: 'verification_criteria',
+        actionable: true,
+        action: 'verify',
+        target: 'APIサーバーのシステム開発',
+        objective: 'APIサーバーの現行仕様を公式根拠で検証する。',
+        deliverables: [],
+        premises: [],
+        constraints: [],
+        prohibitions: [],
+        preserve: [],
+        replace: [],
+        conditions: ['現行仕様であること'],
+        exceptions: [],
+        deadlines: [],
+        priority: 'normal',
+        order: 1,
+        depends_on: [],
+        parallelizable: true,
+        success_criteria: ['公式根拠で確認する'],
+        verification: ['公式Sourceを使用する'],
+        completion_criteria: ['公式根拠で確認する'],
+        unresolved: [],
+        evidence_need: { required: false, reasons: [], queries: [] },
+        external_action: false,
+        hard_blockers: []
+      }],
+      dependencies: [],
+      execution_waves: [['P-REF']],
+      constraints: [], prohibitions: [], preserve: [], replace: [], verification: ['公式Sourceを使用する'], completion_criteria: ['公式根拠で確認する'], unresolved: [], conflicts: [], hard_blockers: [], source_spans: [{ task_id: 'P-REF', start: 0, end: 10, text: 'それを検証して。' }]
+    }
+  };
+  const engine = {
+    async prepareRequest() { return preparedRequest; },
+    async process(input, tenant) {
+      engineCalls.push({ input, tenant });
+      return { result: { type: 'cognitive_map', non_ai: true, comparison: { verdict: { decision: 'recommend' } } }, material: {}, runtime: { ai_used: false, llm_called: false } };
+    },
+    async destroy() {}
+  };
+  const evidenceClient = {
+    async search(payload, context) {
+      evidenceCalls.push({ payload, context });
+      return evidenceResult(context, 'API server current specification is supported');
+    }
+  };
+  const runtime = await startMain({ evidenceClient, engine });
+  try {
+    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': runtime.apiKey }, body: JSON.stringify({ question: 'それを検証して。' }) });
+    assert.equal(response.status, 200);
+    assert.equal(evidenceCalls.length, 1);
+    assert.match(evidenceCalls[0].payload.question, /APIサーバーのシステム開発/);
+    assert.equal(evidenceCalls[0].payload.domain_lens.id, 'G29');
+    assert.ok(Array.isArray(evidenceCalls[0].payload.aliases));
+    assert.equal(Array.isArray(evidenceCalls[0].payload.conditions), false);
+    assert.equal(engineCalls.length, 1);
+    assert.equal(engineCalls[0].input.taskEvidencePackets['P-REF'].status, 'FINAL_VALID');
+  } finally { await stopMain(runtime); }
+});
+
 test('task evidence provider failure is isolated to that task instead of aborting the whole integrated graph', async () => {
   const engineCalls = [];
   const runtime = await startMain({
@@ -132,7 +256,7 @@ test('task evidence provider failure is isolated to that task instead of abortin
     }
   });
   try {
-    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method:'POST', headers:{'Content-Type':'application/json','X-API-Key':runtime.apiKey}, body:JSON.stringify({question:'現在のAPI仕様を公式根拠で検証する。'}) });
+    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method:'POST', headers:{'Content-Type':'application/json','X-API-Key':runtime.apiKey}, body:JSON.stringify({question:'Verify the current API specification using an official source.',language:'en'}) });
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.equal(result.evidence.status, 'REJECTED_TASK_EVIDENCE');
