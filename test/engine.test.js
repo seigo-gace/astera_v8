@@ -12,8 +12,8 @@ const { JapaneseParserMCPClient, MCP_PROTOCOL_VERSION, needsJapaneseParser } = r
 const silentLogger = { write() {} };
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
 
-function validEvidence(claim, candidates = null) {
-  const evidence = candidates || [{
+function officialCandidate(claim) {
+  return {
     candidate_id: 'ev-official-1',
     canonical_record_id: 'official-record-1',
     content_hash: 'hash-official-1',
@@ -26,13 +26,35 @@ function validEvidence(claim, candidates = null) {
     updated_at: '2026-08-16T00:00:00.000Z',
     fields: { claim },
     excerpt: claim
-  }];
+  };
+}
+
+function corroborationCandidate(claim) {
+  return {
+    candidate_id: 'ev-corroboration-1',
+    canonical_record_id: 'corroboration-record-1',
+    content_hash: 'hash-corroboration-1',
+    source_role: 'SECONDARY',
+    source_family_id: 'corroboration-family-1',
+    source_id: 'corroboration-source-1',
+    provider_id: 'corroboration-provider',
+    authority_id: 'corroboration-authority-1',
+    canonical_locator: { url: 'https://corroboration.test/evidence', replayable: true },
+    updated_at: '2026-08-16T00:00:00.000Z',
+    fields: { claim },
+    excerpt: claim
+  };
+}
+
+function validEvidence(claim, candidates = null) {
+  const evidence = candidates || [officialCandidate(claim), corroborationCandidate(claim)];
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: 'ev-test',
     tenant_id: 'test',
     status: 'FINAL_VALID',
     effective_as_of: '2026-08-16T00:00:00.000Z',
+    result_hash: 'test-result-hash',
     evidence,
     coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE', registry_coverage_state: 'COMPLETE' },
     quality: {
@@ -331,6 +353,14 @@ test('two independent SECONDARY sources can corroborate a premise after the fina
     assert.ok(out.result.facts.confirmed.some((item) => item.status === 'INDEPENDENT_CORROBORATION_SUPPORTED'));
     assert.ok(out.result.facts.corroborating_evidence.length >= 2);
   }, parserClient((originalText) => evidenceParserResponse(originalText, claim)));
+});
+
+test('FINAL_VALID metadata cannot claim corroboration that is absent from the evidence array', () => {
+  const claim = 'Node.js 22は本番で対応している';
+  const packet = validEvidence(claim, [officialCandidate(claim)]);
+  const normalized = normalizeEvidencePacket(packet);
+  assert.equal(normalized.state, 'REJECTED');
+  assert.ok(normalized.eligibility_reasons.includes('CORROBORATION_EVIDENCE_MISMATCH'));
 });
 
 test('forged FINAL_VALID without the one reinforcement and new corroboration is rejected and held', async () => {
