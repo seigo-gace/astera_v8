@@ -36,12 +36,13 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
   if (/PARTIAL|UNKNOWN/.test(evidence.coverage_state) && !['NOT_PROVIDED', 'NOT_REQUIRED'].includes(evidence.state)) risks.push({ rule_id: 'RISK-EVIDENCE-COVERAGE', key: 'evidence_coverage', weight: 14, trigger: evidence.coverage_state, impact: '探索範囲不足による見落とし', why: `Evidence coverage=${evidence.coverage_state}。`, mitigation: 'Coverage不足を明示して必要Source範囲を追加する。' });
   if (evidence.provider_failures.length) risks.push({ rule_id: 'RISK-RETRIEVAL-FAILURE', key: 'retrieval_failure', weight: 16, trigger: evidence.provider_failures.map((item) => `${item.provider_id}:${item.error_code}`).join(', '), impact: '根拠取得失敗による判断材料欠落', why: `${evidence.provider_failures.length} Providerの取得失敗。`, mitigation: '取得失敗を未解決として保持する。' });
   if ((task?.prohibitions || []).length) risks.push({ rule_id: 'RISK-PROHIBITION-BREACH', key: 'prohibition_breach', weight: 30, trigger: (task.prohibitions || []).join(' / '), impact: 'Master明示禁止条件の違反', why: '禁止条件は候補Scoreより上位のHard Gate。', mitigation: '禁止条件に触れる候補を選択対象から除外する。' });
+  if ((task?.hard_blockers || []).length) risks.push({ rule_id: 'RISK-HARD-BLOCKER', key: 'hard_blocker', weight: 40, trigger: task.hard_blockers.join(' / '), impact: 'Parser Guard・未解決意味・必須条件未成立のまま判断確定する危険', why: 'Hard BlockerはScore計算より上位のFail-Closed条件。', mitigation: 'Hard Blockerを解消するまでTaskの最終確定を禁止する。' });
 
   const deduped = [...new Map(risks.map((risk) => [risk.key, risk])).values()].sort((a, b) => b.weight - a.weight || a.key.localeCompare(b.key));
   const checks = domainRiskChecks(domain);
   const totalWeight = deduped.reduce((sum, item) => sum + item.weight, 0);
   const level = totalWeight >= 55 ? 'high' : totalWeight >= 20 ? 'medium' : 'low';
-  const safetyGates = unique([...(domain.primary?.safety_gate || []), ...(domain.overlays || []).flatMap((overlay) => overlay.safety_gate || []), ...(task?.prohibitions || [])]);
+  const safetyGates = unique([...(domain.primary?.safety_gate || []), ...(domain.overlays || []).flatMap((overlay) => overlay.safety_gate || []), ...(task?.prohibitions || []), ...(task?.hard_blockers || [])]);
   return {
     pillar: 'risk', task_id: task?.id || null, rule_ids: unique(deduped.map((item) => item.rule_id)), risk_count: deduped.length, risks: deduped,
     domain_checks: checks, safety_gates: safetyGates, highest: deduped[0] || null, level,
