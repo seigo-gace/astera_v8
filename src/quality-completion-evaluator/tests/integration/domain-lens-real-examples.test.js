@@ -48,7 +48,7 @@ for (const [index, item] of CASES.entries()) {
     assert.equal(routed.input_valid, true);
     assert.equal(routed.primary.id, item.expectedId);
     assert.equal(routed.taxonomy_version, "1.0.0");
-    assert.equal(routed.router, "all_domain_lens_router_v1");
+    assert.equal(routed.router, "all_domain_lens_router_v2");
 
     if (item.expectedOverlay) {
       assert.ok(
