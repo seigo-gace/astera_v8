@@ -36,8 +36,10 @@ async function run({ mode = 'analysis', question = '', human_text = '', moodAnsw
   const missingEvidence = evidenceRequired && evidence.state !== 'VALID';
   const hardBlockers = unique(task?.hard_blockers || []);
   const unresolved = unique([...(task?.unresolved || []), ...(task?.conditions || []).length && !completion.length ? ['condition_without_completion'] : []]);
+  const resolvedTask = !missingTarget && hardBlockers.length === 0 && Boolean(task?.action || request.action);
+  const shortAndUnresolved = tooShort && !resolvedTask;
   const questions = [];
-  if (tooShort) questions.push('何を対象に、何を達成したいか具体化が必要。');
+  if (shortAndUnresolved) questions.push('何を対象に、何を達成したいか具体化が必要。');
   if (missingTarget) questions.push('判断対象・変更対象が一意に確定していない。');
   if (missingSuccess) questions.push(`Task ${task?.id || '-'} の完了・合格条件が未指定。`);
   if (missingEvidence) questions.push(`Task ${task?.id || '-'} はEvidenceが必要だがVALIDではない。`);
@@ -47,8 +49,14 @@ async function run({ mode = 'analysis', question = '', human_text = '', moodAnsw
   const uniqueQuestions = unique(questions);
 
   if (mode === 'preflight') {
-    const blocked = tooShort || (missingTarget && text.length < 12) || hardBlockers.length > 0;
-    return { pillar: 'inquiry', stage: 'preflight', task_id: task?.id || null, clarification_needed: blocked, questions: blocked ? uniqueQuestions.slice(0, 8) : [], rule: '明確なTaskは停止しない。不足・曖昧・Conflict・Parser GuardはHard Gateへ渡し、推測で補完しない。', mood, human_reading: human, request_model: request, hard_blockers: hardBlockers, domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null };
+    const blocked = shortAndUnresolved || (missingTarget && text.length < 12) || hardBlockers.length > 0;
+    return {
+      pillar: 'inquiry', stage: 'preflight', task_id: task?.id || null, clarification_needed: blocked,
+      questions: blocked ? uniqueQuestions.slice(0, 8) : [],
+      rule: '明確に解決済みの短いTaskは文字数だけで止めない。不足・曖昧・Conflict・Parser GuardはHard Gateへ渡し、推測で補完しない。',
+      mood, human_reading: human, request_model: request, hard_blockers: hardBlockers,
+      domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null
+    };
   }
 
   const missing = [];
@@ -57,7 +65,7 @@ async function run({ mode = 'analysis', question = '', human_text = '', moodAnsw
   if (missingEvidence) missing.push('evidence');
   missing.push(...unresolved, ...hardBlockers.map((item)=>`hard_blocker:${item}`));
   return {
-    pillar: 'inquiry', task_id: task?.id || null, rule_ids: ['INQ-001-EXPLICIT-PREMISE', 'INQ-002-NO-GUESS-FILL', 'INQ-003-HARD-CONSTRAINT-FIRST', 'INQ-004-PARSER-GUARD-FAIL-CLOSED'],
+    pillar: 'inquiry', task_id: task?.id || null, rule_ids: ['INQ-001-EXPLICIT-PREMISE', 'INQ-002-NO-GUESS-FILL', 'INQ-003-HARD-CONSTRAINT-FIRST', 'INQ-004-PARSER-GUARD-FAIL-CLOSED', 'INQ-005-SHORT-RESOLVED-TASK-CONTINUE'],
     problem_health: { healthy: missing.length === 0, reason: missing.length ? `不足=${unique(missing).join(',')}` : '対象・条件・Evidence・Parser Guardを機械的に追跡可能' },
     missing_fields: unique(missing), missing_questions: uniqueQuestions, hard_blockers: hardBlockers,
     assumptions: ['入力に明示されていない事実は未確認として扱う。', '必要Evidenceが未実行・Rejected・Partialなら根拠不足を保持する。', '禁止・維持・依存・完了条件は推奨候補より優先する。', 'Parser GuardがBlockしたTaskはScoreに関係なく最終確定しない。'],
@@ -66,6 +74,12 @@ async function run({ mode = 'analysis', question = '', human_text = '', moodAnsw
       success_criteria: completion, constraints: task?.constraints || request.constraints || [], prohibitions: task?.prohibitions || [], preserve: task?.preserve || [], replace: task?.replace || [], conditions: task?.conditions || [], exceptions: task?.exceptions || [], dependencies: task?.depends_on || []
     },
     inquiry_lens: domain.primary?.inquiry_lens || [], mood, human_reading: human, evidence_state: evidence.state,
+    evidence_quality: {
+      score_bp: evidence.quality_score_bp,
+      eligibility_reasons: evidence.eligibility_reasons || [],
+      reinforcement_attempt_count: evidence.reinforcement_attempt_count || 0,
+      new_corroboration_count: evidence.new_corroboration_count || 0
+    },
     domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name, inquiry_lens: domain.primary.inquiry_lens || [] } : null
   };
 }
