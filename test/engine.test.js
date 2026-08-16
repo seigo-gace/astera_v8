@@ -2,10 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
+const { PassThrough, Writable } = require('node:stream');
 const KaguraEngine = require('../src/kagura-engine');
 const { analyzeRequest, deriveEvidenceNeed } = require('../src/judgment-materials-analyzer');
 const { routeDomainTemplates } = require('../src/domain-template-router');
-const { needsJapaneseParser } = require('../src/japanese-parser-mcp-client');
+const { JapaneseParserMCPClient, MCP_PROTOCOL_VERSION, needsJapaneseParser } = require('../src/japanese-parser-mcp-client');
 
 const silentLogger = { write() {} };
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
@@ -49,7 +51,51 @@ function parserResponse(originalText, { executionAllowed = true, blockedReasons 
     task_graph: { graph_version: '2.0.0', tasks, edges: tasks.length > 1 ? [{ source: 'P001', target: 'P002', relation: 'depends_on' }] : [], constraints: [], status: executionAllowed ? 'RESOLVED' : 'AMBIGUOUS' },
     ambiguities: executionAllowed ? [] : [{ code: 'AMBIGUOUS_ACTION' }], missing_information: [], contradictions: [], unsupported_elements: [], timeouts: [],
     versions: { parser: 'test-parser', grammar: 'test-grammar' }, metrics: { elapsed_ms: 3.1 },
-    astera_mcp_transport: { protocol_version: '2025-11-25', elapsed_ms: 3.2, tool: 'analyze_japanese' }
+    astera_mcp_transport: { protocol_version: MCP_PROTOCOL_VERSION, elapsed_ms: 3.2, tool: 'analyze_japanese' }
+  };
+}
+
+function mcpSpawnStub(log) {
+  return () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.killed = false;
+    let inputBuffer = '';
+    child.stdin = new Writable({
+      write(chunk, encoding, callback) {
+        inputBuffer += String(chunk);
+        while (inputBuffer.includes('\n')) {
+          const index = inputBuffer.indexOf('\n');
+          const raw = inputBuffer.slice(0, index).trim();
+          inputBuffer = inputBuffer.slice(index + 1);
+          if (!raw) continue;
+          const message = JSON.parse(raw);
+          log.push(message);
+          if (!Object.hasOwn(message, 'id')) continue;
+          let result;
+          if (message.method === 'initialize') {
+            result = { protocolVersion: MCP_PROTOCOL_VERSION, capabilities: { tools: {} }, serverInfo: { name: 'parser-test', version: '1' } };
+          } else if (message.method === 'tools/list') {
+            result = { tools: [{ name: 'analyze_japanese', inputSchema: { type: 'object' }, outputSchema: { type: 'object' } }] };
+          } else if (message.method === 'tools/call') {
+            result = { structuredContent: parserResponse(message.params.arguments.original_text) };
+          } else {
+            result = {};
+          }
+          queueMicrotask(() => child.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n'));
+        }
+        callback();
+      }
+    });
+    child.kill = () => {
+      child.killed = true;
+      child.exitCode = 0;
+      queueMicrotask(() => child.emit('exit', 0, 'SIGTERM'));
+      return true;
+    };
+    return child;
   };
 }
 
@@ -92,6 +138,23 @@ test('compound fast analysis preserves prohibition, preserve, dependencies, wave
   assert.ok(packet.execution_waves.length >= 3);
   assert.ok(packet.source_spans.every((item) => Number.isInteger(item.start) && Number.isInteger(item.end)));
   assert.ok(new Set(packet.tasks.map((item)=>item.action)).size >= 2);
+});
+
+test('native MCP stdio client uses NDJSON initialize/list/call and validates structured result', async () => {
+  const log = [];
+  const client = new JapaneseParserMCPClient({ spawnImpl: mcpSpawnStub(log), timeoutMs: 100, initTimeoutMs: 200 });
+  try {
+    const originalText = 'UIは残せ。APIだけ変更しろ。';
+    const result = await client.analyze({ originalText, executionMode: 'external_action', runDeepAnalysis: true, deadlineMs: 50 });
+    assert.equal(result.original_text, originalText);
+    assert.equal(result.meaning_graph.semantic_hash, 'semantic-test-hash');
+    assert.equal(result.astera_mcp_transport.protocol_version, MCP_PROTOCOL_VERSION);
+    assert.deepEqual(log.map((message)=>message.method), ['initialize','notifications/initialized','tools/list','tools/call']);
+    assert.equal(log[0].params.protocolVersion, MCP_PROTOCOL_VERSION);
+    assert.equal(log[3].params.name, 'analyze_japanese');
+    assert.equal(log[3].params.arguments.execution_mode, 'external_action');
+    assert.equal(log[3].params.arguments.absolute_deadline_ms, 50);
+  } finally { await client.destroy(); }
 });
 
 test('meaning-heavy Japanese is routed to Parser MCP while clear single-task Japanese stays on V8 Fast Path', async () => {
@@ -140,6 +203,7 @@ test('Parser action guard blocks external action regardless of candidate score',
     assert.ok(modify.task.hard_blockers.includes('PARSER_ACTION_GUARD_BLOCKED'));
     assert.equal(modify.comparison.verdict.decision, 'hold_and_clarify');
     assert.ok(modify.comparison.verdict.gate_rule_ids.includes('COMPARE-GATE-HARD-BLOCKER'));
+    assert.ok(modify.risks.risks.some((item)=>item.key==='hard_blocker'));
     assert.equal(out.result.comparison.verdict.decision, 'hold_and_clarify');
   }, client);
 });
