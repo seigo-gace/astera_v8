@@ -34,31 +34,33 @@ async function run({ mode = 'analysis', question = '', human_text = '', moodAnsw
   const missingSuccess = completion.length === 0 && ['implement', 'improve', 'migrate', 'integrate', 'remove'].includes(request.action);
   const evidenceRequired = Boolean(task?.evidence_need?.required);
   const missingEvidence = evidenceRequired && evidence.state !== 'VALID';
+  const hardBlockers = unique(task?.hard_blockers || []);
   const unresolved = unique([...(task?.unresolved || []), ...(task?.conditions || []).length && !completion.length ? ['condition_without_completion'] : []]);
   const questions = [];
   if (tooShort) questions.push('何を対象に、何を達成したいか具体化が必要。');
   if (missingTarget) questions.push('判断対象・変更対象が一意に確定していない。');
   if (missingSuccess) questions.push(`Task ${task?.id || '-'} の完了・合格条件が未指定。`);
   if (missingEvidence) questions.push(`Task ${task?.id || '-'} はEvidenceが必要だがVALIDではない。`);
+  if (hardBlockers.length) questions.push(`Hard Blocker=${hardBlockers.join(' / ')}`);
   if (unresolved.length) questions.push(`未解決=${unresolved.join(' / ')}`);
   questions.push(...domainQuestions(domain));
   const uniqueQuestions = unique(questions);
 
   if (mode === 'preflight') {
-    const blocked = tooShort || (missingTarget && text.length < 12);
-    return { pillar: 'inquiry', stage: 'preflight', task_id: task?.id || null, clarification_needed: blocked, questions: blocked ? uniqueQuestions.slice(0, 6) : [], rule: '明確なTaskは停止しない。不足・曖昧・Conflictは明示して後段Hard Gateへ渡し、推測で補完しない。', mood, human_reading: human, request_model: request, domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null };
+    const blocked = tooShort || (missingTarget && text.length < 12) || hardBlockers.length > 0;
+    return { pillar: 'inquiry', stage: 'preflight', task_id: task?.id || null, clarification_needed: blocked, questions: blocked ? uniqueQuestions.slice(0, 8) : [], rule: '明確なTaskは停止しない。不足・曖昧・Conflict・Parser GuardはHard Gateへ渡し、推測で補完しない。', mood, human_reading: human, request_model: request, hard_blockers: hardBlockers, domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null };
   }
 
   const missing = [];
   if (missingTarget) missing.push('target');
   if (missingSuccess) missing.push('completion_criteria');
   if (missingEvidence) missing.push('evidence');
-  missing.push(...unresolved);
+  missing.push(...unresolved, ...hardBlockers.map((item)=>`hard_blocker:${item}`));
   return {
-    pillar: 'inquiry', task_id: task?.id || null, rule_ids: ['INQ-001-EXPLICIT-PREMISE', 'INQ-002-NO-GUESS-FILL', 'INQ-003-HARD-CONSTRAINT-FIRST'],
-    problem_health: { healthy: missing.length === 0, reason: missing.length ? `不足=${unique(missing).join(',')}` : '対象・条件・Evidence要否を機械的に追跡可能' },
-    missing_fields: unique(missing), missing_questions: uniqueQuestions,
-    assumptions: ['入力に明示されていない事実は未確認として扱う。', '必要Evidenceが未実行・Rejected・Partialなら根拠不足を保持する。', '禁止・維持・依存・完了条件は推奨候補より優先する。'],
+    pillar: 'inquiry', task_id: task?.id || null, rule_ids: ['INQ-001-EXPLICIT-PREMISE', 'INQ-002-NO-GUESS-FILL', 'INQ-003-HARD-CONSTRAINT-FIRST', 'INQ-004-PARSER-GUARD-FAIL-CLOSED'],
+    problem_health: { healthy: missing.length === 0, reason: missing.length ? `不足=${unique(missing).join(',')}` : '対象・条件・Evidence・Parser Guardを機械的に追跡可能' },
+    missing_fields: unique(missing), missing_questions: uniqueQuestions, hard_blockers: hardBlockers,
+    assumptions: ['入力に明示されていない事実は未確認として扱う。', '必要Evidenceが未実行・Rejected・Partialなら根拠不足を保持する。', '禁止・維持・依存・完了条件は推奨候補より優先する。', 'Parser GuardがBlockしたTaskはScoreに関係なく最終確定しない。'],
     extracted: {
       target: request.target, action: request.action, objective: request.objective,
       success_criteria: completion, constraints: task?.constraints || request.constraints || [], prohibitions: task?.prohibitions || [], preserve: task?.preserve || [], replace: task?.replace || [], conditions: task?.conditions || [], exceptions: task?.exceptions || [], dependencies: task?.depends_on || []
