@@ -144,14 +144,19 @@ function deriveEvidenceNeed(task = {}, domain = {}) {
     ...(task.success_criteria || []),
     ...(task.completion_criteria || []),
     ...(task.conditions || []),
+    task.target || '',
     task.objective || ''
   ].join(' ');
+  const internalVerification = /(?:unit|integration|regression|smoke|build|compile|lint|test|テスト|試験|動作確認|回帰|ビルド|コンパイル)/i.test(explicitEvidenceText);
+  const externalEvidenceSignal = /(?:evidence|source|official|primary source|current|latest|fact|根拠|証拠|公式|一次資料|最新|現行|事実|外部情報)/i.test(explicitEvidenceText);
+  const explicitEvidenceOverlay = overlays.includes('current_information') || overlays.includes('evidence_strict');
 
   if (task.evidence_need?.required) reasons.push('task_contract_requires_evidence');
-  if (['verify', 'compare', 'decide'].includes(task.action) && domainEvidence.length) reasons.push(`action:${task.action}`);
-  if (/(?:evidence|source|official|current|根拠|証拠|公式|最新|現行|検証)/i.test(explicitEvidenceText)) reasons.push('task_criteria_requires_evidence');
-  if (overlays.includes('current_information')) reasons.push('overlay:current_information');
-  if (overlays.includes('evidence_strict')) reasons.push('overlay:evidence_strict');
+  if (externalEvidenceSignal) reasons.push('task_criteria_requires_external_evidence');
+  if (explicitEvidenceOverlay) reasons.push(overlays.includes('current_information') ? 'overlay:current_information' : 'overlay:evidence_strict');
+  if (['verify', 'compare', 'decide'].includes(task.action) && domainEvidence.length && (externalEvidenceSignal || explicitEvidenceOverlay) && !internalVerification) {
+    reasons.push(`action:${task.action}:external_evidence`);
+  }
 
   const required = reasons.length > 0;
   const queries = required ? unique([
