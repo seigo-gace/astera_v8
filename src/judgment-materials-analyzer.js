@@ -197,11 +197,16 @@ function emptyEvidencePacket(state = 'NOT_PROVIDED') {
     eligibility_reasons: Object.freeze([]),
     quality_score_bp: null,
     quality_gate_bp: 9500,
+    initial_quality_score_bp: null,
+    initial_quality_gate_bp: 8000,
     final_phase: null,
     reinforcement_attempt_count: 0,
+    reinforcement_fulfilled_count: 0,
     new_corroboration_count: 0,
+    unique_evidence_count: 0,
     coverage_state: 'UNKNOWN',
     conflict_detected: false,
+    result_hash: null,
     evidence: Object.freeze([]),
     provider_failures: Object.freeze([]),
     role_counts: Object.freeze({}),
@@ -216,9 +221,13 @@ function normalizeEvidencePacket(packet) {
   const status = String(source.status || 'UNKNOWN').toUpperCase();
   if (status === 'NOT_REQUIRED') return Object.freeze({ ...emptyEvidencePacket('NOT_REQUIRED'), source_status: status });
 
+  const initialQuality = source.quality?.initial || {};
   const finalQuality = source.quality?.final || {};
+  const initialScore = Number.isInteger(initialQuality.score_bp) ? initialQuality.score_bp : null;
+  const initialGate = Number.isInteger(initialQuality.gates?.initial_minimum_bp) ? initialQuality.gates.initial_minimum_bp : 8000;
   const finalScore = Number.isInteger(finalQuality.score_bp) ? finalQuality.score_bp : null;
   const finalGate = Number.isInteger(finalQuality.gates?.final_minimum_bp) ? finalQuality.gates.final_minimum_bp : 9500;
+  const initialPhase = String(initialQuality.phase || '').toUpperCase() || null;
   const finalPhase = String(finalQuality.phase || '').toUpperCase() || null;
   const reinforcementAttemptCount = Number.isInteger(source.quality?.reinforcement_attempt_count) ? source.quality.reinforcement_attempt_count : 0;
   const newCorroborationCount = Number.isInteger(source.quality?.new_corroboration_count) ? source.quality.new_corroboration_count : 0;
@@ -239,19 +248,29 @@ function normalizeEvidencePacket(packet) {
     version: item.version || null,
     fields: Object.freeze({ ...(item.fields || {}) })
   })).filter((item) => item.claim || item.id);
-  const failures = [...(source.provider_execution?.initial || []), ...(source.provider_execution?.reinforcement || [])]
+  const initialRuns = Array.isArray(source.provider_execution?.initial) ? source.provider_execution.initial : [];
+  const reinforcementRuns = Array.isArray(source.provider_execution?.reinforcement) ? source.provider_execution.reinforcement : [];
+  const failures = [...initialRuns, ...reinforcementRuns]
     .filter((item) => item.status && item.status !== 'FULFILLED')
     .map((item) => ({ provider_id: item.provider_id || '', error_code: item.error_code || 'PROVIDER_FAILED' }));
+  const reinforcementFulfilledCount = reinforcementRuns.filter((item) => String(item.status || '').toUpperCase() === 'FULFILLED').length;
+  const evidenceIdentities = new Set(evidence.map((item) => item.content_hash || item.canonical_record_id || item.id || item.url).filter(Boolean));
 
   const blockingReasons = unique(finalQuality.blocking_reasons || []);
   const eligibilityReasons = [];
   if (status === 'FINAL_VALID') {
     if (String(source.schema_version || '') !== 'astera.evidence-search.result.v1') eligibilityReasons.push('EVIDENCE_SCHEMA_INVALID');
+    if (!String(source.result_hash || '').trim()) eligibilityReasons.push('RESULT_HASH_MISSING');
+    if (String(initialQuality.status || '').toUpperCase() !== 'REINFORCEMENT_REQUIRED') eligibilityReasons.push('INITIAL_QUALITY_STATUS_INVALID');
+    if (initialPhase !== 'INITIAL') eligibilityReasons.push('INITIAL_QUALITY_PHASE_INVALID');
+    if (initialScore == null || initialScore < initialGate || initialScore < 8000) eligibilityReasons.push('INITIAL_QUALITY_BELOW_80');
     if (String(finalQuality.status || '').toUpperCase() !== 'FINAL_VALID') eligibilityReasons.push('FINAL_QUALITY_STATUS_INVALID');
     if (finalPhase !== 'FINAL') eligibilityReasons.push('FINAL_QUALITY_PHASE_INVALID');
     if (finalScore == null || finalScore < finalGate || finalScore < 9500) eligibilityReasons.push('FINAL_QUALITY_BELOW_95');
     if (reinforcementAttemptCount !== 1) eligibilityReasons.push('REINFORCEMENT_COUNT_INVALID');
+    if (reinforcementFulfilledCount < 1) eligibilityReasons.push('REINFORCEMENT_EXECUTION_MISSING');
     if (newCorroborationCount < 1) eligibilityReasons.push('NEW_CORROBORATION_MISSING');
+    if (evidenceIdentities.size < newCorroborationCount + 1) eligibilityReasons.push('CORROBORATION_EVIDENCE_MISMATCH');
     if (!evidence.length) eligibilityReasons.push('EVIDENCE_EMPTY');
     if (source.ai_used !== false) eligibilityReasons.push('AI_USED_CONTRACT_INVALID');
     if (source.payment_executed !== false) eligibilityReasons.push('PAYMENT_EXECUTION_CONTRACT_INVALID');
@@ -279,13 +298,18 @@ function normalizeEvidencePacket(packet) {
     eligibility_reasons: Object.freeze(unique(eligibilityReasons)),
     quality_score_bp: finalScore,
     quality_gate_bp: finalGate,
+    initial_quality_score_bp: initialScore,
+    initial_quality_gate_bp: initialGate,
     quality_criterion_scores: Object.freeze({ ...(finalQuality.criterion_scores || {}) }),
     final_phase: finalPhase,
     reinforcement_attempt_count: reinforcementAttemptCount,
+    reinforcement_fulfilled_count: reinforcementFulfilledCount,
     new_corroboration_count: newCorroborationCount,
+    unique_evidence_count: evidenceIdentities.size,
     coverage_state: String(source.coverage?.discovery_scope_state || source.coverage?.registry_coverage_state || 'UNKNOWN'),
     conflict_detected: blockingReasons.some((item) => /CONFLICT/i.test(item)),
     effective_as_of: source.effective_as_of || null,
+    result_hash: source.result_hash || null,
     evidence: Object.freeze(evidence),
     provider_failures: Object.freeze(failures),
     role_counts: Object.freeze(roleCounts),
