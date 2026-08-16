@@ -15,12 +15,33 @@ function candidate({ id, label, angle, thesis, strengths, failureModes, required
   return { id, label, angle, thesis, strengths: unique(strengths).slice(0, 8), failure_modes: unique(failureModes).slice(0, 8), required_checks: unique(requiredChecks).slice(0, 10), metrics, weights: WEIGHTS, score, answer_line_distance: 100 - score, rationale, rule_ids: ruleIds };
 }
 
-function evidenceFit(evidence, unresolved) {
-  if (evidence.state === 'VALID') return unresolved ? 78 : 92;
-  if (evidence.state === 'REJECTED') return 20;
-  if (evidence.state === 'PARTIAL') return 45;
-  if (evidence.state === 'NOT_REQUIRED') return 85;
-  return unresolved ? 45 : 70;
+function evidenceFit(evidence, unresolved, evidenceRequired = false) {
+  if (evidence.state === 'VALID') {
+    const quality = Number(evidence.quality_score_bp || 9500) / 100;
+    const diversity = Math.min(4, Math.max(0, (evidence.distinct_authority_count || 0) - 1) + Math.max(0, (evidence.distinct_source_family_count || 0) - 1));
+    const corroboration = Math.min(2, Number(evidence.new_corroboration_count || 0));
+    return clamp(quality + diversity + corroboration - (unresolved ? Math.min(10, unresolved * 3) : 0));
+  }
+  if (evidence.state === 'REJECTED') return evidenceRequired ? 5 : 20;
+  if (evidence.state === 'PARTIAL') return evidenceRequired ? 15 : 45;
+  if (evidence.state === 'NOT_REQUIRED') return evidenceRequired ? 10 : 88;
+  if (evidence.state === 'NOT_PROVIDED') return evidenceRequired ? 5 : (unresolved ? 45 : 70);
+  return evidenceRequired ? 10 : 50;
+}
+
+function evidenceMeta(evidence) {
+  return {
+    state: evidence.state,
+    source_status: evidence.source_status,
+    score_bp: evidence.quality_score_bp,
+    gate_bp: evidence.quality_gate_bp,
+    coverage_state: evidence.coverage_state,
+    authority_count: evidence.distinct_authority_count || 0,
+    source_family_count: evidence.distinct_source_family_count || 0,
+    reinforcement_attempt_count: evidence.reinforcement_attempt_count || 0,
+    new_corroboration_count: evidence.new_corroboration_count || 0,
+    eligibility_reasons: evidence.eligibility_reasons || []
+  };
 }
 
 function constraintFit(task, mode) {
@@ -35,6 +56,7 @@ function constraintFit(task, mode) {
 async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi = {}, mood = {}, human = {}, domain = {}, task = null, evidence_packet = null }) {
   const evidence = normalizeEvidencePacket(evidence_packet);
   const t = task || { id: null, target: '対象', objective: question, success_criteria: [], constraints: [], prohibitions: [], preserve: [], action: 'analyze' };
+  const evidenceRequired = Boolean(t.evidence_need?.required);
   const unresolved = facts.unconfirmed?.length || 0;
   const verified = facts.confirmed?.length || 0;
   const riskCount = risks.risk_count || 0;
@@ -45,29 +67,30 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
   const topRisk = risks.highest?.impact || risks.highest?.why || '重大Riskなし';
   const domainChecks = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect.slice(0, 5) : [];
   const pressure = human.mode === 'high_pressure' || Number(mood.score || 0) < 0;
-  const baseEvidenceFit = evidenceFit(evidence, unresolved);
+  const baseEvidenceFit = evidenceFit(evidence, unresolved, evidenceRequired);
+  const evidenceState = evidenceMeta(evidence);
   const baseReversibility = /rollback|戻|復元|revert/i.test([...success, ...constraints].join(' ')) ? 96 : 78;
   const ja = /[ぁ-んァ-ヶ一-龠々]/.test(t.source_span?.text || question);
 
   const candidates = [
     candidate({
       id: 'mainline', label: ja ? '主案' : 'Mainline', angle: multi.recommended || 'balanced',
-      thesis: ja ? `Task ${t.id || '-'}「${t.objective}」を、確認済みFact・Risk・制約・Evidence状態に従って実行する。` : `Execute task ${t.id || '-'} from supported facts, risks, constraints, and evidence state.`,
-      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, constraints.length ? (ja ? `Hard Constraint ${constraints.length}件を評価対象に含める。` : `Includes ${constraints.length} hard constraints.`) : ''],
-      failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : `Fails if top risk is not controlled.`) : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
-      requiredChecks: [...success, ...constraints, ...domainChecks],
+      thesis: ja ? `Task ${t.id || '-'}「${t.objective}」を、確認済みFact・Risk・制約・Evidence品質に従って実行する。` : `Execute task ${t.id || '-'} from supported facts, risks, constraints, and evidence quality.`,
+      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, evidence.state === 'VALID' ? (ja ? `Evidence ${evidence.quality_score_bp}bp・補強${evidence.new_corroboration_count}件を採点へ使用する。` : `Uses Evidence ${evidence.quality_score_bp}bp and corroboration in scoring.`) : ''],
+      failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', evidenceRequired && evidence.state !== 'VALID' ? (ja ? `必須Evidenceが${evidence.state}。` : `Required evidence is ${evidence.state}.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : `Fails if top risk is not controlled.`) : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
+      requiredChecks: [...success, ...constraints, ...domainChecks, ...(evidenceRequired ? ['evidence_state=VALID'] : [])],
       metrics: { objectiveFit: 96, evidenceFit: baseEvidenceFit, riskControl: highRisk ? 68 : 86, constraintFit: constraintFit(t, 'mainline'), reversibility: baseReversibility },
       rationale: ja ? '最短の主案だが、Evidence・Risk・Hard ConstraintのGateを全て満たす場合だけ採用可能。' : 'Shortest mainline; adopt only when evidence, risk, and hard-constraint gates pass.',
-      ruleIds: ['DIALECTIC-MAINLINE-OBJECTIVE', 'DIALECTIC-HARD-GATE']
+      ruleIds: ['DIALECTIC-MAINLINE-OBJECTIVE', 'DIALECTIC-HARD-GATE', 'DIALECTIC-EVIDENCE-QUALITY-SCORE']
     }),
     candidate({
       id: 'opposition', label: ja ? '反対案' : 'Opposition', angle: 'opposition',
       thesis: ja ? `${t.target}を直ちに進めず、未確認・Evidence不足・上位Riskを解消してから進める。` : `Do not advance ${t.target} until unresolved facts, evidence gaps, and top risks are controlled.`,
       strengths: [ja ? `最上位Risk「${topRisk}」を優先できる。` : 'Prioritizes the top risk.', ja ? '未確認の事実化を防止する。' : 'Prevents unresolved claims from becoming facts.', ja ? 'Hard Constraint違反を抑える。' : 'Reduces hard-constraint violations.'],
       failureModes: [ja ? 'Evidenceが十分でRiskが低い場合は過剰停止になる。' : 'Can over-block when evidence is sufficient and risk is low.'],
-      requiredChecks: [...missing.slice(0, 5), ...domainChecks, ...constraints],
-      metrics: { objectiveFit: highRisk || evidence.state === 'REJECTED' ? 86 : 70, evidenceFit: evidence.state === 'VALID' ? 88 : 74, riskControl: 97, constraintFit: constraintFit(t, 'opposition'), reversibility: 96 },
-      rationale: ja ? '誤断定・事故を防ぐ反対候補。停止自体を目的化せず、解除条件を保持する。' : 'Opposition candidate for error prevention; retain explicit release conditions.',
+      requiredChecks: [...missing.slice(0, 5), ...domainChecks, ...constraints, ...(evidence.eligibility_reasons || [])],
+      metrics: { objectiveFit: highRisk || (evidenceRequired && evidence.state !== 'VALID') ? 90 : 70, evidenceFit: evidence.state === 'VALID' ? Math.max(82, baseEvidenceFit - 5) : 96, riskControl: 97, constraintFit: constraintFit(t, 'opposition'), reversibility: 96 },
+      rationale: ja ? '誤断定・事故を防ぐ反対候補。Evidence未成立時は停止条件の妥当性が上がるが、停止自体を目的化しない。' : 'Opposition candidate for error prevention; evidence failure increases its fit but does not make stopping the objective.',
       ruleIds: ['DIALECTIC-OPPOSITION-RISK', 'DIALECTIC-OPPOSITION-EVIDENCE']
     }),
     candidate({
@@ -75,10 +98,10 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
       thesis: ja ? `${t.target}を一括確定せず、依存・Evidence・検証条件で分割し、成立部分だけ進める。` : `Do not decide ${t.target} monolithically; split by dependencies, evidence, and verification gates.`,
       strengths: [ja ? '前進と安全性を両立しやすい。' : 'Balances progress and safety.', ja ? 'Rollback単位を小さく保てる。' : 'Keeps rollback units small.', ja ? 'Evidence不足部分だけ保留できる。' : 'Can hold only evidence-deficient parts.'],
       failureModes: [ja ? '分割境界が依存関係と一致しない場合は複雑化する。' : 'Complexity increases if partition boundaries conflict with dependencies.'],
-      requiredChecks: [...constraints, ...success, ...(t.depends_on || []).map((id) => `dependency:${id}`)],
-      metrics: { objectiveFit: 90, evidenceFit: Math.min(95, baseEvidenceFit + 7), riskControl: highRisk ? 91 : 87, constraintFit: constraintFit(t, 'third_way'), reversibility: 97 },
-      rationale: ja ? 'Task GraphとGateを使って成立部分だけ進める候補。' : 'Advances only graph segments whose gates are satisfied.',
-      ruleIds: ['DIALECTIC-THIRD-WAY-PARTITION', 'DIALECTIC-DEPENDENCY-GATE']
+      requiredChecks: [...constraints, ...success, ...(t.depends_on || []).map((id) => `dependency:${id}`), ...(evidenceRequired ? ['evidence_gate_per_segment'] : [])],
+      metrics: { objectiveFit: 90, evidenceFit: evidence.state === 'VALID' ? Math.min(98, baseEvidenceFit + 3) : Math.max(55, baseEvidenceFit + 20), riskControl: highRisk ? 91 : 87, constraintFit: constraintFit(t, 'third_way'), reversibility: 97 },
+      rationale: ja ? 'Task GraphとGateを使って成立部分だけ進める候補。Evidence不足をTask単位で隔離する。' : 'Advances only graph segments whose gates are satisfied and isolates evidence gaps by task.',
+      ruleIds: ['DIALECTIC-THIRD-WAY-PARTITION', 'DIALECTIC-DEPENDENCY-GATE', 'DIALECTIC-EVIDENCE-SEGMENT-GATE']
     }),
     candidate({
       id: 'human_fit', label: ja ? '人読み最適案' : 'Human-fit', angle: 'human_fit',
@@ -105,10 +128,11 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
   const ranked = [...candidates].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
   return {
     pillar: 'dialectic', task_id: t.id || null, engine: 'Astera Deterministic Dialectic', mode: 'decision_materials',
-    description: ja ? '主案・反対案・第三案・人読み最適案・悪手案を固定Ruleと同一Metricで比較可能なCandidateへ変換する。' : 'Generate five deterministic candidates under the same metrics.',
+    description: ja ? '主案・反対案・第三案・人読み最適案・悪手案を固定Ruleと同一Metricで比較可能なCandidateへ変換する。EvidenceFitはEvidence Searchの最終品質・補強・Source多様性を実数利用する。' : 'Generate five deterministic candidates under the same metrics, with EvidenceFit derived from final evidence quality and diversity.',
+    evidence_state: evidenceState,
     selected: ranked.find((item) => item.id !== 'bad_hand') || null, candidates: ranked,
     bad_hand_lessons: candidates.find((item) => item.id === 'bad_hand')?.failure_modes || [],
-    integration_rule: ja ? '悪手案は採用禁止。Evidence・Hard Constraint・Dependency・Riskを満たさない候補はCompareで減点またはHoldする。' : 'Never select bad-hand; Compare must penalize or hold candidates that fail evidence, hard-constraint, dependency, or risk gates.',
+    integration_rule: ja ? '悪手案は採用禁止。Evidence必須TaskでVALIDでない候補、Hard Constraint・Dependency・Riskを満たさない候補はCompareでHoldする。' : 'Never select bad-hand; Compare must hold evidence-required tasks without VALID evidence and candidates that fail hard constraints, dependencies, or risk gates.',
     score_model: { weights: WEIGHTS }
   };
 }
