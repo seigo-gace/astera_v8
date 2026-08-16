@@ -12,25 +12,8 @@ function parserError(code, message, details = {}) {
   return error;
 }
 
-function needsJapaneseParser(question, fastRequest = {}) {
-  const text = String(question || '');
-  if (!/[ぁ-んァ-ヶ一-龠々]/.test(text)) return false;
-  const packet = fastRequest.analysis_task_packet || {};
-  const map = fastRequest.instruction_map || {};
-  if ((packet.tasks || []).length > 1) return true;
-  if ((map.correction_count || 0) > 0 || (map.prohibition_count || 0) > 0 || (map.preserve_count || 0) > 0) return true;
-  if (fastRequest.context_present) return true;
-  if (/それ|これ|あれ|前の|先ほど|さっき|上記|下記|同じ|そのまま|前述|後述|当該/.test(text)) return true;
-  if (/ただし|例外|場合|なら|ならば|であれば|してから|した後|終わったら|完了後|並列|並行|同時/.test(text)) return true;
-  if (/訂正|撤回|ではなく|じゃなく|違う|二重否定/.test(text)) return true;
-  if (/[「『][\s\S]*[」』]/.test(text)) return true;
-  if (text.length >= 120) return true;
-  return false;
-}
-
-function isExternalActionHint(question, fastRequest = {}) {
-  if ((fastRequest.analysis_task_packet?.tasks || []).some((task) => ['implement', 'improve', 'integrate', 'migrate', 'remove'].includes(task.action))) return true;
-  return /実装|変更|修正|改善|削除|移行|統合|接続|反映|Push|公開|deploy|release|replace|modify|remove/i.test(String(question || ''));
+function isJapaneseText(text) {
+  return /[ぁ-んァ-ヶ一-龠々]/.test(String(text || ''));
 }
 
 function validateParserResult(value, expectedOriginalText) {
@@ -113,7 +96,7 @@ class JapaneseParserMCPClient {
     this.ready = true;
   }
 
-  async analyze({ originalText, conversationContext = [], executionMode = 'analysis', runDeepAnalysis = true, deadlineMs = this.timeoutMs } = {}) {
+  async analyze({ originalText, conversationContext = [], executionMode = 'external_action', runDeepAnalysis = true, deadlineMs = this.timeoutMs } = {}) {
     const original = String(originalText || '');
     if (!original.trim()) throw parserError('PARSER_INPUT_EMPTY', 'Japanese Parser MCP requires non-empty originalText.');
     await this.initialize();
@@ -145,9 +128,7 @@ class JapaneseParserMCPClient {
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => this._onStdout(chunk));
-    child.stderr.on('data', (chunk) => {
-      this.stderrBuffer = (this.stderrBuffer + String(chunk)).slice(-this.maxStderrBytes);
-    });
+    child.stderr.on('data', (chunk) => { this.stderrBuffer = (this.stderrBuffer + String(chunk)).slice(-this.maxStderrBytes); });
     child.once('error', (error) => this._failAll(parserError('PARSER_PROCESS_ERROR', `Japanese Parser MCP process error: ${error.message}`)));
     child.once('exit', (code, signal) => {
       const suffix = this.stderrBuffer.trim() ? ` stderr=${this.stderrBuffer.trim().slice(-1000)}` : '';
@@ -227,7 +208,6 @@ module.exports = {
   JapaneseParserMCPClient,
   MCP_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
-  needsJapaneseParser,
-  isExternalActionHint,
+  isJapaneseText,
   validateParserResult
 };
