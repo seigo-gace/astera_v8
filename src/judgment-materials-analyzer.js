@@ -137,12 +137,32 @@ function extractTerms(text) {
 
 function deriveEvidenceNeed(task = {}, domain = {}) {
   const reasons = unique(task.evidence_need?.reasons || []);
-  if (task.evidence_need?.required) reasons.push('task_contract_requires_evidence');
-  if (['verify', 'compare', 'decide'].includes(task.action) && (domain.primary?.evidence_to_collect || []).length) reasons.push(`action:${task.action}`);
+  const domainEvidence = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect : [];
   const overlays = (domain.overlays || []).map((item) => item.id);
+  const explicitEvidenceText = [
+    ...(task.verification || []),
+    ...(task.success_criteria || []),
+    ...(task.completion_criteria || []),
+    ...(task.conditions || []),
+    task.objective || ''
+  ].join(' ');
+
+  if (task.evidence_need?.required) reasons.push('task_contract_requires_evidence');
+  if (['verify', 'compare', 'decide'].includes(task.action) && domainEvidence.length) reasons.push(`action:${task.action}`);
+  if (/(?:evidence|source|official|current|根拠|証拠|公式|最新|現行|検証)/i.test(explicitEvidenceText)) reasons.push('task_criteria_requires_evidence');
   if (overlays.includes('current_information')) reasons.push('overlay:current_information');
   if (overlays.includes('evidence_strict')) reasons.push('overlay:evidence_strict');
-  return { required: reasons.length > 0, reasons: unique(reasons), queries: unique([...(task.evidence_need?.queries || []), ...(reasons.length ? (domain.primary?.evidence_to_collect || []) : [])]).slice(0, 16) };
+
+  const required = reasons.length > 0;
+  const queries = required ? unique([
+    ...(task.evidence_need?.queries || []),
+    task.target || '',
+    task.objective || '',
+    ...domainEvidence,
+    ...(task.verification || []),
+    ...(task.conditions || [])
+  ]).slice(0, 20) : [];
+  return { required, reasons: unique(reasons), queries };
 }
 
 function buildExecutionWaves(tasks = [], dependencies = []) {
@@ -164,23 +184,108 @@ function evidenceClaim(item) {
   return norm(item?.fields?.claim || item?.excerpt || item?.title || item?.canonical_record_id || '');
 }
 
-function normalizeEvidencePacket(packet) {
-  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return Object.freeze({ schema_version: 'astera.evidence-packet.compact.v1', state: 'NOT_PROVIDED', source_status: null, quality_score_bp: null, coverage_state: 'UNKNOWN', conflict_detected: false, evidence: Object.freeze([]), provider_failures: Object.freeze([]) });
-  const source = packet.result && packet.schema_version === 'astera.evidence-search.module-response.v1' ? packet.result : packet;
-  const status = String(source.status || 'UNKNOWN');
-  const quality = source.quality?.final || {};
-  const evidence = (Array.isArray(source.evidence) ? source.evidence : []).map((item) => Object.freeze({
-    id: String(item.candidate_id || item.canonical_record_id || ''), claim: evidenceClaim(item), source_role: String(item.source_role || '').toUpperCase(), authority_id: String(item.authority_id || item.publisher?.id || ''), source_id: String(item.source_id || item.provider_id || ''),
-    url: item.canonical_locator?.url || null, replayable: item.canonical_locator?.replayable === true, updated_at: item.updated_at || item.published_at || null, version: item.version || null, fields: Object.freeze({ ...(item.fields || {}) })
-  })).filter((item) => item.claim || item.id);
-  const failures = [...(source.provider_execution?.initial || []), ...(source.provider_execution?.reinforcement || [])].filter((item) => item.status && item.status !== 'FULFILLED').map((item) => ({ provider_id: item.provider_id || '', error_code: item.error_code || 'PROVIDER_FAILED' }));
+function emptyEvidencePacket(state = 'NOT_PROVIDED') {
   return Object.freeze({
-    schema_version: 'astera.evidence-packet.compact.v1',
-    state: status === 'FINAL_VALID' ? 'VALID' : status.startsWith('REJECTED') ? 'REJECTED' : status === 'NOT_REQUIRED' ? 'NOT_REQUIRED' : 'PARTIAL',
-    source_status: status, quality_score_bp: Number.isInteger(quality.score_bp) ? quality.score_bp : null,
+    schema_version: 'astera.evidence-packet.compact.v2',
+    state,
+    source_status: null,
+    eligibility_reasons: Object.freeze([]),
+    quality_score_bp: null,
+    quality_gate_bp: 9500,
+    final_phase: null,
+    reinforcement_attempt_count: 0,
+    new_corroboration_count: 0,
+    coverage_state: 'UNKNOWN',
+    conflict_detected: false,
+    evidence: Object.freeze([]),
+    provider_failures: Object.freeze([]),
+    role_counts: Object.freeze({}),
+    distinct_authority_count: 0,
+    distinct_source_family_count: 0
+  });
+}
+
+function normalizeEvidencePacket(packet) {
+  if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return emptyEvidencePacket();
+  const source = packet.result && packet.schema_version === 'astera.evidence-search.module-response.v1' ? packet.result : packet;
+  const status = String(source.status || 'UNKNOWN').toUpperCase();
+  if (status === 'NOT_REQUIRED') return Object.freeze({ ...emptyEvidencePacket('NOT_REQUIRED'), source_status: status });
+
+  const finalQuality = source.quality?.final || {};
+  const finalScore = Number.isInteger(finalQuality.score_bp) ? finalQuality.score_bp : null;
+  const finalGate = Number.isInteger(finalQuality.gates?.final_minimum_bp) ? finalQuality.gates.final_minimum_bp : 9500;
+  const finalPhase = String(finalQuality.phase || '').toUpperCase() || null;
+  const reinforcementAttemptCount = Number.isInteger(source.quality?.reinforcement_attempt_count) ? source.quality.reinforcement_attempt_count : 0;
+  const newCorroborationCount = Number.isInteger(source.quality?.new_corroboration_count) ? source.quality.new_corroboration_count : 0;
+  const evidence = (Array.isArray(source.evidence) ? source.evidence : []).map((item) => Object.freeze({
+    id: String(item.candidate_id || item.canonical_record_id || ''),
+    canonical_record_id: String(item.canonical_record_id || ''),
+    content_hash: String(item.content_hash || ''),
+    claim: evidenceClaim(item),
+    source_role: String(item.source_role || '').toUpperCase(),
+    source_family_id: String(item.source_family_id || ''),
+    authority_id: String(item.authority_id || item.publisher?.id || ''),
+    publisher_id: String(item.publisher?.id || ''),
+    source_id: String(item.source_id || item.provider_id || ''),
+    provider_id: String(item.provider_id || ''),
+    url: item.canonical_locator?.url || null,
+    replayable: item.canonical_locator?.replayable === true,
+    updated_at: item.updated_at || item.published_at || null,
+    version: item.version || null,
+    fields: Object.freeze({ ...(item.fields || {}) })
+  })).filter((item) => item.claim || item.id);
+  const failures = [...(source.provider_execution?.initial || []), ...(source.provider_execution?.reinforcement || [])]
+    .filter((item) => item.status && item.status !== 'FULFILLED')
+    .map((item) => ({ provider_id: item.provider_id || '', error_code: item.error_code || 'PROVIDER_FAILED' }));
+
+  const blockingReasons = unique(finalQuality.blocking_reasons || []);
+  const eligibilityReasons = [];
+  if (status === 'FINAL_VALID') {
+    if (String(source.schema_version || '') !== 'astera.evidence-search.result.v1') eligibilityReasons.push('EVIDENCE_SCHEMA_INVALID');
+    if (String(finalQuality.status || '').toUpperCase() !== 'FINAL_VALID') eligibilityReasons.push('FINAL_QUALITY_STATUS_INVALID');
+    if (finalPhase !== 'FINAL') eligibilityReasons.push('FINAL_QUALITY_PHASE_INVALID');
+    if (finalScore == null || finalScore < finalGate || finalScore < 9500) eligibilityReasons.push('FINAL_QUALITY_BELOW_95');
+    if (reinforcementAttemptCount !== 1) eligibilityReasons.push('REINFORCEMENT_COUNT_INVALID');
+    if (newCorroborationCount < 1) eligibilityReasons.push('NEW_CORROBORATION_MISSING');
+    if (!evidence.length) eligibilityReasons.push('EVIDENCE_EMPTY');
+    if (source.ai_used !== false) eligibilityReasons.push('AI_USED_CONTRACT_INVALID');
+    if (source.payment_executed !== false) eligibilityReasons.push('PAYMENT_EXECUTION_CONTRACT_INVALID');
+    if (blockingReasons.length) eligibilityReasons.push(...blockingReasons.map((item) => `QUALITY_BLOCK:${item}`));
+  }
+
+  const valid = status === 'FINAL_VALID' && eligibilityReasons.length === 0;
+  const state = valid
+    ? 'VALID'
+    : status === 'FINAL_VALID' || status.startsWith('REJECTED') || status === 'ERROR'
+      ? 'REJECTED'
+      : 'PARTIAL';
+  const roleCounts = evidence.reduce((acc, item) => {
+    const key = item.source_role || 'UNKNOWN';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const authorities = new Set(evidence.map((item) => item.authority_id || item.publisher_id).filter(Boolean));
+  const families = new Set(evidence.map((item) => item.source_family_id).filter(Boolean));
+
+  return Object.freeze({
+    schema_version: 'astera.evidence-packet.compact.v2',
+    state,
+    source_status: status,
+    eligibility_reasons: Object.freeze(unique(eligibilityReasons)),
+    quality_score_bp: finalScore,
+    quality_gate_bp: finalGate,
+    quality_criterion_scores: Object.freeze({ ...(finalQuality.criterion_scores || {}) }),
+    final_phase: finalPhase,
+    reinforcement_attempt_count: reinforcementAttemptCount,
+    new_corroboration_count: newCorroborationCount,
     coverage_state: String(source.coverage?.discovery_scope_state || source.coverage?.registry_coverage_state || 'UNKNOWN'),
-    conflict_detected: /CONFLICT/.test(JSON.stringify(quality).toUpperCase()), effective_as_of: source.effective_as_of || null,
-    evidence: Object.freeze(evidence), provider_failures: Object.freeze(failures)
+    conflict_detected: blockingReasons.some((item) => /CONFLICT/i.test(item)),
+    effective_as_of: source.effective_as_of || null,
+    evidence: Object.freeze(evidence),
+    provider_failures: Object.freeze(failures),
+    role_counts: Object.freeze(roleCounts),
+    distinct_authority_count: authorities.size,
+    distinct_source_family_count: families.size
   });
 }
 
