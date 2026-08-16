@@ -82,7 +82,7 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
     candidate({
       id: 'mainline', label: ja ? '主案' : 'Mainline', angle: 'mainline',
       thesis: ja ? `Task ${t.id || '-'}「${t.objective}」を、確認済みFact・Risk・制約・Evidence品質に従って実行する。` : `Execute task ${t.id || '-'} from supported facts, risks, constraints, and evidence quality.`,
-      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}仰を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, perspectiveIds.length ? (ja ? `Multiの視点集合(${perspectiveIds.join(',')})を候補生成材料として保持する。` : `Retains Multi perspectives (${perspectiveIds.join(',')}) as candidate-generation material.`) : '', evidence.state === 'VALID' ? (ja ? `Evidence ${evidence.quality_score_bp}bp・補強${evidence.new_corroboration_count}仰をMetric材料へ使用する。` : `Uses Evidence ${evidence.quality_score_bp}bp and corroboration as metric material.`) : ''],
+      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, perspectiveIds.length ? (ja ? `Multiの視点集合(${perspectiveIds.join(',')})を候補生成材料として保持する。` : `Retains Multi perspectives (${perspectiveIds.join(',')}) as candidate-generation material.`) : '', evidence.state === 'VALID' ? (ja ? `Evidence ${evidence.quality_score_bp}bp・補強${evidence.new_corroboration_count}件をMetric材料へ使用する。` : `Uses Evidence ${evidence.quality_score_bp}bp and corroboration as metric material.`) : ''],
       failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', evidenceRequired && evidence.state !== 'VALID' ? (ja ? `必須Evidenceが${evidence.state}。` : `Required evidence is ${evidence.state}.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : 'Fails if top risk is not controlled.') : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
       requiredChecks: [...success, ...constraints, ...domainChecks, ...(evidenceRequired ? ['evidence_state=VALID'] : [])],
       metrics: { objectiveFit: 96, evidenceFit: baseEvidenceFit, riskControl: highRisk ? 68 : 86, constraintFit: constraintFit(t, 'mainline'), reversibility: baseReversibility },
@@ -111,9 +111,9 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
     }),
     candidate({
       id: 'human_fit', label: ja ? '人読み最適案' : 'Human-fit', angle: 'human_fit',
-      thesis: pressure ? (ja ? `${t.target}について、問い返しを増やさず、確認済み・未確認・次の実行条仰を一括提示する。` : 'Minimize clarification turns and present supported, unresolved, and next-action conditions together.') : (ja ? `${t.target}の事実構造を変えず、説明量と次アクションだけをHuman Signalへ合わせる。` : 'Preserve facts and adjust only explanation density and next action to human signals.'),
+      thesis: pressure ? (ja ? `${t.target}について、問い返しを増やさず、確認済み・未確認・次の実行条件を一括提示する。` : 'Minimize clarification turns and present supported, unresolved, and next-action conditions together.') : (ja ? `${t.target}の事実構造を変えず、説明量と次アクションだけをHuman Signalへ合わせる。` : 'Preserve facts and adjust only explanation density and next action to human signals.'),
       strengths: [ja ? 'Human Signalを回答制御に使える。' : 'Uses human signals only for response control.', ja ? '事実・Risk・EvidenceをHuman Signalで上書きしない。' : 'Does not override facts, risks, or evidence with human signals.'],
-      failureModes: [ja ? 'Human Signal推定を事実判断ぶ使うと破綻する。' : 'Fails if human-signal inference changes factual judgment.'],
+      failureModes: [ja ? 'Human Signal推定を事実判断へ使うと破綻する。' : 'Fails if human-signal inference changes factual judgment.'],
       requiredChecks: ['human_signal_is_response_only', ...success],
       metrics: { objectiveFit: 82, evidenceFit: baseEvidenceFit, riskControl: 80, constraintFit: constraintFit(t, 'human_fit'), reversibility: 86 },
       rationale: ja ? '利用者状態は表示制御だけに使い、判断内容の根拠にはしない。' : 'Human state controls presentation only, never factual judgment.',

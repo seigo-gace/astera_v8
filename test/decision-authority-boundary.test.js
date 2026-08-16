@@ -104,6 +104,4 @@ test('Compare is the unique score, ranking and selected-candidate owner', async 
   assert.equal(output.candidate_ranking[0].id, 'bad_hand');
   assert.equal(output.candidate_ranking[1].id, 'high');
   assert.equal(output.verdict.angle, 'high');
-  assert.equal(output.authority.stage, 'compare');
-  assert.ok(output.authority.owns.includes('selected_candidate'));
 });

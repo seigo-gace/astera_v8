@@ -32,14 +32,14 @@ function detectContradictions({ facts = {}, risks = {}, inquiry = {}, evidence, 
 async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry = {}, dialectic = {}, domain = {}, task = null, evidence_packet = null, dependency_state = {} }) {
   const t = task || { id: null, target: '対象', objective: question, action: 'analyze', constraints: [], prohibitions: [], preserve: [], replace: [], depends_on: [], hard_blockers: [] };
   const evidence = normalizeEvidencePacket(evidence_packet);
-  const evidenceRequired = Boolean((t.evidence_need || {}).required);
+  const evidenceRequired = Boolean(t.evidence_need?.required);
   const evidenceValid = evidence.state === 'VALID';
   const ranking = compareCandidates(Array.isArray(dialectic.candidates) ? dialectic.candidates : []);
   const selectable = ranking.filter((item) => item.id !== 'bad_hand');
   const selected = selectable[0] || null;
   const contradictions = detectContradictions({ facts, risks, inquiry, evidence, ranking, task: t });
   const dependencyBlockers = (t.depends_on || []).filter((id) => !['recommend', 'recommend_with_caution'].includes(dependency_state[id]?.decision));
-  if (dependencyBlockers.length) contradictions.push({ key: 'dependency_blocked', note: 未成立Dependency=${dependencyBlockers.join(',')}` });
+  if (dependencyBlockers.length) contradictions.push({ key: 'dependency_blocked', note: `未成立Dependency=${dependencyBlockers.join(',')}` });
   const hardBlockers = unique(t.hard_blockers || []);
   const score = selected?.score || 0;
   const answerLineDistance = 100 - score;
@@ -64,17 +64,10 @@ async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry 
     : '比較可能な候補がない。';
 
   return {
-    pillar: 'compare',
-    task_id: t.id || null,
-    score,
-    answer_line_distance: answerLineDistance,
+    pillar: 'compare', task_id: t.id || null, score, answer_line_distance: answerLineDistance,
     score_model: { formula: 'objectiveFit*0.30 + evidenceFit*0.25 + riskControl*0.20 + constraintFit*0.15 + reversibility*0.10', weights: WEIGHTS },
     score_breakdown: selected ? Object.entries(WEIGHTS).map(([key, weight]) => ({ key, weight, raw: selected.metrics[key] ?? 0, contribution: Number(((selected.metrics[key] || 0) * weight).toFixed(2)) })) : [],
-    contradictions,
-    dependency_blockers: dependencyBlockers,
-    hard_blockers: hardBlockers,
-    selected_candidate: selected,
-    candidate_ranking: ranking,
+    contradictions, dependency_blockers: dependencyBlockers, hard_blockers: hardBlockers, selected_candidate: selected, candidate_ranking: ranking,
     rejected_candidates: ranking.filter((candidate) => candidate.id !== selected?.id).map((candidate) => ({ id: candidate.id, label: candidate.label, score: candidate.score, reason: candidate.id === 'bad_hand' ? '意図的悪手のため採用対象外。' : `首位との差=${selected ? selected.score - candidate.score : '-'} / failure=${candidate.failure_modes?.[0] || '明示なし'}` })),
     evidence_gate: {
       required: evidenceRequired,
@@ -103,11 +96,7 @@ async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry 
       selection_margin: margin
     },
     domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name, compare_lens: domain.primary.compare_lens || [] } : null,
-    authority: {
-      stage: 'compare',
-      owns: ['score', 'candidate_ranking', 'selected_candidate', 'rejected_candidates', 'uncertainty', 'decision']
-    },
-    verdict: { decision, angle: selected?.angle || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
+    verdict: { decision, angle: selected?.angle || multi.recommended || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
   };
 }
 
