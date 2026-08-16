@@ -3,7 +3,7 @@
 const KaguraServer = require('./server');
 const EvidenceSearchClient = require('./evidence-search/api/client');
 const { routeDomainTemplates } = require('./domain-template-router');
-const { analyzeRequest, deriveEvidenceNeed } = require('./judgment-materials-analyzer');
+const { analyzeRequest, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
 const { isSkillApiConfigured } = require('./auth/skill-api-key');
 
 const EVIDENCE_REQUEST_LIMIT = 256 * 1024;
@@ -15,6 +15,15 @@ function evidenceClientConfigured(options = {}) {
 function validDomainId(value) { return /^G(?:0[1-9]|[12][0-9]|3[0-8])$/.test(String(value || '')); }
 function notRequired(taskId) { return { schema_version:'astera.evidence-search.result.v1', status:'NOT_REQUIRED', task_id:taskId, evidence:[], coverage:{discovery_scope_state:'NOT_REQUIRED'}, quality:{final:{status:'NOT_REQUIRED',score_bp:null}}, provider_execution:{initial:[],reinforcement:[]}, ai_used:false, payment_executed:false }; }
 function failedEvidence(taskId, error) { return { schema_version:'astera.evidence-search.result.v1', status:'REJECTED_PROVIDER_FAILURE', task_id:taskId, evidence:[], coverage:{discovery_scope_state:'PARTIAL'}, quality:{final:{status:'REJECTED_PROVIDER_FAILURE',score_bp:0,reasons:['PROVIDER_FAILURE']}}, provider_execution:{initial:[{provider_id:'task_evidence_search',status:'REJECTED',error_code:error?.code||'PROVIDER_FAILURE'}],reinforcement:[]}, ai_used:false, payment_executed:false }; }
+function taskRouteText(task) { return unique([task.target || '', ...(task.premises || []), task.source_span?.text || '']).join('\n'); }
+function evidenceQuestion(task) { return unique([task.target || '', task.source_span?.text || '']).join('\n') || String(task.objective || ''); }
+function evidenceContext(task, bodyContext) { return unique([task.objective || '', ...(task.premises || []), ...(task.conditions || []), ...(task.verification || []), task.source_span?.text || '', bodyContext || '']).join('\n'); }
+function evidenceAliases(task) {
+  const question = evidenceQuestion(task);
+  return unique(task.evidence_need?.queries || [])
+    .filter((item) => item !== question && item.length <= 512)
+    .slice(0, 64);
+}
 
 function aggregateEvidence(byTask) {
   const entries=Object.entries(byTask);
@@ -82,25 +91,28 @@ class AsteraServerWithEvidence extends KaguraServer {
     const tasks=request.analysis_task_packet?.tasks||[];
     if(!tasks.length){const error=new Error('analysis task graph is empty');error.code='TASK_GRAPH_EMPTY';error.status=422;throw error;}
     const taskPlans=tasks.map((task)=>{
-      const routeText=[...(task.premises||[]),task.source_span?.text||''].filter(Boolean).join('\n');
+      const routeText=taskRouteText(task);
       const domain=routeDomainTemplates({question:routeText,context:body.context||''});
+      const evidenceNeed=deriveEvidenceNeed(task,domain);
       const explicitSingleDomain=tasks.length===1&&validDomainId(body.domain_lens?.id)?body.domain_lens.id:null;
       const domainId=explicitSingleDomain||domain.primary?.id;
-      if(!validDomainId(domainId)) return {...task,domain,evidence_need:{required:false,reasons:['domain_unresolved'],queries:[]},domain_error:'DOMAIN_LENS_UNRESOLVED'};
-      return {...task,domain,evidence_need:deriveEvidenceNeed(task,domain),domain_id:domainId};
+      if(!validDomainId(domainId)) return {...task,domain,evidence_need:evidenceNeed,domain_error:'DOMAIN_LENS_UNRESOLVED'};
+      return {...task,domain,evidence_need:evidenceNeed,domain_id:domainId};
     });
 
     const evidenceByTask={};
     await Promise.all(taskPlans.map(async(task)=>{
+      if(task.domain_error&&task.evidence_need.required){evidenceByTask[task.id]=failedEvidence(task.id,Object.assign(new Error(task.domain_error),{code:task.domain_error}));return;}
       if(!task.evidence_need.required){evidenceByTask[task.id]=notRequired(task.id);return;}
-      if(task.domain_error){evidenceByTask[task.id]=failedEvidence(task.id,Object.assign(new Error(task.domain_error),{code:task.domain_error}));return;}
+      const aliases=evidenceAliases(task);
       const evidenceRequest={
-        question:task.source_span.text,
-        context:[...(task.premises||[]),body.context||''].filter(Boolean).join('\n'),
+        question:evidenceQuestion(task),
+        context:evidenceContext(task,body.context||''),
         domain_lens:{id:task.domain_id,...(task.domain.primary?.taxonomy_version?{taxonomy_version:task.domain.primary.taxonomy_version}:{})},
         overlays:(task.domain.overlays||[]).map((overlay)=>overlay.id).filter(Boolean).slice(0,16),
+        ...(aliases.length?{aliases}:{}),
         search:{free_projection:true,free_current:true}, paid_search:{enabled:false},
-        conditions:[...(Array.isArray(evidenceOptions.conditions)?evidenceOptions.conditions:[]),...(task.conditions||[])],
+        ...(Array.isArray(evidenceOptions.conditions)&&evidenceOptions.conditions.length?{conditions:evidenceOptions.conditions}:{}),
         ...(Array.isArray(evidenceOptions.provider_allowlist)?{provider_allowlist:evidenceOptions.provider_allowlist}:{}),
         ...(Array.isArray(evidenceOptions.provider_denylist)?{provider_denylist:evidenceOptions.provider_denylist}:{}),
         ...(Number.isInteger(evidenceOptions.maximum_results)?{maximum_results:evidenceOptions.maximum_results}:{}),
