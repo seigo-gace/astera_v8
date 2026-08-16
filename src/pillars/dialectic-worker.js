@@ -11,8 +11,9 @@ function metricScore(metrics) {
 }
 
 function candidate({ id, label, angle, thesis, strengths, failureModes, requiredChecks, metrics, rationale, ruleIds }) {
-  const score = metricScore(metrics);
-  return { id, label, angle, thesis, strengths: unique(strengths).slice(0, 8), failure_modes: unique(failureModes).slice(0, 8), required_checks: unique(requiredChecks).slice(0, 10), metrics, weights: WEIGHTS, score, answer_line_distance: 100 - score, rationale, rule_ids: ruleIds };
+  const boundedMetrics = Object.fromEntries(Object.entries(metrics || {}).map(([key, value]) => [key, clamp(Number(value || 0))]));
+  const score = metricScore(boundedMetrics);
+  return { id, label, angle, thesis, strengths: unique(strengths).slice(0, 8), failure_modes: unique(failureModes).slice(0, 8), required_checks: unique(requiredChecks).slice(0, 10), metrics: boundedMetrics, weights: WEIGHTS, score, answer_line_distance: 100 - score, rationale, rule_ids: ruleIds };
 }
 
 function evidenceFit(evidence, unresolved, evidenceRequired = false) {
