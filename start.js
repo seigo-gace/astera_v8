@@ -1,6 +1,6 @@
 'use strict';
 
-const AsteraServer = require('./src/server-with-evidence');
+const AsteraServer = require('./src/server-with-module-switch');
 const SQLiteStore = require('./src/store/sqlite-store');
 const StripeClient = require('./src/billing/stripe-client');
 const SubscriptionSync = require('./src/billing/subscription-sync');
