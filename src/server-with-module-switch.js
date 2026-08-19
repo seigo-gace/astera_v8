@@ -1,6 +1,7 @@
 'use strict';
 
 const AsteraServerWithEvidence = require('./server-with-evidence');
+const CanonicalAsteraEngine = require('./canonical-astera-engine');
 const { evaluate } = require('./quality-completion-evaluator');
 const { AsteraModuleSwitch } = require('./astera-module-switch');
 
@@ -15,7 +16,8 @@ function apiError(code, message, status = 400) {
 
 class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
   constructor(options = {}) {
-    super(options);
+    const engine = options.engine || new CanonicalAsteraEngine({ poolSize: Number(options.poolSize || 4), logger: options.logger });
+    super({ ...options, engine });
     this.qualityEvaluator = options.qualityEvaluator || evaluate;
     if (typeof this.qualityEvaluator !== 'function') {
       throw new TypeError('qualityEvaluator must be a function');
