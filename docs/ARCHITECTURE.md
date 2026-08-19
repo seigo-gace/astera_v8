@@ -1,308 +1,621 @@
-# Astera v8 v1.1.1 アーキテクチャ全集
+# Astera v8 — Current Architecture
 
-## 1. システム全体構造図（レイヤー俯瞰）
+## 1. Architectureの位置づけ
 
-```text
-╔═══════════════════════════════════════════════════════════════╗
-║                      外部クライアント                         ║
-║         （Webアプリ / CLI / 他言語アプリ / curl）             ║
-╚═══════════════════════════════════════════════════════════════╝
-                              │ HTTP/HTTPS
-                              ▼
-╔═══════════════════════════════════════════════════════════════╗
-║  ① ゲートウェイ層（src/server.js）                            ║
-║  ┌─────────────┬──────────────┬─────────────────────────┐    ║
-║  │ CORS処理    │ ルーティング │ ペイロード上限(1MB)防御 │    ║
-║  └─────────────┴──────────────┴─────────────────────────┘    ║
-╚═══════════════════════════════════════════════════════════════╝
-                              ▼
-╔═══════════════════════════════════════════════════════════════╗
-║  ② 認証・防御層                                               ║
-║  ┌──────────────┬───────────────┬──────────────────────┐     ║
-║  │ TenantManager│ RateLimiter   │ KeyVault             │     ║
-║  │ (認証/分離)  │ (流量制御)    │ (キー安全管理)       │     ║
-║  └──────────────┴───────────────┴──────────────────────┘     ║
-╚═══════════════════════════════════════════════════════════════╝
-                              ▼
-╔═══════════════════════════════════════════════════════════════╗
-║  ③ 認知エンジン層（src/kagura-engine.js）★心臓               ║
-║                                                               ║
-║     ┌──────────── WorkerPool（V8並列）────────────┐          ║
-║     │  並列実行（同時）                            │          ║
-║     │  ┌────────┐ ┌────────┐ ┌──────────┐        │          ║
-║     │  │①真実   │ │②危機   │ │④反対思考 │        │          ║
-║     │  │Fact    │ │Risk    │ │Inquiry   │        │          ║
-║     │  └────────┘ └────────┘ └──────────┘        │          ║
-║     │       │          │           │              │          ║
-║     │       └──────────┴───────────┘              │          ║
-║     │                  ▼                          │          ║
-║     │            ┌──────────┐  逐次（①②を使う） │          ║
-║     │            │③多角度   │                    │          ║
-║     │            │Multi     │                    │          ║
-║     │            └──────────┘                    │          ║
-║     │                  ▼                          │          ║
-║     │            ┌──────────┐  逐次（全部を統合）│          ║
-║     │            │⑤比較検証 │                    │          ║
-║     │            │Compare   │                    │          ║
-║     │            └──────────┘                    │          ║
-║     └──────────────────┬──────────────────────────┘          ║
-║                        ▼                                      ║
-║                 【認知マップ生成】                            ║
-╚═══════════════════════════════════════════════════════════════╝
-                  ▼                          ▼
-╔══════════════════════════╗  ╔═══════════════════════════════╗
-║ ④ LLM非依存層            ║  ║ ⑤ 永続・課金層               ║
-║ ┌──────────────────────┐ ║  ║ ┌──────────┬────────────────┐ ║
-║ │ LLMClient(チェーン)  │ ║  ║ │ Logger   │ UsageMeter     │ ║
-║ │  ├ OpenAI            │ ║  ║ │(全記録)  │ (使用量計測)   │ ║
-║ │  ├ Anthropic         │ ║  ║ ├──────────┼────────────────┤ ║
-║ │  ├ Ollama(ローカル)  │ ║  ║ │SQLiteStore│ StripeClient  │ ║
-║ │  ├ OpenAI互換        │ ║  ║ │(テナント) │ (決済)        │ ║
-║ │  └ Null(防衛線)      │ ║  ║ └──────────┴────────────────┘ ║
-║ └──────────────────────┘ ║  ╚═══════════════════════════════╝
-╚══════════════════════════╝            │
-        │                               ▼ webhook
-        ▼                       ┌──────────────┐
-  外部LLM API                   │   Stripe     │
-  （呼ぶ側が選ぶ）              │ (課金の真実) │
-                                └──────────────┘
-```
+Astera v8は、主役AIそのものではなく、入力を分解・検証・比較し、判断に使える材料へ変換する非AIコグニションランタイムである。
 
-## 2. リクエスト処理フロー図（時系列）
+この文書はWorking Branch上の現行実装構造を説明する。仕様決定の起点はNotion正本であり、GitHub上の過去構造・Legacy名称・旧READMEを設計正本として扱わない。
+
+## 2. システム全体構造
 
 ```text
-クライアント                KAGURA                    外部
-   │                         │                        │
-   │── POST /process ───────▶│                        │
-   │   {question, llm}       │                        │
-   │                    ┌────▼────┐                   │
-   │                    │①認証    │ TenantManager     │
-   │                    └────┬────┘                   │
-   │                    ┌────▼────┐                   │
-   │                    │②流量制御│ RateLimiter       │
-   │                    └────┬────┘                   │
-   │                    ┌────▼────┐                   │
-   │                    │③キー解決│ KeyVault(BYOK/管理)│
-   │                    └────┬────┘                   │
-   │              ┌──────────▼──────────┐             │
-   │              │ ④並列前処理(Pool)   │             │
-   │              │  ┌──┬──┬──┐         │             │
-   │              │  │真│危│反│ 同時    │── LLM ─────▶│
-   │              │  └──┴──┴──┘         │◀─ or rule ──│
-   │              │      ▼              │             │
-   │              │   多角度→比較検証   │             │
-   │              └──────────┬──────────┘             │
-   │                    ┌────▼────┐                   │
-   │                    │⑤計測    │ UsageMeter→SQLite │
-   │                    └────┬────┘                   │
-   │                    ┌────▼────┐                   │
-   │                    │⑥記録    │ Logger(テナント別)│
-   │                    └────┬────┘                   │
-   │◀── {result, prompt} ───│                        │
-   │    認知マップ+AIプロンプト                       │
-```
-
-## 3. データフロー図（質問→認知マップ）
-
-```text
-   質問テキスト
-       │
-       ▼
-  ┌─────────────────────────────────────────┐
-  │ ④Inquiry が最初に「機嫌」を検出         │
-  │  ・5問Yes/No回答あり → 確信度0.85       │
-  │  ・文章推定のみ      → 確信度0.4〜0.6   │
-  │  ・機嫌5段階(GOOD+2 〜 BAD-2)           │
-  └─────────────┬───────────────────────────┘
-                │ 機嫌で問い返し判定
-        ┌───────┴────────┐
-        ▼                ▼
-  問い返す(停止)      磨かれた問題で続行
-   ・不機嫌→1問          │
-   ・通常→最大5問        │
-   （優先度順）          ▼
-              ┌────────────────────────┐
-              │ ①Fact   主張→事実/意見/未確認
-              │ ②Risk   リスクパターン検出
-              │ ③Multi  攻め/守り/会心
-              │ ④Inquiry 前提・ニーズ
-              └───────────┬────────────┘
-                          ▼
-              ┌────────────────────────┐
-              │ ⑤Compare 比較検証      │
-              │  ・減点ランキング       │
-              │   (原点100→answer線距離)│
-              │  ・score_breakdown残す  │
-              │  ・矛盾検出             │
-              │  ・verdict(recommend等) │
-              └───────────┬────────────┘
-                          ▼
-              ┌────────────────────────┐
-              │   認知マップ            │
-              │  {mood, facts, risks,  │
-              │   multi, inquiry,      │
-              │   comparison}          │
-              └───────────┬────────────┘
-                          ▼
-                  AIへ渡すプロンプト
-              （相手の機嫌込みで最終推論）
-```
-
-## 4. コンポーネント依存図
-
-```text
-                    start.js
-                       │ 組み立て
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   SQLiteStore    StripeClient   KaguraServer
-        │              │              │
-        │         SubscriptionSync    │
-        │              │              │
-        └──────┬───────┘              │
-               │                      │
-               ▼                      ▼
-        ┌─────────────────────────────────┐
-        │         KaguraServer             │
-        ├─────────────────────────────────┤
-        │ TenantManager  ← store           │
-        │ UsageMeter     ← store           │
-        │ RateLimiter                      │
-        │ KeyVault                         │
-        │ KaguraEngine ───────┐            │
-        └─────────────────────┼────────────┘
-                              ▼
-                       KaguraEngine
-                              │
-                  ┌───────────┼───────────┐
-                  ▼           ▼           ▼
-              WorkerPool   Logger    (request LLM)
-                  │
-                  ▼
-            pool-runner.js
-                  │ require
-        ┌─────────┼─────────┬─────────┬──────────┐
-        ▼         ▼         ▼         ▼          ▼
-     fact      risk      multi    inquiry    compare
-    worker    worker    worker    worker     worker
-        │                              │
-        ▼                              ▼
-   LLMClient                    mood-detector
-        │
-   ┌────┴─────┬──────┬──────┬─────┐
-   ▼          ▼      ▼      ▼     ▼
- OpenAI  Anthropic Ollama Compat Null
-```
-
-## 5. デプロイ構成図（VPS運用）
-
-```text
-╔════════════════════════════════════════════════╗
-║              クラウドVPS                       ║
-║                                                ║
-║  ┌────────────────────────────────────────┐    ║
-║  │  Nginx（リバースプロキシ / HTTPS終端） │    ║
-║  │  ・SSL証明書  ・ドメイン               │    ║
-║  └─────────────────┬──────────────────────┘    ║
-║                    │ localhost:7373             ║
-║  ┌─────────────────▼──────────────────────┐    ║
-║  │  Astera v8 Docker Container             │    ║
-║  │  ┌──────────────────────────────────┐  │    ║
-║  │  │ WorkerPool（4 Worker = 4 Isolate)│  │    ║
-║  │  │  Worker1  Worker2  Worker3  W4   │  │    ║
-║  │  └──────────────────────────────────┘  │    ║
-║  └─────────────────┬──────────────────────┘    ║
-║                    │                            ║
-║  ┌─────────────────▼──────┐  ┌────────────────────────┐ ║
-║  │ astera.db / JSON fallback│ │ /home/admin1/logs/     │ ║
-║  │ ・tenants  ・usage      │  │ astera-v8/outbox(一時) │ ║
-║  └────────────────────────┘  └───────────┬────────────┘ ║
-║                                                ║
-║  ┌────────────────────────────────────────┐    ║
-║  │ Ollama（任意・ローカルLLM）            │    ║
-║  └────────────────────────────────────────┘    ║
-╚════════════════════════════════════════════════╝
-        │                          │
-        ▼ webhook                  ▼ TGserver→Telegram正本
-   ┌─────────┐              ┌──────────────┐
-   │ Stripe  │              │ 外部LLM API  │
-   └─────────┘              └──────────────┘
-```
-
-## 6. 設計原則マッピング（思想→構造）
-
-| 思想 | アーキテクチャでの実現箇所 |
-|---|---|
-| 引き算・本質だけ | ゼロnpm依存 / Node標準http / SQLiteまたはJSON fallback |
-| 一点突破 | 認知前処理という単一軸 |
-| 悪手を捨てない | score_breakdown・why_bad・errors記録 |
-| 最初は粗く洗練 | ルールベース→LLM段階移行 |
-| ニッチ | AIを増やさず入力を賢くする |
-| プロバイダ非依存 | アダプタ＋フェイルオーバー＋Null防衛線 |
-| 危機察知 | Risk Worker / 1社障害でも止まらない |
-| 機嫌5段階 | mood-detector→inquiry |
-| 減点方式 | Compareの原点100→answer線距離 |
-| 攻め/守り/会心 | Multiの3角度 |
-
-## 7. レイヤー責務一覧
-
-```text
-┌─────────────┬──────────────────────────────────┐
-│ レイヤー    │ 責務（単一責任）                 │
-├─────────────┼──────────────────────────────────┤
-│ ①ゲートウェイ│ HTTP受付・ルーティング・CORS     │
-│ ②認証防御   │ 誰か特定・流量制御・キー管理      │
-│ ③認知エンジン│ 5本柱並列・認知マップ生成 ★心臓  │
-│ ④LLM非依存  │ プロバイダ抽象・フェイルオーバー │
-│ ⑤永続課金   │ 記録・計測・決済・テナント保存    │
-└─────────────┴──────────────────────────────────┘
-```
-
----
-
-# 8. Hyperion/PCE 最大火力統合図（v1.1.0）
-
-```text
-質問
- │
- ▼
-┌──────────────────────────────┐
-│ Inquiry preflight             │
-│ + Hyperion Human Reader       │
-│ ・機嫌                         │
-│ ・急ぎ/怒り/混乱/正確性要求     │
-└──────────────┬───────────────┘
-               │
-       ┌───────┴────────┐
-       ▼                ▼
-  問い返し停止      続行
-                        │
-                        ▼
-          ┌────────────────────────┐
-          │ 並列: Fact / Risk / Inquiry │
-          └───────────┬────────────┘
-                      ▼
-              ┌────────────┐
-              │ Multi      │
-              └─────┬──────┘
+┌──────────────────────────────────────────────┐
+│ External Consumer                            │
+│ App / Skill / CLI / HTTP Client / Main AI   │
+└───────────────────┬──────────────────────────┘
+                    │ HTTP/HTTPS
                     ▼
-      ┌──────────────────────────────┐
-      │ Dialectic Worker / PCE-DCE    │
-      │ ・主案                         │
-      │ ・悪手案                       │
-      │ ・反対案                       │
-      │ ・第三案                       │
-      │ ・人読み最適案                 │
-      └──────────────┬───────────────┘
-                     ▼
-          ┌─────────────────────┐
-          │ Compare              │
-          │ ・通常減点            │
-          │ ・候補ランキング統合  │
-          │ ・selected_candidate │
-          └──────────┬──────────┘
-                     ▼
-          認知マップ + Hyperionランキング
+┌──────────────────────────────────────────────┐
+│ Astera HTTP Boundary                         │
+│                                              │
+│ server-with-module-switch                    │
+│   ↓                                          │
+│ server-with-evidence                         │
+│   ↓                                          │
+│ server.js                                    │
+│   ↓                                          │
+│ server-base.js                               │
+│                                              │
+│ CORS / HTTPS / Auth / Rate / Payload / Usage │
+└───────────────────┬──────────────────────────┘
+                    │
+                    ▼
+┌──────────────────────────────────────────────┐
+│ Canonical Decision Runtime                   │
+│                                              │
+│ CanonicalAsteraEngine                        │
+│   ↓                                          │
+│ Input Understanding                          │
+│   ↓                                          │
+│ Analysis Task Graph                          │
+│   ↓                                          │
+│ Task Lens + Evidence Need                    │
+│   ↓                                          │
+│ Fact / Risk / Inquiry                        │
+│   ↓                                          │
+│ Multi                                        │
+│   ↓                                          │
+│ Dialectic                                    │
+│   ↓                                          │
+│ Compare                                      │
+│   ↓                                          │
+│ Main8 Judgment + Decision Trace              │
+└───────────────┬──────────────────────────────┘
+                │
+                ├──────────────┐
+                ▼              ▼
+       Evidence Search     Quality Gate
+       explicit module     explicit module
 ```
 
-v1.1.0では、v1.0.1の5本柱を壊さず、上位層としてHyperion/PCE-DCEを追加する。
+## 3. Composition Root
+
+現行`start.js`は次を組み立てる。
+
+```text
+start.js
+  ├─ SQLiteStore
+  ├─ Logger
+  ├─ optional Legacy Commerce Adapter
+  │    ├─ StripeClient
+  │    └─ SubscriptionSync
+  │
+  └─ AsteraServerWithModuleSwitch
+       ├─ Evidence Search boundary
+       ├─ Integrated Process boundary
+       ├─ Module Switch boundary
+       └─ Canonical Process boundary
+```
+
+Legacy Commerce Adapterは`ASTERA_ENABLE_LEGACY_COMMERCE=1`の場合だけ生成する。Canonical defaultでは生成しない。
+
+## 4. HTTP Server継承構造
+
+```text
+AsteraServerWithModuleSwitch
+  extends AsteraServerWithEvidence
+    extends AsteraServer
+      extends AsteraServerBase
+```
+
+### AsteraServerBase
+
+責務:
+
+- HTTP受付
+- Request ID
+- CORS
+- HTTPS要求
+- Payload上限
+- Tenant認証
+- Skill認証
+- Rate Limit
+- Usage Meter
+- Health
+- structured access/error log
+- `/process`
+- `/v1/skill/process`
+
+非責務:
+
+- Plan/Credit正本
+- Payment business logic
+- Account UI
+- Evidence Provider実装
+- Quality Gate scoring実装
+
+### AsteraServer
+
+`CanonicalAsteraEngine`を標準Engineとして注入する。
+
+### AsteraServerWithEvidence
+
+追加責務:
+
+- `/v1/evidence/search`
+- `/v1/skill/evidence/search`
+- `/v1/integrated/process`
+- Task別Evidence request生成
+- Evidence Result集約
+- Evidence未設定時の明示Unavailable
+
+### AsteraServerWithModuleSwitch
+
+追加責務:
+
+- `/v1/astera/execute`
+- 明示TargetのValidation
+- Decision Materials / Evidence Search / Quality Gateの切替
+
+## 5. Canonical Naming境界
+
+現行Canonical実装:
+
+```text
+src/astera-engine.js              → AsteraEngine
+src/canonical-astera-engine-base.js
+src/canonical-astera-engine.js    → CanonicalAsteraEngine
+src/server-base.js                → AsteraServerBase
+```
+
+Legacy compatibility:
+
+```text
+src/kagura-engine.js
+  → require('./astera-engine')
+```
+
+`kagura-engine.js`は旧Importを破壊しないためのShimであり、Canonical実装の所在ではない。
+
+Env naming:
+
+```text
+ASTERA_*  = Canonical
+KAGURA_*  = legacy fallback where still required
+```
+
+互換Envを残すことと、旧名称を現行Canonical名称として扱うことは別である。
+
+## 6. Input Understanding
+
+Canonical Runtimeは入力言語を日本語へ固定せず、Input Understandingで入力を構造化する。
+
+主要概念:
+
+- input language
+- script
+- requested output language
+- instruction understanding
+- source spans
+- operation/action intent
+- target
+- premises
+- conditions
+- constraints
+- prohibitions
+- preserve conditions
+- verification conditions
+- hard blockers
+
+入力理解が不十分な場合、推測で埋めて最終確定するのではなく、ClarificationまたはBlockingとして残す。
+
+## 7. Analysis Task Graph
+
+```text
+Input
+  ↓
+Instruction Understanding
+  ↓
+Analysis Task Packet
+  ├─ Task A
+  ├─ Task B
+  ├─ Task C
+  ├─ dependency edges
+  └─ execution waves
+```
+
+各Taskは独立した対象・行為・目的・前提・制約・検証条件を持つ。
+
+### 原則
+
+- 複数要求を1個の曖昧なQuestionへ潰さない
+- 依存関係を保持する
+- 前Taskの結果が必要なTaskを先に確定しない
+- 最弱Taskを平均Scoreで隠さない
+- Hard Constraint違反を平均で相殺しない
+
+## 8. Task別Lens Routing
+
+```text
+Task text + target + premises
+  ↓
+Domain Router
+  ↓
+G01-G38 scoring
+  ↓
+Primary
+Secondary
+Overlay
+  ↓
+Task Lens Plan
+```
+
+Domain LensとOperation Intentは別軸で扱う。
+
+例:
+
+- `compare`
+- `review`
+- `improve`
+- `verify`
+- `research`
+- `plan`
+
+などは操作意図であり、専門分野Lensそのものではない。
+
+Taskごとに選ばれた同一Lens情報をFact / Risk / Inquiry / Multi / Dialectic / Compareへ渡し、Workerごとに別分類を作らない。
+
+## 9. 5本柱 + Dialectic責務
+
+### Fact
+
+- claimをFact / Unconfirmed / Opinion等へ分離
+- Evidence Gateを通過していないものをConfirmedへ昇格しない
+- Source / Evidence参照を保持する
+
+### Risk
+
+- Task固有Risk
+- Domain固有Risk
+- Hard Constraint
+- Safety条件
+- Blocking条件
+
+を扱う。
+
+### Inquiry
+
+- 前提不足
+- Target不明
+- 成功条件不足
+- Clarification必要項目
+
+を扱う。
+
+### Multi
+
+複数PerspectiveとTrade-offを生成する。Dialecticの候補生成やCompareの最終ランキングと責務を重複させない。
+
+### Dialectic
+
+- 主案
+- 反対案
+- 代替案
+- 悪手から得る教訓
+
+などを比較可能なCandidateへ構造化する。
+
+### Compare
+
+- 同一MetricでCandidateを比較
+- Candidate ranking
+- Rejected reason
+- Contradiction
+- Uncertainty
+- Selected candidate
+- Task verdict
+
+を生成する。
+
+複数Task全体では、弱いTaskが平均で隠れないようBottleneckを保持する。
+
+## 10. Evidence Architecture
+
+### Evidence Need
+
+TaskごとにEvidenceが必要かを決定する。
+
+```text
+Task
+  ↓
+deriveEvidenceNeed
+  ├─ NOT_REQUIRED
+  └─ REQUIRED
+       ↓
+    Evidence Search
+```
+
+### Evidence Search
+
+Evidence SearchはCoreの固定Rule判断材料へ根拠を供給する外部能力境界である。
+
+現行入口:
+
+- `/v1/evidence/search`
+- `/v1/skill/evidence/search`
+
+Evidence Clientが構成されていない場合、存在するふりをせず`evidence_search_not_configured`を返す。
+
+有料検索は現行無効。
+
+### Integrated Process
+
+```text
+POST /v1/integrated/process
+  ↓
+Input Understanding
+  ↓
+Analysis Task Graph
+  ↓
+Task Lens
+  ↓
+Task Evidence Search
+  ↓
+Canonical Decision Runtime
+  ↓
+Evidence + Decision Materials
+```
+
+Evidence取得失敗TaskはRejected/Partial状態を保持する。失敗したEvidenceをConfirmed Factへ変換しない。
+
+## 11. Main8 Architecture
+
+Canonical 8 Sections:
+
+```text
+01 True Objective
+02 Missing Context
+03 Fact Check
+04 Risk Detection
+05 Opposing View
+06 Alternative Options
+07 Recommendation
+08 Re-instruction to Main AI
+```
+
+日本語表示では対応する日本語Labelを使用する。
+
+各SectionはSummaryだけでなくDecision Basisを持つ。
+
+### Decision Trace
+
+- `rule_ids`
+- `task_ids`
+- `lens_ids`
+- `evidence_refs`
+- `facts_used`
+- `constraints_used`
+- `risks_used`
+- `candidates_compared`
+- `rejected_reasons`
+- `score_breakdown`
+- `uncertainty`
+- `blocking_conditions`
+- `source_spans`
+
+これにより、8段が単なる説明文ではなく、何を根拠に生成されたかを追跡可能にする。
+
+## 12. Module Switch
+
+`AsteraModuleSwitch`は3つのTargetだけを受け付ける。
+
+```text
+astera.decision-materials
+astera.evidence-search
+astera.quality-gate
+```
+
+```text
+POST /v1/astera/execute
+  { target, input }
+       ↓
+  exact target validation
+       ↓
+  one handler
+```
+
+TargetをAI推測や文字列類似で選ばない。
+
+## 13. Quality Completion Evaluator
+
+Quality Completion Evaluatorは、成果物の品質・完成度・Requirement・Evidence・Blockingを固定Ruleで評価するModuleである。
+
+```text
+Artifact
++ Requirements
++ Evidence
++ Domain Lens
+   ↓
+Quality Completion Evaluator
+   ↓
+VALID / REVISION / BLOCKED等
+   ↓
+KB eligibility candidate
+```
+
+### 境界
+
+- `KB_ELIGIBLE`は保存完了ではない
+- KBへ自動Publishしない
+- `modular-catalog`へ自動Publishしない
+- Coreの通常`/process`へ暗黙挿入しない
+- Module SwitchまたはEvaluator APIから明示呼出する
+
+## 14. Auth / Guard / Usage Layer
+
+```text
+Request
+  ↓
+HTTPS / CORS
+  ↓
+Authentication
+  ↓
+Tenant resolution
+  ↓
+Rate Limit
+  ↓
+Payload / option validation
+  ↓
+Core processing
+  ↓
+Usage Meter
+  ↓
+Structured Log
+```
+
+### Core responsibility
+
+- API Key / Tenant
+- Rate Limit
+- Request Size
+- Allowed Options
+- Abuse Guard
+- Usage Meter boundary
+
+### Core non-responsibility
+
+- Plan authority
+- Credit authority
+- Checkout authority
+- Subscription authority
+- Payment authority
+
+## 15. Commerce Separation
+
+### Canonical default
+
+```text
+ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
+
+start.js
+  ├─ does NOT construct StripeClient
+  ├─ does NOT construct SubscriptionSync
+  └─ server receives no Commerce Adapter
+
+/signup            → 404
+/billing/checkout  → 404
+/billing/webhook   → 404
+```
+
+### Legacy compatibility
+
+```text
+ASTERA_ENABLE_LEGACY_COMMERCE=1
+
+start.js
+  ├─ StripeClient
+  └─ SubscriptionSync
+       ↓ explicit injection
+Legacy routes enabled
+```
+
+Legacy Route codeを互換目的で残すことと、CommerceをCore責務に戻すことは同義ではない。
+
+`UsageMeter`は決済処理ではなくCoreのUsage境界なので残す。
+
+## 16. Store境界
+
+StoreはRuntime Application状態を保持する。
+
+例:
+
+- Tenant
+- hashed API Key reference
+- Usage
+- Legacy webhook idempotency state
+
+Storeを仕様正本・KB正本・Log正本として扱わない。
+
+Legacy webhook stateが残ることはLegacy Commerce compatibilityのためであり、Canonical Commerce責務を意味しない。
+
+## 17. Logging Architecture
+
+```text
+Runtime Event
+  ↓
+Logger
+  ↓ secret masking
+  ├─ TGserver configured → HTTP ingest
+  └─ delivery pending → temporary Outbox
+```
+
+- 成功済みEventをOutboxへ恒久保存しない
+- Secretを送らない
+- `/healthz`成功Accessは監視Noiseとして通常送信しない
+- Error / abnormal closeは記録対象
+
+## 18. Web UI境界
+
+`src/public/index.html`はCoreの開発補助用最小Web UIである。
+
+Canonical defaultでは:
+
+- Account registrationを行わない
+- Plan upgradeを行わない
+- Stripe Checkoutを行わない
+- Core外でProvisioningされたTenant API Keyを入力して`/process`を試す
+
+このUIをAstera App本体、Account正本、Billing UIとして扱わない。
+
+## 19. Smoke Test境界
+
+`scripts/smoke.sh`は短時間のLoopback検証用である。
+
+Canonical Smokeは:
+
+- `ASTERA_LOCAL_NO_AUTH=1`
+- Loopback Host
+- Legacy Commerce disabled
+- `/process` Request
+- Main8主要Section確認
+
+を使用する。
+
+No-Auth SwitchをProductionで使う設計ではない。
+
+## 20. Completion Evidence Layer
+
+次の状態を混同しない。
+
+```text
+Designed
+Implemented
+Committed
+Tested
+CI Passed
+Deployed
+Runtime Verified
+```
+
+- CommitがあるだけでTestedではない
+- Test fileがあるだけでTestedではない
+- Workflow定義があるだけでCI Passedではない
+- Deploy設定があるだけでDeployedではない
+- Health codeがあるだけでRuntime Verifiedではない
+
+各状態は個別Evidenceを必要とする。
+
+## 21. 現行依存方向の原則
+
+```text
+HTTP Layer
+  → Canonical Engine
+      → Router / Worker / Evidence Normalization
+
+Worker
+  -X→ HTTP Server
+
+Catalog
+  -X→ Worker / Server / KB
+
+Quality Evaluator
+  -X→ automatic KB publish
+
+Core
+  -X→ Account/Payment authority
+```
+
+上位から下位へ依存し、下位Moduleが上位Serverへ逆依存しない。
+
+## 22. Legacyとの境界
+
+Legacy資材は、互換維持・History・Migration Evidenceとして存在し得る。
+
+ただし:
+
+- Legacy名称をCanonical名称として新規利用しない
+- Archiveを現行設計の起点にしない
+- 旧READMEをNotion正本より優先しない
+- 旧Routeが存在することを現在の責務定義と取り違えない
+
+現行CanonicalとLegacy compatibilityを明示的に分離する。
