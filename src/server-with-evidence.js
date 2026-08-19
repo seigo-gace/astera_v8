@@ -1,6 +1,6 @@
 'use strict';
 
-const KaguraServer = require('./server');
+const AsteraServer = require('./server');
 const EvidenceSearchClient = require('./evidence-search/api/client');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
@@ -35,7 +35,7 @@ function aggregateEvidence(byTask) {
   return {status,searched_task_count:searched.length,valid_task_count:valid.length,rejected_task_count:rejected.length,evidence:searched.flatMap(([taskId,value])=>(value.evidence||[]).map((item)=>({task_id:taskId,...item})))};
 }
 
-class AsteraServerWithEvidence extends KaguraServer {
+class AsteraServerWithEvidence extends AsteraServer {
   constructor(options = {}) {
     super(options);
     this.evidenceClient = options.evidenceClient || (evidenceClientConfigured(options) ? new EvidenceSearchClient({ baseUrl:options.evidenceBaseUrl, timeoutMs:options.evidenceTimeoutMs, internalSecret:options.internalSecret, internalSecretFile:options.internalSecretFile, fetch:options.fetch }) : null);
@@ -53,7 +53,7 @@ class AsteraServerWithEvidence extends KaguraServer {
       if(!this.evidenceClient) return this._json(req,res,503,{error:'evidence_search_not_configured'});
       const tenant=isSkillEvidence?await this._authenticateSkill(req):await this._authenticate(req);
       if(isSkillEvidence&&!isSkillApiConfigured()) return this._json(req,res,503,{error:'skill_api_not_configured'});
-      if(!tenant) return this._json(req,res,401,{error:'unauthorized',hint:isSkillEvidence?'Valid ASTERA_SKILL_API_KEY is required.':'X-API-Key header is required. Use /signup first.'});
+      if(!tenant) return this._json(req,res,401,{error:'unauthorized',hint:isSkillEvidence?'Valid ASTERA_SKILL_API_KEY is required.':'X-API-Key header is required. Provision tenant credentials outside the Astera Core runtime.'});
       context.tenantId=tenant.id;
       if(!isSkillEvidence){const limits=this.tenants.limitsFor(tenant);const rate=this.limiter.check({key:`${isIntegrated?'integrated':'evidence'}:${tenant.id}`,limit:limits.perMinute,windowMs:60_000});if(!rate.allowed)return this._json(req,res,429,{error:'rate_limited',rate});}
       if(isIntegrated) return this._handleIntegrated(req,res,context,tenant);
