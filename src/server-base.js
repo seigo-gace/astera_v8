@@ -39,8 +39,9 @@ class KaguraServer {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port, 7373);
     this.host = options.host || '127.0.0.1';
     this.store = options.store;
-    this.stripe = options.stripe;
-    this.subSync = options.subSync;
+    this.stripe = options.stripe || null;
+    this.subSync = options.subSync || null;
+    this.legacyCommerceEnabled = Boolean(this.stripe && this.subSync);
     this.logger = options.logger || new Logger();
     this.engine = options.engine || new KaguraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
     this.tenants = new TenantManager(this.store);
@@ -122,8 +123,11 @@ class KaguraServer {
 
   _headers(req, extra = {}) {
     const origin = this._corsOriginFor(req);
+    const allowedHeaders = this.legacyCommerceEnabled
+      ? 'Content-Type, X-API-Key, Stripe-Signature'
+      : 'Content-Type, X-API-Key';
     const headers = {
-      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Stripe-Signature',
+      'Access-Control-Allow-Headers': allowedHeaders,
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
       'Vary': 'Origin',
       'X-Content-Type-Options': 'nosniff',
@@ -288,6 +292,9 @@ class KaguraServer {
             enabled: isSkillApiConfigured(),
             process_endpoint: '/v1/skill/process'
           },
+          commerce_boundary: {
+            legacy_routes_enabled: this.legacyCommerceEnabled
+          },
           logging,
           runtime: {
             node: process.version,
@@ -298,7 +305,7 @@ class KaguraServer {
         });
       }
 
-      if (req.method === 'POST' && url.pathname === '/signup') {
+      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/signup') {
         const ip = req.socket.remoteAddress || 'unknown';
         const rl = this.limiter.check({ key: `signup:${ip}`, limit: 10, windowMs: 60_000 });
         if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
@@ -313,7 +320,7 @@ class KaguraServer {
         }, { mask: false });
       }
 
-      if (req.method === 'POST' && url.pathname === '/billing/webhook') {
+      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/billing/webhook') {
         const raw = await this._readRawBody(req, ONE_MB);
         const event = this.stripe.verifyWebhook(raw, req.headers['stripe-signature']);
         const result = await this.subSync.handleEvent(event);
@@ -322,7 +329,7 @@ class KaguraServer {
         return this._json(req, res, 200, { received: true, result });
       }
 
-      if (req.method === 'POST' && url.pathname === '/billing/checkout') {
+      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/billing/checkout') {
         const tenant = await this._authenticate(req);
         if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
         context.tenantId = tenant.id;
@@ -364,7 +371,7 @@ class KaguraServer {
 
       if (req.method === 'POST' && url.pathname === '/process') {
         const tenant = await this._authenticate(req);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Use /signup first.' });
+        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Provision tenant credentials outside the Astera Core runtime.' });
         return await this._processRequest(req, res, context, tenant);
       }
 
