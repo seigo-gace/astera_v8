@@ -170,16 +170,19 @@ test('integrated process decomposes first, searches Evidence only for external-e
   } finally { await stopMain(runtime); }
 });
 
-test('integrated boundary uses Parser-resolved task target for Lens and Evidence Search query', async () => {
+test('integrated boundary uses Input-Understanding-resolved task target for Lens and Evidence Search query', async () => {
   const evidenceCalls = [];
   const engineCalls = [];
   const preparedRequest = {
     schema_version: 'astera.request-model.v2',
     language: 'ja',
+    locale: 'ja-JP',
+    script: 'Hira',
+    scripts: ['Hira', 'Hani'],
     target: 'APIサーバーのシステム開発',
     action: 'verify',
     objective: 'APIサーバーの現行仕様を公式根拠で検証する。',
-    instruction_understanding: { mode: 'DEEP_PATH', parser: 'Deterministic-Japanese-Parser-MCP', execution_allowed: true, blocked_reasons: [], semantic_hash: 'resolved-ref' },
+    instruction_understanding: { mode: 'GLOBAL_LANGUAGE_ADAPTER', adapter: 'builtin-ja', semantic_resolution: 'adapter-resolved', parser: null, execution_allowed: true, blocked_reasons: [], language: 'ja', locale: 'ja-JP', script: 'Hira', scripts: ['Hira', 'Hani'], detection_basis: 'EXPLICIT_LANGUAGE' },
     analysis_task_packet: {
       schema_version: 'astera.analysis-task-packet.v1',
       intent: 'verify',
@@ -243,6 +246,8 @@ test('integrated boundary uses Parser-resolved task target for Lens and Evidence
     assert.equal(Array.isArray(evidenceCalls[0].payload.conditions), false);
     assert.equal(engineCalls.length, 1);
     assert.equal(engineCalls[0].input.taskEvidencePackets['P-REF'].status, 'FINAL_VALID');
+    assert.equal(preparedRequest.instruction_understanding.parser, null);
+    assert.equal(preparedRequest.instruction_understanding.adapter, 'builtin-ja');
   } finally { await stopMain(runtime); }
 });
 

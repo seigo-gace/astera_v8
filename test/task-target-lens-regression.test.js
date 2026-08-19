@@ -2,13 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const KaguraEngine = require('../src/kagura-engine');
+const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 
 async function withEngine(fn) {
-  const engine = new KaguraEngine({ poolSize: 4, logger: silentLogger });
+  const engine = new CanonicalAsteraEngine({ poolSize: 4, logger: silentLogger });
   try { await fn(engine); } finally { await engine.destroy(); }
 }
 
