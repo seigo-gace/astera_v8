@@ -87,7 +87,7 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
     assert.match(process.headers['content-type'], /text\/plain/);
     assert.equal(process.json, null);
     assert.match(process.body, /01 本当の目的/);
-    assert.match(process.body, /一言説明/);
+    assert.match(process.body, /判断基準/);
     assert.match(process.body, /主役AIへ渡す内容/);
     assert.match(process.body, /08 主役AIへの再指示/);
     assert.equal((process.body.match(/^---$/gm) || []).length, 7);
@@ -245,7 +245,6 @@ test('HTTP flow: invalid question type returns 400', async () => {
     assert.equal(bad.json.error, 'question must be a string');
   });
 });
-
 
 test('HTTP flow: unauthorized process returns 401', async () => {
   await withServer(async (port) => {
