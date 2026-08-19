@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const KaguraEngine = require('../src/kagura-engine');
+const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 
 const silentLogger = { write() {} };
 
@@ -41,19 +41,19 @@ const CASES = [
 ];
 
 for (const item of CASES) {
-  test(`実際の8段出力へLensが反映される: ${item.name}`, async () => {
-    const engine = new KaguraEngine({ poolSize: 3, logger: silentLogger });
+  test(`Canonical Main8へTask別Lensが反映される: ${item.name}`, async () => {
+    const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
     try {
       const out = await engine.process({
         question: item.question,
-        llm: { chain: ['null'] },
         moodAnswers: { deepThink: true, accuracy: true }
       }, { id: 'lens-integration', is_global: true, plan: 'admin' });
 
       assert.equal(out.result.type, 'cognitive_map');
-      assert.equal(out.result.domain.primary.id, item.id);
-      assert.equal(out.result.judgment.domain_template.primary.id, item.id);
-      assert.equal(out.result.domain.taxonomy_version, '1.0.0');
+      assert.equal(out.result.non_ai, true);
+      assert.equal(out.runtime.ai_used, false);
+      assert.equal(out.runtime.llm_called, false);
+      assert.equal(out.runtime.engine, 'v8_canonical_global_rules');
       assert.equal(out.result.judgment.order.length, 8);
       assert.deepEqual(out.result.judgment.order, [
         '01_purpose',
@@ -66,30 +66,32 @@ for (const item of CASES) {
         '08_reinstruction'
       ]);
 
+      const matchingTasks = out.result.task_results.filter((entry) => entry.task.domain.primary?.id === item.id);
+      assert.ok(matchingTasks.length >= 1, `${item.name}: ${item.id}へTask routingされていない`);
+      assert.ok(Object.values(out.result.judgment.lens_routing.per_task).some((route) => route.primary?.id === item.id));
+      assert.ok(out.result.five_stage.tasks.some((entry) => entry.lens_id === item.id));
+
       if (item.overlay) {
-        assert.ok(out.result.domain.overlays.some((overlay) => overlay.id === item.overlay));
+        assert.ok(matchingTasks.some((entry) => (entry.task.domain.overlays || []).some((overlay) => overlay.id === item.overlay)));
       }
 
-      assert.ok(out.result.facts.evidence_gaps.length >= 5);
-      assert.ok(out.result.risks.domain_checks.length >= 5);
-      assert.ok(out.result.multi.angles.domain.length >= 5);
-      assert.ok(out.result.inquiry.inquiry_lens.length >= 4);
-      assert.ok(out.result.judgment['03_facts'].evidence_to_collect.length >= 5);
-      assert.ok(out.result.judgment['04_crisis'].domain_checks.length >= 5);
-      assert.ok(out.result.judgment['05_opposition'].domain_perspectives.length >= 5);
-      assert.ok(out.result.judgment['06_comparison'].domain_compare_lens.length >= 5);
+      for (const entry of matchingTasks) {
+        assert.ok(Array.isArray(entry.task.domain.primary.evidence_to_collect));
+        assert.ok(Array.isArray(entry.task.domain.primary.risk_lens));
+        assert.ok(Array.isArray(entry.task.domain.primary.multi_lens));
+        assert.ok(Array.isArray(entry.task.domain.primary.inquiry_lens));
+        assert.ok(Array.isArray(entry.task.domain.primary.compare_lens));
+        assert.ok(entry.facts.evidence_gaps.length >= entry.task.domain.primary.evidence_to_collect.length);
+      }
 
       const serialized = JSON.stringify({
-        domain: out.result.domain,
-        facts: out.result.facts,
-        risks: out.result.risks,
-        multi: out.result.multi,
-        inquiry: out.result.inquiry,
+        task_results: out.result.task_results,
+        five_stage: out.result.five_stage,
         judgment: out.result.judgment,
         material: out.material
       });
       for (const required of item.required) {
-        assert.ok(serialized.includes(required), `${item.name}: ${required}が出力へ反映されていない`);
+        assert.ok(serialized.includes(required), `${item.name}: ${required}がTask別Lens/判断材料へ反映されていない`);
       }
       assert.match(out.material.text, /01 本当の目的/);
       assert.match(out.material.text, /08 主役AIへの再指示/);
