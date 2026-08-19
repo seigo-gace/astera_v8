@@ -233,6 +233,18 @@ function applyOverlayScores(text) {
     }));
 }
 
+function medicalSafetyFallback(scored = [], overlays = []) {
+  if (!overlays.some((item) => item.id === 'medical_safety')) return null;
+  const candidate = scored.find((item) => item.genre?.id === 'G23');
+  if (!candidate) return null;
+  return publicGenre({
+    ...candidate,
+    classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
+    confidence: 0.5,
+    taxonomy_review_required: true
+  });
+}
+
 function buildLensText(primary, overlays, classificationBasis = null, confidence = 0, taxonomyReviewRequired = true) {
   const lines = [
     '[all_domain_lens]',
@@ -303,6 +315,25 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   const best = scored[0];
 
   if (!qualifiedScore(best)) {
+    const safetyPrimary = medicalSafetyFallback(scored, overlays);
+    if (safetyPrimary) {
+      return {
+        router: 'all_domain_lens_router_v2',
+        taxonomy_version: TAXONOMY_VERSION,
+        user_selection_required: false,
+        input_valid: true,
+        input_error: null,
+        classification_basis: safetyPrimary.classification_basis,
+        confidence: safetyPrimary.confidence,
+        taxonomy_review_required: true,
+        primary: safetyPrimary,
+        secondary: [],
+        overlays,
+        normalized,
+        lens_text: buildLensText(safetyPrimary, overlays),
+        analysis_text: normalized.analysis_text
+      };
+    }
     const confidence = Math.max(0.1, Math.min(0.49, 0.15 + best.similarity * 0.5));
     return {
       router: 'all_domain_lens_router_v2',
@@ -356,5 +387,6 @@ module.exports = {
   GENRE_LENSES,
   OVERLAYS,
   normalizeInput,
-  scoreGenre
+  scoreGenre,
+  medicalSafetyFallback
 };

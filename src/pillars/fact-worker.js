@@ -131,7 +131,7 @@ async function run({ question = '', domain = {}, task = null, evidence_packet = 
 
   const domainEvidence = Array.isArray(domain.primary?.evidence_to_collect) ? domain.primary.evidence_to_collect : [];
   const unresolvedClaims = unconfirmed.map((item) => item.text).slice(0, 8);
-  const evidenceGaps = unique([...(task?.evidence_need?.required ? domainEvidence : []), ...unresolvedClaims])
+  const evidenceGaps = unique([...domainEvidence, ...unresolvedClaims])
     .map((item) => ({ item, reason: '判断前に根拠または明示前提が必要。' }));
 
   return {
