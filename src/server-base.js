@@ -4,7 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const KaguraEngine = require('./kagura-engine');
+const AsteraEngine = require('./astera-engine');
 const Logger = require('./logger');
 const TenantManager = require('./auth/tenant');
 const { UsageMeter } = require('./billing/meter');
@@ -34,7 +34,7 @@ function positiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
-class KaguraServer {
+class AsteraServerBase {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port, 7373);
     this.host = options.host || '127.0.0.1';
@@ -43,7 +43,7 @@ class KaguraServer {
     this.subSync = options.subSync || null;
     this.legacyCommerceEnabled = Boolean(this.stripe && this.subSync);
     this.logger = options.logger || new Logger();
-    this.engine = options.engine || new KaguraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
+    this.engine = options.engine || new AsteraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
     this.tenants = new TenantManager(this.store);
     this.meter = new UsageMeter(this.store);
     this.limiter = options.limiter || new RateLimiter();
@@ -401,5 +401,5 @@ class KaguraServer {
   }
 }
 
-module.exports = KaguraServer;
+module.exports = AsteraServerBase;
 module.exports.parseAllowedOrigins = parseAllowedOrigins;
