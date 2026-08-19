@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const KaguraEngine = require('../src/kagura-engine');
+const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { analyzeRequest, deriveEvidenceNeed, normalizeEvidencePacket } = require('../src/judgment-materials-analyzer');
 const { routeDomainTemplates } = require('../src/domain-template-router');
 
@@ -47,7 +47,7 @@ function validEvidence(claim) {
 }
 
 async function withEngine(fn) {
-  const engine = new KaguraEngine({ poolSize:4, logger:silentLogger });
+  const engine = new CanonicalAsteraEngine({ poolSize:4, logger:silentLogger });
   try { await fn(engine); } finally { await engine.destroy(); }
 }
 
@@ -107,7 +107,7 @@ test('Evidence FINAL_VALID is accepted only when 80/95, reinforcement, corrobora
 test('non-AI V8 runtime builds Task Graph before Lens and all Main8 sections carry decision traces', async () => {
   await withEngine(async (engine)=>{
     const out=await engine.process({question:'READMEは残す。APIを改善する。成功条件は互換性維持とRollback可能であること。mainは変更するな。'},tenant);
-    assert.equal(out.result.non_ai,true); assert.equal(out.runtime.ai_used,false); assert.equal(out.runtime.llm_called,false); assert.equal(out.runtime.engine,'v8_deterministic_rules'); assert.equal(Object.hasOwn(out,'answer'),false);
+    assert.equal(out.result.non_ai,true); assert.equal(out.runtime.ai_used,false); assert.equal(out.runtime.llm_called,false); assert.equal(out.runtime.engine,'v8_canonical_global_rules'); assert.equal(Object.hasOwn(out,'answer'),false);
     assert.ok(out.result.analysis_task_packet.tasks.length>=2); assert.deepEqual(out.result.five_stage.order,['fact','risk','multi','inquiry','compare']); assert.equal(out.result.judgment.order.length,8);
     for(const key of out.result.judgment.order){const section=out.result.judgment[key];assert.ok(section.decision_basis);assert.ok(section.decision_basis.rule_ids.length>=1);assert.equal(section.decision_basis.task_ids.length,out.result.analysis_task_packet.tasks.length);assert.ok(Array.isArray(section.decision_basis.source_spans));}
     assert.match(out.material.text,/判断基準/);
@@ -126,8 +126,8 @@ test('rejected evidence never becomes a supported fact and blocks plain recommen
   await withEngine(async (engine)=>{const packet=validEvidence('Node.js 22は本番で対応している');packet.status='REJECTED_BLOCKING';packet.quality.final={status:'REJECTED_BLOCKING',phase:'FINAL',score_bp:4200,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:['SOURCE_CONFLICT']};const out=await engine.process({question:'Node.js 22は本番で対応している。対応状況を公式根拠で検証する。',evidencePacket:packet},tenant);assert.equal(out.result.facts.confirmed.length,0);assert.equal(out.result.facts.evidence_state.state,'REJECTED');assert.ok(out.result.risks.risks.some((item)=>item.key==='evidence_quality'||item.key==='evidence_conflict'));assert.notEqual(out.result.comparison.verdict.decision,'recommend');});
 });
 
-test('five deterministic dialectic candidates remain input-specific and bad-hand is never selected', async () => {
-  await withEngine(async (engine)=>{const out=await engine.process({question:'旧Codeを分析し、根拠検索と責務分離を維持したままAstera本体を改善する。成功条件は非AIを維持し、未確認を事実化しないこと。'},tenant);const candidates=out.result.hyperion.dialectic.candidates;assert.ok(candidates.length>=5);assert.ok(candidates.some((candidate)=>/旧Code|Astera|根拠/.test(candidate.thesis)));assert.ok(candidates.every((candidate)=>candidate.metrics&&Number.isInteger(candidate.score)));assert.notEqual(out.result.comparison.selected_candidate?.id,'bad_hand');assert.ok(out.result.comparison.rejected_candidates.some((candidate)=>candidate.id==='bad_hand'));});
+test('five deterministic dialectic candidates remain input-specific and only Compare owns final scores and selection', async () => {
+  await withEngine(async (engine)=>{const out=await engine.process({question:'旧Codeを分析し、根拠検索と責務分離を維持したままAstera本体を改善する。成功条件は非AIを維持し、未確認を事実化しないこと。'},tenant);const candidates=out.result.hyperion.dialectic.candidates;assert.ok(candidates.length>=5);assert.ok(candidates.some((candidate)=>/旧Code|Astera|根拠/.test(candidate.thesis)));assert.ok(candidates.every((candidate)=>candidate.metrics&&!Object.hasOwn(candidate,'score')));assert.ok(out.result.comparison.candidate_ranking.every((candidate)=>Number.isInteger(candidate.score)));assert.notEqual(out.result.comparison.selected_candidate?.id,'bad_hand');assert.ok(out.result.comparison.rejected_candidates.some((candidate)=>candidate.id==='bad_hand'));});
 });
 
 test('Task-specific Lens routing is retained per Analysis Task', async () => {

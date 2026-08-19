@@ -46,8 +46,6 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, domain
   const constraints = unique([...(request.constraints || []), ...(request.prohibitions || []), ...(request.preserve || [])]);
   const domainPerspectives = Array.isArray(domain.primary?.multi_lens) ? domain.primary.multi_lens : [];
   const ja = request.language === 'ja';
-  const strongEvidence = evidence.state === 'VALID' && Number(evidence.quality_score_bp || 0) >= 9500;
-  const diverseEvidence = (evidence.distinct_authority_count || 0) >= 2 || (evidence.distinct_source_family_count || 0) >= 2;
 
   const perspectives = [
     {
@@ -63,7 +61,7 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, domain
       id: 'defense',
       label: ja ? '防御視点' : 'Defensive view',
       focus: firstRisk(risks),
-      benefit: ja ? `最上位Risk「${firstRisk(risks)}」と禁止・維持条件を先に固定し、失敗時被害を抑える。` : `Fix the top risk and hard constraints first to limit failure impact.`,
+      benefit: ja ? `最上位Risk「${firstRisk(risks)}」と禁止・維持条件を先に固定し、失敗時被害を抑える。` : 'Fix the top risk and hard constraints first to limit failure impact.',
       weakness: ja ? (riskCount === 0 ? '重大Riskがない場合は過剰防御で前進速度を落とす可能性がある。' : '防御条件を過剰化すると目的達成を遅らせる。') : 'Over-defense can slow objective completion.',
       adoption_conditions: unique([...constraints, ...(risks.safety_gates || [])]).slice(0, 8),
       basis: { rule_ids: ['MULTI-DEFENSE-RISK'], highest_risk: risks.highest?.key || null, risk_count: riskCount, evidence: evidenceMeta }
@@ -93,24 +91,24 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, domain
     });
   }
 
-  let recommended = 'attack';
-  const recommendationRules = [];
-  if (riskCount >= 2 || risks.level === 'high') { recommended = 'defense'; recommendationRules.push('MULTI-SELECT-HIGH-RISK-DEFENSE'); }
-  if (request.evidence_required && !strongEvidence) { recommended = 'critical'; recommendationRules.push('MULTI-SELECT-REQUIRED-EVIDENCE-CRITICAL'); }
-  if (evidence.state === 'REJECTED' || unresolved >= Math.max(2, verified + 1)) { recommended = 'critical'; recommendationRules.push('MULTI-SELECT-EVIDENCE-CRITICAL'); }
-  if (request.evidence_required && strongEvidence && !diverseEvidence && verified === 0) { recommended = 'critical'; recommendationRules.push('MULTI-SELECT-LOW-DIVERSITY-CRITICAL'); }
-  if (riskCount <= 1 && (!request.evidence_required || strongEvidence) && inquiry.problem_health?.healthy && (!request.evidence_required || verified > 0)) { recommended = 'attack'; recommendationRules.push('MULTI-SELECT-HEALTHY-FORWARD'); }
-  const chosen = perspectives.find((item) => item.id === recommended) || perspectives[0];
-
   return {
-    pillar: 'multi', task_id: request.id, perspectives,
+    pillar: 'multi',
+    task_id: request.id,
+    perspectives,
     angles: Object.fromEntries(perspectives.map((item) => [item.id, `${item.focus}｜利点:${item.benefit}｜弱点:${item.weakness}`])),
     trade_off_map: perspectives.map((item) => ({ id: item.id, benefit: item.benefit, weakness: item.weakness, adoption_conditions: item.adoption_conditions, basis: item.basis })),
     domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name } : null,
     evidence_state: evidenceMeta,
-    recommended, recommendation_rule_ids: recommendationRules,
-    reason: `objective=${request.objective} / risk=${riskCount}(${risks.level || 'unknown'}) / verified=${verified} / unresolved=${unresolved} / evidence=${evidence.state}:${evidence.quality_score_bp ?? '-'}bp / authorities=${evidence.distinct_authority_count || 0} / families=${evidence.distinct_source_family_count || 0}`,
-    selected_perspective: chosen
+    analysis_basis: {
+      objective: request.objective,
+      risk_count: riskCount,
+      verified_fact_count: verified,
+      unresolved_fact_count: unresolved,
+      evidence_state: evidence.state,
+      evidence_quality_score_bp: evidence.quality_score_bp,
+      authority_count: evidence.distinct_authority_count || 0,
+      source_family_count: evidence.distinct_source_family_count || 0
+    }
   };
 }
 

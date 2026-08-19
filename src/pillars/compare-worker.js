@@ -96,8 +96,8 @@ async function run({ question = '', facts = {}, risks = {}, multi = {}, inquiry 
       selection_margin: margin
     },
     domain_template: domain.primary ? { id: domain.primary.id, name: domain.primary.name, compare_lens: domain.primary.compare_lens || [] } : null,
-    verdict: { decision, angle: selected?.angle || multi.recommended || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
+    verdict: { decision, angle: selected?.angle || 'balanced', reason: rationale, objective: t.objective, gate_rule_ids: unique(gates) }
   };
 }
 
-module.exports = { run, WEIGHTS };
+module.exports = { run, WEIGHTS, scoreMetrics, compareCandidates };

@@ -4,15 +4,22 @@ const { normalizeEvidencePacket, unique } = require('../judgment-materials-analy
 
 function clamp(value) { return Math.max(0, Math.min(100, Math.round(value))); }
 
-const WEIGHTS = Object.freeze({ objectiveFit: 0.30, evidenceFit: 0.25, riskControl: 0.20, constraintFit: 0.15, reversibility: 0.10 });
-
-function metricScore(metrics) {
-  return clamp(Object.entries(WEIGHTS).reduce((sum, [key, weight]) => sum + Number(metrics[key] || 0) * weight, 0));
-}
+const CANDIDATE_ORDER = Object.freeze(['mainline', 'bad_hand', 'opposition', 'third_way', 'human_fit']);
+const METRIC_KEYS = Object.freeze(['objectiveFit', 'evidenceFit', 'riskControl', 'constraintFit', 'reversibility']);
 
 function candidate({ id, label, angle, thesis, strengths, failureModes, requiredChecks, metrics, rationale, ruleIds }) {
-  const score = metricScore(metrics);
-  return { id, label, angle, thesis, strengths: unique(strengths).slice(0, 8), failure_modes: unique(failureModes).slice(0, 8), required_checks: unique(requiredChecks).slice(0, 10), metrics, weights: WEIGHTS, score, answer_line_distance: 100 - score, rationale, rule_ids: ruleIds };
+  return {
+    id,
+    label,
+    angle,
+    thesis,
+    strengths: unique(strengths).slice(0, 8),
+    failure_modes: unique(failureModes).slice(0, 8),
+    required_checks: unique(requiredChecks).slice(0, 10),
+    metrics: Object.freeze({ ...metrics }),
+    rationale,
+    rule_ids: ruleIds
+  };
 }
 
 function evidenceFit(evidence, unresolved, evidenceRequired = false) {
@@ -72,16 +79,16 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
   const baseReversibility = /rollback|戻|復元|revert/i.test([...success, ...constraints].join(' ')) ? 96 : 78;
   const ja = /[ぁ-んァ-ヶ一-龠々]/.test(t.source_span?.text || question);
 
-  const candidates = [
+  const generated = [
     candidate({
-      id: 'mainline', label: ja ? '主案' : 'Mainline', angle: multi.recommended || 'balanced',
+      id: 'mainline', label: ja ? '主案' : 'Mainline', angle: 'balanced',
       thesis: ja ? `Task ${t.id || '-'}「${t.objective}」を、確認済みFact・Risk・制約・Evidence品質に従って実行する。` : `Execute task ${t.id || '-'} from supported facts, risks, constraints, and evidence quality.`,
-      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, evidence.state === 'VALID' ? (ja ? `Evidence ${evidence.quality_score_bp}bp・補強${evidence.new_corroboration_count}件を採点へ使用する。` : `Uses Evidence ${evidence.quality_score_bp}bp and corroboration in scoring.`) : ''],
-      failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', evidenceRequired && evidence.state !== 'VALID' ? (ja ? `必須Evidenceが${evidence.state}。` : `Required evidence is ${evidence.state}.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : `Fails if top risk is not controlled.`) : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
+      strengths: [ja ? `目的「${t.objective}」へ直接対応する。` : `Directly fits objective: ${t.objective}`, ja ? `確認済み${verified}件・未確認${unresolved}件を分離する。` : `Separates ${verified} supported and ${unresolved} unresolved facts.`, evidence.state === 'VALID' ? (ja ? `Evidence ${evidence.quality_score_bp}bp・補強${evidence.new_corroboration_count}件をMetric材料へ使用する。` : `Uses Evidence ${evidence.quality_score_bp}bp and corroboration as metric material.`) : ''],
+      failureModes: [unresolved ? (ja ? `未確認${unresolved}件が残る。` : `${unresolved} unresolved facts remain.`) : '', evidenceRequired && evidence.state !== 'VALID' ? (ja ? `必須Evidenceが${evidence.state}。` : `Required evidence is ${evidence.state}.`) : '', highRisk ? (ja ? `最上位Risk「${topRisk}」への制御が不足すると破綻する。` : 'Fails if top risk is not controlled.') : '', missing.length ? (ja ? `不足条件${missing.length}件が残る。` : `${missing.length} missing conditions remain.`) : ''],
       requiredChecks: [...success, ...constraints, ...domainChecks, ...(evidenceRequired ? ['evidence_state=VALID'] : [])],
       metrics: { objectiveFit: 96, evidenceFit: baseEvidenceFit, riskControl: highRisk ? 68 : 86, constraintFit: constraintFit(t, 'mainline'), reversibility: baseReversibility },
-      rationale: ja ? '最短の主案だが、Evidence・Risk・Hard ConstraintのGateを全て満たす場合だけ採用可能。' : 'Shortest mainline; adopt only when evidence, risk, and hard-constraint gates pass.',
-      ruleIds: ['DIALECTIC-MAINLINE-OBJECTIVE', 'DIALECTIC-HARD-GATE', 'DIALECTIC-EVIDENCE-QUALITY-SCORE']
+      rationale: ja ? '最短の主案。採用可否はCompareがEvidence・Risk・Hard Constraint Gateを含めて決定する。' : 'Shortest mainline; Compare alone decides adoptability under evidence, risk, and hard-constraint gates.',
+      ruleIds: ['DIALECTIC-MAINLINE-OBJECTIVE', 'DIALECTIC-HARD-GATE', 'DIALECTIC-EVIDENCE-METRIC-MATERIAL']
     }),
     candidate({
       id: 'opposition', label: ja ? '反対案' : 'Opposition', angle: 'opposition',
@@ -90,7 +97,7 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
       failureModes: [ja ? 'Evidenceが十分でRiskが低い場合は過剰停止になる。' : 'Can over-block when evidence is sufficient and risk is low.'],
       requiredChecks: [...missing.slice(0, 5), ...domainChecks, ...constraints, ...(evidence.eligibility_reasons || [])],
       metrics: { objectiveFit: highRisk || (evidenceRequired && evidence.state !== 'VALID') ? 90 : 70, evidenceFit: evidence.state === 'VALID' ? Math.max(82, baseEvidenceFit - 5) : 96, riskControl: 97, constraintFit: constraintFit(t, 'opposition'), reversibility: 96 },
-      rationale: ja ? '誤断定・事故を防ぐ反対候補。Evidence未成立時は停止条件の妥当性が上がるが、停止自体を目的化しない。' : 'Opposition candidate for error prevention; evidence failure increases its fit but does not make stopping the objective.',
+      rationale: ja ? '誤断定・事故を防ぐ反対候補。停止自体を結論にはせずCompareへ材料として渡す。' : 'Opposition candidate for error prevention; stopping is metric material, not a final decision.',
       ruleIds: ['DIALECTIC-OPPOSITION-RISK', 'DIALECTIC-OPPOSITION-EVIDENCE']
     }),
     candidate({
@@ -125,16 +132,21 @@ async function run({ question = '', facts = {}, risks = {}, inquiry = {}, multi 
     })
   ];
 
-  const ranked = [...candidates].sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  const byId = new Map(generated.map((item) => [item.id, item]));
+  const candidates = CANDIDATE_ORDER.map((id) => byId.get(id)).filter(Boolean);
   return {
-    pillar: 'dialectic', task_id: t.id || null, engine: 'Astera Deterministic Dialectic', mode: 'decision_materials',
-    description: ja ? '主案・反対案・第三案・人読み最適案・悪手案を固定Ruleと同一Metricで比較可能なCandidateへ変換する。EvidenceFitはEvidence Searchの最終品質・補強・Source多様性を実数利用する。' : 'Generate five deterministic candidates under the same metrics, with EvidenceFit derived from final evidence quality and diversity.',
+    pillar: 'dialectic',
+    task_id: t.id || null,
+    engine: 'Astera Deterministic Dialectic',
+    mode: 'candidate_generation',
+    description: ja ? '固定5候補と採用条件・失敗条件・生Metric材料を生成し、Rankingと最終選択はCompareへ委譲する。' : 'Generate the fixed five candidates and raw metric material; ranking and final selection belong only to Compare.',
     evidence_state: evidenceState,
-    selected: ranked.find((item) => item.id !== 'bad_hand') || null, candidates: ranked,
-    bad_hand_lessons: candidates.find((item) => item.id === 'bad_hand')?.failure_modes || [],
-    integration_rule: ja ? '悪手案は採用禁止。Evidence必須TaskでVALIDでない候補、Hard Constraint・Dependency・Riskを満たさない候補はCompareでHoldする。' : 'Never select bad-hand; Compare must hold evidence-required tasks without VALID evidence and candidates that fail hard constraints, dependencies, or risk gates.',
-    score_model: { weights: WEIGHTS }
+    candidates,
+    candidate_order: [...CANDIDATE_ORDER],
+    metric_schema: [...METRIC_KEYS],
+    bad_hand_lessons: byId.get('bad_hand')?.failure_modes || [],
+    integration_rule: ja ? 'Dialecticは候補を選ばない。悪手案を含む固定候補を同じ順序でCompareへ渡し、Compareだけが採点・Ranking・選択・Holdを決定する。' : 'Dialectic never selects a candidate. It passes the fixed ordered candidate set to Compare, which alone scores, ranks, selects, rejects, or holds.'
   };
 }
 
-module.exports = { run };
+module.exports = { run, CANDIDATE_ORDER, METRIC_KEYS };
