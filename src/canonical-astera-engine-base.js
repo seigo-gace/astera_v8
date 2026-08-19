@@ -1,6 +1,6 @@
 'use strict';
 
-const KaguraEngine = require('./kagura-engine');
+const AsteraEngine = require('./astera-engine');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
@@ -75,7 +75,7 @@ function aggregateTaskResults(taskResults) {
   return { facts, risks, inquiry, multi, dialectic, comparison };
 }
 
-class CanonicalAsteraEngine extends KaguraEngine {
+class CanonicalAsteraEngine extends AsteraEngine {
   prepareRequest(input = {}) {
     return analyzeRequest(input);
   }
