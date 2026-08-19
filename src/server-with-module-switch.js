@@ -72,7 +72,7 @@ class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
 
       const tenant = await this._authenticate(req);
       if (!tenant) {
-        return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Use /signup first.' });
+        return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Provision tenant credentials outside the Astera Core runtime.' });
       }
       context.tenantId = tenant.id;
 
