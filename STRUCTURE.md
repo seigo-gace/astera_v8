@@ -1,193 +1,337 @@
-# Astera v8 — STRUCTURE（構成図・絶対）
+# Astera v8 — STRUCTURE（現行構成・依存境界）
 
-> LibralCore 第六原則: 本Projectの実装・配置はこの構成図に従う。
+> 本ファイルはRepository上の現行実装構造を説明する。設計・仕様の決定源はNotion正本であり、GitHub上の構造を理由に正本を逆上書きしない。
 
-## 責務
+## 1. Core責務
 
-Astera v8は、入力の意味判定、38専門ジャンル分類、固定Ruleによる5本柱処理、8段の判断材料生成を担当する。一般的な会話AIやKnowledge保存Systemではない。
+Astera v8は、入力理解、Analysis Task Graph、Task別Lens Routing、根拠状態管理、固定Ruleによる認知処理、8段の判断材料生成を担当する。一般的な会話AI、Knowledge保存System、Account/Payment Platformではない。
 
-- 分類・Lens正本: `src/all-domain-lens-catalog.js`
-- 分類実行: `src/domain-template-router.js`
-- Taxonomy Version: `1.0.0`
-- Runtime分類: `G01`〜`G38`の専門ジャンルLens
-- 判定Module Lens接続: `src/quality-completion-evaluator/domain-lens-resolver.js`
-- 4階層連結: 各Genreの検証Anchor Pathを保持し、将来ASTERA-KBの完全Path結果へ接続する
-- ログ永続正本: TGserver経由のTelegram
-- ログ検索索引: TGserver配下のMeilisearch
-- ログ送信失敗時の一時状態: `/home/admin1/logs/astera-v8/outbox`
-- テナント・使用量・Stripe webhook冪等性: `/data/astera.db`（Application状態。ログ正本ではない）
-- KB連携: 未実装。生ログ・処理結果の自動投入は禁止
-- 品質・完成度判定: `src/quality-completion-evaluator`。固定Ruleで評価し、KB掲載候補Recordを生成する。KB保存は担当しない
+Core内で維持する運用境界:
 
-## ディレクトリ構造
+- API Key / Tenant解決
+- Rate Limit
+- Request Size
+- Allowed Options / Abuse Guard
+- Usage Meter境界
+- Secret Mask / structured logging
+
+Core非責務:
+
+- Plan正本
+- Credit正本
+- Checkout / Subscription / Payment正本
+- Account登録UI
+- KB保存・自動Publish
+
+## 2. Canonical Naming
+
+- Canonical Engine実装: `src/astera-engine.js` → `AsteraEngine`
+- Global Canonical Engine: `src/canonical-astera-engine.js` / `src/canonical-astera-engine-base.js`
+- HTTP Base: `src/server-base.js` → `AsteraServerBase`
+- Legacy compatibility path: `src/kagura-engine.js` → `require('./astera-engine')`
+- 正式Env prefix: `ASTERA_*`
+- `KAGURA_*`: 必要な既存環境互換のfallbackのみ維持
+
+旧`Kagura`名称は現行Canonical実装の名前として新規利用しない。互換経路を無断削除もしない。
+
+## 3. 現行主要正本
+
+- Lens Catalog: `src/all-domain-lens-catalog.js`
+- Lens Router: `src/domain-template-router.js`
+- Input Understanding: `src/input-understanding.js`
+- Canonical Decision Engine: `src/canonical-astera-engine.js`
+- Base Decision Engine: `src/astera-engine.js`
+- Module Switch: `src/astera-module-switch.js`
+- Quality Completion Evaluator: `src/quality-completion-evaluator/`
+- Evidence Search: `src/evidence-search/`
+- Runtime Log sink境界: Logger → TGserver
+- Application状態: SQLite / fallback store
+
+## 4. ディレクトリ構造
 
 ```text
 astera_v8/
-├── STRUCTURE.md                    # 本ファイル（構成図・絶対）
-├── README.md                       # Project入口
-├── RELEASE_MANIFEST.txt            # 配布対象一覧
-├── start.js                        # Docker ContainerのComposition Root
+├── STRUCTURE.md
+├── README.md
+├── RELEASE_MANIFEST.txt
+├── start.js                         # Composition Root
 ├── package.json
 ├── Dockerfile
-├── docker-compose.yml              # 本番常駐の唯一の起動方式
+├── docker-compose.yml
+├── docker-compose.evidence.yml
 ├── .env / .env.example
-├── .gitignore / .dockerignore
 ├── src/
-│   ├── server.js                   # HTTP境界・Routing
-│   ├── kagura-engine.js            # 5本柱・8段処理の順序統合
-│   ├── all-domain-lens-catalog.js  # G01〜G38 Lens定義・検証Anchor Path
-│   ├── domain-template-router.js   # 入力正規化・38 Genre分類・Overlay選択
-│   ├── worker-pool.js              # Worker Lifecycle
-│   ├── logger.js                   # 構造化Event生成・配送順序
-│   ├── logging/
-│   │   ├── tgs-client.js           # TGserver HTTP配送・再試行
-│   │   └── outbox.js               # 未送信Eventの一時状態
-│   ├── safe-json.js                # Secret除去・安全なJSON処理
-│   ├── mood-detector.js
-│   ├── hyperion-human-reader.js
-│   ├── auth/                       # Tenant認証
-│   ├── billing/                    # 課金・使用量
-│   ├── guard/                      # Rate Limit
-│   ├── llm/                        # 任意の外部出力Adapter境界
-│   │   ├── llm-client.js           # Provider Chain
-│   │   ├── adapter-base.js         # Adapter契約
-│   │   ├── adapters.js             # Provider Factory
-│   │   ├── http-client.js          # Timeout・Response上限
-│   │   └── providers/              # 1 Provider = 1 Module
-│   ├── pillars/                    # Fact / Risk / Multi / Inquiry / Compare Worker群
-│   ├── store/                      # Application状態
-│   ├── quality-completion-evaluator/
-│   │   ├── domain-lens-resolver.js # 同じG01〜G38 Lensの読込・分野別確認
-│   │   └── ...                     # 品質・完成度固定Rule採点／KB掲載候補判定
-│   └── public/                     # 最小Web UI
-├── test/                           # Node標準Test
-├── scripts/                        # 短時間の検証用。常駐禁止
+│   ├── server-with-module-switch.js # 現行start.jsのHTTP最上位Server
+│   ├── server-with-evidence.js      # Evidence / Integrated境界
+│   ├── server.js                    # CanonicalAsteraEngineを標準注入
+│   ├── server-base.js               # HTTP/Auth/Rate/Usage等のBase境界
+│   ├── astera-module-switch.js      # 3 Targetの明示Switch
+│   ├── canonical-astera-engine.js   # Global Input補強・Canonical出力
+│   ├── canonical-astera-engine-base.js
+│   ├── astera-engine.js             # 5本柱・Dialectic・Main8の基底実装
+│   ├── kagura-engine.js             # Legacy compatibility shimのみ
+│   ├── input-understanding.js       # 言語非依存Input理解・Task Packet
+│   ├── judgment-materials-analyzer.js
+│   ├── all-domain-lens-catalog.js   # G01-G38 Lens Catalog
+│   ├── domain-template-router.js    # Task別Lens Routing
+│   ├── worker-pool.js
+│   ├── pool-runner.js
+│   ├── pillars/
+│   │   ├── fact-worker.js
+│   │   ├── risk-worker.js
+│   │   ├── multi-worker.js
+│   │   ├── inquiry-worker.js
+│   │   ├── dialectic-worker.js
+│   │   └── compare-worker.js
+│   ├── evidence-search/             # Evidence Search Module/API/Adapters
+│   ├── quality-completion-evaluator/# 固定Rule品質・完成度判定
+│   ├── auth/                        # Tenant / Skill認証
+│   ├── guard/                       # Rate Limit等
+│   ├── billing/
+│   │   ├── meter.js                 # Core責務: Usage Meter境界
+│   │   ├── key-vault.js             # Request LLM Key境界
+│   │   ├── stripe-client.js         # Legacy Commerce Adapter
+│   │   └── subscription-sync.js     # Legacy Commerce Adapter
+│   ├── store/                       # Application状態
+│   ├── llm/                         # 任意外部LLM Adapter境界
+│   ├── logging/                     # TGserver配送 / Outbox
+│   ├── logger.js
+│   ├── safe-json.js
+│   └── public/                      # 開発補助用最小Web UI
+├── test/                            # Core Regression / Integration
+├── scripts/                         # 短時間検証用
 ├── deploy/
-│   └── nginx/                      # Docker前段のHTTPS Reverse Proxy例
-├── docs/                           # 仕様・API・運用文書
-└── archive/                        # 廃止資材の退避先（削除禁止）
+├── docs/
+└── archive/                         # Historical/Legacy。現行Canonへ混入禁止
 ```
 
-## 依存方向
+## 5. Composition Root
 
 ```text
-start
-  → server
-      → auth / guard / billing / store
-      → kagura-engine
-          → domain-template-router
-              → all-domain-lens-catalog
-          → worker-pool → pillars
-          → llm adapters
-          → logger → logging/tgs-client → TGserver
-                   → logging/outbox → /home/admin1/logs/astera-v8/outbox
-
-evaluation caller（成果物・Requirement・Evidence確定後）
-  → quality-completion-evaluator
-      → domain-lens-resolver
-          → domain-template-router
-          → all-domain-lens-catalog
-      → Artifact Profile
-      → Requirement / Evidence / Blocking Rule
-      → KB System Adapter（publish明示時のみ）
+start.js
+  ├─ SQLiteStore
+  ├─ Logger
+  ├─ ASTERA_ENABLE_LEGACY_COMMERCE=1 ?
+  │    ├─ StripeClient
+  │    └─ SubscriptionSync
+  │  : 何も注入しない
+  │
+  └─ AsteraServerWithModuleSwitch
+       └─ AsteraServerWithEvidence
+            └─ AsteraServer
+                 └─ AsteraServerBase
 ```
 
-- `server`より下位のModuleは`server`をImportしない。
-- `kagura-engine`より下位のModuleは`kagura-engine`をImportしない。
-- `all-domain-lens-catalog`はRuntime・Worker・KBをImportしない。
-- `domain-template-router`は`all-domain-lens-catalog`だけを分類定義の正本として読む。
-- `pillars/*`は分類を再実行せず、Routerが返した同一Lensを参照する。
-- `quality-completion-evaluator`は`server`・`kagura-engine`・KB DBをImportしない。
-- `quality-completion-evaluator/domain-lens-resolver`は通常版と同じCatalog・Routerを参照し、別のLens定義を複製しない。
-- Artifact Profileは設計・実装・研究などの成果物種別を扱い、`G01`〜`G38` Lensは分野固有のRisk・Evidence・Safety条件を扱う。両者を混同しない。
-- `quality-completion-evaluator`は成果物を修正せず、固定Ruleの評価結果とKB掲載候補Recordだけを返す。
-- 現行の`/process`へ品質・完成度判定を自動挿入しない。成果物・Requirement・Evidenceが確定した処理から明示的に呼び出す。
-- 本体`server`は公開`/process`とアプリGPT Skill専用`/v1/skill/process`を提供する。後者は`ASTERA_SKILL_API_KEY`だけを受け付け、公開TenantのRate Limit・課金を適用しない。
-- 判定Moduleの`api/server`は本体から独立起動し、一般ユーザー用`/v1/evaluate`とSkill専用`/v1/skill/evaluate`を提供する。一般ユーザーには本体と同じTenant Key・Plan別Rate Limit・利用計測を適用する。
-- 両判定Endpointは`quality-completion-evaluator.evaluate`だけを呼び、KB DBや`modular-catalog`へ自動保存しない。
-- `logger`はTGserverのHTTP Ingest契約だけに依存し、TGserver内部ModuleをImportしない。
-- TGserverはAsteraをImportせず、意味判定を行わない。
+Canonical defaultではLegacy Commerce Adapterを生成しない。
 
-## Module責務
+## 6. Decision Runtime依存方向
 
-| Module | 単一責務 |
-|---|---|
-| `server` | HTTP受付・認証順序・Response |
-| `kagura-engine` | 38 Genre Lens、5本柱、8段判断材料の順序統合 |
-| `all-domain-lens-catalog` | `G01`〜`G38`の固定ID、分類語、5本柱Lens、Evidence条件、検証Anchor Path |
-| `domain-template-router` | 入力正規化、決定論的Score、Primary・Secondary・Overlay選択、Confidence生成 |
-| `worker-pool` | Workerの割当・Timeout・再生成 |
-| `pillars/*` | 選択済みLensに基づく各認知観点の決定論的処理 |
-| `llm/llm-client` | 任意Provider ChainとFallback順序 |
-| `llm/adapters` | Provider名からAdapterを生成するFactory |
-| `llm/http-client` | 外部HTTPのTimeout・Response上限 |
-| `llm/providers/*` | 各Provider固有のRequest・Response変換 |
-| `quality-completion-evaluator` | 品質・完成度を個別採点し、95/95・Blocking・Requirement・Evidence条件からKB掲載候補を判定 |
-| `quality-completion-evaluator/domain-lens-resolver` | 同じ38 Genre Lensを読込み、指定Path・分野別Risk・Evidence・Safety確認を採点Contextへ追加 |
-| `logger` | Secret除去済みEventの生成と配送順序の統合 |
-| `logging/tgs-client` | TGserver HTTP配送・Timeout・再試行 |
-| `logging/outbox` | 未送信Eventの一時保存・復旧・期限削除 |
-| `store` | Tenant・Usage・Webhook状態 |
-| `billing/*` | Stripe境界・Subscription反映 |
+```text
+CanonicalAsteraEngine
+  → CanonicalAsteraEngineBase
+      → AsteraEngine
+          → Input / Task analysis
+          → domain-template-router
+              → all-domain-lens-catalog
+          → worker-pool
+              → Fact
+              → Risk
+              → Inquiry
+              → Multi
+              → Dialectic
+              → Compare
+          → Main8 Judgment / Decision Trace
+```
 
-## Lens分類契約
+- `src/kagura-engine.js`は上記依存の本体ではない。旧Importを`AsteraEngine`へ転送するShim。
+- 下位WorkerからServerへ逆Importしない。
+- `all-domain-lens-catalog`はRuntime / Worker / KBをImportしない。
+- `domain-template-router`はCatalogをLens分類正本として読む。
+- WorkerはTaskへ割り当て済みLensを使用し、独自の別Catalogを作らない。
+
+## 7. Analysis Task Graph契約
 
 ```text
 Input
-  → Normalize
-  → G01〜G38 Score
-  → Primary 1件
-  → Secondary 最大3件
-  → Overlay 0〜5件
-  → 同一Lensを5本柱へ配布
-  → 8段の判断材料へ反映
+  → Input Understanding
+  → Instruction Understanding
+  → Analysis Task Packet
+      ├─ tasks[]
+      ├─ dependencies[]
+      ├─ execution_waves[]
+      ├─ constraints[]
+      ├─ prohibitions[]
+      ├─ preserve[]
+      └─ hard_blockers[]
+  → TaskごとにLens / Evidence Needを決定
 ```
 
-- 同一Input・同一Taxonomy Versionは同じ分類順序を返す。
-- 空Inputは分類せず`ASTERA_LENS_INPUT_REQUIRED`状態を返す。
-- `AI`、`IT`等の短いASCII語は単語境界で照合し、別単語の一部で発火させない。
-- 弱い一致は`HYPOTHESIS_LAST_RESORT`、低Confidence、Review必須として返す。
-- `未分類`、`その他`、`不明`、`other`、`unknown`、`unclassified`を分類IDとして作らない。
-- 現行Runtimeは38 Genre Lensを選択する。ASTERA-KB完成後はKBが返す完全4階層Pathを同じ`Gxx`へ接続する。
+複数要求を1つの曖昧な処理へ平均化しない。Taskの依存順序をExecution Waveとして保持する。
 
-## 判定Module Lens契約
+## 8. Lens契約
+
+```text
+Task text / target / premises
+  → G01-G38 Score
+  → Primary
+  → Secondary
+  → Overlay
+  → 同一Task Lens Planを各Workerへ渡す
+```
+
+- 同一Input・同一Taxonomy Versionで決定性を維持する。
+- 短い一般語の部分一致だけで強い専門Lensへ確定しない。
+- Operation IntentとDomain Lensを混同しない。
+- 外部Language Parserが未完成でもCoreを成立させる。将来のParserはAdapter候補。
+
+## 9. Worker責務
+
+| Module | 責務 |
+|---|---|
+| `fact-worker` | 根拠状態を踏まえFact / Unconfirmed / Opinionを分離 |
+| `risk-worker` | Risk・Safety・Hard Constraint違反を検出 |
+| `inquiry-worker` | 前提不足・確認必要条件を抽出 |
+| `multi-worker` | 独立した複数Perspective / Trade-offを生成 |
+| `dialectic-worker` | 主案・反対案・代替案等を比較候補へ構造化 |
+| `compare-worker` | Candidateを同一Metricで比較しDecisionとBottleneckを出す |
+
+Multi / Dialectic / Compareを同じ責務に重複させない。
+
+## 10. Evidence境界
+
+```text
+Task
+  → deriveEvidenceNeed
+      ├─ NOT_REQUIRED
+      └─ REQUIRED
+           → Evidence Search
+           → normalizeEvidencePacket
+           → Fact / Risk / Compare Gate
+```
+
+Evidenceが必要なTaskで根拠取得に失敗した場合、失敗や未確認を確認済みFactへ昇格しない。
+
+現行Main HTTP入口:
+
+- `POST /v1/evidence/search`
+- `POST /v1/skill/evidence/search`
+- `POST /v1/integrated/process`
+
+Evidence Search未設定時は明示的にUnavailableを返す。有料検索は現行無効。
+
+## 11. Module Switch
+
+`POST /v1/astera/execute`は次のTargetだけを受け付ける。
+
+```text
+astera.decision-materials
+astera.evidence-search
+astera.quality-gate
+```
+
+Target名を暗黙推定して別Moduleを呼ばない。
+
+## 12. Main8 Decision Trace
+
+8段出力は文章だけでなく、各Sectionで次の判断根拠を保持する。
+
+- Rule IDs
+- Task IDs
+- Lens IDs
+- Evidence refs
+- Facts used
+- Constraints used
+- Risks used
+- Candidate comparison
+- Rejected reasons
+- Score breakdown
+- Uncertainty
+- Blocking conditions
+- Source spans
+
+未確認・Blockingを隠して最終確定しない。
+
+## 13. Auth / Guard / Usage責務
+
+```text
+HTTP
+  → HTTPS / CORS
+  → Authentication
+  → Tenant resolution
+  → Rate Limit
+  → Request size / option validation
+  → Core process
+  → Usage Meter
+  → Structured Log
+```
+
+Core責務は認証・防御・Usage境界まで。Plan/Credit/決済のBusiness LogicをCoreへ混在させない。
+
+## 14. Commerce Compatibility境界
+
+Canonical default:
+
+```text
+ASTERA_ENABLE_LEGACY_COMMERCE != 1
+  → StripeClient生成なし
+  → SubscriptionSync生成なし
+  → /signup = 404
+  → /billing/checkout = 404
+  → /billing/webhook = 404
+```
+
+Legacy compatibility:
+
+```text
+ASTERA_ENABLE_LEGACY_COMMERCE=1
+  → StripeClient / SubscriptionSyncを明示注入
+  → 旧Routeだけ有効
+```
+
+これは互換経路であり、CoreのPlan/Credit/Payment責務ではない。
+
+`UsageMeter`はCommerceではなくCoreのUsage境界なので削除しない。
+
+## 15. Quality Completion Evaluator境界
 
 ```text
 Artifact + Requirement + Evidence
-  → domain_lens指定あり: 指定GxxとPathを使用
-  → domain_lens指定なし: 同一Routerで決定論的に補完
-  → Lens固有Risk / Evidence / Safety確認
-  → 固定Rule採点
-  → Blocking / KB掲載候補判定
+  → Quality Completion Evaluator
+  → fixed-rule scoring
+  → Blocking / Revision / KB eligibility
 ```
 
-- `domain_lens.enforce=false`または未指定時は、Lensを評価結果へ付与するが、未確認項目だけでBlockingしない。
-- `domain_lens.enforce=true`時は、Lens固有項目を`analysis.domain_checks`で確認する。
-- `passed`はEvaluatorが`VALID`と確認したEvidence IDへ接続されている場合だけ有効とする。
-- 任意文字列、存在しないEvidence ID、別CandidateのEvidenceでは合格させない。
-- 未確認・失敗時は`KB-HB-016`でKB掲載候補をBlockingする。
+- Core Processへ無条件で自動挿入しない。
+- `KB_ELIGIBLE`は保存済みを意味しない。
+- KB / modular-catalogへ自動Publishしない。
+- Lens Resolverは通常Runtimeと同じCatalog / Routerを使用し、独自Taxonomyを複製しない。
 
-## HTTPアクセスログ契約
+## 16. Logging境界
 
-- 正常終了した `GET /healthz` は定期監視Noiseのため、TGserverへ送信しない。
-- `/healthz` の失敗Response・Client切断は異常検知の対象として送信する。
-- その他のHTTP Accessは従来どおり構造化Eventとして送信する。
+- `logger`はSecret除去済みEventを扱う。
+- TGserver設定時はHTTP Ingestへ送る。
+- 未送信EventのみOutboxへ一時保持する。
+- 成功済みLogをProject内へ二重正本化しない。
+- `GET /healthz`成功は監視Noiseとして通常Access Logから除外する。
 
-## ログ一時Cache契約
+## 17. Test境界
 
-Host上の `/home/admin1/logs/astera-v8/outbox` はTGserver配送の一時状態だけに使用する。
+- Unit / Regression: File・Module責務
+- Integration: Requirement / Change Unit
+- Smoke: Canonical Runtimeの短時間起動・Request
+- CI: GitHub Actions Runが存在して成功したCommitのみCI成功Evidenceとする
+- Deploy / Runtime: G5承認後の別Evidence
 
-- 書込条件: TGserver送信開始前に、Secret除去済みEventを1件1Fileで置く。
-- 再送条件: 初回送信失敗時の規定回数再試行、およびProcess再起動時。
-- 削除条件: TGserverが2xxを返した直後。
-- 保持期限: 7日（`ASTERA_LOG_CACHE_TTL_MS`で変更可能）。期限超過Fileは起動時に削除する。
-- 禁止: 成功済みLogの複製、長期監査Log、Telegram原本の複製、KB、仕様書。
-- Project直下へ`logs/`や`astera-logs/`を作らない。
+主な境界Regression:
 
-## 運用境界
+- `test/commerce-boundary.test.js`
+- `test/legacy-naming-boundary.test.js`
 
-- 本番常駐はDocker / Docker Composeのみ。
-- `node start.js`と検証Scriptは短時間検証に限る。
-- systemd / pm2 / nohup / screen / tmuxによるApplication直接常駐は禁止。
-- 本番起動・再起動・切替は管理者の明示承認後に行う。
-- 不要資材は削除せず`archive/YYYY-MM-DD/`へ退避する。
+## 18. 運用境界
+
+- 本番常駐は採用済みDeployment方式に従う。
+- G4実装承認だけでMerge / Release / Deploy権限は発生しない。
+- main / protected branchへ無断変更しない。
+- Force Push / 無断Merge / Branch削除を行わない。
+- Historical資材を現行Canonへ混入しない。
+- 実装済み / Test済み / CI済み / Deploy済み / Runtime確認済みを分離して報告する。
