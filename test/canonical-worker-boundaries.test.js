@@ -1,41 +1,53 @@
 'use strict';
+
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const multi=require('../src/pillars/multi-worker');
-const dialectic=require('../src/pillars/dialectic-worker');
-const compare=require('../src/pillars/compare-worker');
+const CanonicalAsteraEngine=require('../src/canonical-astera-engine');
+const legacyMulti=require('../src/pillars/multi-worker');
+const legacyDialectic=require('../src/pillars/dialectic-worker');
+const legacyCompare=require('../src/pillars/compare-worker');
+const {buildCanonicalTaskPlan,evaluateCanonicalTaskPlan,projectFiveLanes}=require('../src/canonical-claim-runtime');
 
-const baseTask={id:'T01',source_span:{text:'Verify API compatibility.'},target:'API compatibility',objective:'Verify API compatibility.',success_criteria:['preserve compatibility'],constraints:['rollback'],prohibitions:[],preserve:[],depends_on:[],hard_blockers:[],evidence_need:{required:false}};
-const evidence={state:'NOT_REQUIRED',source_status:'NOT_REQUIRED',quality_score_bp:null,quality_gate_bp:9500,coverage_state:'NOT_REQUIRED',distinct_authority_count:0,distinct_source_family_count:0,reinforcement_attempt_count:0,new_corroboration_count:0,eligibility_reasons:[],role_counts:{},conflict_detected:false};
+const silentLogger={write(){}};
+const tenant={id:'worker-boundary',is_global:true,plan:'admin'};
+const baseTask={id:'T01',source_span:{start:0,end:25,text:'API compatibility is preserved.'},raw_text:'API compatibility is preserved.',target:'API compatibility',objective:'Verify API compatibility.',action:'verify',success_criteria:['preserve compatibility'],completion_criteria:[],constraints:['rollback'],prohibitions:[],preserve:[],premises:[],conditions:[],exceptions:[],depends_on:[],hard_blockers:[],evidence_need:{required:false}};
 
-test('Multi exposes perspectives and tradeoffs only',async()=>{
- const out=await multi.run({task:baseTask,facts:{confirmed:[{text:'x'}],unconfirmed:[]},risks:{risk_count:0,risks:[],safety_gates:[]},inquiry:{missing_questions:[],problem_health:{healthy:true}},domain:{},evidence_packet:evidence});
- assert.ok(out.perspectives.length>=3);
- for(const key of ['recommended','selected','selected_perspective','ranking','candidate_ranking']) assert.equal(key in out,false,key);
+test('legacy Multi/Dialectic/Compare modules remain importable only as compatibility components',()=>{
+  assert.equal(typeof legacyMulti.run,'function');
+  assert.equal(typeof legacyDialectic.run,'function');
+  assert.equal(typeof legacyCompare.run,'function');
 });
 
-test('Dialectic emits fixed canonical candidate order with raw metrics only',async()=>{
- const out=await dialectic.run({task:baseTask,facts:{confirmed:[],unconfirmed:[]},risks:{risk_count:0,risks:[]},inquiry:{missing_questions:[]},multi:{perspectives:[]},domain:{},evidence_packet:evidence});
- assert.deepEqual(out.candidates.map(x=>x.id),['mainline','bad_hand','opposition','third_way','human_fit']);
- assert.equal('selected' in out,false);
- assert.equal('ranking' in out,false);
- assert.ok(out.candidates.every(x=>x.metrics&&typeof x.metrics==='object'));
- assert.ok(out.candidates.every(x=>!('score' in x)&&!('answer_line_distance' in x)&&!('weights' in x)));
+test('Canonical five lanes are projected without legacy candidate scoring or selection',()=>{
+  const task={...baseTask,evidence_need:{required:false}};
+  const plan=buildCanonicalTaskPlan(task,{primary:{id:'G29',multi_lens:['compatibility','rollback'],compare_lens:['scope','coverage']}});
+  const canonical=evaluateCanonicalTaskPlan(plan,{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',evidence:[],provider_execution:{initial:[],reinforcement:[]},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},ai_used:false,payment_executed:false});
+  const lanes=projectFiveLanes({task,canonical,domain:{primary:{id:'G29',multi_lens:['compatibility','rollback'],compare_lens:['scope','coverage']}}});
+  assert.equal(lanes.compare.material_only,true);
+  assert.equal(lanes.compare.selected_candidate,null);
+  assert.deepEqual(lanes.compare.candidate_ranking,[]);
+  assert.deepEqual(lanes.compare.rejected_candidates,[]);
+  assert.equal(Object.hasOwn(lanes.compare,'score'),false);
+  assert.ok(lanes.multi.perspectives.length>=2);
 });
 
-test('Compare alone owns scoring ranking and selection',async()=>{
- const d=await dialectic.run({task:baseTask,facts:{confirmed:[],unconfirmed:[]},risks:{risk_count:0,risks:[]},inquiry:{missing_questions:[]},multi:{perspectives:[]},domain:{},evidence_packet:evidence});
- const out=await compare.run({task:baseTask,facts:{confirmed:[],unconfirmed:[]},risks:{risk_count:0,risks:[],level:'low'},inquiry:{missing_fields:[],problem_health:{healthy:true}},multi:{perspectives:[]},dialectic:d,domain:{},evidence_packet:evidence});
- assert.ok(out.selected_candidate);
- assert.ok(out.candidate_ranking.length===5);
- assert.ok(out.candidate_ranking.every(x=>Number.isInteger(x.score)));
- assert.notEqual(out.selected_candidate.id,'bad_hand');
-});
-
-test('required evidence failure is a Compare hard gate',async()=>{
- const task={...baseTask,evidence_need:{required:true}};
- const rejected={...evidence,state:'REJECTED',source_status:'FINAL_VALID',quality_score_bp:9900,eligibility_reasons:['REINFORCEMENT_COUNT_INVALID']};
- const d=await dialectic.run({task,facts:{confirmed:[],unconfirmed:[]},risks:{risk_count:0,risks:[]},inquiry:{missing_questions:[]},multi:{perspectives:[]},domain:{},evidence_packet:rejected});
- const out=await compare.run({task,facts:{confirmed:[],unconfirmed:[]},risks:{risk_count:0,risks:[],level:'low'},inquiry:{missing_fields:[],problem_health:{healthy:true}},multi:{perspectives:[]},dialectic:d,domain:{},evidence_packet:rejected});
- assert.equal(out.verdict.decision,'hold_and_clarify');
+test('Canonical Engine never exposes legacy scoring/selection even while compatibility workers exist',async()=>{
+  const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger});
+  try{
+    const out=await engine.process({question:'API互換性を比較する。'},tenant);
+    assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
+    assert.equal(out.result.comparison.material_only,true);
+    assert.equal(out.result.comparison.selected_candidate,null);
+    assert.deepEqual(out.result.comparison.candidate_ranking,[]);
+    assert.deepEqual(out.result.comparison.rejected_candidates,[]);
+    assert.equal(Object.hasOwn(out.result.comparison,'score'),false);
+    assert.equal(out.result.hyperion.mode,'MATERIAL_ONLY');
+    assert.deepEqual(out.result.hyperion.candidates,[]);
+    assert.equal(out.result.hyperion.selected,null);
+    assert.deepEqual(out.result.hyperion.rejected,[]);
+    assert.equal(out.result.judgment.order[6],'07_evidence_status');
+    assert.equal(Object.hasOwn(out.result.judgment,'07_recommendation'),false);
+  }finally{
+    await engine.destroy();
+  }
 });
