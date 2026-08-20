@@ -75,7 +75,17 @@ test('G1-G7 are the only confirmation boundary; high Evidence quality alone is n
   const missingPlan={...good,planning_authority:'EVIDENCE_SEARCH_LEGACY_COMPATIBILITY',planned_query_roles:[]};
   const undetermined=evaluateCanonicalTaskPlan(plan,missingPlan);
   assert.equal(undetermined.records[0].confirmation.status,'UNDETERMINED');
-  assert.ok(undetermined.records[0].confirmation.reasons.includes('G5_PLANNED_QUERY_RETRIEVAL_INCOMPLETE'));
+  assert.ok(undetermined.records[0].confirmation.reasons.includes('G5_PLANNED_QUERY_RETRIEVAL_INCOMPLETE_OR_INVALID'));
+});
+
+test('REJECTED Evidence Search result cannot pass G5 even when planned roles and bindings exist',()=>{
+  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],rejected=validEvidence(claim.raw_text);
+  rejected.status='REJECTED_BLOCKING';
+  rejected.quality.final={status:'REJECTED_BLOCKING',phase:'FINAL',score_bp:9700,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]};
+  const result=evaluateCanonicalTaskPlan(plan,rejected);
+  assert.equal(result.records[0].confirmation.status,'UNDETERMINED');
+  assert.equal(result.records[0].confirmation.gates.G5,false);
+  assert.ok(result.records[0].confirmation.reasons.includes('G5_PLANNED_QUERY_RETRIEVAL_INCOMPLETE_OR_INVALID'));
 });
 
 test('source code can be locally confirmed as CODE_STRUCTURE without external search',()=>{
