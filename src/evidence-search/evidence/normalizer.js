@@ -3,6 +3,8 @@
 const crypto = require('node:crypto');
 const { stableStringify } = require('../../quality-completion-evaluator/utils/stable-json');
 
+const RETRIEVAL_STATUSES = new Set(['FOUND', 'NOT_FOUND', 'RETRIEVAL_FAILED']);
+
 function sha256(value) {
   return crypto.createHash('sha256').update(typeof value === 'string' ? value : stableStringify(value)).digest('hex');
 }
@@ -56,6 +58,34 @@ function normalizeCandidate(raw, provider, index) {
   });
 }
 
+function normalizeQueryResults(result, provider) {
+  const rawResults = Array.isArray(result?.query_results) ? result.query_results : [];
+  return Object.freeze(rawResults.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      const error = new Error(`query_results[${index}] must be an object`);
+      error.code = 'PROVIDER_QUERY_RESULT_INVALID';
+      throw error;
+    }
+    const queryId = String(item.query_id || '').trim();
+    const retrievalStatus = String(item.retrieval_status || '').toUpperCase();
+    if (!queryId || !RETRIEVAL_STATUSES.has(retrievalStatus)) {
+      const error = new Error(`query_results[${index}] is incomplete`);
+      error.code = 'PROVIDER_QUERY_RESULT_INVALID';
+      throw error;
+    }
+    return Object.freeze({
+      query_id: queryId,
+      provider_id: provider.provider_id,
+      source_class: provider.source_class,
+      retrieval_status: retrievalStatus,
+      candidate_record_ids: Object.freeze([...(item.candidate_record_ids || [])].map(String).filter(Boolean).sort()),
+      error_code: item.error_code == null ? null : String(item.error_code),
+      endpoint_count: Number.isInteger(item.endpoint_count) ? item.endpoint_count : null,
+      completed_endpoint_count: Number.isInteger(item.completed_endpoint_count) ? item.completed_endpoint_count : null
+    });
+  }));
+}
+
 function normalizeProviderResult(result, provider) {
   const rawCandidates = Array.isArray(result) ? result : Array.isArray(result?.candidates) ? result.candidates : [];
   const candidates = rawCandidates.map((raw, index) => normalizeCandidate(raw, provider, index)).filter(Boolean);
@@ -66,8 +96,9 @@ function normalizeProviderResult(result, provider) {
     current_watermark: result?.current_watermark || null,
     usage: Object.freeze({ ...(result?.usage || {}) }),
     provider_pricing: result?.provider_pricing ? Object.freeze({ ...result.provider_pricing }) : null,
+    query_results: normalizeQueryResults(result, provider),
     candidates: Object.freeze(candidates)
   });
 }
 
-module.exports = { normalizeCandidate, normalizeProviderResult };
+module.exports = { RETRIEVAL_STATUSES, normalizeCandidate, normalizeProviderResult, normalizeQueryResults };
