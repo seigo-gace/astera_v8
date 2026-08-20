@@ -376,7 +376,7 @@ astera_v8/
 
 > 以下は**現在のCodeに存在するObserved Contract**です。すべてが将来の正式責務という意味ではありません。
 
-### Runtime `127.0.0.1:7373`
+### Runtime `127.0.0.1:7375`
 
 | Method | Path | Position |
 |---|---|---|
@@ -438,13 +438,13 @@ npm start
 Health:
 
 ```bash
-curl http://127.0.0.1:7373/healthz
+curl http://127.0.0.1:7375/healthz
 ```
 
 Process:
 
 ```bash
-curl -X POST http://127.0.0.1:7373/process \
+curl -X POST http://127.0.0.1:7375/process \
   -H "Content-Type: application/json" \
   -d '{
     "question": "Node.js APIを互換性を保って段階移行する判断材料を作る。対象は本番Serviceで、成功条件は停止時間を作らずRollback可能にすること。",
@@ -462,7 +462,15 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-現行ComposeはHost Network、loopback、TGserver接続、Cloudflare profileを前提にします。開発PCでそのまま本番設定を流用しないでください。
+| サービス | ポート | 役割 |
+|---|---|---|
+| `astera-v8`（本体） | `127.0.0.1:7375` | 判断材料生成 API |
+| `astera-v8-evaluator` | `127.0.0.1:7374` | 品質・完成度判定 API |
+| nginx（personal ローカル） | `127.0.0.1:8082` → `7375` | ローカル reverse proxy（`docker-compose.personal.yml` の `nginx-personal`） |
+
+`docker-compose.personal.yml` の `astera-v8-personal`（personal 本体）は既定では起動しません。本番の `astera-v8`（7375）と `astera-v8-evaluator`（7374）を使用してください。personal 用 nginx（8082→7375）だけが必要な場合は `docker compose -f docker-compose.personal.yml up -d nginx-personal` で起動します。
+
+現行ComposeはHost Network、loopback、TGserver接続、Cloudflare profileを前提にします。開発PCでそのまま本番設定を流用しないでください。ホストの `npm start` / systemd 常駐は本番運用では行いません。
 
 ---
 

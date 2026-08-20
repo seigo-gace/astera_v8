@@ -8,6 +8,7 @@ export KAGURA_PORT=${ASTERA_PORT}
 export ASTERA_DB=${ASTERA_DB:-astera-smoke.db}
 export KAGURA_DB=${ASTERA_DB}
 export ASTERA_TGS_ENABLED=0
+export ASTERA_ALLOW_HOST_START=1
 node start.js >/tmp/astera-smoke.log 2>&1 &
 pid=$!
 trap 'kill $pid >/dev/null 2>&1 || true' EXIT

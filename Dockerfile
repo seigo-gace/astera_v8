@@ -16,6 +16,15 @@ COPY docs ./docs
 COPY scripts ./scripts
 COPY .env.example ./
 
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages sudachipy sudachidict_core \
+    && rm -rf /var/lib/apt/lists/*
+ENV SUDACHI_BIN=sudachipy
+ENV SUDACHI_DICT_VERSION=sudachidict_core-latest
+
 RUN chmod +x scripts/*.sh \
     && mkdir -p /data /cache/outbox \
     && chown -R node:node /app /data /cache
