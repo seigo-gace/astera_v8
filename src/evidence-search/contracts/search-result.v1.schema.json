@@ -4,6 +4,33 @@
   "title": "ASTERA Evidence Search Result v1",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "queryExecutionRecord": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["query_id", "status", "provider_records"],
+      "properties": {
+        "query_id": { "type": "string", "minLength": 1 },
+        "claim_id": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "status": { "enum": ["FOUND", "NOT_FOUND", "RETRIEVAL_FAILED"] },
+        "provider_records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["provider_id", "status"],
+            "properties": {
+              "provider_id": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["FOUND", "NOT_FOUND", "RETRIEVAL_FAILED"] },
+              "error_code": { "type": ["string", "null"] },
+              "candidate_record_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  },
   "required": [
     "schema_version",
     "request_id",
@@ -16,6 +43,7 @@
     "evidence",
     "coverage",
     "quality",
+    "query_execution",
     "provider_execution",
     "paid_usage_reports",
     "ai_used",
@@ -34,6 +62,15 @@
     "evidence": { "type": "array" },
     "coverage": { "type": "object" },
     "quality": { "type": "object" },
+    "query_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial", "reinforcement"],
+      "properties": {
+        "initial": { "type": "array", "items": { "$ref": "#/$defs/queryExecutionRecord" } },
+        "reinforcement": { "type": "array", "items": { "$ref": "#/$defs/queryExecutionRecord" } }
+      }
+    },
     "provider_execution": { "type": "object" },
     "paid_usage_reports": { "type": "array" },
     "ai_used": { "const": false },
