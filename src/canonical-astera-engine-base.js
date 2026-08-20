@@ -4,149 +4,109 @@ const AsteraEngine = require('./astera-engine');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
+const {
+  buildCanonicalTaskPlan,
+  evaluateCanonicalTaskPlan,
+  projectFiveLanes,
+  deterministicPerspectiveExpansion
+} = require('./canonical-claim-runtime');
 
-const FIVE_STAGE = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare']);
+const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
+const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
+const LABELS=Object.freeze({
+  ja:['01 本当の目的','02 前提不足','03 事実確認','04 危機察知','05 反対視点','06 比較案','07 根拠成立状態','08 主役AI／利用者への再指示'],
+  en:['01 True Objective','02 Missing Context','03 Fact Check','04 Risk Detection','05 Opposing View','06 Comparison Material','07 Evidence Status','08 Re-instruction to Main AI / User']
+});
+const CANON=Object.freeze(['01 True Objective','02 Missing Context','03 Fact Check','04 Risk Detection','05 Opposing View','06 Comparison Material','07 Evidence Status','08 Re-instruction to Main AI / User']);
+const line=(value)=>String(value??'-').replace(/\s+/g,' ').trim()||'-';
+const join=(items,fallback='-')=>(items||[]).map(line).filter((item)=>item&&item!=='-').join(' / ')||fallback;
 
-function notRequiredEvidence(taskId) {
-  return { schema_version: 'astera.evidence-search.result.v1', status: 'NOT_REQUIRED', task_id: taskId, evidence: [], coverage: { discovery_scope_state: 'NOT_REQUIRED' }, quality: { final: { status: 'NOT_REQUIRED', score_bp: null } }, provider_execution: { initial: [], reinforcement: [] }, ai_used: false, payment_executed: false };
-}
+function notRequiredEvidence(taskId){return{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'NOT_REQUIRED'},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};}
+function taskText(task,claims=[]){return unique([...(claims||[]).map((claim)=>claim.raw_text),task.target||'',...(task.premises||[]),task.source_span?.text||'']).join('\n');}
+function claimStatus(canonical){const total=canonical?.records?.length||0,confirmed=canonical?.confirmed_count||0,undetermined=canonical?.undetermined_count||0;return{status:total&&undetermined===0?'CONFIRMED':'UNDETERMINED',total,confirmed,undetermined};}
+function evidenceBindingRefs(records=[]){const refs=[];for(const record of records)for(const binding of record.confirmation?.bindings||[])if(binding.evidence_source==='EXTERNAL_RETRIEVED_EVIDENCE')refs.push(binding);return[...new Map(refs.map((item)=>[item.candidate_id||item.url||JSON.stringify(item),item])).values()];}
 
-function taskRouteText(task) {
-  return unique([task.target || '', ...(task.premises || []), task.source_span?.text || '']).join('\n');
-}
-
-function aggregateTaskResults(taskResults) {
-  const facts = {
-    pillar: 'fact',
-    confirmed: taskResults.flatMap((r) => (r.facts.confirmed || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    unconfirmed: taskResults.flatMap((r) => (r.facts.unconfirmed || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    opinions: taskResults.flatMap((r) => (r.facts.opinions || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    not_applicable: taskResults.flatMap((r) => (r.facts.not_applicable || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    evidence_need: taskResults.flatMap((r) => (r.facts.evidence_need || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    evidence_state: taskResults.length === 1 ? taskResults[0].facts.evidence_state : { state: 'PER_TASK', per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.facts.evidence_state])) },
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.facts]))
+function aggregateTaskResults(taskResults){
+  const allRecords=taskResults.flatMap((result)=>(result.canonical.records||[]).map((record)=>({task_id:result.task.id,...record})));
+  const confirmed=taskResults.flatMap((result)=>(result.lanes.fact.confirmed||[]).map((item)=>({task_id:result.task.id,...item})));
+  const unconfirmed=taskResults.flatMap((result)=>(result.lanes.fact.unconfirmed||[]).map((item)=>({task_id:result.task.id,...item})));
+  const facts={
+    pillar:'fact',confirmed,unconfirmed,opinions:[],not_applicable:[],
+    evidence_need:taskResults.flatMap((result)=>(result.lanes.fact.evidence_need||[]).map((item)=>({task_id:result.task.id,...item}))),
+    evidence_gaps:taskResults.flatMap((result)=>(result.lanes.fact.evidence_gaps||[]).map((item)=>({task_id:result.task.id,...item}))),
+    evidence_state:taskResults.length===1?taskResults[0].evidence:{state:'PER_TASK',per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.evidence]))},
+    per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.fact]))
   };
-  const allRisks = taskResults.flatMap((r) => (r.risks.risks || []).map((item) => ({ task_id: r.task.id, ...item }))).sort((a, b) => b.weight - a.weight || a.key.localeCompare(b.key));
-  const riskWeight = allRisks.reduce((sum, item) => sum + Number(item.weight || 0), 0);
-  const risks = {
-    pillar: 'risk', risk_count: allRisks.length, risks: allRisks, highest: allRisks[0] || null,
-    level: riskWeight >= 55 ? 'high' : riskWeight >= 20 ? 'medium' : 'low',
-    safety_gates: unique(taskResults.flatMap((r) => r.risks.safety_gates || [])),
-    domain_checks: taskResults.flatMap((r) => r.risks.domain_checks || []),
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.risks]))
-  };
-  const inquiry = {
-    pillar: 'inquiry',
-    problem_health: { healthy: taskResults.every((r) => r.inquiry.problem_health?.healthy), reason: taskResults.filter((r) => !r.inquiry.problem_health?.healthy).map((r) => `${r.task.id}:${r.inquiry.problem_health?.reason}`).join(' / ') || 'All task premises remain traceable.' },
-    missing_fields: unique(taskResults.flatMap((r) => (r.inquiry.missing_fields || []).map((item) => `${r.task.id}:${item}`))),
-    missing_questions: unique(taskResults.flatMap((r) => r.inquiry.missing_questions || [])),
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.inquiry]))
-  };
-  const multi = {
-    pillar: 'multi',
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.multi])),
-    perspectives: taskResults.flatMap((r) => (r.multi.perspectives || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    trade_off_map: taskResults.flatMap((r) => (r.multi.trade_off_map || []).map((item) => ({ task_id: r.task.id, ...item })))
-  };
-  const dialectic = {
-    pillar: 'dialectic', engine: 'Astera Deterministic Dialectic', mode: 'decision_materials',
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.dialectic])),
-    candidates: taskResults.flatMap((r) => (r.dialectic.candidates || []).map((item) => ({ task_id: r.task.id, ...item }))),
-    bad_hand_lessons: unique(taskResults.flatMap((r) => r.dialectic.bad_hand_lessons || []))
-  };
-  const taskComparisons = taskResults.map((r) => ({ task_id: r.task.id, ...r.comparison }));
-  const bottleneck = [...taskComparisons].sort((a, b) => a.score - b.score || a.task_id.localeCompare(b.task_id))[0] || null;
-  const decisions = taskComparisons.map((c) => c.verdict?.decision).filter(Boolean);
-  let globalDecision = 'recommend';
-  if (decisions.includes('hold_and_clarify')) globalDecision = 'hold_and_clarify';
-  else if (decisions.includes('recommend_with_caution')) globalDecision = 'recommend_with_caution';
-  const comparison = {
-    pillar: 'compare', score: bottleneck?.score || 0, answer_line_distance: 100 - (bottleneck?.score || 0),
-    score_model: { aggregation: 'MIN_TASK_SCORE_BOTTLENECK', reason: 'A weak task cannot be averaged away.' },
-    score_breakdown: taskComparisons.map((c) => ({ task_id: c.task_id, score: c.score, decision: c.verdict?.decision, breakdown: c.score_breakdown })),
-    contradictions: taskComparisons.flatMap((c) => (c.contradictions || []).map((item) => ({ task_id: c.task_id, ...item }))),
-    selected_candidate: bottleneck?.selected_candidate ? { task_id: bottleneck.task_id, ...bottleneck.selected_candidate } : null,
-    candidate_ranking: taskComparisons.flatMap((c) => (c.candidate_ranking || []).map((item) => ({ task_id: c.task_id, ...item }))),
-    rejected_candidates: taskComparisons.flatMap((c) => (c.rejected_candidates || []).map((item) => ({ task_id: c.task_id, ...item }))),
-    uncertainty: { per_task: Object.fromEntries(taskComparisons.map((c) => [c.task_id, c.uncertainty || {}])), bottleneck_task_id: bottleneck?.task_id || null },
-    per_task: Object.fromEntries(taskResults.map((r) => [r.task.id, r.comparison])),
-    verdict: { decision: globalDecision, angle: bottleneck?.verdict?.angle || 'task_graph', reason: `MIN_TASK_SCORE_BOTTLENECK=${bottleneck?.task_id || '-'}:${bottleneck?.score || 0}`, objective: 'Satisfy the full Analysis Task Graph under evidence, dependency, and hard-constraint gates.' }
-  };
-  return { facts, risks, inquiry, multi, dialectic, comparison };
+  const riskItems=taskResults.flatMap((result)=>(result.lanes.risk.risks||[]).map((item)=>({task_id:result.task.id,...item}))).sort((a,b)=>Number(b.weight||0)-Number(a.weight||0)||String(a.key).localeCompare(String(b.key)));
+  const risks={pillar:'risk',risk_count:riskItems.length,risks:riskItems,highest:riskItems[0]||null,level:riskItems.some((item)=>Number(item.weight||0)>=100)?'high':riskItems.length?'medium':'low',safety_gates:unique(taskResults.flatMap((result)=>result.lanes.risk.safety_gates||[])),hard_constraints:unique(taskResults.flatMap((result)=>result.lanes.risk.hard_constraints||[])),per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.risk]))};
+  const multi={pillar:'multi',material_only:true,perspectives:taskResults.flatMap((result)=>(result.lanes.multi.perspectives||[]).map((item)=>({task_id:result.task.id,...item}))),trade_off_map:taskResults.flatMap((result)=>(result.lanes.multi.trade_off_map||[]).map((item)=>({task_id:result.task.id,...item}))),per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.multi]))};
+  const inquiry={pillar:'inquiry',problem_health:{healthy:taskResults.every((result)=>result.lanes.inquiry.problem_health?.healthy),reason:taskResults.filter((result)=>!result.lanes.inquiry.problem_health?.healthy).map((result)=>`${result.task.id}:${result.lanes.inquiry.problem_health?.reason}`).join(' / ')||'All canonical claims are traceable.'},missing_fields:unique(taskResults.flatMap((result)=>(result.lanes.inquiry.missing_fields||[]).map((item)=>`${result.task.id}:${item}`))),missing_questions:unique(taskResults.flatMap((result)=>result.lanes.inquiry.missing_questions||[])),open_items:taskResults.flatMap((result)=>(result.lanes.inquiry.open_items||[]).map((item)=>({task_id:result.task.id,...item}))),per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.inquiry]))};
+  const claims=allRecords.length,confirmedCount=allRecords.filter((record)=>record.confirmation.status==='CONFIRMED').length,undeterminedCount=claims-confirmedCount,conflictCount=allRecords.filter((record)=>(record.confirmation.reasons||[]).includes('G6_UNRESOLVED_CONFLICT')).length;
+  const comparison={pillar:'compare',material_only:true,counts:{claims,confirmed:confirmedCount,undetermined:undeterminedCount,conflicts:conflictCount},coverage:claims?{numerator:confirmedCount,denominator:claims,ratio:confirmedCount/claims}:null,dimensions:unique(taskResults.flatMap((result)=>result.lanes.compare.dimensions||[])),scope_booleans:taskResults.flatMap((result)=>(result.lanes.compare.scope_booleans||[]).map((item)=>({task_id:result.task.id,...item}))),selected_candidate:null,candidate_ranking:[],rejected_candidates:[],per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.compare])),verdict:{decision:'MATERIAL_ONLY',reason:'Astera does not select, rank, recommend, adopt, or reject candidates.',objective:'Expose deterministic comparison material only.'}};
+  const perspectiveExpansion={engine:'Astera Deterministic Perspective Expansion',mode:'MATERIAL_ONLY',per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.perspective_expansion])),perspectives:taskResults.flatMap((result)=>(result.perspective_expansion.perspectives||[]).map((item)=>({task_id:result.task.id,...item}))),candidates:[],selected:null,rejected:[]};
+  const canonical={schema_version:'astera.canonical-claim-records.aggregate.v1',records:allRecords,claim_count:claims,confirmed_count:confirmedCount,undetermined_count:undeterminedCount,status:claims&&undeterminedCount===0?'CONFIRMED':'UNDETERMINED',per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.canonical]))};
+  return{facts,risks,multi,inquiry,comparison,perspectiveExpansion,canonical};
 }
 
 class CanonicalAsteraEngine extends AsteraEngine {
-  prepareRequest(input = {}) {
-    return analyzeRequest(input);
-  }
+  prepareRequest(input={}){return analyzeRequest(input);}
 
-  async process(input = {}, tenant = { id: 'unknown' }) {
-    const question = String(input.question || '').trim();
-    const context = String(input.context || '').trim();
-    const request = input.preparedRequest?.analysis_task_packet ? input.preparedRequest : this.prepareRequest({ question, context, language: input.language, locale: input.locale, output_language: input.output_language });
-    const requestedOutput = String(request.output_language || request.language || input.output_language || input.language || 'und');
-    const renderLang = requestedOutput.split('-')[0] === 'ja' ? 'ja' : 'en';
-    if (!question) return super.process(input, tenant);
-    const packet = request.analysis_task_packet;
-    if (!packet?.tasks?.length) return super.process(input, tenant);
+  async process(input={},tenant={id:'unknown'}){
+    const question=String(input.question||'').trim(),context=String(input.context||'').trim();
+    const request=input.preparedRequest?.analysis_task_packet?input.preparedRequest:this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
+    const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
+    if(!question)return{result:{type:'clarification_needed',non_ai:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:this.clarify([],renderLang),prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    const packet=request.analysis_task_packet;
+    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:this.clarify([],renderLang),prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
 
-    const tasks = packet.tasks.map((baseTask) => {
-      const domain = routeDomainTemplates({ question: taskRouteText(baseTask), context });
-      const evidenceNeed = deriveEvidenceNeed(baseTask, domain);
-      return { ...baseTask, evidence_need: evidenceNeed, domain };
+    const tasks=packet.tasks.map((baseTask)=>{
+      const preliminary=buildCanonicalTaskPlan(baseTask,{});
+      const domain=routeDomainTemplates({question:taskText(baseTask,preliminary.claims),context});
+      const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
+      const task={...baseTask,evidence_need:evidenceNeed,domain};
+      const canonicalPlan=buildCanonicalTaskPlan(task,domain);
+      return{...task,canonical_plan:canonicalPlan};
     });
-    request.analysis_task_packet = { ...packet, tasks, execution_waves: packet.execution_waves };
+    request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
 
-    const taskEvidence = input.taskEvidencePackets || input.task_evidence_packets || {};
-    const globalEvidence = input.evidencePacket || input.evidence_packet || null;
-    const completed = new Map();
-    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const taskEvidence=input.taskEvidencePackets||input.task_evidence_packets||{},globalEvidence=input.evidencePacket||input.evidence_packet||null,providedCanonical=input.canonicalClaimRecordsByTask||input.canonical_claim_records_by_task||{};
+    const taskResults=tasks.map((task)=>{
+      let evidenceRaw=task.canonical_plan.search_plan.queries.length?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
+      if(!evidenceRaw&&globalEvidence&&tasks.length>1&&input.allow_shared_legacy_evidence===true)evidenceRaw=globalEvidence;
+      if(!evidenceRaw)evidenceRaw={schema_version:'astera.evidence-search.result.v1',status:'NOT_PROVIDED',task_id:task.id,evidence:[],coverage:{discovery_scope_state:'UNKNOWN'},quality:{final:{status:'NOT_PROVIDED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};
+      const evidence=normalizeEvidencePacket(evidenceRaw),canonical=providedCanonical[task.id]||evaluateCanonicalTaskPlan(task.canonical_plan,evidenceRaw),lanes=projectFiveLanes({task,canonical,domain:task.domain}),perspectiveExpansion=deterministicPerspectiveExpansion({task,canonical,domain:task.domain});
+      return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,dialectic:perspectiveExpansion};
+    });
 
-    for (const wave of packet.execution_waves) {
-      const runnable = wave.map((id) => taskById.get(id)).filter(Boolean);
-      const waveResults = await Promise.all(runnable.map(async (task) => {
-        let evidenceRaw = task.evidence_need.required ? (taskEvidence[task.id] || (tasks.length === 1 ? globalEvidence : null)) : notRequiredEvidence(task.id);
-        if (!evidenceRaw && globalEvidence && tasks.length > 1 && input.allow_shared_legacy_evidence === true) evidenceRaw = globalEvidence;
-        const evidence = normalizeEvidencePacket(evidenceRaw);
-        const dependencyState = Object.fromEntries((task.depends_on || []).map((id) => [id, completed.get(id)?.comparison?.verdict || { decision: 'missing' }]));
-        const pre = await this.pool.exec('inquiry', { mode: 'preflight', question: task.source_span.text, human_text: question, moodAnswers: input.moodAnswers || {}, domain: task.domain, task, evidence_packet: evidenceRaw });
-        const [facts, risks, inquiry] = await Promise.all([
-          this.pool.exec('fact', { question: task.source_span.text, domain: task.domain, task, evidence_packet: evidenceRaw }),
-          this.pool.exec('risk', { question: task.source_span.text, domain: task.domain, task, evidence_packet: evidenceRaw }),
-          this.pool.exec('inquiry', { mode: 'analysis', question: task.source_span.text, human_text: question, moodAnswers: input.moodAnswers || {}, domain: task.domain, task, evidence_packet: evidenceRaw })
-        ]);
-        const multi = await this.pool.exec('multi', { question: task.source_span.text, facts, risks, inquiry, domain: task.domain, task, evidence_packet: evidenceRaw });
-        const dialectic = await this.pool.exec('dialectic', { question: task.source_span.text, facts, risks, inquiry, multi, domain: task.domain, task, evidence_packet: evidenceRaw, mood: pre.mood, human: inquiry.human_reading || pre.human_reading || {} });
-        const comparison = await this.pool.exec('compare', { question: task.source_span.text, facts, risks, multi, inquiry, dialectic, domain: task.domain, task, evidence_packet: evidenceRaw, mood: pre.mood, dependency_state: dependencyState });
-        return { task, evidence, preflight: pre, facts, risks, inquiry, multi, dialectic, comparison };
-      }));
-      for (const result of waveResults) completed.set(result.task.id, result);
-    }
-
-    const taskResults = tasks.map((task) => completed.get(task.id)).filter(Boolean);
-    const aggregate = aggregateTaskResults(taskResults);
-    const judgment = this.frame({ request, context, taskResults, aggregate, lang: renderLang });
-    judgment.requested_output_language = requestedOutput;
-    judgment.localization = {
-      requested_language: requestedOutput,
-      rendered_language: renderLang,
-      status: ['ja', 'en'].includes(requestedOutput.split('-')[0]) ? 'NATIVE_CANONICAL_RENDER' : 'EXTERNAL_LOCALIZATION_REQUIRED'
-    };
-    const material = this.material(judgment);
-    const fiveStage = {
-      schema_version: 'astera.five-stage.v1', order: [...FIVE_STAGE], execution_waves: packet.execution_waves,
-      tasks: taskResults.map((r) => ({ task_id: r.task.id, lens_id: r.task.domain.primary?.id || null, evidence_state: r.evidence.state, fact: r.facts, risk: r.risks, multi: r.multi, inquiry: r.inquiry, compare: r.comparison, dialectic: r.dialectic }))
-    };
-    const result = {
-      type: 'cognitive_map', mode: 'deterministic_multi_parallel_decision_materials', non_ai: true,
-      request_model: request, instruction_understanding: request.instruction_understanding || null, analysis_task_packet: request.analysis_task_packet, five_stage: fiveStage,
-      task_results: taskResults.map((r) => ({ task: r.task, evidence: r.evidence, preflight: r.preflight, facts: r.facts, risks: r.risks, inquiry: r.inquiry, multi: r.multi, dialectic: r.dialectic, comparison: r.comparison })),
-      facts: aggregate.facts, risks: aggregate.risks, multi: aggregate.multi, inquiry: aggregate.inquiry,
-      hyperion: { engine: 'Astera Deterministic Dialectic', mode: 'decision_materials', dialectic: aggregate.dialectic }, comparison: aggregate.comparison, judgment
-    };
-    this.logger.write({ tenantId: tenant.id, type: 'process_completed', text: `Decision graph completed: ${aggregate.comparison.verdict.decision}`, payload: { task_count: tasks.length, wave_count: packet.execution_waves.length, bottleneck_score: aggregate.comparison.score, decision: aggregate.comparison.verdict.decision, non_ai: true, input_language: request.language, input_script: request.script } });
-    return { result, material, prompt: this.externalBrief(judgment), runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_global_rules', task_count: tasks.length, wave_count: packet.execution_waves.length, input_language: request.language, input_script: request.script, requested_output_language: requestedOutput, localization: judgment.localization } };
+    const aggregate=aggregateTaskResults(taskResults),judgment=this.frame({request,context,taskResults,aggregate,lang:renderLang});
+    judgment.requested_output_language=requestedOutput;
+    judgment.localization={requested_language:requestedOutput,rendered_language:renderLang,status:['ja','en'].includes(requestedOutput.split('-')[0])?'NATIVE_CANONICAL_RENDER':'EXTERNAL_LOCALIZATION_REQUIRED'};
+    const material=this.material(judgment),fiveStage={schema_version:'astera.five-stage.v2',order:[...FIVE_STAGE],execution_waves:packet.execution_waves,tasks:taskResults.map((result)=>({task_id:result.task.id,lens_id:result.task.domain.primary?.id||null,claim_status:claimStatus(result.canonical),evidence_state:result.evidence.state,fact:result.lanes.fact,risk:result.lanes.risk,multi:result.lanes.multi,inquiry:result.lanes.inquiry,compare:result.lanes.compare}))};
+    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion,dialectic:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,hyperion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,judgment};
+    this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:packet.execution_waves.length,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
+    return{result,material,prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:packet.execution_waves.length,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
   }
+
+  frame({request,context,taskResults,aggregate,lang}){
+    const packet=request.analysis_task_packet,taskIds=taskResults.map((result)=>result.task.id),lensIds=unique(taskResults.map((result)=>result.task.domain.primary?.id).filter(Boolean)),sourceSpans=packet.source_spans||[],constraints=unique([...(packet.constraints||[]),...(packet.prohibitions||[]),...(packet.preserve||[])]),evidenceRefs=evidenceBindingRefs(aggregate.canonical.records),factsUsed=(aggregate.facts.confirmed||[]).map((item)=>`${item.task_id}:${item.claim_id}:${item.text}`),risksUsed=(aggregate.risks.risks||[]).map((item)=>`${item.task_id}:${item.key}`),claimBlockers=unique(aggregate.canonical.records.filter((record)=>record.confirmation.status!=='CONFIRMED').flatMap((record)=>(record.confirmation.reasons||[]).map((reason)=>`${record.task_id}:${record.claim.claim_id}:${reason}`))),blockers=unique([...(packet.unresolved||[]),...(packet.conflicts||[]).map((item)=>item.type),...claimBlockers]);
+    const trace=(ruleIds,extra={})=>({trace_schema:'astera.decision-trace.v2',rule_ids:ruleIds,task_ids:taskIds,lens_ids:lensIds,evidence_refs:evidenceRefs,facts_used:factsUsed,constraints_used:constraints,risks_used:risksUsed,candidates_compared:[],rejected_reasons:[],score_breakdown:[],uncertainty:{undetermined_claim_count:aggregate.canonical.undetermined_count},blocking_conditions:blockers,source_spans:sourceSpans,...extra});
+    const purposeItems=taskResults.map((result)=>`${result.task.id}[${result.task.action}] ${result.task.objective}`),premiseItems=unique([...(packet.unresolved||[]).map((item)=>`unresolved=${item}`),...(packet.conflicts||[]).map((item)=>`conflict=${item.type}:${item.note}`),...aggregate.inquiry.missing_fields.map((item)=>`missing=${item}`),...constraints.map((item)=>`hard_constraint=${item}`),...(context?[`context_length=${context.length}`]:[])]),factItems=unique([...(aggregate.facts.confirmed||[]).map((item)=>`${item.task_id}:${item.claim_id}:CONFIRMED:${item.text}`),...(aggregate.facts.unconfirmed||[]).map((item)=>`${item.task_id}:${item.claim_id}:UNDETERMINED:${item.text}`)]),riskItems=(aggregate.risks.risks||[]).map((item)=>`${item.task_id}:${item.key}[${item.weight}] ${item.impact}`),oppositionItems=taskResults.map((result)=>`${result.task.id}: counter query role=${result.canonical.search_plan.planned_query_roles.includes('COUNTER')?'PLANNED':'NOT_REQUIRED'} / unresolved=${result.canonical.undetermined_count}`),comparisonItems=taskResults.map((result)=>`${result.task.id}: claims=${result.lanes.compare.counts.claims}, confirmed=${result.lanes.compare.counts.confirmed}, undetermined=${result.lanes.compare.counts.undetermined}, coverage=${result.lanes.compare.coverage?.ratio??'-'}`),evidenceItems=taskResults.map((result)=>`${result.task.id}: EvidenceSearch=${result.evidence.source_status||result.evidence.state}; quality=${result.evidence.quality_score_bp??'-'}bp; ClaimConfirmation=${claimStatus(result.canonical).status} (${result.canonical.confirmed_count}/${result.canonical.records.length})`),reinstructionItems=unique([`Task Wave順を保持: ${packet.execution_waves.map((wave,index)=>`W${index+1}[${wave.join(',')}]`).join(' -> ')}`,...packet.prohibitions.map((item)=>`禁止条件を破らない: ${item}`),...packet.preserve.map((item)=>`維持条件を保持: ${item}`),...taskResults.map((result)=>`${result.task.id}: Lens=${result.task.domain.primary?.id||'UNRESOLVED'} / Claim=${claimStatus(result.canonical).status} / EvidenceSearch=${result.evidence.state}`),...(aggregate.canonical.undetermined_count?['UNDETERMINED ClaimをCONFIRMEDへ推測昇格しない。']:[]),...(blockers.length?[`Blocking条件を解消せず最終判断へ進めない: ${blockers.join(' / ')}`]:[]),'Astera自身は採用・棄却・Ranking・Recommendation・最終Decisionを行わない。']);
+    const sections={
+      '01_purpose':{summary:join(purposeItems),items:purposeItems,decision_basis:trace(['MAIN8-01-TASK-GRAPH-OBJECTIVE'],{derivation:'Analysis Task Graphの目的を順序・依存と分離して保持する。'})},
+      '02_premise':{summary:premiseItems.length?join(premiseItems):(lang==='en'?'No unresolved premise or hard-constraint gap.':'未解決の前提不足・Hard Constraint競合は検出されていない。'),items:premiseItems,decision_basis:trace(['MAIN8-02-UNRESOLVED-CONSTRAINT'],{derivation:'Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない。'})},
+      '03_facts':{summary:lang==='en'?`confirmed=${aggregate.canonical.confirmed_count}, undetermined=${aggregate.canonical.undetermined_count}`:`CONFIRMED ${aggregate.canonical.confirmed_count}件 / UNDETERMINED ${aggregate.canonical.undetermined_count}件`,items:factItems,confirmed:aggregate.facts.confirmed,unconfirmed:aggregate.facts.unconfirmed,decision_basis:trace(['MAIN8-03-G1-G7-CANONICAL-CLAIMS'],{derivation:'Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする。'})},
+      '04_crisis':{summary:aggregate.risks.highest?`${aggregate.risks.level}: ${aggregate.risks.highest.task_id}:${aggregate.risks.highest.impact}`:(lang==='en'?'No material rule-derived risk detected.':'重大なRule由来Riskは検出されていない。'),items:riskItems,highest:aggregate.risks.highest,risks:aggregate.risks.risks,decision_basis:trace(['MAIN8-04-INDEPENDENT-RISK-PROJECTION'],{derivation:'Risk Laneは他Lane出力ではなくTask/Canonical Claim/Domain Ruleから独立投影する。'})},
+      '05_opposition':{summary:join(oppositionItems),items:oppositionItems,decision_basis:trace(['MAIN8-05-COUNTER-ROLE-MATERIAL'],{derivation:'各外部確認Claimにcounter Search Roleを必須化し、反証探索材料を保持する。'})},
+      '06_comparison':{summary:`claims=${aggregate.comparison.counts.claims}, confirmed=${aggregate.comparison.counts.confirmed}, undetermined=${aggregate.comparison.counts.undetermined}, conflicts=${aggregate.comparison.counts.conflicts}`,items:comparisonItems,counts:aggregate.comparison.counts,coverage:aggregate.comparison.coverage,dimensions:aggregate.comparison.dimensions,selected_candidate:null,candidate_ranking:[],rejected_candidates:[],decision_basis:trace(['MAIN8-06-MATERIAL-ONLY-COMPARE'],{derivation:'Count/Coverage/Scope/Conflict/Dimensionのみ。加重Score・Ranking・Selected/Rejectedを生成しない。'})},
+      '07_evidence_status':{summary:`Claim=${aggregate.canonical.status}: confirmed=${aggregate.canonical.confirmed_count}/${aggregate.canonical.claim_count}; Evidence Search quality is tracked separately.`,items:evidenceItems,claim_status:aggregate.canonical.status,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,evidence_search:Object.fromEntries(taskResults.map((result)=>[result.task.id,{state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}])),decision_basis:trace(['MAIN8-07-EVIDENCE-STATUS-SEPARATION'],{derivation:'Evidence Searchは根拠候補品質、Claim ConfirmationはG1-G7成立状態として分離表示する。'})},
+      '08_reinstruction':{summary:join(reinstructionItems),items:reinstructionItems,decision_basis:trace(['MAIN8-08-LOSSLESS-EXTERNAL-REINSTRUCTION'],{derivation:'Task順序・禁止・維持・Evidence/Claim状態・未確定を失わずExternal Consumerへ渡す。'})}
+    };
+    ORDER.forEach((key,index)=>{sections[key]={canonical_label:CANON[index],label:LABELS[lang][index],...sections[key]};});
+    return{format:'astera_judgment_v4',canonical_language:'en',output_language:lang,order:[...ORDER],non_ai:true,decision_authority:'EXTERNAL_ONLY',task_graph:{task_count:taskResults.length,dependencies:packet.dependencies,execution_waves:packet.execution_waves},lens_routing:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{primary:result.task.domain.primary||null,secondary:result.task.domain.secondary||[],overlays:result.task.domain.overlays||[],classification_basis:result.task.domain.classification_basis,confidence:result.task.domain.confidence}]))},claim_state:{status:aggregate.canonical.status,claim_count:aggregate.canonical.claim_count,confirmed_count:aggregate.canonical.confirmed_count,undetermined_count:aggregate.canonical.undetermined_count},evidence_state:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{required:result.canonical.search_plan.queries.length>0,state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}]))},...sections};
+  }
+
+  material(judgment){const sections=ORDER.map((key)=>judgment[key]),compact_text=sections.map((section)=>`${section.label}: ${line(section.summary)}`).join('\n'),heads=judgment.output_language==='en'?{one:'Judgment Material',basis:'Derivation Basis',pass:'Material for External Consumer'}:{one:'判断材料',basis:'導出根拠',pass:'External Consumerへ渡す内容'},text=sections.map((section)=>{const basis=section.decision_basis||{},basisLines=[`rules=${join(basis.rule_ids)}`,`tasks=${join(basis.task_ids)}`,`lenses=${join(basis.lens_ids)}`,`evidence_refs=${(basis.evidence_refs||[]).length}`,`blockers=${join(basis.blocking_conditions,'none')}`,`derivation=${line(basis.derivation)}`];return`${section.label}\n${heads.one}\n${line(section.summary)}\n${heads.basis}\n${basisLines.map((item)=>`- ${item}`).join('\n')}\n${heads.pass}\n${section.items?.length?section.items.map((item)=>`- ${line(item)}`).join('\n'):`- ${line(section.summary)}`}`;}).join('\n---\n');return{mode:'judgment_material',target:'user_ai',raw_policy:'do_not_pass_raw_by_default',non_ai:true,decision_authority:'EXTERNAL_ONLY',format:judgment.format,text,compact_text,sections};}
+  externalBrief(judgment){return['# Astera v8 Deterministic Judgment Materials',`TaskGraph: ${judgment.task_graph.task_count} tasks / waves=${judgment.task_graph.execution_waves.length}`,...ORDER.flatMap((key)=>{const section=judgment[key];return[`${section.canonical_label}: ${line(section.summary)}`,`  basis=${join(section.decision_basis?.rule_ids)}; blockers=${join(section.decision_basis?.blocking_conditions,'none')}`];}),'Consumer rule: preserve task order, hard constraints, evidence status, and UNDETERMINED claims. Astera does not make the final decision or recommendation.'].join('\n');}
 }
 
-module.exports = CanonicalAsteraEngine;
+module.exports=CanonicalAsteraEngine;
