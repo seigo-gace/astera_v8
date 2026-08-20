@@ -19,6 +19,22 @@ function clarificationQuestions(request = {}, context = '') {
     : 'The target of the request is not uniquely resolved. Specify the target.'];
 }
 
+function preserveTextApiCompatibility(out) {
+  if (!out?.material || typeof out.material.text !== 'string') return out;
+  out.material.text = out.material.text
+    .replaceAll('導出根拠\n', '導出根拠（判断基準）\n')
+    .replaceAll('External Consumerへ渡す内容\n', '主役AIへ渡す内容 / 利用者へ渡す内容\n')
+    .replaceAll('08 主役AI／利用者への再指示', '08 主役AIへの再指示 / 利用者への再指示')
+    .replaceAll('Ranking・Recommendation・最終Decision', '順位付け・推奨・最終判断');
+  if (typeof out.material.compact_text === 'string') {
+    out.material.compact_text = out.material.compact_text.replaceAll(
+      '08 主役AI／利用者への再指示',
+      '08 主役AIへの再指示 / 利用者への再指示'
+    );
+  }
+  return out;
+}
+
 class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   prepareRequest(input = {}) {
     const understood = inputUnderstanding.analyzeRequest(input);
@@ -53,8 +69,11 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   async process(input = {}, tenant = { id: 'unknown' }) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
-    const request = input.preparedRequest?.analysis_task_packet
-      ? enrichRequest(input.preparedRequest, { question, context })
+    const prepared = input.preparedRequest?.analysis_task_packet ? input.preparedRequest : null;
+    const request = prepared
+      ? (prepared.schema_version === 'astera.request-model.v3'
+          ? prepared
+          : enrichRequest(prepared, { question, context }))
       : this.prepareRequest({ question, context, language: input.language, locale: input.locale, output_language: input.output_language });
 
     if (question && request.analysis_task_packet?.tasks?.length) {
@@ -96,7 +115,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
         (result.facts?.evidence_gaps || []).map((item) => ({ task_id: result.task?.id || null, ...item }))
       );
     }
-    return out;
+    return preserveTextApiCompatibility(out);
   }
 }
 
