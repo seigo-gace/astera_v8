@@ -1,6 +1,8 @@
 'use strict';
 
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
+const inputUnderstanding = require('./input-understanding');
+const { enrichRequest } = require('./deterministic-task-decomposer');
 const { unique } = require('./judgment-materials-analyzer');
 
 function clarificationQuestions(request = {}, context = '') {
@@ -9,10 +11,8 @@ function clarificationQuestions(request = {}, context = '') {
   const unresolvedTarget = (packet.unresolved || []).some((item) => /:target$/.test(String(item)))
     || (packet.tasks || []).some((task) => !String(task.target || '').trim() || weakTargets.test(String(task.target || '').trim()));
   if (!unresolvedTarget) return [];
-
   const explicitContextTarget = /(?:対象|target)(?:は|:|=)\s*([^。！？!?\n]{2,160})/i.exec(String(context || ''));
   if (explicitContextTarget && explicitContextTarget[1]?.trim()) return [];
-
   const lang = String(request.language || '').split('-')[0];
   return [lang === 'ja'
     ? '判断・変更する対象が一意に確定していません。対象を指定してください。'
@@ -20,6 +20,11 @@ function clarificationQuestions(request = {}, context = '') {
 }
 
 class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
+  prepareRequest(input = {}) {
+    const understood = inputUnderstanding.analyzeRequest(input);
+    return enrichRequest(understood, input);
+  }
+
   frame(args) {
     const judgment = super.frame(args);
     const packet = args.request?.analysis_task_packet || {};
@@ -32,7 +37,6 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       if (item && typeof item === 'object') return item.code || item.type || JSON.stringify(item);
       return String(item || '');
     }));
-
     for (const key of judgment.order || []) {
       const section = judgment[key];
       if (!section?.decision_basis) continue;
@@ -50,7 +54,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
     const request = input.preparedRequest?.analysis_task_packet
-      ? input.preparedRequest
+      ? enrichRequest(input.preparedRequest, { question, context })
       : this.prepareRequest({ question, context, language: input.language, locale: input.locale, output_language: input.output_language });
 
     if (question && request.analysis_task_packet?.tasks?.length) {
