@@ -3,7 +3,7 @@
 const AsteraServer = require('./server');
 const EvidenceSearchClient = require('./evidence-search/api/client');
 const { routeDomainTemplates } = require('./domain-template-router');
-const { analyzeRequest, unique } = require('./judgment-materials-analyzer');
+const { analyzeRequest, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
 const { buildCanonicalTaskPlan, evaluateCanonicalTaskPlan } = require('./canonical-claim-runtime');
 const { isSkillApiConfigured } = require('./auth/skill-api-key');
 
@@ -60,7 +60,8 @@ class AsteraServerWithEvidence extends AsteraServer {
     const taskPlans=tasks.map((baseTask)=>{
       const preliminaryPlan=buildCanonicalTaskPlan(baseTask,{});
       const domain=routeDomainTemplates({question:claimRouteText(baseTask,preliminaryPlan),context:body.context||''});
-      const task={...baseTask,domain};
+      const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
+      const task={...baseTask,domain,evidence_need:evidenceNeed};
       const canonicalPlan=buildCanonicalTaskPlan(task,domain);
       const explicitSingleDomain=tasks.length===1&&validDomainId(body.domain_lens?.id)?body.domain_lens.id:null,domainId=explicitSingleDomain||domain.primary?.id;
       if(!validDomainId(domainId)&&canonicalPlan.search_plan.queries.length)return{...task,canonical_plan:canonicalPlan,domain_error:'DOMAIN_LENS_UNRESOLVED'};
