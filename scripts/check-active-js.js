@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const ACTIVE_ROOTS = ['src', 'test', 'scripts'];
+const ACTIVE_ROOTS = ['src', 'test', 'scripts', 'web'];
 const EXCLUDED_DIRS = new Set(['archive', 'node_modules', '.git']);
 
 function collectJavaScriptFiles(relativeDir, output = []) {
@@ -24,7 +24,16 @@ function collectJavaScriptFiles(relativeDir, output = []) {
   return output;
 }
 
-const files = ACTIVE_ROOTS.flatMap((root) => collectJavaScriptFiles(root));
+function collectRootJavaScriptFiles() {
+  return fs.readdirSync(ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.js'))
+    .map((entry) => entry.name);
+}
+
+const files = [
+  ...collectRootJavaScriptFiles(),
+  ...ACTIVE_ROOTS.flatMap((root) => collectJavaScriptFiles(root))
+];
 files.sort();
 
 const failures = [];
