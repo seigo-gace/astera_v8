@@ -81,7 +81,7 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
       method: 'POST',
       path: '/process',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。', llm: { chain: ['null'] } })
+      body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。' })
     });
     assert.equal(process.status, 200);
     assert.match(process.headers['content-type'], /text\/plain/);
@@ -94,6 +94,21 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
     assert.doesNotMatch(process.body, /"result"/);
     assert.doesNotMatch(process.body, /"prompt"/);
     assert.doesNotMatch(process.body, /"answer"/);
+  });
+});
+
+test('HTTP flow: canonical process rejects caller-supplied LLM configuration', async () => {
+  await withServer(async (port) => {
+    const signup = await request({ port, method: 'POST', path: '/signup' });
+    const response = await request({
+      port,
+      method: 'POST',
+      path: '/process',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      body: JSON.stringify({ question: '判断材料を作る。', llm: { chain: ['null'] } })
+    });
+    assert.equal(response.status, 400);
+    assert.match(response.json.error, /unsupported decision-materials input fields: llm/i);
   });
 });
 
@@ -156,7 +171,7 @@ test('Skill process API uses dedicated key and bypasses public rate and billing'
         method: 'POST',
         path: '/v1/skill/process',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.ASTERA_SKILL_API_KEY },
-        body: JSON.stringify({ question: '新規事業の判断材料を整理する。対象は小規模事業者で、成功条件は低コストで検証できること。', llm: { chain: ['null'] } })
+        body: JSON.stringify({ question: '新規事業の判断材料を整理する。対象は小規模事業者で、成功条件は低コストで検証できること。' })
       });
       assert.equal(response.status, 200);
       assert.match(response.body, /01 本当の目的/);
@@ -190,7 +205,7 @@ test('HTTP flow: short process request returns clarification text', async () => 
       method: 'POST',
       path: '/process',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: JSON.stringify({ question: 'どう？', llm: { chain: ['null'] } })
+      body: JSON.stringify({ question: 'どう？' })
     });
     assert.equal(process.status, 200);
     assert.match(process.headers['content-type'], /text\/plain/);
