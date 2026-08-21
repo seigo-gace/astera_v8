@@ -10,6 +10,7 @@ function compareLineage(a, b) {
   if (sameNonEmpty(af.origin_record_id, bf.origin_record_id)) return 'DEPENDENT';
   if (sameNonEmpty(af.normalized_text_fingerprint, bf.normalized_text_fingerprint)) return 'DEPENDENT';
   if (sameNonEmpty(af.content_fingerprint, bf.content_fingerprint)) return 'DEPENDENT';
+  if (a.source_family_id && b.source_family_id && a.source_family_id === b.source_family_id) return 'PARTIALLY_SHARED';
   if (af.upstream_source_ids?.some((id) => bf.upstream_source_ids?.includes(id))) return 'PARTIALLY_SHARED';
   if (sameNonEmpty(af.dataset_id, bf.dataset_id) || sameNonEmpty(af.method_id, bf.method_id)) return 'PARTIALLY_SHARED';
   if (af.authority_id && bf.authority_id && af.publisher_id && bf.publisher_id) {
@@ -34,12 +35,16 @@ function analyzeLineage(candidates) {
   }
   const origins = new Set(candidates.map((candidate) => candidate.lineage_fingerprint?.origin_record_id || candidate.canonical_record_id).filter(Boolean));
   const authorities = new Set(candidates.map((candidate) => candidate.authority_id).filter(Boolean));
+  const sourceFamilies = new Set(candidates.map((candidate) => candidate.source_family_id).filter(Boolean));
   let independentOriginCount = candidates.length ? 1 : 0;
-  if ([...independentGraph.values()].some((set) => set.size > 0)) independentOriginCount = Math.min(candidates.length, Math.max(2, authorities.size));
+  if ([...independentGraph.values()].some((set) => set.size > 0)) {
+    independentOriginCount = Math.min(candidates.length, Math.max(2, authorities.size));
+  }
   return Object.freeze({
     pair_measurements: Object.freeze(pairs),
     origin_count: origins.size,
     authority_count: authorities.size,
+    source_family_count: sourceFamilies.size,
     independent_origin_count: independentOriginCount
   });
 }
