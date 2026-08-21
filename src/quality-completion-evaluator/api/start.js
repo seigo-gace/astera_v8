@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
+const { assertContainerRuntime } = require('../../runtime/container-boundary');
+assertContainerRuntime();
+
 const EvaluatorApiServer = require('./server-with-internal');
 const SQLiteStore = require('../../store/sqlite-store');
 

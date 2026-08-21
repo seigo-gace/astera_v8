@@ -31,7 +31,23 @@ async function stopMain(runtime) {
   await fs.rm(runtime.root, { recursive: true, force: true });
 }
 
-function evidenceResult(context, claim = 'API compatibility is preserved') {
+function queryExecution(queries = []) {
+  return {
+    initial: queries.map((query) => ({
+      query_id: query.query_id,
+      claim_id: query.claim_id,
+      role: query.role,
+      status: 'FOUND',
+      provider_records: [
+        { provider_id: 'official-provider', status: 'FOUND', candidate_record_ids: ['official-record'] },
+        { provider_id: 'corroboration-provider', status: 'FOUND', candidate_record_ids: ['corroboration-record'] }
+      ]
+    })),
+    reinforcement: []
+  };
+}
+
+function evidenceResult(context, claim = 'API compatibility is preserved', queries = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: context.requestId,
@@ -73,6 +89,7 @@ function evidenceResult(context, claim = 'API compatibility is preserved') {
       new_corroboration_count: 1,
       final: { status: 'FINAL_VALID', phase: 'FINAL', score_bp: 9700, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] }
     },
+    query_execution: queryExecution(queries),
     provider_execution: {
       initial: [{ provider_id: 'official-provider', status: 'FULFILLED' }],
       reinforcement: [{ provider_id: 'corroboration-provider', status: 'FULFILLED' }]
@@ -127,19 +144,19 @@ test('unauthenticated user cannot access the evidence route', async () => {
   } finally { await stopMain(runtime); }
 });
 
-test('integrated process decomposes first, searches Evidence only for external-evidence tasks, and passes task-indexed packets into non-AI V8 runtime', async () => {
+test('integrated process decomposes first, sends the canonical upstream Search Plan, searches only external-evidence tasks, and passes task-indexed packets into the non-AI runtime', async () => {
   const evidenceCalls = [];
   const engineCalls = [];
   const evidenceClient = {
     async search(payload, context) {
       evidenceCalls.push({ payload, context });
-      return evidenceResult(context);
+      return evidenceResult(context, 'API compatibility is preserved', payload.preplanned_queries || []);
     }
   };
   const engine = {
     async process(input, tenant) {
       engineCalls.push({ input, tenant });
-      return { result: { type: 'cognitive_map', non_ai: true, comparison: { verdict: { decision: 'recommend_with_caution' } } }, material: { compact_text: 'decision-material' }, runtime: { ai_used: false, llm_called: false, engine: 'v8_deterministic_rules' } };
+      return { result: { type: 'cognitive_map', non_ai: true, comparison: { material_only: true, selected_candidate: null, candidate_ranking: [], verdict: { decision: 'MATERIAL_ONLY' } } }, material: { compact_text: 'decision-material' }, runtime: { ai_used: false, llm_called: false, engine: 'v8_deterministic_rules' } };
     },
     async destroy() {}
   };
@@ -151,7 +168,7 @@ test('integrated process decomposes first, searches Evidence only for external-e
     });
     assert.equal(response.status, 200);
     const result = await response.json();
-    assert.equal(result.schema_version, 'astera.integrated.result.v1');
+    assert.equal(result.schema_version, 'astera.integrated.result.v2');
     assert.equal(result.non_ai, true);
     assert.ok(result.task_graph.task_count >= 3);
     assert.equal(result.evidence.searched_task_count, 1);
@@ -165,12 +182,20 @@ test('integrated process decomposes first, searches Evidence only for external-e
     assert.equal(evidenceCalls[0].payload.paid_search.enabled, false);
     assert.match(evidenceCalls[0].payload.domain_lens.id, /^G\d{2}$/);
     assert.match(evidenceCalls[0].context.requestId, /:T\d{2}$/);
+    assert.ok(Array.isArray(evidenceCalls[0].payload.upstream_search_plan?.queries));
+    assert.ok(evidenceCalls[0].payload.upstream_search_plan.queries.length > 0);
+    assert.ok(evidenceCalls[0].payload.upstream_search_plan.planned_query_roles.includes('COUNTER'));
+    assert.ok(evidenceCalls[0].payload.preplanned_queries.some((query) => query.role === 'COUNTER'));
+    assert.deepEqual(evidenceCalls[0].payload.preplanned_queries, evidenceCalls[0].payload.upstream_search_plan.queries);
+    const searchedTask = Object.values(result.evidence.by_task).find((packet) => packet.status === 'FINAL_VALID');
+    assert.equal(searchedTask.planning_authority, 'UPSTREAM_CANONICAL');
+    assert.ok(searchedTask.planned_query_roles.includes('COUNTER'));
     assert.equal(result.decision_materials.runtime.ai_used, false);
     assert.equal(result.decision_materials.runtime.llm_called, false);
   } finally { await stopMain(runtime); }
 });
 
-test('integrated boundary uses Input-Understanding-resolved task target for Lens and Evidence Search query', async () => {
+test('integrated boundary uses Input-Understanding-resolved task target and canonical preplanned queries for Lens and Evidence Search', async () => {
   const evidenceCalls = [];
   const engineCalls = [];
   const preparedRequest = {
@@ -225,27 +250,32 @@ test('integrated boundary uses Input-Understanding-resolved task target for Lens
     async prepareRequest() { return preparedRequest; },
     async process(input, tenant) {
       engineCalls.push({ input, tenant });
-      return { result: { type: 'cognitive_map', non_ai: true, comparison: { verdict: { decision: 'recommend' } } }, material: {}, runtime: { ai_used: false, llm_called: false } };
+      return { result: { type: 'cognitive_map', non_ai: true, comparison: { material_only: true, selected_candidate: null, candidate_ranking: [], verdict: { decision: 'MATERIAL_ONLY' } } }, material: {}, runtime: { ai_used: false, llm_called: false } };
     },
     async destroy() {}
   };
   const evidenceClient = {
     async search(payload, context) {
       evidenceCalls.push({ payload, context });
-      return evidenceResult(context, 'API server current specification is supported');
+      return evidenceResult(context, 'API server current specification is supported', payload.preplanned_queries || []);
     }
   };
   const runtime = await startMain({ evidenceClient, engine });
   try {
     const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': runtime.apiKey }, body: JSON.stringify({ question: 'それを検証して。' }) });
     assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.schema_version, 'astera.integrated.result.v2');
     assert.equal(evidenceCalls.length, 1);
     assert.match(evidenceCalls[0].payload.question, /APIサーバーのシステム開発/);
     assert.equal(evidenceCalls[0].payload.domain_lens.id, 'G29');
-    assert.ok(Array.isArray(evidenceCalls[0].payload.aliases));
+    assert.ok(Array.isArray(evidenceCalls[0].payload.upstream_search_plan?.queries));
+    assert.ok(evidenceCalls[0].payload.upstream_search_plan.planned_query_roles.includes('COUNTER'));
+    assert.ok(evidenceCalls[0].payload.preplanned_queries.some((query) => query.role === 'COUNTER'));
     assert.equal(Array.isArray(evidenceCalls[0].payload.conditions), false);
     assert.equal(engineCalls.length, 1);
     assert.equal(engineCalls[0].input.taskEvidencePackets['P-REF'].status, 'FINAL_VALID');
+    assert.equal(engineCalls[0].input.taskEvidencePackets['P-REF'].planning_authority, 'UPSTREAM_CANONICAL');
     assert.equal(preparedRequest.instruction_understanding.parser, null);
     assert.equal(preparedRequest.instruction_understanding.adapter, 'builtin-ja');
   } finally { await stopMain(runtime); }
@@ -256,7 +286,7 @@ test('task evidence provider failure is isolated to that task instead of abortin
   const runtime = await startMain({
     evidenceClient: { async search() { const error = new Error('provider down'); error.code = 'PROVIDER_DOWN'; throw error; } },
     engine: {
-      async process(input) { engineCalls.push(input); return { result: { type: 'cognitive_map', non_ai: true, comparison: { verdict: { decision: 'hold_and_clarify' } } }, material: {}, runtime: { ai_used: false, llm_called: false } }; },
+      async process(input) { engineCalls.push(input); return { result: { type: 'cognitive_map', non_ai: true, comparison: { material_only: true, selected_candidate: null, candidate_ranking: [], verdict: { decision: 'MATERIAL_ONLY' } } }, material: {}, runtime: { ai_used: false, llm_called: false } }; },
       async destroy() {}
     }
   });
@@ -264,6 +294,7 @@ test('task evidence provider failure is isolated to that task instead of abortin
     const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method:'POST', headers:{'Content-Type':'application/json','X-API-Key':runtime.apiKey}, body:JSON.stringify({question:'Verify the current API specification using an official source.',language:'en'}) });
     assert.equal(response.status, 200);
     const result = await response.json();
+    assert.equal(result.schema_version, 'astera.integrated.result.v2');
     assert.equal(result.evidence.status, 'REJECTED_TASK_EVIDENCE');
     assert.equal(result.evidence.rejected_task_count, 1);
     assert.equal(engineCalls.length, 1);

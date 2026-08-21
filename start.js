@@ -1,5 +1,8 @@
 'use strict';
 
+const { assertContainerRuntime } = require('./src/runtime/container-boundary');
+assertContainerRuntime();
+
 const AsteraServer = require('./src/server-with-module-switch');
 const SQLiteStore = require('./src/store/sqlite-store');
 const Logger = require('./src/logger');

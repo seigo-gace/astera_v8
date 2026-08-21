@@ -21,7 +21,22 @@ const tenant={id:'test',is_global:true,plan:'admin'};
 function evidenceCandidate({id,role,family,authority,claim,url}){
   return{candidate_id:id,canonical_record_id:`${id}-record`,content_hash:`${id}-hash`,source_role:role,source_family_id:family,source_id:`${id}-source`,provider_id:`${id}-provider`,authority_id:authority,canonical_locator:{url,replayable:true},updated_at:'2026-08-20T00:00:00.000Z',fields:{claim},excerpt:claim};
 }
-function validEvidence(claim){
+function queryExecution(queries=[]){
+  return{
+    initial:queries.map((query)=>({
+      query_id:query.query_id,
+      claim_id:query.claim_id,
+      role:query.role,
+      status:'FOUND',
+      provider_records:[
+        {provider_id:'ev-official-provider',status:'FOUND',candidate_record_ids:['ev-official-record']},
+        {provider_id:'ev-independent-provider',status:'FOUND',candidate_record_ids:['ev-independent-record']}
+      ]
+    })),
+    reinforcement:[]
+  };
+}
+function validEvidence(claim,queries=[]){
   return{
     schema_version:'astera.evidence-search.result.v1',request_id:'ev-test',tenant_id:'test',status:'FINAL_VALID',effective_as_of:'2026-08-20T00:00:00.000Z',result_hash:'test-result-hash',planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:Object.values(QUERY_ROLES),
     evidence:[
@@ -30,6 +45,7 @@ function validEvidence(claim){
     ],
     coverage:{discovery_scope_state:'COMPLETE_FOR_QUERY_SCOPE',registry_coverage_state:'COMPLETE_FOR_ACTIVE_REGISTRY'},
     quality:{initial:{status:'REINFORCEMENT_REQUIRED',phase:'INITIAL',score_bp:8500,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]},reinforcement_attempt_count:1,new_corroboration_count:1,final:{status:'FINAL_VALID',phase:'FINAL',score_bp:9700,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]}},
+    query_execution:queryExecution(queries),
     provider_execution:{initial:[{provider_id:'ev-official-provider',status:'FULFILLED'}],reinforcement:[{provider_id:'ev-independent-provider',status:'FULFILLED'}]},
     ai_used:false,payment_executed:false
   };
@@ -68,24 +84,26 @@ test('upstream Search Plan without COUNTER is rejected before retrieval',()=>{
 });
 
 test('G1-G7 are the only confirmation boundary; high Evidence quality alone is not truth',()=>{
-  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],good=validEvidence(claim.raw_text),confirmed=evaluateCanonicalTaskPlan(plan,good);
+  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],good=validEvidence(claim.raw_text,plan.search_plan.queries),confirmed=evaluateCanonicalTaskPlan(plan,good);
   assert.equal(confirmed.confirmed_count,1);
   assert.equal(confirmed.records[0].confirmation.status,'CONFIRMED');
   assert.deepEqual(confirmed.records[0].confirmation.gates,{G1:true,G2:true,G3:true,G4:true,G5:true,G6:true,G7:true});
-  const missingPlan={...good,planning_authority:'EVIDENCE_SEARCH_LEGACY_COMPATIBILITY',planned_query_roles:[]};
-  const undetermined=evaluateCanonicalTaskPlan(plan,missingPlan);
+  const missingRetrieval={...good,query_execution:{initial:[],reinforcement:[]}};
+  const undetermined=evaluateCanonicalTaskPlan(plan,missingRetrieval);
   assert.equal(undetermined.records[0].confirmation.status,'UNDETERMINED');
-  assert.ok(undetermined.records[0].confirmation.reasons.includes('G5_PLANNED_QUERY_RETRIEVAL_INCOMPLETE_OR_INVALID'));
+  assert.equal(undetermined.records[0].confirmation.gates.G5,false);
+  assert.ok(undetermined.records[0].confirmation.reasons.includes('RETRIEVAL_FAILED'));
 });
 
-test('REJECTED Evidence Search result cannot pass G5 even when planned roles and bindings exist',()=>{
-  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],rejected=validEvidence(claim.raw_text);
+test('REJECTED Evidence Search result cannot pass G5 even when planned roles, query records and bindings exist',()=>{
+  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],rejected=validEvidence(claim.raw_text,plan.search_plan.queries);
   rejected.status='REJECTED_BLOCKING';
   rejected.quality.final={status:'REJECTED_BLOCKING',phase:'FINAL',score_bp:9700,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]};
   const result=evaluateCanonicalTaskPlan(plan,rejected);
   assert.equal(result.records[0].confirmation.status,'UNDETERMINED');
   assert.equal(result.records[0].confirmation.gates.G5,false);
-  assert.ok(result.records[0].confirmation.reasons.includes('G5_PLANNED_QUERY_RETRIEVAL_INCOMPLETE_OR_INVALID'));
+  assert.equal(result.records[0].confirmation.gate_details.evidence_search_status.status,'REJECTED_BLOCKING');
+  assert.ok(result.records[0].confirmation.reasons.includes('RETRIEVAL_FAILED'));
 });
 
 test('source code can be locally confirmed as CODE_STRUCTURE without external search',()=>{
@@ -95,12 +113,12 @@ test('source code can be locally confirmed as CODE_STRUCTURE without external se
   const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
   assert.equal(plan.claims[0].claim_origin,'CODE_STRUCTURE');
   assert.equal(plan.search_plan.queries.length,0);
-  const result=evaluateCanonicalTaskPlan(plan,{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',evidence:[],provider_execution:{initial:[],reinforcement:[]},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},ai_used:false,payment_executed:false});
+  const result=evaluateCanonicalTaskPlan(plan,{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',evidence:[],query_execution:{initial:[],reinforcement:[]},provider_execution:{initial:[],reinforcement:[]},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},ai_used:false,payment_executed:false});
   assert.equal(result.records[0].confirmation.status,'CONFIRMED');
 });
 
 test('five lanes are independent projections from Canonical Claim Records and Compare is material-only',()=>{
-  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),canonical=evaluateCanonicalTaskPlan(plan,validEvidence(plan.claims[0].raw_text)),lanes=projectFiveLanes({task,canonical,domain:{primary:{id:'G01',multi_lens:['forward','counter'],compare_lens:['scope','coverage']}}});
+  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),canonical=evaluateCanonicalTaskPlan(plan,validEvidence(plan.claims[0].raw_text,plan.search_plan.queries)),lanes=projectFiveLanes({task,canonical,domain:{primary:{id:'G01',multi_lens:['forward','counter'],compare_lens:['scope','coverage']}}});
   assert.equal(lanes.fact.confirmed.length,1);
   assert.equal(lanes.compare.material_only,true);
   assert.equal(lanes.compare.selected_candidate,null);
@@ -172,7 +190,12 @@ test('same Task input produces deterministic graph, Claim IDs and Search Plan ID
 
 test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/recommends',async()=>{
   await withEngine(async(engine)=>{
-    const claim='Node.js 22は本番対応している。',evidence=validEvidence(claim),out=await engine.process({question:claim,evidencePacket:evidence},tenant);
+    const claim='Node.js 22は本番対応している。';
+    const prepared=engine.prepareRequest({question:claim});
+    const task=prepared.analysis_task_packet.tasks[0];
+    const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
+    const evidence=validEvidence(claim,plan.search_plan.queries);
+    const out=await engine.process({question:claim,evidencePacket:evidence,preparedRequest:prepared},tenant);
     assert.equal(out.result.non_ai,true);
     assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
     assert.equal(out.runtime.engine,'v8_canonical_global_rules');

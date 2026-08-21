@@ -1,5 +1,8 @@
 'use strict';
 
+const { assertContainerRuntime } = require('../../runtime/container-boundary');
+assertContainerRuntime();
+
 const Logger = require('../../logger');
 const EvidenceSearchApiServer = require('./server');
 const InformationQualityClient = require('./information-quality-client');
