@@ -14,6 +14,8 @@
     "start:evaluator-api": "node src/quality-completion-evaluator/api/start.js",
     "start:evidence-api": "node src/evidence-search/api/start.js",
     "check:syntax": "node scripts/check-active-js.js",
+    "check:json": "node scripts/check-active-json.js",
+    "check:shell": "bash -n scripts/*.sh",
     "test": "npm run test:runtime && npm run test:evaluator && npm run test:evaluator-api",
     "test:runtime": "node --test test/*.test.js",
     "test:evaluator": "node --test src/quality-completion-evaluator/tests/**/*.test.js",
@@ -32,7 +34,7 @@
     "validate:evidence-architecture": "node scripts/validate-evidence-modular-architecture.js",
     "verify:evidence": "npm run check:evidence && npm run validate:evidence-architecture && npm run test:evidence && npm run test:evidence-user && npm run test:evidence-api && npm run test:evidence-main && npm run test:evidence-live && npm run test:evidence-evaluator && npm run test:evidence-recovery && npm run test:evidence-projection && npm run test:evidence-architecture && npm run test:information-quality",
     "smoke": "bash scripts/smoke.sh",
-    "verify:source": "npm run check:syntax && npm test && npm run validate:evidence-architecture",
+    "verify:source": "npm run check:syntax && npm run check:json && npm run check:shell && npm test && npm run validate:evidence-architecture",
     "verify": "npm run verify:source && bash scripts/smoke.sh"
   },
   "dependencies": {},
