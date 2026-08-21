@@ -13,7 +13,7 @@ if [[ "$containerized" -ne 1 ]]; then
   exit 2
 fi
 
-# Smoke is deliberately isolated from a running service's production port and DB.
+# Smoke is isolated from running service ports, databases and credentials.
 export ASTERA_HOST=127.0.0.1
 export KAGURA_HOST=127.0.0.1
 export ASTERA_PORT=${ASTERA_SMOKE_PORT:-17373}
@@ -21,9 +21,9 @@ export KAGURA_PORT=${ASTERA_PORT}
 export ASTERA_DB=${ASTERA_SMOKE_DB:-/tmp/astera-smoke.db}
 export KAGURA_DB=${ASTERA_DB}
 export ASTERA_TGS_ENABLED=0
-
-# Canonical smoke runs only inside a container: loopback auth bypass, legacy commerce disabled.
-export ASTERA_LOCAL_NO_AUTH=1
+export ASTERA_LOCAL_NO_AUTH=0
+export KAGURA_LOCAL_NO_AUTH=0
+export ASTERA_API_KEY='astera-smoke-ephemeral-key'
 export ASTERA_ENABLE_LEGACY_COMMERCE=0
 
 rm -f "${ASTERA_DB}" "${ASTERA_DB}-shm" "${ASTERA_DB}-wal"
@@ -81,7 +81,7 @@ const body={
 };
 fetch('http://127.0.0.1:'+port+'/process',{
   method:'POST',
-  headers:{'Content-Type':'application/json'},
+  headers:{'Content-Type':'application/json','X-API-Key':process.env.ASTERA_API_KEY},
   body:JSON.stringify(body)
 }).then(async r=>{
   const text=await r.text();
@@ -92,7 +92,7 @@ fetch('http://127.0.0.1:'+port+'/process',{
   if(!/08 主役AI|08 Re-instruction/.test(text)) throw new Error('Main8 section 08 missing');
   if(/推奨判断|07 Recommendation/.test(text)) throw new Error('normative recommendation must not be emitted');
   if(!/判断基準|導出根拠|Derivation Basis/.test(text)) throw new Error('decision/derivation basis missing');
-  console.log('smoke ok: isolated canonical text/plain /process + Main8 Evidence Status');
+  console.log('smoke ok: authenticated isolated canonical text/plain /process + Main8 Evidence Status');
 }).catch(err=>{console.error(err.message);process.exit(1);});
 "
 
