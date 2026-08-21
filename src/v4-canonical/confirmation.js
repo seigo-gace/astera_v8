@@ -14,7 +14,31 @@ function retrievalRecords(rawEvidence){const initial=Array.isArray(rawEvidence?.
 function retrievalGate(policy,queries,records){if(!policy.external_search_required)return deepFreeze({passed:true,details:[]});const byQuery=new Map();for(const record of records){if(!byQuery.has(record.query_id))byQuery.set(record.query_id,[]);byQuery.get(record.query_id).push(record.retrieval_status);}const details=queries.map((query)=>{const statuses=byQuery.get(query.query_id)||[],failed=statuses.length===0||statuses.includes(RetrievalStatus.RETRIEVAL_FAILED),valid=statuses.length>0&&statuses.every((status)=>status===RetrievalStatus.FOUND||status===RetrievalStatus.NOT_FOUND);return deepFreeze({query_id:query.query_id,role:query.role,statuses,passed:!failed&&valid});});return deepFreeze({passed:details.every((item)=>item.passed),details});}
 function evidenceSearchStatusGate(policy,rawEvidence){if(!policy.external_search_required)return deepFreeze({passed:true,status:'NOT_REQUIRED'});const status=String(rawEvidence?.status||'').toUpperCase();return deepFreeze({passed:status==='FINAL_VALID',status:status||'UNKNOWN'});}
 function requiredSourceRolesSatisfied(policy,supports){const required=policy.required_source_roles||[];return required.every((role)=>supports.some((binding)=>binding.source_roles?.includes(role)));}
-function evaluateIndependence(policy,supports){if(!policy.external_search_required)return deepFreeze({satisfied:true,status:'NOT_REQUIRED',reasons:[]});const external=supports.filter((binding)=>binding.evidence_source===EvidenceSource.EXTERNAL_RETRIEVED_EVIDENCE),authorityFamilies=new Set(external.filter((binding)=>binding.source_roles?.some((role)=>['OFFICIAL','PRIMARY'].includes(role))).map((binding)=>binding.source_family_id||binding.authority_id).filter(Boolean)),independentFamilies=new Set(external.filter((binding)=>!binding.source_roles?.some((role)=>['OFFICIAL','PRIMARY'].includes(role))).map((binding)=>binding.source_family_id||binding.authority_id).filter(Boolean)),allFamilies=new Set(external.map((binding)=>binding.source_family_id||binding.authority_id).filter(Boolean));const satisfied=policy.independence_requirement==='LOCAL_INPUT_ONLY'?true:policy.independence_requirement==='AUTHORITY_PLUS_INDEPENDENT_OR_TWO_FAMILIES'?(authorityFamilies.size>=1&&independentFamilies.size>=1)||allFamilies.size>=2:allFamilies.size>=2;return deepFreeze({satisfied,status:satisfied?'SATISFIED':'INSUFFICIENT',reasons:satisfied?[]:['INDEPENDENCE_INSUFFICIENT'],authority_family_count:authorityFamilies.size,independent_family_count:independentFamilies.size,distinct_family_count:allFamilies.size});}
+function evaluateIndependence(policy,supports){
+  if(!policy.external_search_required)return deepFreeze({satisfied:true,status:'NOT_REQUIRED',reasons:[]});
+  const external=supports.filter((binding)=>binding.evidence_source===EvidenceSource.EXTERNAL_RETRIEVED_EVIDENCE);
+  const familyId=(binding)=>binding.source_family_id||binding.authority_id||null;
+  const authorityFamilies=new Set(external.filter((binding)=>binding.source_roles?.some((role)=>['OFFICIAL','PRIMARY'].includes(role))).map(familyId).filter(Boolean));
+  const independentFamilies=new Set(external.filter((binding)=>!binding.source_roles?.some((role)=>['OFFICIAL','PRIMARY'].includes(role))).map(familyId).filter(Boolean));
+  const allFamilies=new Set(external.map(familyId).filter(Boolean));
+  const overlappingRoleFamilies=[...authorityFamilies].filter((family)=>independentFamilies.has(family));
+  const hasDistinctAuthorityIndependentPair=[...authorityFamilies].some((authorityFamily)=>[...independentFamilies].some((independentFamily)=>independentFamily!==authorityFamily));
+  const satisfied=policy.independence_requirement==='LOCAL_INPUT_ONLY'
+    ? true
+    : policy.independence_requirement==='AUTHORITY_PLUS_INDEPENDENT_OR_TWO_FAMILIES'
+      ? hasDistinctAuthorityIndependentPair||allFamilies.size>=2
+      : allFamilies.size>=2;
+  return deepFreeze({
+    satisfied,
+    status:satisfied?'SATISFIED':'INSUFFICIENT',
+    reasons:satisfied?[]:['INDEPENDENCE_INSUFFICIENT'],
+    authority_family_count:authorityFamilies.size,
+    independent_family_count:independentFamilies.size,
+    distinct_family_count:allFamilies.size,
+    authority_independent_distinct_pair:hasDistinctAuthorityIndependentPair,
+    overlapping_role_family_count:overlappingRoleFamilies.length
+  });
+}
 function originWithinConfirmableRange(claim,supports){if(claim.claim_origin===ClaimOrigin.DIRECT_ASSERTION)return supports.every((binding)=>binding.evidence_source===EvidenceSource.EXTERNAL_RETRIEVED_EVIDENCE);if(claim.claim_origin===ClaimOrigin.ATTRIBUTED_ASSERTION)return claim.predicate==='STATED'&&supports.every((binding)=>binding.evidence_source===EvidenceSource.LOCAL_INPUT_EVIDENCE);if(claim.claim_origin===ClaimOrigin.CODE_STRUCTURE)return CODE_PREDICATES.has(claim.predicate)&&supports.every((binding)=>binding.evidence_source===EvidenceSource.LOCAL_INPUT_EVIDENCE);if(claim.claim_origin===ClaimOrigin.LOG_OBSERVATION)return claim.predicate==='LOG_RECORD_EXISTS'&&supports.every((binding)=>binding.evidence_source===EvidenceSource.LOCAL_INPUT_EVIDENCE);if(claim.claim_origin===ClaimOrigin.TABLE_OBSERVATION)return supports.every((binding)=>binding.evidence_source===EvidenceSource.LOCAL_INPUT_EVIDENCE);return false;}
 
 function evaluateClaimConfirmation({claim,policy,bindings,queries,rawEvidence,additionalReasons=[]}){
