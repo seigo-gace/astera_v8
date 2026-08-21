@@ -110,7 +110,7 @@ class AsteraServerWithEvidence extends AsteraServer {
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,domain,evidence_need:evidenceNeed};
       const canonicalPlan=buildCanonicalTaskPlan(task,domain);
-      const explicitSingleDomain=tasks.length===1&&validDomainId(body.domain_lens?.id)?body.domain_lens.id:null,domainId=explicitSingleDomain||domain.primary?.id;
+      const domainId=domain.primary?.id;
       if(!validDomainId(domainId)&&canonicalPlan.search_plan.queries.length)return{...task,canonical_plan:canonicalPlan,domain_error:'DOMAIN_LENS_UNRESOLVED'};
       return{...task,canonical_plan:canonicalPlan,domain_id:domainId};
     });
