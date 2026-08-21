@@ -58,14 +58,19 @@ test('Integrated API hard-block check occurs before Evidence Search planning/exe
   assert.ok(evidenceExecution > blockedBranch, 'Evidence Search must not precede hard-block handling');
 });
 
-test('Canonical public runtime contains no normative recommendation section or weighted selection output', () => {
-  const base = read('src/canonical-astera-engine-base.js');
-  const current = read('src/canonical-astera-engine.js');
-  const combined = `${base}\n${current}`;
+test('Canonical public runtime contains no normative recommendation section, weighted selection, or legacy worker dependency', () => {
+  const files = [
+    'src/canonical-astera-engine-base.js',
+    'src/canonical-astera-engine.js',
+    'src/canonical-claim-runtime.js'
+  ];
+  const combined = files.map(read).join('\n');
 
   assert.match(combined, /07_evidence_status/);
   assert.match(combined, /MATERIAL_ONLY/);
   assert.doesNotMatch(combined, /07_recommendation/);
   assert.doesNotMatch(combined, /globalDecision\s*=\s*['"]recommend/);
   assert.doesNotMatch(combined, /WEIGHTED-CANDIDATE-COMPARE/);
+  assert.doesNotMatch(combined, /require\(['"][^'"]*worker-pool['"]\)/);
+  assert.doesNotMatch(combined, /require\(['"][^'"]*pillars\//);
 });
