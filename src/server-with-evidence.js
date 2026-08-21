@@ -3,7 +3,9 @@
 const AsteraServer = require('./server');
 const EvidenceSearchClient = require('./evidence-search/api/client');
 const { routeDomainTemplates } = require('./domain-template-router');
-const { analyzeRequest, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
+const inputUnderstanding = require('./input-understanding');
+const { enrichRequest } = require('./deterministic-task-decomposer');
+const { deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
 const { buildCanonicalTaskPlan, evaluateCanonicalTaskPlan } = require('./canonical-claim-runtime');
 const { isSkillApiConfigured } = require('./auth/skill-api-key');
 
@@ -16,9 +18,36 @@ function notRequired(taskId){return{schema_version:'astera.evidence-search.resul
 function failedEvidence(taskId,error){return{schema_version:'astera.evidence-search.result.v1',status:'REJECTED_PROVIDER_FAILURE',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'PARTIAL'},quality:{final:{status:'REJECTED_PROVIDER_FAILURE',score_bp:0,reasons:['PROVIDER_FAILURE']}},provider_execution:{initial:[{provider_id:'task_evidence_search',status:'REJECTED',error_code:error?.code||'PROVIDER_FAILURE'}],reinforcement:[]},ai_used:false,payment_executed:false};}
 function claimRouteText(task,preliminaryPlan){return unique([...(preliminaryPlan?.claims||[]).map((claim)=>claim.raw_text),task.target||'',...(task.premises||[]),task.source_span?.text||'']).join('\n');}
 function evidenceQuestion(task){return unique([task.target||'',task.source_span?.text||'']).join('\n')||String(task.objective||'');}
-function evidenceContext(task,bodyContext){return unique([task.objective||'',...(task.premises||[]),...(task.conditions||[]),...(task.verification||[]),task.source_span?.text||'',bodyContext||'']).join('\n');}
+function evidenceContext(task,bodyContext){return unique([task.purpose||'',task.objective||'',...(task.premises||[]),...(task.constraints||[]),...(task.prohibitions||[]),...(task.preserve||[]),...(task.conditions||[]),...(task.exceptions||[]),...(task.verification||[]),task.source_span?.text||'',bodyContext||'']).join('\n');}
 function aggregateEvidence(byTask){const entries=Object.entries(byTask),searched=entries.filter(([,value])=>value.status!=='NOT_REQUIRED');if(!searched.length)return{status:'NOT_REQUIRED',searched_task_count:0,valid_task_count:0,rejected_task_count:0,evidence:[]};const valid=searched.filter(([,value])=>value.status==='FINAL_VALID'),rejected=searched.filter(([,value])=>String(value.status||'').startsWith('REJECTED')),status=valid.length===searched.length?'FINAL_VALID':rejected.length===searched.length?'REJECTED_TASK_EVIDENCE':'PARTIAL_TASK_EVIDENCE';return{status,searched_task_count:searched.length,valid_task_count:valid.length,rejected_task_count:rejected.length,evidence:searched.flatMap(([taskId,value])=>(value.evidence||[]).map((item)=>({task_id:taskId,...item})))};}
 function aggregateClaimState(byTask){const records=Object.values(byTask).flatMap((value)=>value.records||[]),confirmed=records.filter((record)=>record.confirmation?.status==='CONFIRMED').length,undetermined=records.length-confirmed;return{status:records.length&&undetermined===0?'CONFIRMED':'UNDETERMINED',claim_count:records.length,confirmed_count:confirmed,undetermined_count:undetermined};}
+
+function normalizeBlocker(item){if(typeof item==='string')return item;if(item&&typeof item==='object')return item.code||item.type||JSON.stringify(item);return String(item||'');}
+function taskGraphBlockState(request={}){
+  const packet=request.analysis_task_packet||{};
+  const hardBlockers=unique([...(packet.hard_blockers||[]),...((request.instruction_understanding?.blocked_reasons)||[])].map(normalizeBlocker));
+  return{
+    blocked:request.instruction_understanding?.execution_allowed===false||hardBlockers.length>0,
+    hard_blockers:hardBlockers,
+    unresolved:packet.unresolved||[],
+    validation:packet.task_graph_validation||null
+  };
+}
+function taskGraphView(request={}){
+  const packet=request.analysis_task_packet||{};
+  return{
+    task_count:(packet.tasks||[]).length,
+    dependencies:packet.dependencies||[],
+    execution_waves:packet.execution_waves||[],
+    branches:packet.branches||[],
+    branch_groups:packet.branch_groups||[],
+    reference_resolutions:packet.reference_resolutions||[],
+    context_bindings:packet.context_bindings||[],
+    unresolved:packet.unresolved||[],
+    hard_blockers:packet.hard_blockers||[],
+    validation:packet.task_graph_validation||null
+  };
+}
 
 class AsteraServerWithEvidence extends AsteraServer {
   constructor(options={}){super(options);this.evidenceClient=options.evidenceClient||(evidenceClientConfigured(options)?new EvidenceSearchClient({baseUrl:options.evidenceBaseUrl,timeoutMs:options.evidenceTimeoutMs,internalSecret:options.internalSecret,internalSecretFile:options.internalSecretFile,fetch:options.fetch}):null);}
@@ -45,7 +74,13 @@ class AsteraServerWithEvidence extends AsteraServer {
     }catch(error){const requestedStatus=Number(error?.status),status=requestedStatus>=400&&requestedStatus<=599?requestedStatus:500;this.logger.write({tenantId:context.tenantId,type:'evidence_or_integrated_failed',severity:status>=500?'error':'warn',text:`${req.method} ${pathname} failed`,payload:{request_id:req.requestId,status,error_code:error.code||'INTERNAL_ERROR'}});return this._json(req,res,status,{error:status>=500?'internal_error':error.message,code:error.code||'INTERNAL_ERROR',status,requestId:req.requestId});}
   }
 
-  async _prepareIntegratedRequest(body){if(this.engine&&typeof this.engine.prepareRequest==='function')return this.engine.prepareRequest({question:body.question,context:body.context||'',language:body.language,output_language:body.output_language});const fallback=analyzeRequest({question:body.question,context:body.context||''});fallback.instruction_understanding={mode:'FAST_PATH_COMPATIBILITY_FALLBACK',parser:null,execution_allowed:true,blocked_reasons:[]};return fallback;}
+  async _prepareIntegratedRequest(body){
+    if(this.engine&&typeof this.engine.prepareRequest==='function')return this.engine.prepareRequest({question:body.question,context:body.context||'',language:body.language,locale:body.locale,output_language:body.output_language});
+    const input={question:body.question,context:body.context||'',language:body.language,locale:body.locale,output_language:body.output_language};
+    const fallback=enrichRequest(inputUnderstanding.analyzeRequest(input),input);
+    fallback.instruction_understanding={...(fallback.instruction_understanding||{}),compatibility_fallback:true};
+    return fallback;
+  }
 
   async _handleIntegrated(req,res,context,tenant){
     const body=await this._readJsonObject(req,INTEGRATED_REQUEST_LIMIT);
@@ -56,6 +91,18 @@ class AsteraServerWithEvidence extends AsteraServer {
 
     const request=await this._prepareIntegratedRequest(body),tasks=request.analysis_task_packet?.tasks||[];
     if(!tasks.length){const error=new Error('analysis task graph is empty');error.code='TASK_GRAPH_EMPTY';error.status=422;throw error;}
+    const blockState=taskGraphBlockState(request);
+    if(blockState.blocked){
+      this.logger.write({tenantId:tenant.id,type:'integrated_task_graph_blocked',severity:'warn',text:'Integrated processing stopped before Evidence Search because Task Graph contains a hard blocker.',payload:{request_id:req.requestId,hard_blockers:blockState.hard_blockers,unresolved:blockState.unresolved}});
+      return this._json(req,res,422,{
+        schema_version:'astera.integrated.blocked.v1',request_id:req.requestId,non_ai:true,status:'TASK_GRAPH_BLOCKED',
+        instruction_understanding:request.instruction_understanding||null,
+        task_graph:taskGraphView(request),
+        evidence:{status:'NOT_STARTED',searched_task_count:0,valid_task_count:0,rejected_task_count:0,by_task:{}},
+        canonical:{status:'NOT_STARTED',by_task:{}},
+        decision_materials:null
+      });
+    }
 
     const taskPlans=tasks.map((baseTask)=>{
       const preliminaryPlan=buildCanonicalTaskPlan(baseTask,{});
@@ -78,11 +125,13 @@ class AsteraServerWithEvidence extends AsteraServer {
       try{const result=await this.evidenceClient.search(evidenceRequest,{requestId:`${req.requestId}:${task.id}`,tenantId:tenant.id});evidenceByTask[task.id]={...result,planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:upstreamPlan.planned_query_roles,query_plan:{planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:upstreamPlan.planned_query_roles,query_ids:upstreamPlan.queries.map((query)=>query.query_id)}};}catch(error){evidenceByTask[task.id]={...failedEvidence(task.id,error),planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:upstreamPlan.planned_query_roles};}
     }));
 
-    const canonicalByTask=Object.fromEntries(taskPlans.map((task)=>[task.id,evaluateCanonicalTaskPlan(task.canonical_plan,evidenceByTask[task.id])])),evidenceSummary=aggregateEvidence(evidenceByTask),claimSummary=aggregateClaimState(canonicalByTask),decision=await this.engine.process({question:body.question,context:body.context||'',language:body.language,output_language:body.output_language,moodAnswers:body.moodAnswers||{},taskEvidencePackets:evidenceByTask,canonicalClaimRecordsByTask:canonicalByTask,preparedRequest:request},tenant);
+    const canonicalByTask=Object.fromEntries(taskPlans.map((task)=>[task.id,evaluateCanonicalTaskPlan(task.canonical_plan,evidenceByTask[task.id])])),evidenceSummary=aggregateEvidence(evidenceByTask),claimSummary=aggregateClaimState(canonicalByTask),decision=await this.engine.process({question:body.question,context:body.context||'',language:body.language,locale:body.locale,output_language:body.output_language,moodAnswers:body.moodAnswers||{},taskEvidencePackets:evidenceByTask,canonicalClaimRecordsByTask:canonicalByTask,preparedRequest:request},tenant);
     this.meter.record({tenant,route:'/v1/integrated/process',units:1,status:claimSummary.status,meta:{instruction_mode:request.instruction_understanding?.mode||'UNKNOWN',evidence_status:evidenceSummary.status,claim_status:claimSummary.status,searched_task_count:evidenceSummary.searched_task_count,confirmed_claim_count:claimSummary.confirmed_count,undetermined_claim_count:claimSummary.undetermined_count,ai_used:false}});
     this.logger.write({tenantId:tenant.id,type:'integrated_process_completed',text:`Integrated task graph completed: instruction=${request.instruction_understanding?.mode||'UNKNOWN'} evidence=${evidenceSummary.status} claims=${claimSummary.status}`,payload:{request_id:req.requestId,task_count:tasks.length,searched_task_count:evidenceSummary.searched_task_count,instruction_mode:request.instruction_understanding?.mode||'UNKNOWN',evidence_status:evidenceSummary.status,claim_status:claimSummary.status,confirmed_claim_count:claimSummary.confirmed_count,undetermined_claim_count:claimSummary.undetermined_count,ai_used:false}});
-    return this._json(req,res,200,{schema_version:'astera.integrated.result.v2',request_id:req.requestId,non_ai:true,instruction_understanding:request.instruction_understanding||null,task_graph:{task_count:tasks.length,dependencies:request.analysis_task_packet.dependencies,execution_waves:request.analysis_task_packet.execution_waves,hard_blockers:request.analysis_task_packet.hard_blockers||[]},canonical:{claim_summary:claimSummary,by_task:canonicalByTask},evidence:{...evidenceSummary,by_task:evidenceByTask},decision_materials:{result:decision.result,material:decision.material,runtime:decision.runtime}});
+    return this._json(req,res,200,{schema_version:'astera.integrated.result.v2',request_id:req.requestId,non_ai:true,instruction_understanding:request.instruction_understanding||null,task_graph:taskGraphView(request),canonical:{claim_summary:claimSummary,by_task:canonicalByTask},evidence:{...evidenceSummary,by_task:evidenceByTask},decision_materials:{result:decision.result,material:decision.material,runtime:decision.runtime}});
   }
 }
 
 module.exports=AsteraServerWithEvidence;
+module.exports.taskGraphBlockState=taskGraphBlockState;
+module.exports.taskGraphView=taskGraphView;
