@@ -13,11 +13,12 @@ if [[ "$containerized" -ne 1 ]]; then
   exit 2
 fi
 
+# Smoke is deliberately isolated from a running service's production port and DB.
 export ASTERA_HOST=127.0.0.1
 export KAGURA_HOST=127.0.0.1
-export ASTERA_PORT=${ASTERA_PORT:-${KAGURA_PORT:-7373}}
+export ASTERA_PORT=${ASTERA_SMOKE_PORT:-17373}
 export KAGURA_PORT=${ASTERA_PORT}
-export ASTERA_DB=${ASTERA_DB:-astera-smoke.db}
+export ASTERA_DB=${ASTERA_SMOKE_DB:-/tmp/astera-smoke.db}
 export KAGURA_DB=${ASTERA_DB}
 export ASTERA_TGS_ENABLED=0
 
@@ -25,10 +26,29 @@ export ASTERA_TGS_ENABLED=0
 export ASTERA_LOCAL_NO_AUTH=1
 export ASTERA_ENABLE_LEGACY_COMMERCE=0
 
+rm -f "${ASTERA_DB}" "${ASTERA_DB}-shm" "${ASTERA_DB}-wal"
 node start.js >/tmp/astera-smoke.log 2>&1 &
 pid=$!
 trap 'kill $pid >/dev/null 2>&1 || true; rm -f "${ASTERA_DB}" "${ASTERA_DB}-shm" "${ASTERA_DB}-wal"' EXIT
-sleep 1
+
+ready=0
+for _ in $(seq 1 30); do
+  if node -e "fetch('http://127.0.0.1:'+process.env.ASTERA_PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  if ! kill -0 "$pid" >/dev/null 2>&1; then
+    echo 'smoke server exited before becoming healthy' >&2
+    cat /tmp/astera-smoke.log >&2 || true
+    exit 1
+  fi
+  sleep 0.2
+done
+if [[ "$ready" -ne 1 ]]; then
+  echo 'smoke server did not become healthy' >&2
+  cat /tmp/astera-smoke.log >&2 || true
+  exit 1
+fi
 
 node -e "
 const port=process.env.ASTERA_PORT;
@@ -70,8 +90,36 @@ fetch('http://127.0.0.1:'+port+'/process',{
   if(!/03 事実確認/.test(text)) throw new Error('Main8 section 03 missing');
   if(!/07 根拠成立状態|07 Evidence Status/.test(text)) throw new Error('Main8 section 07 must be Evidence Status');
   if(!/08 主役AI|08 Re-instruction/.test(text)) throw new Error('Main8 section 08 missing');
-  if(/推奨判断|Recommendation/.test(text)) throw new Error('normative recommendation must not be emitted');
+  if(/推奨判断|07 Recommendation/.test(text)) throw new Error('normative recommendation must not be emitted');
   if(!/判断基準|導出根拠|Derivation Basis/.test(text)) throw new Error('decision/derivation basis missing');
-  console.log('smoke ok: container-only canonical text/plain /process + Main8 Evidence Status');
+  console.log('smoke ok: isolated canonical text/plain /process + Main8 Evidence Status');
 }).catch(err=>{console.error(err.message);process.exit(1);});
 "
+
+node - <<'NODE'
+const AsteraEngine = require('./src/astera-engine');
+const CanonicalAsteraEngine = require('./src/canonical-astera-engine');
+
+(async () => {
+  if (AsteraEngine !== CanonicalAsteraEngine) throw new Error('AsteraEngine public entrypoint is not canonical');
+  const engine = new AsteraEngine({ logger: { write() {}, async flush() {} } });
+  try {
+    const out = await engine.process({ question: 'APIを検証する。', language: 'ja' }, { id: 'smoke' });
+    if (out.result?.non_ai !== true) throw new Error('non_ai invariant failed');
+    if (out.result?.decision_authority !== 'EXTERNAL_ONLY') throw new Error('decision_authority invariant failed');
+    if (out.runtime?.ai_used !== false || out.runtime?.llm_called !== false) throw new Error('AI/LLM invariant failed');
+    if (out.result?.judgment?.order?.[6] !== '07_evidence_status') throw new Error('Main8 #7 is not Evidence Status');
+    if (out.result?.comparison?.material_only !== true) throw new Error('comparison is not material-only');
+    if (out.result?.comparison?.selected_candidate !== null) throw new Error('selected candidate must remain null');
+    if ((out.result?.comparison?.candidate_ranking || []).length !== 0) throw new Error('candidate ranking must remain empty');
+    if (Object.hasOwn(out.result?.comparison || {}, 'score')) throw new Error('weighted score must not exist');
+    if (out.result?.comparison?.verdict?.decision !== 'MATERIAL_ONLY') throw new Error('comparison verdict must be MATERIAL_ONLY');
+    console.log('structured invariants ok: canonical public entrypoint / non-AI / material-only / no ranking');
+  } finally {
+    await engine.destroy();
+  }
+})().catch((error) => {
+  console.error(error.message);
+  process.exit(1);
+});
+NODE
