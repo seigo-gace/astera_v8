@@ -195,7 +195,7 @@ test('integrated process decomposes first, sends the canonical upstream Search P
   } finally { await stopMain(runtime); }
 });
 
-test('integrated boundary uses Input-Understanding-resolved task target and canonical preplanned queries for Lens and Evidence Search', async () => {
+test('integrated boundary uses internally resolved task target and Lens even when caller supplies a conflicting domain_lens', async () => {
   const evidenceCalls = [];
   const engineCalls = [];
   const preparedRequest = {
@@ -262,13 +262,14 @@ test('integrated boundary uses Input-Understanding-resolved task target and cano
   };
   const runtime = await startMain({ evidenceClient, engine });
   try {
-    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': runtime.apiKey }, body: JSON.stringify({ question: 'それを検証して。' }) });
+    const response = await fetch(`${runtime.baseUrl}/v1/integrated/process`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': runtime.apiKey }, body: JSON.stringify({ question: 'それを検証して。', domain_lens: { id: 'G01' } }) });
     assert.equal(response.status, 200);
     const result = await response.json();
     assert.equal(result.schema_version, 'astera.integrated.result.v2');
     assert.equal(evidenceCalls.length, 1);
     assert.match(evidenceCalls[0].payload.question, /APIサーバーのシステム開発/);
     assert.equal(evidenceCalls[0].payload.domain_lens.id, 'G29');
+    assert.notEqual(evidenceCalls[0].payload.domain_lens.id, 'G01');
     assert.ok(Array.isArray(evidenceCalls[0].payload.upstream_search_plan?.queries));
     assert.ok(evidenceCalls[0].payload.upstream_search_plan.planned_query_roles.includes('COUNTER'));
     assert.ok(evidenceCalls[0].payload.preplanned_queries.some((query) => query.role === 'COUNTER'));
