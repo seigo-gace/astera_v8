@@ -4,6 +4,7 @@ const AsteraServerWithEvidence = require('./server-with-evidence');
 const CanonicalAsteraEngine = require('./canonical-astera-engine');
 const { evaluate } = require('./quality-completion-evaluator');
 const { AsteraModuleSwitch } = require('./astera-module-switch');
+const { sanitizePublicDecisionInput } = require('./canonical-public-input');
 
 const MODULE_SWITCH_REQUEST_LIMIT = 1024 * 1024;
 
@@ -36,7 +37,7 @@ class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
     if (input.context !== undefined && typeof input.context !== 'string') {
       throw apiError('INVALID_CONTEXT', 'decision-materials input.context must be a string', 400);
     }
-    return this.engine.process({ ...input }, tenant);
+    return this.engine.process(sanitizePublicDecisionInput(input), tenant);
   }
 
   async _executeEvidenceSearch(input, tenant, requestId) {
