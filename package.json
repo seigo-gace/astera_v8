@@ -18,6 +18,7 @@
     "check:shell": "bash -n scripts/*.sh",
     "test": "npm run test:runtime && npm run test:evaluator && npm run test:evaluator-api",
     "test:runtime": "node --test test/*.test.js",
+    "test:purpose-effect": "node --test test/purpose-effect-story.test.js test/false-confirmation-effect.test.js test/evidence-lineage-effect.test.js test/evidence-search-main-proxy.test.js test/api.test.js",
     "test:evaluator": "node --test src/quality-completion-evaluator/tests/**/*.test.js",
     "test:evaluator-api": "node --test src/quality-completion-evaluator/api/*.test.js",
     "test:evidence": "node --test test/evidence-paid-usage.test.js test/evidence-search-core.test.js",
