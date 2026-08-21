@@ -32,7 +32,8 @@
     "validate:evidence-architecture": "node scripts/validate-evidence-modular-architecture.js",
     "verify:evidence": "npm run check:evidence && npm run validate:evidence-architecture && npm run test:evidence && npm run test:evidence-user && npm run test:evidence-api && npm run test:evidence-main && npm run test:evidence-live && npm run test:evidence-evaluator && npm run test:evidence-recovery && npm run test:evidence-projection && npm run test:evidence-architecture && npm run test:information-quality",
     "smoke": "bash scripts/smoke.sh",
-    "verify": "npm run check:syntax && npm test && npm run validate:evidence-architecture && bash scripts/smoke.sh"
+    "verify:source": "npm run check:syntax && npm test && npm run validate:evidence-architecture",
+    "verify": "npm run verify:source && bash scripts/smoke.sh"
   },
   "dependencies": {},
   "devDependencies": {},
