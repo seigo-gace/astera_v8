@@ -1,6 +1,6 @@
 'use strict';
 
-const AsteraEngine = require('./astera-engine');
+const CanonicalEngineSupport = require('./canonical-engine-support');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
@@ -48,7 +48,7 @@ function aggregateTaskResults(taskResults){
   return{facts,risks,multi,inquiry,comparison,perspectiveExpansion,canonical};
 }
 
-class CanonicalAsteraEngine extends AsteraEngine {
+class CanonicalAsteraEngine extends CanonicalEngineSupport {
   prepareRequest(input={}){return analyzeRequest(input);}
 
   async process(input={},tenant={id:'unknown'}){
