@@ -1,13 +1,11 @@
-# Astera v8 — Development Repository
+# Astera v8 — Deterministic Cognition Runtime
 
 > **問いを星図に変える。**
 >
-> **Private / Active Development**  
-> Astera v8はAIではありません。固定Rule・Script・検証工程で、問い・資料・検索結果・他Systemの出力を、判断に使える8段の材料へ再構成する非AI・決定論的Multi-Perspective Cognition Runtimeです。
+> Astera v8はAIではありません。Node.js / Google V8上の固定Rule・Script・検証工程で、入力を分解し、根拠境界を保持した判断材料へ再構成する非AI・決定論的Runtimeです。
 
-**設計・開発:** Seigo (`seigo-gace`)  
-**Runtime package:** `astera-v8-runtime` v1.1.1  
-**Runtime:** Node.js 22以上 / Google V8  
+**Design / Development:** Seigo (`seigo-gace`)  
+**Runtime:** Node.js 22+ / Google V8  
 **Runtime npm dependencies:** 0  
 **Lens taxonomy:** `1.0.0`
 
@@ -15,177 +13,564 @@
 
 ## 1. このRepositoryの位置付け
 
-このRepositoryは、Astera v8の**開発・検証・責務分離を行うPrivate Repository**です。
+このRepositoryはAstera v8の実装・Test・Runtime Evidenceを保持する開発Repositoryです。
 
-このREADMEは宣伝用の紹介文ではありません。初めてCodeを読む開発者が、次を誤解しないための開発入口です。
+**READMEは設計正本ではありません。**
 
-- Astera v8が何をするSystemか
-- Code上で何が実装されているか
-- 何が正式なCore責務か
-- 現行Codeに残るが、別Systemへ分離すべきものは何か
-- 何が未実装・未検証か
-- どの順でCodeとTestを確認するか
+本Change Unitの実装は、Masterの明示決定と、指定された現行正本、およびDriveに保存されている元v4完成版設計・Runtime部品を照合して構成しています。GitHubの現状やREADMEから仕様を逆生成しません。
 
-公開HP、CAMPFIRE、Press、Landing Page等へ掲載する最終本文は、Repository内の古い原稿を直接転用せず、Notionの公開本文正本を優先します。
+Repositoryで確認するものは次です。
+
+- 実装されている処理経路
+- File責務と依存
+- Test / CI
+- Commit / Diff
+- Runtime / Deploy Evidence
 
 ---
 
-## 2. Astera v8とは
+## 2. Astera v8の最上位原則
 
-Astera v8は、入力をそのままAIへ渡したり、ひとつの答えへ急いでまとめたりしません。
-
-入力を固定RuleとScriptで分解し、目的、前提不足、未確認情報、Risk、反対視点、比較案、推奨判断、主役AIへの再指示へ整理する**判断材料生成Runtime**です。
+Astera v8は、受け手が取るべき行動・採否・推奨案を決定しません。
 
 ```text
-Question / Document / Search Result / Other System Output
-  ↓
-Input Normalize
-  ↓
-Inquiry Preflight
-  ↓
-38 Genre Lens + Secondary Lens + Safety Overlay
-  ↓
-Fact / Risk / Inquiry
-  ↓
-Multi Perspective
-  ↓
-Dialectic Candidates
-  ↓
-Compare
-  ↓
-01〜08 Judgment Material
-  ↓
-Human / Application / Main AI
+Astera
+  = 判断材料を作るRuntime
+Human / Main AI
+  = 判断を行う受け手
 ```
 
-入力元はAIに限定されません。人間、Web Form、CLI、業務System、API、MCP、検索結果、文書、他AIの出力などを受け取れます。
+固定原則:
 
-Astera v8の中心は「答えを生成すること」ではなく、**答えを出す前に必要な判断材料を、再現可能な処理順で作ること**です。
+1. **Astera自身は規範判断をしない**
+2. **根拠なしを推測で埋めない**
+3. **無言で捨てない**
+4. **Claim最終状態は `CONFIRMED / UNDETERMINED` の2値だけ**
+5. **TaskとClaimを混同しない**
+6. **5 Laneは同じCanonical Claim Recordsから独立投影し、他Lane出力を見ない**
+7. **Compareは加重Score・自動Ranking・Selected Candidate・Recommendation・Decisionを作らない**
+8. **外部検索を使うClaimではsupportだけでなくcounter角度を事前生成する**
+9. **同一入力・同一Ruleset・同一Candidate Setでは決定論的に同じ処理結果を返す**
+10. **最新検索を含む場合はEvidence Snapshotの差で結果が変化し得ることを隠さない**
 
 ---
 
-## 3. Astera v8ではないもの
+## 3. Canonical Runtime Pipeline
 
-| 対象 | Astera v8との関係 |
+現在の本体実行経路は次です。
+
+```text
+Input / Context / File / Code / Quote
+↓
+Source Role Isolation
+↓
+Language / Locale / Script
+↓
+Deterministic Task Decomposition
+↓
+Task Graph Validation
+↓
+Task
+↓
+Fragmentation / Claim Extraction
+↓
+Canonical Claim
+↓
+Claim Policy Registry
+↓
+planned_query_roles
+↓
+Prebuilt Search Plan
+  ├ support
+  └ counter (mandatory when external search is required)
+↓
+G01-G38 Lens / Router / Overlay strengthening
+↓
+Evidence Search boundary
+↓
+Provider Retrieval / supplied Evidence Packet
+↓
+Evidence Binding
+↓
+G1-G7 Confirmation
+↓
+Canonical Claim Records
+  ├ CONFIRMED
+  └ UNDETERMINED
+↓
+Independent 5 Lane projection
+  ├ Fact
+  ├ Risk
+  ├ Multi
+  ├ Inquiry
+  └ Compare
+↓
+Deterministic Perspective Expansion
+↓
+Main8
+↓
+Human / External AI
+```
+
+`src/kagura-engine.js`は互換Entry Pointで、実体は`src/canonical-v4-engine.js`です。
+
+---
+
+## 4. Source Role Isolation
+
+入力の文字列をすべて「ユーザー命令」とみなしません。
+
+`src/canonical-v4-core.js`は、入力を次の軸で保持します。
+
+```text
+container_role × content_role × quotation_role × input_role
+```
+
+例:
+
+- 通常のQuestion本文
+- Context
+- fenced code block
+- 引用
+- File boundary
+
+Codeや引用内に`削除しろ`、`変更する`、`remove`等の語があっても、**その内容自体を実行Taskへ昇格させません。**
+
+Source Spanは保持し、非実行Sourceとして追跡できます。
+
+---
+
+## 5. Deterministic Task Decomposition
+
+Task Decompositionは「検索Queryを作る機能」ではありません。
+
+入力の要求構造を、実行・検証可能な契約へ分ける責務です。
+
+Taskが保持する主なField:
+
+```text
+Task ID
+Source Role
+Source Span
+Action
+Target
+Purpose / Objective
+Premise
+Constraint
+Prohibition
+Preserve
+Replace
+Condition
+Exception
+Priority
+Deadline
+Dependencies
+Parallel Group
+Conditional Branch
+Deliverable
+Success Criteria
+Completion Criteria
+Verification
+Evidence Need
+Unresolved
+Field Provenance
+Supersedes
+```
+
+### Context Scope Binding
+
+Context内の禁止・維持・制約は、対象TaskへBindします。
+
+例:
+
+```text
+Question:
+  APIを修正する
+
+Context:
+  mainは変更禁止
+  READMEは維持する
+```
+
+TaskはContext条件を失わず保持します。
+
+### Correction / Retraction
+
+訂正は過去Taskを無言削除しません。
+
+```text
+T01: Aを使う
+T02: AではなくBを使う
+
+T02.supersedes = T01
+```
+
+### Unresolved
+
+参照先やScopeが確定できない場合、推測して埋めません。
+
+```text
+unresolved: reference
+unresolved: target
+unresolved: condition_scope
+```
+
+---
+
+## 6. Task Graph Validation
+
+Task Graphは実行前に検証します。
+
+対応:
+
+- 複数Parent dependency
+- 並列Wave
+- dangling dependency検出
+- self-cycle検出
+- cycle検出
+
+Cycleがある場合、残りTaskを勝手に最後のWaveへ押し込みません。
+
+```text
+T01 → T02
+T02 → T01
+```
+
+は`TASK_DEPENDENCY_CYCLE`として明示し、そのGraphを実行可能扱いしません。
+
+---
+
+## 7. TaskとClaimの分離
+
+TaskとClaimは別の構造です。
+
+例:
+
+```text
+Task T01
+  API移行が安全か検証する
+
+Claim C01
+  現行Versionが有効
+
+Claim C02
+  新Versionに互換性がある
+
+Claim C03
+  Rollback手段が存在する
+```
+
+したがって処理順は、
+
+```text
+Task Decomposition
+↓
+Task
+↓
+Claim Extraction
+↓
+Canonical Claim
+```
+
+です。
+
+Task GraphはClaim Extractionを置換しません。
+
+---
+
+## 8. Canonical Claim / Policy / Search Plan
+
+Canonical Claimは最低限、次を保持します。
+
+```text
+claim_id
+subject
+predicate / statement
+object_or_value
+polarity
+modality
+time_scope
+jurisdiction
+version_scope
+claim_origin
+claim_policy_id
+```
+
+Claim originの代表:
+
+- `DIRECT_ASSERTION`
+- `ATTRIBUTED_ASSERTION`
+- `CODE_STRUCTURE`
+
+PolicyはClaim originごとのEvidence条件を定義します。
+
+外部検索が必要なClaimでは、Evidence Searchを呼ぶ前にSearch Planを生成します。
+
+```text
+Claim
+↓
+Claim Policy
+↓
+planned_query_roles
+↓
+Search Plan
+```
+
+### Counter mandatory
+
+外部検索対象はsupportだけを探しません。
+
+```text
+AFFIRMATIVE
+  → support + counter(negative)
+
+NEGATIVE
+  → support + counter(affirmative)
+```
+
+Queryに根拠のない推測語を追加して意味を書き換えることはしません。
+
+---
+
+## 9. Evidence Search Boundary
+
+Astera CoreはSearch Planを先に作り、Evidence Searchへ渡せる契約を持ちます。
+
+`CanonicalV4Engine`は次の2経路を受けます。
+
+### A. Evidence Packetを既に持つ場合
+
+```js
+engine.process({
+  question,
+  evidencePacket
+})
+```
+
+複数Task:
+
+```js
+engine.process({
+  question,
+  taskEvidencePackets: {
+    T01: packetA,
+    T02: packetB
+  }
+})
+```
+
+### B. Evidence Search executorを接続する場合
+
+Engine生成時に`evidenceSearch.execute()`を注入できます。
+
+```js
+const engine = new KaguraEngine({
+  evidenceSearch: {
+    async execute({ task, claims, search_plans, domain }) {
+      // Evidence Search v2.x / Provider Retrieval
+      // result must satisfy the Evidence Packet contract
+    }
+  }
+});
+```
+
+Executorは**Claimと事前生成済みsupport/counter Search Planを受け取った後**に呼ばれます。
+
+Executorが接続されておらずEvidence Packetも与えられない場合、外部事実を捏造せず`UNDETERMINED`として残します。
+
+---
+
+## 10. Evidence Binding
+
+Evidence候補はClaimへBindingしてから確認に使います。
+
+代表Field:
+
+```text
+evidence_binding_id
+claim_id
+candidate_id
+relation
+source_role
+source_family_id
+authority_id
+source_id
+url
+```
+
+Evidence Packetが`FINAL_VALID`相当でも、ClaimとBindingできなければ自動的にCONFIRMEDにはしません。
+
+---
+
+## 11. G1-G7 Confirmation Gate
+
+Claim最終状態はG1-G7の全条件を満たした場合のみ`CONFIRMED`になります。
+
+| Gate | 内容 |
 |---|---|
-| ChatGPT / Claude / Gemini等 | 主役AI。Asteraとは別System |
-| AMATERAS Ω / β / Δ | HFや複数AIを使う別System。Asteraへ混在させない |
-| Astera App | UI、入力、履歴、Account、Plan等を扱う別Repository |
-| Account / Login / Square / Credit | Astera Runtime Coreの正式責務外 |
-| ASTERA-KB | Knowledge保存・検索を担う別System。接続は現時点で未実装 |
-| Webhook Gateway | 外部Eventの受信・検証・保存・配送・再送を担う別System |
-| TGserver | 構造化Logの配送先。Astera内部処理を所有しない |
-| 検索エンジン | Astera Coreは外部情報を自動取得しない |
-| 専門家判断 | 医療、法律、税務、投資等を代替しない |
+| G1 | Claim Policyが解決されている |
+| G2 | ModalityがPolicyの照合可能範囲内 |
+| G3 | Policy必須Scopeが確定している |
+| G4 | Policy要件を満たすEvidence Bindingが成立 |
+| G5 | 外部検索が必要な場合の取得条件が成立 |
+| G6 | 未解消Conflictがない |
+| G7 | Claim originの確定可能範囲内 |
 
-外部LLM Adapterは存在しますが任意です。既定の`null` Providerでは外部AIを呼びません。
-
----
-
-## 4. 現在の責務境界
-
-### 正式なCore責務
-
-- 入力本文とContextの正規化
-- 過去のAstera 8段出力が再入力された場合のMeta Block除去
-- `G01`〜`G38`専門ジャンルLensの決定論的分類
-- Primary 1件、Secondary最大3件、Overlay最大5件の選択
-- Fact / Risk / Inquiryの並列処理
-- Multi Perspective、Dialectic、Compareの順序実行
-- 01〜08の判断材料生成
-- 任意LLM Adapterへ渡すPrompt生成
-- Secret除去済み構造化LogのTGserver配送
-- 独立QualityCompletionEvaluatorによる品質・完成度判定
-
-### 現行Codeに存在するMigration Debt
-
-次の機能は現在のCodeに実装されていますが、現在確定した責務境界ではAstera App / Account / Commerce側へ分離すべき対象です。
-
-- `POST /signup`
-- Tenant API Key発行・照合
-- Free / Pro / BusinessのProcess内Rate Limit
-- Usage計測
-- Stripe Checkout
-- Stripe WebhookとSubscription同期
-- `ASTERA_SKILL_API_KEY`を使う所有者専用Endpoint
-- Tenant・Usage・Stripe状態を保持するSQLite / JSON fallback
-
-これらを削除済みとも、将来の正式構成とも扱いません。**現行実装として存在するが、責務分離が未完了のMigration Debt**として記録します。
-
----
-
-## 5. 実装Status
-
-| 領域 | Status | 現在の事実 |
-|---|---|---|
-| Input Normalizer | Implemented | NFKC正規化、Context統合、Astera Meta Block除去 |
-| 38 Genre Lens | Implemented | `G01`〜`G38`、Taxonomy `1.0.0` |
-| Secondary Lens | Implemented | Score順で最大3件 |
-| Safety Overlay | Implemented | Legal / Medical / Current / Evidence / Abuse |
-| Worker Pool | Implemented | `worker_threads`、Queue、Timeout、Crash時再生成 |
-| Fact | Implemented with limitation | 入力内の確認候補・未確認・意見を分類。外部検索はしない |
-| Risk | Implemented | 固定RuleとLens由来Risk / Safety Gate |
-| Inquiry Preflight | Implemented | 短文、対象不足、成功条件不足を検査 |
-| Human Reader | Implemented as rules | 文字列SignalでUrgency等を推定。心理診断ではない |
-| Multi | Implemented | Attack / Defense / Critical / Domain視点 |
-| Dialectic | Implemented | 主案・悪手・反対案・第三案・人読み最適案 |
-| Compare | Implemented | 100点からの減点方式、矛盾検出、Decision分類 |
-| Main 8 | Implemented | 日本語・英語表示、固定順序 |
-| Optional LLM | Implemented | Null / OpenAI / Anthropic / Ollama / OpenAI-compatible |
-| TGserver Logging | Implemented | Secret Mask、Retry、短期Outbox、起動時再送 |
-| QualityCompletionEvaluator | Implemented independently | 95/95、Blocking、Evidence、KB候補判定 |
-| ASTERA-KB connection | Not implemented | `KB_ELIGIBLE`後も自動保存しない |
-| Account / Square / Credit | Out of Runtime Scope | Astera App / Commerce側の責務 |
-| Current SHA CI evidence | Verification required | Test Sourceの存在と、現在SHAの成功結果を分離する |
-
-### Status用語
-
-- **Implemented**: Codeが存在する
-- **Implemented with limitation**: Codeはあるが、保証範囲に重要な制限がある
-- **Migration Debt**: Codeには存在するが、確定責務から分離が必要
-- **Not implemented**: 将来構想を実装済みとして扱わない
-- **Verification required**: Test Sourceだけで成功済みとは判定しない
-
----
-
-## 6. 実際の処理順
-
-### 6.1 Input Normalize
-
-`src/domain-template-router.js`
-
-1. `question`と`context`を受け取る
-2. 過去のAstera 01〜08 Blockが貼られていれば分析対象から除去する
-3. Core RequestとAnalysis Textを分離する
-4. 空Inputは`ASTERA_LENS_INPUT_REQUIRED`として分類しない
-
-### 6.2 Genre Lens Router
-
-`src/all-domain-lens-catalog.js`  
-`src/domain-template-router.js`
-
-分類はAI推論ではありません。
-
-- 固定分類語
-- Anchor Title
-- Exact Match
-- 文字長に応じたScore
-- 3-gram overlap
-- 固定Tie-break
-- Confidence
-- `HYPOTHESIS_LAST_RESORT`
-
-同一Input・同一Taxonomy Versionでは同じ分類順序を返す設計です。
+1つでも成立しなければ:
 
 ```text
-Normalize
-  → G01〜G38 Score
-  → Primary 1
-  → Secondary 0〜3
-  → Overlay 0〜5
+UNDETERMINED
 ```
 
-#### Overlay
+理由を配列で残します。
+
+代表例:
+
+- `INSUFFICIENT_EVIDENCE`
+- `CONFLICT`
+- `SCOPE_UNKNOWN`
+- `PARSE_UNRESOLVED`
+- `MODALITY_NOT_VERIFIABLE`
+- `RETRIEVAL_FAILED`
+
+---
+
+## 12. 5 Lane — 完全独立投影
+
+5 Laneは同一Taskの同一Canonical Claim Recordsを入力として**並列実行**します。
+
+```text
+Canonical Claim Records
+├─ Fact
+├─ Risk
+├─ Multi
+├─ Inquiry
+└─ Compare
+```
+
+禁止:
+
+```text
+Fact → Multi
+Multi → Compare
+Risk → Compare
+Inquiry → Compare
+```
+
+つまり、あるLaneの出力を次のLaneの入力にして結論を強める構造にはしません。
+
+### Fact
+
+`CONFIRMED / UNDETERMINED` Claim Recordsを事実Laneへ投影します。
+
+### Risk
+
+Task、Domain Lens、Canonical Claim Recordsに存在するRisk Signalを観察材料として列挙します。
+
+Risk Laneは受け手の行動を決定しません。
+
+### Multi
+
+目的・制約・Evidence状態・Domain Lensから複数視点を独立生成します。
+
+### Inquiry
+
+未解決Target、Hard Blocker、UNDETERMINED Claim等を列挙します。
+
+推測補完はしません。
+
+### Compare
+
+Compareが持つのは非規範的な比較材料です。
+
+```text
+CONFIRMED件数
+UNDETERMINED件数
+scope_matrix
+conflicts
+evidence_bound_claim_count
+compare_lens
+```
+
+Compareが**持たないもの**:
+
+```text
+weighted score
+auto ranking
+selected candidate
+rejected candidate
+recommendation
+decision
+verdict
+```
+
+---
+
+## 13. Deterministic Perspective Expansion
+
+5 Laneが完了した後に、`src/pillars/dialectic-worker.js`が表示・検討用のPerspectiveを展開します。
+
+現在の固定Perspective:
+
+- Mainline view
+- Opposition view
+- Third view
+- Human-reading presentation view
+- Failure reference (`bad_hand`)
+
+これは**採用候補Rankingではありません。**
+
+`bad_hand`も「選択候補」ではなく失敗Patternを明示する参照材料です。
+
+Score / Selected / Decisionは所有しません。
+
+---
+
+## 14. Human Reader
+
+`src/hyperion-human-reader.js`はUrgency、Confusion、Precision等の固定Signalを検出します。
+
+Human Readerの情報は、事実状態の書換えには使いません。
+
+用途:
+
+- 表示順
+- 説明密度
+- 読みやすさ
+- Perspective Expansionの表示材料
+
+禁止:
+
+- Human SignalをFactへ昇格
+- Human SignalでEvidence状態を変更
+- Human SignalでClaimをCONFIRMED化
+
+---
+
+## 15. G01-G38 Lens / Overlay
+
+現行強化機能として38 Genre Lensを保持します。
+
+主な実装:
+
+- `src/all-domain-lens-catalog.js`
+- `src/domain-template-router.js`
+- `docs/LENS_GENRE_INDEX.md`
+- `docs/DOMAIN_TEMPLATE_CATALOG.md`
+
+LensはTask / Claimの意味を置換するものではありません。
+
+役割は、Domain固有の:
+
+- Risk観点
+- Evidence収集観点
+- Inquiry観点
+- Compare観点
+- Safety Overlay
+
+を追加することです。
+
+Overlay例:
 
 - `high_stakes_legal`
 - `medical_safety`
@@ -193,481 +578,258 @@ Normalize
 - `evidence_strict`
 - `safety_abuse`
 
-OverlayはPrimary Lensを上書きせず、Risk、Evidence、Safety Gateを追加します。
+---
 
-### 6.3 Inquiry Preflight
+## 16. 日本語Runtime
 
-`src/pillars/inquiry-worker.js`
+日本語入力は`Deterministic Japanese Parser MCP`へ接続する既存構成を維持します。
 
-短すぎる入力や、対象・成功条件が同時に不足する入力だけを停止します。明確な入力は不要な質問で止めず、Lens固有の不足を分析結果へ渡します。
+実装:
 
-### 6.4 Parallel Pillars
+- `src/japanese-parser-mcp-client.js`
+- `src/runtime/ja/`
 
-```text
-Fact ─────┐
-Risk ─────┼─ parallel
-Inquiry ──┘
-```
+日本語Parserが返すTask Graphは、Astera側のTask Contractへ変換した後、Canonical Task Graph Validationを通します。
 
-- **Fact**: 入力内の具体値・固有語を確認候補にする。外部検証済みとは扱わない
-- **Risk**: Security、Production、Cost、Data等の固定RuleとDomain Riskを検査
-- **Inquiry**: 問いの健全性、Missing Questions、Human Reader情報を作る
+Parserが確定できない意味をAstera側で推測して補完しません。
 
-### 6.5 Sequential Judgment
-
-```text
-Fact / Risk / Inquiry
-  → Multi
-  → Dialectic
-  → Compare
-  → Main 8
-```
-
-- **Multi**: Attack / Defense / Critical / Domain視点を作る
-- **Dialectic**: 主案・悪手・反対案・第三案・人読み最適案を生成する
-- **Compare**: Risk、未確認、問いの不健全、High-Stakes Overlay等を減点する
-
-Compare Decision:
-
-- `recommend`
-- `recommend_with_caution`
-- `hold_and_clarify`
+Parser障害は`DEGRADED`として明示します。
 
 ---
 
-## 7. 01〜08 Judgment Material
+## 17. Main8
 
-| No. | 固定名称 | 役割 |
+Main8は固定8段です。
+
+| No. | 名称 | 内容 |
 |---:|---|---|
-| 01 | 本当の目的 | Core Requestと達成目的 |
-| 02 | 前提不足 | 不足条件、Context、Assumption |
-| 03 | 事実確認 | Evidence候補、未確認、Evidence Gap |
-| 04 | 危機察知 | Risk、Safety Gate、Domain Check |
-| 05 | 反対視点 | Opposition、矛盾、悪手から得る教訓 |
-| 06 | 比較案 | Candidate Ranking、Score、比較軸 |
-| 07 | 推奨判断 | Decision、理由、条件 |
-| 08 | 主役AIへの再指示 | Main AIへ渡す再構成指示 |
+| 01 | 本当の目的 | Task Objective / Purpose |
+| 02 | 前提不足 | Unresolved / Conflict / Constraint |
+| 03 | 事実確認 | CONFIRMED / UNDETERMINED Claim |
+| 04 | 危機察知 | Risk Observation |
+| 05 | 反対視点 | Post-Lane Opposition Perspective |
+| 06 | 比較案 | 件数・Scope・Conflict等の非規範比較 |
+| 07 | Evidence成立状態 | G1-G7とClaim最終状態 |
+| 08 | 主役AIへの再指示 | Task順・禁止・維持・未解決境界を失わず渡す |
 
-08はAI接続時に使う再指示です。AIを使わない経路では、01〜07を人間または別Systemの判断材料として使用できます。
+**07は「推奨判断」ではありません。**
 
-通常`POST /process`は内部Map全体ではなく、利用者向けの`text/plain`判断材料を返します。
-
----
-
-## 8. 精度上の重要な境界
-
-### Factは外部事実確認ではない
-
-`fact-worker.js`は入力本文を分類します。Web検索、一次Source取得、現在情報確認は行いません。
-
-内部の`confirmed`は「入力内に具体値・固有語がある確認候補」です。外部検証済みの事実ではありません。
-
-### Human Readerは診断ではない
-
-`hyperion-human-reader.js`はUrgency、Anger、Fatigue、Confusion、Precision等の固定Signalを検出し、応答方針を調整します。感情・心理状態を医学的に判定する機能ではありません。
-
-### Current-Information Overlayは情報取得をしない
-
-最新性が必要なことを検出し、確認項目を追加します。最新情報自体を取得・保証する機能ではありません。
-
-### Optional LLMはCoreではない
-
-既定値は`LLM_CHAIN=null`です。Null Adapterは外部AIを呼ばず、Asteraが作ったPromptを返します。
-
-### QCEはKBへ保存しない
-
-`KB_ELIGIBLE`は掲載可能判定です。保存完了、公開完了、品質保証済みを意味しません。
+Astera自身が推奨・採否を決定しないためです。
 
 ---
 
-## 9. QualityCompletionEvaluator
+## 18. QualityCompletionEvaluator
 
-`src/quality-completion-evaluator/`
+`src/quality-completion-evaluator/`はAstera本体とは独立した品質・完成度評価Moduleです。
 
-本体`/process`とは独立した固定Rule評価Moduleです。
+本体のCanonical Claim ConfirmationとQCEを混同しません。
 
-合格条件:
-
-- Quality `>= 95`
-- Completion `>= 95`
-- Blocking `0`
-- Mandatory Requirement failure `0`
-- Evidence mismatch `0`
-- Evaluation成功
-
-Artifact ProfileとDomain Lensを分離します。
-
-- **Artifact Profile**: design / implementation / research / test等
-- **Domain Lens**: `G01`〜`G38`のRisk / Evidence / Safety条件
-
-### 現在確認済みのDefect
-
-`blocking-rule-engine.js`は`KB-HB-016`を生成しますが、`blocking-rules.v1.json`のRegistryは`KB-HB-015`までです。
-
-これは修正・Test対象として残っています。
-
-### 起動境界
-
-Evaluator APIは別Process・別Portです。
-
-```bash
-npm run start:evaluator-api
-```
-
-既定: `127.0.0.1:7374`
-
-Rootの`docker-compose.yml`は現時点でEvaluator APIを自動起動しません。
+QCEの`KB_ELIGIBLE`等はArtifact品質・掲載判定の状態であり、Astera Claimの`CONFIRMED`とは別の状態体系です。
 
 ---
 
-## 10. Repository構造
+## 19. Runtime Core外のMigration Debt
+
+Repositoryには歴史的にAccount / Commerce責務が残っています。
+
+例:
+
+- `POST /signup`
+- Tenant API Key
+- Usage / Rate Limit
+- Stripe関連
+- Storage
+- Skill専用Endpoint
+
+これらは**現行Codeに存在する実装事実**ですが、Canonical Cognition Runtimeの責務とは分離して扱います。
+
+今回のCanonical v4復元Change Unitでは、これらを削除・移管・再設計していません。
+
+---
+
+## 20. File Map
+
+### Canonical Runtime
 
 ```text
-astera_v8/
-├── README.md
-├── STRUCTURE.md
-├── RELEASE_MANIFEST.txt
-├── package.json
-├── start.js
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
-├── src/
-│   ├── server.js
-│   ├── kagura-engine.js
-│   ├── all-domain-lens-catalog.js
-│   ├── domain-template-router.js
-│   ├── worker-pool.js
-│   ├── mood-detector.js
-│   ├── hyperion-human-reader.js
-│   ├── pillars/
-│   ├── llm/
-│   ├── logging/
-│   ├── auth/              # Migration Debtを含む
-│   ├── billing/           # Migration Debtを含む
-│   ├── store/             # Migration Debtを含むApplication状態
-│   ├── guard/
-│   ├── public/
-│   └── quality-completion-evaluator/
-├── test/
-├── scripts/
-├── docs/
-├── deploy/
-├── .github/workflows/
-└── archive/
+src/
+├─ kagura-engine.js                 # compatibility entry point
+├─ canonical-v4-engine.js           # canonical orchestration
+├─ canonical-v4-core.js             # fragmentation / task binding / claims / policy / G1-G7
+├─ judgment-materials-analyzer.js   # existing deterministic task fast path
+├─ japanese-parser-mcp-client.js    # Japanese deterministic parser MCP
+├─ all-domain-lens-catalog.js       # G01-G38 catalog
+├─ domain-template-router.js        # Lens / Overlay routing
+├─ worker-pool.js                   # Worker Threads
+└─ pillars/
+   ├─ fact-worker.js                # Claim Record projection
+   ├─ risk-worker.js                # independent risk observation
+   ├─ multi-worker.js               # independent perspective projection
+   ├─ inquiry-worker.js             # independent unresolved projection + Human Reader
+   ├─ compare-worker.js             # non-normative comparison
+   ├─ dialectic-worker.js           # post-lane perspective expansion
+   └─ pool-runner.js
 ```
 
-### 最初に読むCode
+### Separate evaluation
 
-1. `src/kagura-engine.js` — 全処理順
-2. `src/domain-template-router.js` — Input Normalizeと分類
-3. `src/all-domain-lens-catalog.js` — 38 Genre Lens正本
-4. `src/pillars/` — 各Rule処理
-5. `src/worker-pool.js` — 並列実行
-6. `src/quality-completion-evaluator/` — 独立品質Gate
-7. `src/server.js` — 現行HTTP境界とMigration Debt
-8. `start.js` — 現行Composition Root
-
-内部Class / File名に`Kagura`が残っています。Public名はAstera v8のまま維持し、内部名称Migrationは互換性とTestを保って別作業で行います。
+```text
+src/quality-completion-evaluator/
+```
 
 ---
 
-## 11. 現行HTTP Endpoint
+## 21. Test
 
-> 以下は**現在のCodeに存在するObserved Contract**です。すべてが将来の正式責務という意味ではありません。
-
-### Runtime `127.0.0.1:7375`
-
-| Method | Path | Position |
-|---|---|---|
-| GET | `/` | 最小Web UI |
-| GET | `/healthz` | Health / Runtime / Logging状態 |
-| POST | `/process` | 判断材料生成 |
-| POST | `/signup` | 現行Tenant Key発行。Migration Debt |
-| POST | `/v1/skill/process` | 現行所有者専用入口。Migration Debt |
-| POST | `/billing/checkout` | 現行Stripe境界。Migration Debt |
-| POST | `/billing/webhook` | 現行Stripe境界。Migration Debt |
-
-### Evaluator `127.0.0.1:7374`
-
-| Method | Path | Position |
-|---|---|---|
-| GET | `/healthz` | Evaluator状態 |
-| POST | `/v1/evaluate` | 現行Tenant評価入口。Auth依存はMigration対象 |
-| POST | `/v1/skill/evaluate` | 現行所有者専用評価入口。Migration対象 |
-
-詳細なObserved Contractは`docs/API_REFERENCE.md`を参照してください。
-
----
-
-## 12. Local Development
-
-### Requirements
-
-- Node.js 22以上
-- Bash（Smoke Test用）
-- Docker / Docker Compose（Container確認時）
-
-npm Packageの追加Installは不要です。
+基本:
 
 ```bash
-node --version
 npm test
 ```
 
-### 短時間のLocal起動
+主要Canonical Test:
 
-認証を省略するLocal開発例:
+- `test/canonical-v4-core.test.js`
+  - Source Role Isolation
+  - Context Binding
+  - Multi-parent Dependency
+  - Cycle Detection
+  - Correction / Supersedes
+  - Unresolved Reference
+  - Counter Search Plan
+  - G1-G7
+  - Non-normative Compare
+  - Determinism
 
-```bash
-ASTERA_LOCAL_NO_AUTH=1 \
-ASTERA_TGS_ENABLED=0 \
-LLM_CHAIN=null \
-npm start
-```
+- `test/engine.test.js`
+  - 5 Lane independent order
+  - Main8 07 Evidence
+  - Japanese Parser MCP integration
+  - Parser Guard preservation
+  - Evidence Search executor boundary
+  - CONFIRMED / UNDETERMINED
+  - Runtime determinism
 
-PowerShell:
+- `test/decision-authority-boundary.test.js`
+  - Multi / Compare / Perspective ExpansionのAuthority境界
+  - Score / Ranking / Selection / Decision非所有
 
-```powershell
-$env:ASTERA_LOCAL_NO_AUTH = "1"
-$env:ASTERA_TGS_ENABLED = "0"
-$env:LLM_CHAIN = "null"
-npm start
-```
+- `test/lens-output-integration.test.js`
+  - G01-G38 / OverlayがCanonical Main8へ保持されること
 
-Health:
+### Verify
 
-```bash
-curl http://127.0.0.1:7375/healthz
-```
-
-Process:
-
-```bash
-curl -X POST http://127.0.0.1:7375/process \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Node.js APIを互換性を保って段階移行する判断材料を作る。対象は本番Serviceで、成功条件は停止時間を作らずRollback可能にすること。",
-    "context": "外部情報は未確認。現行構成とTest結果を根拠に判断する。",
-    "language": "ja",
-    "llm": {"chain": ["null"]}
-  }'
-```
-
-### Docker起動
+Repository設定に応じて:
 
 ```bash
-cp .env.example .env
-# Secretと接続先をLocal環境に合わせて設定する
-docker compose up -d --build
-```
-
-| サービス | ポート | 役割 |
-|---|---|---|
-| `astera-v8`（本体） | `127.0.0.1:7375` | 判断材料生成 API |
-| `astera-v8-evaluator` | `127.0.0.1:7374` | 品質・完成度判定 API |
-| nginx（personal ローカル） | `127.0.0.1:8082` → `7375` | ローカル reverse proxy（`docker-compose.personal.yml` の `nginx-personal`） |
-
-`docker-compose.personal.yml` の `astera-v8-personal`（personal 本体）は既定では起動しません。本番の `astera-v8`（7375）と `astera-v8-evaluator`（7374）を使用してください。personal 用 nginx（8082→7375）だけが必要な場合は `docker compose -f docker-compose.personal.yml up -d nginx-personal` で起動します。
-
-現行ComposeはHost Network、loopback、TGserver接続、Cloudflare profileを前提にします。開発PCでそのまま本番設定を流用しないでください。ホストの `npm start` / systemd 常駐は本番運用では行いません。
-
----
-
-## 13. Testと検証
-
-```bash
-npm test
-bash scripts/smoke.sh
 npm run verify
 ```
 
-`npm test`:
-
-- Runtime Test
-- QualityCompletionEvaluator Test
-- Evaluator API Test
-
-`npm run verify`:
-
-- 全Test
-- Runtime起動
-- `/signup`
-- `/process`
-- G10 Lens
-- 01〜08出力
-- Evidence表示
-
-主なTest範囲:
-
-- 38 Genre固定IDとAnchor Path
-- 同一Input 100回の決定性
-- 空Input
-- 短いASCII分類語の誤発火防止
-- Overlay順序
-- Main 8の順序・英日表示
-- Astera Meta Block除去
-- Worker Timeout / Crash復旧
-- HTTP入力型・Payload上限・CORS・HTTPS
-- Secret Mask
-- Stripe署名と価格改ざん拒否
-- Tenant / Skill Key境界
-- TGserver Outbox
-- QCE Requirement / Evidence / Blocking / Determinism
-
-### 検証結果の扱い
-
-- Test Fileがあるだけでは「成功済み」としない
-- 過去Commitの成功は現在SHAの成功を意味しない
-- READMEに固定Test件数を書かない
-- GitHub Actionsと実行Logで同一SHAを確認する
-- 未実行・取得不能は`未検証`と書く
-
-Workflow:
-
-- `.github/workflows/test.yml`
-- `.github/workflows/verify.yml`
-- `.github/workflows/gh-ready.yml`
+Test Sourceが存在することと、特定CommitのCI成功は別Evidenceです。
 
 ---
 
-## 14. Known Debt / Known Limitation
+## 22. 起動
 
-### P0 — 責務境界
+Repositoryの現行Docker / Compose構成を使用します。
 
-- Runtime Composition RootにTenant / Billing / Stripeが混在している
-- Account / Plan / Square / Creditの正式責務はAstera App / Commerce側
-- Evaluator APIも現行Tenant認証Moduleへ依存している
-
-### P0 — QCE Registry
-
-- `KB-HB-016`がEngineに存在するがRegistryにない
-
-### P1 — Evidence
-
-- Fact Workerは外部Sourceを取得しない
-- Current Overlayは最新情報を取得しない
-- ASTERA-KBは未接続
-
-### P1 — Runtime / API
-
-- Rate LimiterはProcess内Memory MapでReplica間共有ではない
-- `clarification_needed`はHTTP 200 Textで専用JSON契約がない
-- Tenant Keyの失効・Rotation Endpointがない
-- Root ComposeはEvaluatorを起動しない
-
-### P1 — Naming
-
-- `KaguraServer`、`KaguraEngine`等の内部名称が残る
-- Public InterfaceやPathを壊さずMigrationする必要がある
-
-### P2 — Documentation
-
-- Repository内のPress / LP / Public Packは開発用Draft
-- 公開本文はNotionの最新公開正本を優先する
-- Archiveは歴史資料であり現行仕様の根拠にしない
-
-詳細: `docs/LIMITATIONS.md`
-
----
-
-## 15. Documentation Map
-
-### 開発入口
-
-- `README.md` — 本ページ
-- `STRUCTURE.md` — 現行Repository構造と依存方向
-- `docs/DOCUMENTATION_INDEX.md` — 文書の分類と優先順位
-- `docs/ARCHITECTURE.md` — Runtime内部構造
-- `docs/API_REFERENCE.md` — 現行CodeのObserved HTTP Contract
-- `docs/LIMITATIONS.md` — 制限と未実装
-
-### Lens
-
-- `docs/LENS_GENRE_INDEX.md`
-- `docs/DOMAIN_TEMPLATE_CATALOG.md`
-- `src/all-domain-lens-catalog.js`
-- `src/domain-template-router.js`
-
-### QualityCompletionEvaluator
-
-- `src/quality-completion-evaluator/README.md`
-- `src/quality-completion-evaluator/contracts/`
-- `src/quality-completion-evaluator/tests/`
-
-### Operations
-
-- `docs/DEPLOYMENT_VPS.md`
-- `docs/PRODUCTION_CHECKLIST.md`
-- `docs/SECURITY_NOTES.md`
-- `docs/TROUBLESHOOTING.md`
-
-### Public copy
-
-Repository内の次のFileは**Internal Draft / Reference**です。
-
-- `docs/README_PUBLIC.md`
-- `docs/PRESS_KIT.md`
-- `docs/LP_COPY.md`
-- `docs/BRAND_PHILOSOPHY.md`
-
-最終公開本文はNotionの次の正本を優先します。
-
-- [Astera公式HP｜公開本文・参照Source正本](https://app.notion.com/p/3a9cdcf128e481ca9c90c186c60bd5d8)
-
-### Notion development canon
-
-- [04｜Astera v8 本体](https://app.notion.com/p/3aecdcf128e48161a895c208087c9ad5)
-- [01｜Astera v8 議事録](https://app.notion.com/p/3aecdcf128e481c69afcc2470f878aa4)
-- [Astera v8｜実装正本](https://app.notion.com/p/3accdcf128e48197981cc71a0d2d630b)
-- [Astera v8｜全Code正本](https://app.notion.com/p/3adcdcf128e4811a84e0d4b14e60a2d2)
-
----
-
-## 16. 正本の優先順位
-
-仕様判断は次の順で行います。
-
-1. マスターがNotion正本で確定した最新の目的・責務・境界
-2. 現行RepositoryのCode / Schema / TestによるObserved Fact
-3. 本READMEの開発向け説明
-4. `STRUCTURE.md`と技術文書
-5. Repository内のPublic Draft
-6. `archive/`内の歴史資料
-
-Codeと確定責務が矛盾する場合、Codeを「現行事実」、Notionを「到達すべき責務」として分離し、Migration Debtとして記録します。説明だけを書き換えて、実装済み・分離済みとは扱いません。
-
----
-
-## 17. 変更時の同期Rule
-
-変更は次を同じ作業単位で確認します。
-
-```text
-Notion議事録
-  → 基本設計 / 詳細設計
-  → Code
-  → Test
-  → README / STRUCTURE / API / LIMITATIONS
-  → Notion Status
+```bash
+docker compose up -d --build
 ```
 
-禁止:
-
-- 未実装を実装済みと書く
-- 未実行Testを成功扱いする
-- AsteraをAI本体と表現する
-- AMATERAS ΩやHF構成をAsteraへ混在させる
-- Account / Square / CreditをRuntime Core責務へ戻す
-- `KB_ELIGIBLE`をKB保存済みと表現する
-- Public DraftをNotion公開正本より優先する
+Port、Proxy、staging / production mappingは`docker-compose*.yml`と`deploy/`の現行設定を正として確認してください。READMEへ古いPort値を固定して運用設定を上書きしません。
 
 ---
 
-## 18. 現在の開発判断
+## 23. API契約
 
-Astera v8のCore Runtimeは、38 Genre Lens、5 Overlay、Worker Pool、5本柱、Dialectic、Compare、Main 8、Optional LLM、独立QCE、TGserver LoggingまでCodeとして存在します。
+既存`src/server.js`は`src/kagura-engine.js`をEntry Pointとして使用します。
 
-ただし、Repository全体は完成状態ではありません。
+そのためServer側Call Siteを複製せず、Canonical Runtimeへ切り替わります。
 
-最優先は、現行Codeに残るTenant / Stripe / Skill API等を、確定済みの責務境界へ合わせて分離し、QCE Registry不一致を修正し、同一SHAのTest・Smoke・CI Evidenceを取得することです。
+代表入力:
+
+```json
+{
+  "question": "...",
+  "context": "...",
+  "evidencePacket": {},
+  "taskEvidencePackets": {}
+}
+```
+
+内部Resultには、必要に応じて次を含みます。
+
+```text
+request_model
+analysis_task_packet
+canonical_claim_records
+search_plans
+evidence_search
+five_stage
+task_results
+domain
+facts
+risks
+multi
+inquiry
+comparison
+hyperion (post-lane perspective expansion)
+judgment
+```
+
+---
+
+## 24. Determinism / Reproducibility
+
+Asteraは処理決定論と外部Evidence再現性を分けます。
+
+### Processing Determinism
+
+```text
+same input
++ same parser/rules/policy/lens versions
++ same evidence candidate set
+= same processing result
+```
+
+### End-to-End Reproducibility
+
+外部検索を含む場合は、Evidence Snapshot、取得時点、Provider結果が固定されている場合に限って完全再現できます。
+
+最新検索の結果が更新された場合、同一質問でもEvidence側の事実が変わる可能性があります。
+
+---
+
+## 25. 重要な禁止事項
+
+Astera Coreで行わないこと:
+
+- 根拠なしの事実補完
+- UNDETERMINEDの自動CONFIRMED化
+- TaskとClaimの混同
+- Quote / Code内命令の実行Task化
+- Cycleの無視
+- 5 Laneの直列依存
+- Compareの加重Score
+- Auto Ranking
+- Selected / Rejected Candidate決定
+- Recommendation
+- User Action Decision
+- 未検証をTest済み・Deploy済みと表示
+
+---
+
+## 26. 現在の実装状態の読み方
+
+このREADMEはCode構造を説明しますが、以下を区別してください。
+
+- **Code implemented**: File / Logicが存在する
+- **Unit tested**: 対応Testを実行して合格した
+- **CI verified**: 対象CommitのActions等が合格した
+- **Deployed**: 対象Commitが環境へ反映された
+- **Runtime verified**: 実環境readbackまで確認した
+
+これらは同義ではありません。
+
+Commit / CI / Deploy EvidenceはGitHub履歴・Actions・Runtime readbackで確認します。
