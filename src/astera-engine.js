@@ -1,6 +1,6 @@
 'use strict';
 
 // Canonical public engine entrypoint.
-// The former score/ranking/recommendation engine is intentionally not executable
-// from the active runtime. Git history preserves it for archaeology only.
-module.exports = require('./canonical-astera-engine');
+// Evidence-required tasks keep the canonical Search Plan and execute it through
+// the isolated Evidence Search API boundary before Evidence Binding / G1-G7.
+module.exports = require('./canonical-evidence-auto-engine');
