@@ -9,8 +9,8 @@ const Logger = require('./logger');
 const TenantManager = require('./auth/tenant');
 const { UsageMeter } = require('./billing/meter');
 const RateLimiter = require('./guard/rate-limiter');
-const KeyVault = require('./billing/key-vault');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
+const { sanitizePublicDecisionInput } = require('./canonical-public-input');
 const { authenticateSkillApiKey, isSkillApiConfigured } = require('./auth/skill-api-key');
 const pkg = require('../package.json');
 
@@ -47,7 +47,6 @@ class AsteraServerBase {
     this.tenants = new TenantManager(this.store);
     this.meter = new UsageMeter(this.store);
     this.limiter = options.limiter || new RateLimiter();
-    this.vault = new KeyVault();
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
       const startedAt = Date.now();
@@ -245,8 +244,8 @@ class AsteraServerBase {
       error.status = 413;
       throw error;
     }
-    body.llm = this.vault.resolveRequestLLM(body);
-    const out = await this.engine.process(body, tenant);
+    const publicInput = sanitizePublicDecisionInput(body);
+    const out = await this.engine.process(publicInput, tenant);
     if (!unlimited) this.meter.record({ tenant, route, units: 1, status: 'ok', meta: { answerProvider: out.answer?.provider || null } });
     return this._text(req, res, 200, out.material?.text || '');
   }
