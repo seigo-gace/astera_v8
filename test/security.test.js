@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { maskSecrets, parseJsonStrict } = require('../src/safe-json');
 const StripeClient = require('../src/billing/stripe-client');
-const KeyVault = require('../src/billing/key-vault');
+const { sanitizePublicDecisionInput } = require('../src/canonical-public-input');
 
 test('safe-json masks keys and secret-looking values deeply', () => {
   const out = maskSecrets({
@@ -37,11 +37,11 @@ test('parseJsonStrict returns HTTP 400 error metadata on bad JSON', () => {
   assert.throws(() => parseJsonStrict('{bad'), (err) => err.status === 400 && /Invalid JSON/.test(err.message));
 });
 
-test('KeyVault drops unknown LLM providers and falls back to null', () => {
-  const vault = new KeyVault();
-  const llm = vault.resolveRequestLLM({ llm: { chain: ['evil', 'anthropic'], apiKey: 'sk_test_xxx' } });
-  assert.deepEqual(llm.chain, ['anthropic']);
-  assert.equal(llm.apiKey, 'sk_test_xxx');
+test('public decision input rejects legacy llm control fields', () => {
+  assert.throws(
+    () => sanitizePublicDecisionInput({ question: 'API互換性を確認する。', llm: { chain: ['anthropic'] } }),
+    (err) => err.code === 'UNSUPPORTED_DECISION_INPUT_FIELD' && Array.isArray(err.fields) && err.fields.includes('llm')
+  );
 });
 
 test('Stripe webhook verification accepts valid v1 signature over raw Buffer body', () => {
