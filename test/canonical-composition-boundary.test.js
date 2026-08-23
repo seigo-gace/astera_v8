@@ -12,6 +12,7 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   const start = read('start.js');
   const moduleSwitchServer = read('src/server-with-module-switch.js');
   const server = read('src/server.js');
+  const evidenceServer = read('src/server-with-evidence.js');
   const asteraEngine = read('src/astera-engine.js');
   const canonicalBase = read('src/canonical-astera-engine-base.js');
   const compatibilityAuto = read('src/canonical-evidence-auto-engine.js');
@@ -19,6 +20,7 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   assert.match(start, /require\('\.\/src\/server-with-module-switch'\)/);
   assert.match(moduleSwitchServer, /require\('\.\/astera-engine'\)/);
   assert.match(server, /require\('\.\/astera-engine'\)/);
+  assert.doesNotMatch(evidenceServer, /domain-template-router|input-understanding|canonical-claim-runtime|buildCanonicalTaskPlan|evaluateCanonicalTaskPlan/);
   assert.match(asteraEngine, /class AsteraEngine extends CanonicalAsteraEngine/);
   assert.match(asteraEngine, /resolveEvidenceForTask/);
   assert.doesNotMatch(asteraEngine, /async process\s*\(/);

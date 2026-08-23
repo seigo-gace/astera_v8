@@ -81,6 +81,10 @@ function searchRequestFor(task, input, tenant, requestId) {
       free_current: true
     },
     paid_search: { enabled: false },
+    ...(Array.isArray(input.evidence_search?.provider_allowlist) ? { provider_allowlist: input.evidence_search.provider_allowlist } : {}),
+    ...(Array.isArray(input.evidence_search?.provider_denylist) ? { provider_denylist: input.evidence_search.provider_denylist } : {}),
+    ...(Number.isInteger(input.evidence_search?.maximum_results) ? { maximum_results: input.evidence_search.maximum_results } : {}),
+    ...(Number.isInteger(input.evidence_search?.deadline_ms) ? { deadline_ms: input.evidence_search.deadline_ms } : {}),
     request_id: requestId,
     tenant_id: tenant.id
   };
