@@ -1,7 +1,7 @@
 'use strict';
 
 const ServerBase = require('./server-base');
-const CanonicalAsteraEngine = require('./canonical-astera-engine');
+const AsteraEngine = require('./astera-engine');
 const { sanitizePublicDecisionInput } = require('./canonical-public-input');
 
 function isLoopbackAddress(address = '') {
@@ -14,9 +14,10 @@ function isLoopbackHost(host = '') {
 
 class AsteraServer extends ServerBase {
   constructor(options = {}) {
-    const engine = options.engine || new CanonicalAsteraEngine({
+    const engine = options.engine || new AsteraEngine({
       poolSize: Number(options.poolSize || 4),
-      logger: options.logger
+      logger: options.logger,
+      evidenceSearchClient: options.evidenceSearchClient || options.evidenceClient || null
     });
     super({ ...options, engine });
   }
@@ -78,5 +79,3 @@ class AsteraServer extends ServerBase {
 }
 
 module.exports = AsteraServer;
-module.exports.isLoopbackAddress = isLoopbackAddress;
-module.exports.isLoopbackHost = isLoopbackHost;

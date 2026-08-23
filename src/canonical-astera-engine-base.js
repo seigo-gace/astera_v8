@@ -50,6 +50,7 @@ function aggregateTaskResults(taskResults){
 
 class CanonicalAsteraEngine extends CanonicalEngineSupport {
   prepareRequest(input={}){return analyzeRequest(input);}
+  async resolveEvidenceForTask(){return null;}
 
   async process(input={},tenant={id:'unknown'}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
@@ -70,13 +71,15 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
 
     const taskEvidence=input.taskEvidencePackets||input.task_evidence_packets||{},globalEvidence=input.evidencePacket||input.evidence_packet||null,providedCanonical=input.canonicalClaimRecordsByTask||input.canonical_claim_records_by_task||{};
-    const taskResults=tasks.map((task)=>{
-      let evidenceRaw=task.canonical_plan.search_plan.queries.length?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
+    const taskResults=await Promise.all(tasks.map(async(task)=>{
+      const searchRequired=task.canonical_plan.search_plan.queries.length>0;
+      let evidenceRaw=searchRequired?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
       if(!evidenceRaw&&globalEvidence&&tasks.length>1&&input.allow_shared_legacy_evidence===true)evidenceRaw=globalEvidence;
+      if(!evidenceRaw&&searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request});
       if(!evidenceRaw)evidenceRaw={schema_version:'astera.evidence-search.result.v1',status:'NOT_PROVIDED',task_id:task.id,evidence:[],coverage:{discovery_scope_state:'UNKNOWN'},quality:{final:{status:'NOT_PROVIDED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};
       const evidence=normalizeEvidencePacket(evidenceRaw),canonical=providedCanonical[task.id]||evaluateCanonicalTaskPlan(task.canonical_plan,evidenceRaw),lanes=projectFiveLanes({task,canonical,domain:task.domain}),perspectiveExpansion=deterministicPerspectiveExpansion({task,canonical,domain:task.domain});
       return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,dialectic:perspectiveExpansion};
-    });
+    }));
 
     const aggregate=aggregateTaskResults(taskResults),judgment=this.frame({request,context,taskResults,aggregate,lang:renderLang});
     judgment.requested_output_language=requestedOutput;
