@@ -5,8 +5,7 @@ ENV NODE_ENV=production \
     ASTERA_PORT=7373 \
     ASTERA_HEALTH_PORT=7373 \
     ASTERA_DB=/data/astera.db \
-    ASTERA_LOG_CACHE_DIR=/cache/outbox \
-    LLM_CHAIN=null
+    ASTERA_LOG_CACHE_DIR=/cache/outbox
 
 WORKDIR /app
 
