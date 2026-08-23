@@ -1,136 +1,82 @@
 # Astera v8 API Reference
 
-## 1. 共通
+> 本文書はWorking Branch上の現行HTTP Contractを説明する。仕様決定源はNotion正本。
 
-Canonical Core Base URL:
+## 1. 共通境界
+
+Canonical Core default:
 
 ```text
 http://127.0.0.1:7373
 ```
 
-公開Tenant APIの認証:
+Public Tenant API:
 
 ```text
 X-API-Key: <provisioned-tenant-api-key>
 ```
 
-Tenant CredentialはAstera Core外のAccount / App境界でProvisioningする。Canonical CoreはPlan、Credit、Checkout、Subscription、決済の正本を持たない。
-
-アプリGPT Skill用PRIVATE APIは公開Tenant Keyと分離した32文字以上の`ASTERA_SKILL_API_KEY`を`X-API-Key`へ指定する。未設定、短いKey、公開Tenant Keyとの共有は無効。Skill入口では公開Tenant向けRate Limit / Usage Meterを適用しないが、認証、HTTPS、CORS、Payload上限、Timeout、Secret Mask、監査Logは維持する。
-
-## 2. GET /healthz
-
-CoreのHealthと有効境界を返す。
-
-### Response 200 主要項目
-
-```json
-{
-  "ok": true,
-  "service": "astera-v8",
-  "store": "sqlite",
-  "skill_api": {
-    "enabled": true,
-    "process_endpoint": "/v1/skill/process"
-  },
-  "commerce_boundary": {
-    "legacy_routes_enabled": false
-  },
-  "runtime": {
-    "node": "v22.x",
-    "uptime_seconds": 123,
-    "pid": 1234
-  },
-  "time": "2026-08-20T00:00:00.000Z"
-}
-```
-
-`commerce_boundary.legacy_routes_enabled=false`がCanonical defaultである。
-
-## 3. POST /process
-
-Canonical判断材料生成入口。
-
-Input Understandingで質問とContextを構造化し、Analysis Task Graph、Task別Lens、Evidence状態、5本柱、Dialectic、Compareを通して8段の判断材料を生成する。
-
-### Authentication
-
-```text
-X-API-Key: <provisioned-tenant-api-key>
-Content-Type: application/json
-```
-
-`ASTERA_LOCAL_NO_AUTH=1`はLoopback開発・Smoke専用であり、本番認証代替ではない。
-
-### Request
-
-```json
-{
-  "question": "現在のNode.js APIを互換性を保って段階移行する判断材料を出す",
-  "context": "既存利用者のRequest/Response Contractは維持する",
-  "language": "ja",
-  "output_language": "ja"
-}
-```
-
-`question`は必須String。`context`は任意String。`language`、`locale`、`output_language`は任意で、Input Understandingは入力言語・Script・要求出力言語を分離して保持する。
-
-### Response 200
-
-通常のHTTP Responseは`text/plain; charset=utf-8`で8段の判断材料を返す。
-
-```text
-01 本当の目的
-判断材料
-...
-判断基準
-- rules=...
-- tasks=...
-- lenses=...
-- evidence_refs=...
-- blockers=...
-主役AIへ渡す内容
-...
----
-...
-08 主役AIへの再指示
-...
-```
-
-内部ResultはTask Graph、Task別Evidence、Fact / Risk / Inquiry / Multi / Dialectic / Compare、Main8 Decision Traceを保持する。
-
-### Authentication Error
-
-Tenant Keyがない場合は`401 unauthorized`。Canonical Coreは`/signup`への誘導を返さず、CredentialをCore外でProvisioningするよう要求する。
-
-## 4. POST /v1/skill/process
-
-アプリGPT Skill専用の判断材料生成入口。
-
-### Authentication
+Skill API:
 
 ```text
 X-API-Key: <ASTERA_SKILL_API_KEY>
-Content-Type: application/json
 ```
 
-処理本体は`/process`と同じCanonical Engineを使用する。公開Tenant向けRate Limit / Usage Meterは適用しない。
+Tenant CredentialはCore外のAccount / App境界でProvisioningする。
 
-## 5. POST /v1/evidence/search
+## 2. Public Decision Input Contract
 
-Tenant認証付きEvidence Search proxy。
-
-Evidence Search Clientが設定されていない場合は:
+`/process`、`/v1/skill/process`、Decision Materials moduleのPublic Callerが指定できるField:
 
 ```json
 {
-  "error": "evidence_search_not_configured"
+  "question": "処理対象の質問",
+  "context": "任意の文脈",
+  "language": "ja",
+  "locale": "ja-JP",
+  "output_language": "ja",
+  "moodAnswers": {}
 }
 ```
 
-を`503`で返す。
+許可Field:
 
-有料検索指定`paid_search.enabled=true`は現行実装で拒否する。
+- `question`
+- `context`
+- `language`
+- `locale`
+- `output_language`
+- `moodAnswers`
+
+次はPublic Callerから注入できないInternal Trust Field:
+
+- `preparedRequest` / `prepared_request`
+- `evidencePacket` / `evidence_packet`
+- `taskEvidencePackets` / `task_evidence_packets`
+- `canonicalClaimRecordsByTask` / `canonical_claim_records_by_task`
+- `allow_shared_legacy_evidence`
+
+未知Fieldや`llm` / provider / model / adapter等のDecision Control FieldはHTTP `400`で拒否する。Sanitizer内部では`UNSUPPORTED_DECISION_INPUT_FIELD`または`UNTRUSTED_CANONICAL_INPUT_FIELD`として分類するが、現HTTP Error Bodyはその内部Codeを直接API Contractとして返さない。
+
+## 3. GET /healthz
+
+Core Healthと有効境界を返す。
+
+主な情報:
+
+- service / version
+- store
+- skill API有効状態
+- Legacy Commerce有効状態
+- logging状態
+- Node runtime / uptime / pid
+- time
+
+`commerce_boundary.legacy_routes_enabled=false`がCanonical default。
+
+## 4. POST /process
+
+Canonical判断材料生成入口。
 
 ### Authentication
 
@@ -139,54 +85,102 @@ X-API-Key: <provisioned-tenant-api-key>
 Content-Type: application/json
 ```
 
-## 6. POST /v1/skill/evidence/search
+`ASTERA_LOCAL_NO_AUTH=1`はLoopback開発・Smoke専用。
 
-Skill専用Evidence Search入口。`ASTERA_SKILL_API_KEY`だけを受け付ける。
+### Request validation
 
-## 7. POST /v1/integrated/process
+- `question`はString必須。空StringはEngine側でClarification Materialへ落ちる。
+- `context`は任意String。
+- Question / ContextはServer設定の最大文字数を超えると`413`。
+- Public Decision Inputは前節のallowlistを通る。
 
-Input Understanding → Analysis Task Graph → Task別Evidence Search → Canonical Decision Materialsを一つのRequestで実行する統合入口。
+### 処理
 
-### Request主要項目
-
-```json
-{
-  "question": "比較対象AとBを最新根拠付きで比較する",
-  "context": "価格だけでなく安全性と運用負荷も比較する",
-  "language": "ja",
-  "evidence_search": {
-    "maximum_results": 10
-  }
-}
+```text
+Public Input Sanitization
+ → Input Understanding
+ → Analysis Task Graph
+ → Task Lens Plan
+ → Canonical Claim Plan
+ → Evidence Binding / G1-G7
+ → Canonical Claim Records
+ → Five Lanes
+ → Deterministic Perspective Expansion
+ → Main8
 ```
 
-各TaskでEvidence必要性を決定し、不要Taskは`NOT_REQUIRED`、必要TaskはTaskごとのEvidence Resultを保持する。根拠取得失敗を確認済みFactへ昇格しない。
+### Response
 
-### Response主要構造
+通常HTTP Responseは`text/plain; charset=utf-8`のMain8材料。
 
-```json
-{
-  "schema_version": "astera.integrated.result.v1",
-  "non_ai": true,
-  "instruction_understanding": {},
-  "task_graph": {},
-  "evidence": {
-    "status": "FINAL_VALID",
-    "by_task": {}
-  },
-  "decision_materials": {
-    "result": {},
-    "material": {},
-    "runtime": {}
-  }
-}
+```text
+01 本当の目的
+02 前提不足
+03 事実確認
+04 危機察知
+05 反対視点
+06 比較案
+07 根拠成立状態
+08 主役AI／利用者への再指示
 ```
 
-## 8. POST /v1/astera/execute
+Asteraは第7段でRecommendationを決定しない。
 
-Astera Module Switchの明示入口。
+内部ResultではCanonical Claim、Five Lane、Perspective Expansion、Traceを保持するが、Public Callerがそれらを入力側から信頼Objectとして注入することはできない。
 
-### Request
+## 5. POST /v1/skill/process
+
+Skill専用判断材料入口。
+
+- `ASTERA_SKILL_API_KEY`必須
+- 処理本体は同じCanonical Engine
+- Public Tenant向けRate Limit / Usage Meterを適用しない
+- HTTPS / CORS / Payload / Timeout / Secret Mask / Log境界は維持
+
+## 6. POST /v1/evidence/search
+
+Tenant認証付きEvidence Search入口。
+
+Evidence Search Client未設定時は`503`で明示Unavailableを返す。
+
+Paid Search指定は現行Policyで拒否する。
+
+## 7. POST /v1/skill/evidence/search
+
+Skill専用Evidence Search入口。`ASTERA_SKILL_API_KEY`を使用する。
+
+## 8. POST /v1/integrated/process
+
+Input理解からTask別Evidence Search、Canonical判断材料までを統合実行する。
+
+概念Flow:
+
+```text
+Input
+ → Task Graph
+ → Task Canonical Query Plan
+ → Task Evidence Search
+ → Evidence Binding
+ → G1-G7 Confirmation
+ → Canonical Claim Records
+ → Five Lanes / Perspective Expansion / Main8
+```
+
+Evidence不要Taskは`NOT_REQUIRED`、必要Taskで失敗・不足したEvidenceはConfirmed Factへ変換しない。
+
+内部統合Resultは`non_ai: true`を持つ。
+
+## 9. POST /v1/astera/execute
+
+Astera Module Switch。
+
+Allowed target:
+
+- `astera.decision-materials`
+- `astera.evidence-search`
+- `astera.quality-gate`
+
+例:
 
 ```json
 {
@@ -197,76 +191,66 @@ Astera Module Switchの明示入口。
 }
 ```
 
-### Allowed target
+不明Targetは`400`で拒否される。内部Module Switch分類Codeは`INVALID_MODULE_TARGET`。
 
-- `astera.decision-materials`
-- `astera.evidence-search`
-- `astera.quality-gate`
+## 10. Quality Completion Evaluator API
 
-不明Targetは`400 INVALID_MODULE_TARGET`。
+EvaluatorはCoreと別Process / 別Portで運用可能。
 
-`astera.evidence-search`はEvidence Client未設定時`503`。`astera.quality-gate`はQuality Completion Evaluatorの固定Rule評価を呼ぶ。
+主入口:
 
-## 9. Quality Completion Evaluator API
+- `POST /v1/evaluate`
+- `POST /v1/skill/evaluate`
 
-EvaluatorはCoreと別Process / 別Port（既定`127.0.0.1:7374`）で起動する。
+`KB_ELIGIBLE`は保存完了を意味しない。KBへ自動Publishしない。
 
-### POST /v1/evaluate
+## 11. Legacy Commerce Compatibility
 
-一般Tenant向けEvaluator入口。Tenant Key、Rate Limit、Usage Meter境界を使用する。
-
-### POST /v1/skill/evaluate
-
-Skill専用Evaluator入口。`ASTERA_SKILL_API_KEY`を使用する。
-
-### 主なStatus
-
-- `KB_ELIGIBLE`: 掲載候補条件を満たす
-- `REVISION_REQUIRED`: 品質・完成度条件不足
-- `BLOCKED`: Blocking条件、Requirement未達、Evidence不整合等
-- `INVALID_INPUT`: Schema / Hash / Version等の不正
-- `EVALUATION_FAILED`: 評価処理未完了
-
-`KB_ELIGIBLE`は保存完了ではない。KBや`modular-catalog`への自動Publishは行わない。
-
-## 10. Legacy Commerce Compatibility
-
-以下は**Canonical Core APIではない**。通常起動ではRoute自体が無効で404となる。
+次はCanonical Core APIではない:
 
 - `POST /signup`
 - `POST /billing/checkout`
 - `POST /billing/webhook`
 
-旧環境の互換検証が必要な場合だけ:
+Defaultでは無効。
 
 ```text
 ASTERA_ENABLE_LEGACY_COMMERCE=1
 ```
 
-を指定すると、`start.js`がLegacy `StripeClient` / `SubscriptionSync` Adapterを生成し、上記Routeを有効化する。
+を明示した場合だけCompatibility Routeを有効化する。
 
-このFlagはPlan / Credit / Checkout / Subscription / 決済をAstera Core責務へ戻すものではない。新規ClientはこれらのRouteをCanonical Contractとして依存してはならない。
+新規ClientはこれらをCanonical Contractとして依存しない。
 
-Legacy Checkoutはサーバー側Price IDを使用し、Webhookは`Stripe-Signature`を検証する。これらの詳細は互換維持用であり、新規Architectureの設計起点ではない。
+## 12. Naming Compatibility
 
-## 11. Runtime Naming Compatibility
+Canonical:
 
-Canonical実装:
+- `src/astera-engine.js`
+- `src/canonical-astera-engine.js`
+- `src/server-base.js`
+- `ASTERA_*`
 
-```text
-src/astera-engine.js              AsteraEngine
-src/canonical-astera-engine.js    CanonicalAsteraEngine
-src/server-base.js                AsteraServerBase
-```
+Compatibility:
 
-Legacy compatibility path:
+- `src/kagura-engine.js`
+- 必要な`KAGURA_*` fallback
 
-```text
-src/kagura-engine.js → require('./astera-engine')
-```
+## 13. Error / Trust原則
 
-`ASTERA_*`が正式な環境変数名。既存環境との互換性が必要な`KAGURA_*` fallbackは当面読み込む。
+- Invalid JSON → 4xx
+- Unsupported Public Field → 400
+- Internal Trust Field injection → 400
+- Invalid Module Target → 400
+- Evidence module未設定 → 明示Unavailable
+- Auth失敗 → 401
+- Rate limit → 429
+- Oversized input → 413
 
-## 12. API完成判定について
+内部Error CodeとHTTP Response Bodyの公開Contractを混同しない。失敗を成功へ変換しない。
 
-CodeにEndpointが存在すること、Testがあること、GitHub Actionsが成功したこと、Deployされたこと、実Runtimeで応答確認されたことは別の状態として扱う。Workflow RunやRuntime readbackのないCommitをCI済み・Deploy済みとは表現しない。
+## 14. 完成判定
+
+Endpoint Codeの存在、Test Fileの存在、CI成功、Deploy、Runtime readbackは別状態。
+
+現Commitに対する実Evidenceがない状態をTest済み / CI済み / Deploy済みとして扱わない。
