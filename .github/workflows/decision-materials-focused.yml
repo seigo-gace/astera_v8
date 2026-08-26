@@ -61,6 +61,7 @@ jobs:
             test/v4-source-span-regression.test.js
 
       - name: Decision materials public API cases
+        if: always()
         run: |
           node --test \
             --test-name-pattern='HTTP flow: signup -> process works with tenant key|HTTP flow: canonical process rejects caller-supplied LLM configuration|HTTP flow: context must be a string|HTTP flow: short process request returns clarification text|HTTP flow: bad JSON returns 400 instead of 500|HTTP flow: invalid question type returns 400|HTTP flow: unauthorized process returns 401|HTTP flow: payload over 1MB returns 413' \
