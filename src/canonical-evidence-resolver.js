@@ -90,9 +90,17 @@ function searchRequestFor(task, input, tenant, requestId) {
   };
 }
 
-async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'unknown' } }) {
+function cancellationError() {
+  const error = new Error('evidence search cancelled by request boundary');
+  error.code = 'EVIDENCE_API_CANCELLED';
+  error.status = 499;
+  return error;
+}
+
+async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'unknown' }, signal = null }) {
   const upstreamPlan = task.canonical_plan?.search_plan;
   if (!upstreamPlan?.queries?.length) return null;
+  if (signal?.aborted) throw cancellationError();
 
   const requestId = `auto-evidence:${tenant.id}:${task.id}:${crypto.randomUUID()}`;
   if (!client || typeof client.search !== 'function') {
@@ -107,7 +115,7 @@ async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'u
 
   try {
     const payload = searchRequestFor(task, input, tenant, requestId);
-    const packet = await client.search(payload, { requestId, tenantId: tenant.id });
+    const packet = await client.search(payload, { requestId, tenantId: tenant.id, signal });
     return {
       ...packet,
       planning_authority: 'UPSTREAM_CANONICAL',
@@ -119,6 +127,7 @@ async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'u
       }
     };
   } catch (error) {
+    if (signal?.aborted || error?.code === 'EVIDENCE_API_CANCELLED') throw error;
     return {
       ...failedEvidence(task.id, error),
       planning_authority: 'UPSTREAM_CANONICAL',

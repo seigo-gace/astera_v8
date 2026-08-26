@@ -3,6 +3,7 @@
 const AsteraServer = require('./server');
 const EvidenceSearchClient = require('./evidence-search/api/client');
 const { isSkillApiConfigured } = require('./auth/skill-api-key');
+const { createRequestAbortContext } = require('./request-abort-context');
 
 const EVIDENCE_REQUEST_LIMIT = 256 * 1024;
 const INTEGRATED_REQUEST_LIMIT = 1024 * 1024;
@@ -181,10 +182,16 @@ class AsteraServerWithEvidence extends AsteraServer {
         error.status = 400;
         throw error;
       }
-      const result = await this.evidenceClient.search(
-        { ...body, request_id: req.requestId, tenant_id: tenant.id, paid_search: { enabled: false } },
-        { requestId: req.requestId, tenantId: tenant.id }
-      );
+      const requestExecution = createRequestAbortContext(req, res);
+      let result;
+      try {
+        result = await this.evidenceClient.search(
+          { ...body, request_id: req.requestId, tenant_id: tenant.id, paid_search: { enabled: false } },
+          { requestId: req.requestId, tenantId: tenant.id, signal: requestExecution.signal }
+        );
+      } finally {
+        requestExecution.dispose();
+      }
       if (!isSkillEvidence) {
         this.meter.record({
           tenant,
@@ -245,15 +252,21 @@ class AsteraServerWithEvidence extends AsteraServer {
     }
 
     const evidenceSearch = safeEvidenceOptions(body);
-    const decision = await this.engine.process({
-      question: body.question,
-      context: body.context || '',
-      language: body.language,
-      locale: body.locale,
-      output_language: body.output_language,
-      moodAnswers: body.moodAnswers || {},
-      evidence_search: evidenceSearch
-    }, tenant);
+    const requestExecution = createRequestAbortContext(req, res);
+    let decision;
+    try {
+      decision = await this.engine.process({
+        question: body.question,
+        context: body.context || '',
+        language: body.language,
+        locale: body.locale,
+        output_language: body.output_language,
+        moodAnswers: body.moodAnswers || {},
+        evidence_search: evidenceSearch
+      }, tenant, { signal: requestExecution.signal });
+    } finally {
+      requestExecution.dispose();
+    }
 
     const request = decision.result?.request_model || {};
     if (decision.result?.type === 'task_graph_blocked') {

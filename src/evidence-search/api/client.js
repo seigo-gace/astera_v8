@@ -31,10 +31,24 @@ class EvidenceSearchClient {
     }
   }
 
-  async search(payload, context) {
+  async search(payload, context = {}) {
     const body = JSON.stringify(payload);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const externalSignal = context.signal || null;
+    let timedOut = false;
+    let externallyCancelled = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeoutMs);
+    const onExternalAbort = () => {
+      externallyCancelled = true;
+      controller.abort();
+    };
+    if (externalSignal) {
+      if (externalSignal.aborted) onExternalAbort();
+      else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+    }
     try {
       const headers = createInternalHeaders({
         body,
@@ -76,14 +90,23 @@ class EvidenceSearchClient {
       return parsed;
     } catch (error) {
       if (error?.name === 'AbortError') {
-        const timeout = new Error('evidence search API timed out');
-        timeout.code = 'EVIDENCE_API_TIMEOUT';
-        timeout.status = 504;
-        throw timeout;
+        if (externallyCancelled || externalSignal?.aborted) {
+          const cancelled = new Error('evidence search API cancelled by caller');
+          cancelled.code = 'EVIDENCE_API_CANCELLED';
+          cancelled.status = 499;
+          throw cancelled;
+        }
+        if (timedOut) {
+          const timeout = new Error('evidence search API timed out');
+          timeout.code = 'EVIDENCE_API_TIMEOUT';
+          timeout.status = 504;
+          throw timeout;
+        }
       }
       throw error;
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
     }
   }
 

@@ -138,7 +138,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     return judgment;
   }
 
-  async process(input = {}, tenant = { id: 'unknown' }) {
+  async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
     const prepared = input.preparedRequest?.analysis_task_packet ? input.preparedRequest : null;
@@ -224,7 +224,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       }
     }
 
-    const out = await super.process({ ...input, preparedRequest: request }, tenant);
+    const out = await super.process({ ...input, preparedRequest: request }, tenant, executionContext);
     if (out?.result?.type === 'cognitive_map') {
       out.result.human_reader = request.human_reader;
       if (out.result.facts && Array.isArray(out.result.task_results)) {

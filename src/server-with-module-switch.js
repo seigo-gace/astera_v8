@@ -5,6 +5,7 @@ const AsteraEngine = require('./astera-engine');
 const { evaluate } = require('./quality-completion-evaluator');
 const { AsteraModuleSwitch } = require('./astera-module-switch');
 const { sanitizePublicDecisionInput } = require('./canonical-public-input');
+const { createRequestAbortContext } = require('./request-abort-context');
 
 const MODULE_SWITCH_REQUEST_LIMIT = 1024 * 1024;
 
@@ -24,23 +25,23 @@ class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
       throw new TypeError('qualityEvaluator must be a function');
     }
     this.moduleSwitch = options.moduleSwitch || new AsteraModuleSwitch({
-      decisionMaterials: ({ input, tenant }) => this._executeDecisionMaterials(input, tenant),
-      evidenceSearch: ({ input, tenant, requestId }) => this._executeEvidenceSearch(input, tenant, requestId),
+      decisionMaterials: ({ input, tenant, signal }) => this._executeDecisionMaterials(input, tenant, signal),
+      evidenceSearch: ({ input, tenant, requestId, signal }) => this._executeEvidenceSearch(input, tenant, requestId, signal),
       qualityGate: ({ input }) => this.qualityEvaluator(input)
     });
   }
 
-  async _executeDecisionMaterials(input, tenant) {
+  async _executeDecisionMaterials(input, tenant, signal = null) {
     if (typeof input.question !== 'string' || !input.question.trim()) {
       throw apiError('INVALID_QUESTION', 'decision-materials input.question must be a non-empty string', 400);
     }
     if (input.context !== undefined && typeof input.context !== 'string') {
       throw apiError('INVALID_CONTEXT', 'decision-materials input.context must be a string', 400);
     }
-    return this.engine.process(sanitizePublicDecisionInput(input), tenant);
+    return this.engine.process(sanitizePublicDecisionInput(input), tenant, { signal });
   }
 
-  async _executeEvidenceSearch(input, tenant, requestId) {
+  async _executeEvidenceSearch(input, tenant, requestId, signal = null) {
     if (!this.evidenceClient) {
       throw apiError('EVIDENCE_SEARCH_NOT_CONFIGURED', 'evidence search is not configured', 503);
     }
@@ -54,7 +55,7 @@ class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
         tenant_id: tenant.id,
         paid_search: { enabled: false }
       },
-      { requestId, tenantId: tenant.id }
+      { requestId, tenantId: tenant.id, signal }
     );
   }
 
@@ -82,11 +83,17 @@ class AsteraServerWithModuleSwitch extends AsteraServerWithEvidence {
       if (!rate.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate });
 
       const body = await this._readJsonObject(req, MODULE_SWITCH_REQUEST_LIMIT);
-      const moduleResult = await this.moduleSwitch.execute({
-        target: body.target,
-        input: body.input,
-        context: { tenant, requestId: req.requestId }
-      });
+      const requestExecution = createRequestAbortContext(req, res);
+      let moduleResult;
+      try {
+        moduleResult = await this.moduleSwitch.execute({
+          target: body.target,
+          input: body.input,
+          context: { tenant, requestId: req.requestId, signal: requestExecution.signal }
+        });
+      } finally {
+        requestExecution.dispose();
+      }
 
       const moduleStatus = moduleResult?.status
         || moduleResult?.result?.comparison?.verdict?.decision

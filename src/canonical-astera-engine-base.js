@@ -4,12 +4,9 @@ const CanonicalEngineSupport = require('./canonical-engine-support');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
-const {
-  buildCanonicalTaskPlan,
-  evaluateCanonicalTaskPlan,
-  projectFiveLanes,
-  deterministicPerspectiveExpansion
-} = require('./canonical-claim-runtime');
+const { buildCanonicalTaskPlan } = require('./canonical-claim-runtime');
+const { projectCanonicalFailure } = require('./canonical-task-projection');
+const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 
 const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
 const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
@@ -22,6 +19,7 @@ const line=(value)=>String(value??'-').replace(/\s+/g,' ').trim()||'-';
 const join=(items,fallback='-')=>(items||[]).map(line).filter((item)=>item&&item!=='-').join(' / ')||fallback;
 
 function notRequiredEvidence(taskId){return{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'NOT_REQUIRED'},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};}
+function notProvidedEvidence(taskId){return{schema_version:'astera.evidence-search.result.v1',status:'NOT_PROVIDED',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'UNKNOWN'},quality:{final:{status:'NOT_PROVIDED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};}
 function taskText(task,claims=[]){return unique([...(claims||[]).map((claim)=>claim.raw_text),task.target||'',...(task.premises||[]),task.source_span?.text||'']).join('\n');}
 function claimStatus(canonical){const total=canonical?.records?.length||0,confirmed=canonical?.confirmed_count||0,undetermined=canonical?.undetermined_count||0;return{status:total&&undetermined===0?'CONFIRMED':'UNDETERMINED',total,confirmed,undetermined};}
 function evidenceBindingRefs(records=[]){const refs=[];for(const record of records)for(const binding of record.confirmation?.bindings||[])if(binding.evidence_source==='EXTERNAL_RETRIEVED_EVIDENCE')refs.push(binding);return[...new Map(refs.map((item)=>[item.candidate_id||item.url||JSON.stringify(item),item])).values()];}
@@ -52,7 +50,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
   prepareRequest(input={}){return analyzeRequest(input);}
   async resolveEvidenceForTask(){return null;}
 
-  async process(input={},tenant={id:'unknown'}){
+  async process(input={},tenant={id:'unknown'},executionContext={}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
     const request=input.preparedRequest?.analysis_task_packet?input.preparedRequest:this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
@@ -71,23 +69,40 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
 
     const taskEvidence=input.taskEvidencePackets||input.task_evidence_packets||{},globalEvidence=input.evidencePacket||input.evidence_packet||null,providedCanonical=input.canonicalClaimRecordsByTask||input.canonical_claim_records_by_task||{};
-    const taskResults=await Promise.all(tasks.map(async(task)=>{
-      const searchRequired=task.canonical_plan.search_plan.queries.length>0;
-      let evidenceRaw=searchRequired?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
-      if(!evidenceRaw&&globalEvidence&&tasks.length>1&&input.allow_shared_legacy_evidence===true)evidenceRaw=globalEvidence;
-      if(!evidenceRaw&&searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request});
-      if(!evidenceRaw)evidenceRaw={schema_version:'astera.evidence-search.result.v1',status:'NOT_PROVIDED',task_id:task.id,evidence:[],coverage:{discovery_scope_state:'UNKNOWN'},quality:{final:{status:'NOT_PROVIDED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};
-      const evidence=normalizeEvidencePacket(evidenceRaw),canonical=providedCanonical[task.id]||evaluateCanonicalTaskPlan(task.canonical_plan,evidenceRaw),lanes=projectFiveLanes({task,canonical,domain:task.domain}),perspectiveExpansion=deterministicPerspectiveExpansion({task,canonical,domain:task.domain});
-      return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,dialectic:perspectiveExpansion};
-    }));
+    const signal=executionContext?.signal||null,evidenceRawByTask=new Map(),executor=this.getCanonicalTaskExecutor();
+    const execution=await executeTaskWaves({
+      tasks,
+      executionWaves:packet.execution_waves,
+      signal,
+      runTask:async(task)=>{
+        const searchRequired=task.canonical_plan.search_plan.queries.length>0;
+        let evidenceRaw=searchRequired?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
+        if(!evidenceRaw&&globalEvidence&&tasks.length>1&&input.allow_shared_legacy_evidence===true)evidenceRaw=globalEvidence;
+        if(!evidenceRaw&&searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request,signal});
+        if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
+        evidenceRawByTask.set(String(task.id),evidenceRaw);
+        const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw,providedCanonical:providedCanonical[task.id]||null},{signal});
+        const evidence=normalizeEvidencePacket(evidenceRaw),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
+        return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,dialectic:perspectiveExpansion};
+      }
+    });
+    if(signal?.aborted){const error=new Error('Request cancelled');error.code='REQUEST_CANCELLED';error.status=499;throw error;}
+    const taskResults=execution.ordered.map((entry)=>{
+      if(entry.result)return entry.result;
+      const error=entry.error||Object.assign(new Error('Task skipped because a dependency failed'),{code:'SKIPPED_DEPENDENCY',details:entry.skipped||null});
+      const evidenceRaw=evidenceRawByTask.get(String(entry.task.id))||(entry.task.canonical_plan?.search_plan?.queries?.length?notProvidedEvidence(entry.task.id):notRequiredEvidence(entry.task.id));
+      const evidence=normalizeEvidencePacket(evidenceRaw),projected=projectCanonicalFailure({task:entry.task,error}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
+      return{task:entry.task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,dialectic:perspectiveExpansion,execution_failure:{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message,skipped:entry.skipped||null}};
+    });
+    const executionSummary={mode:'WORKER_THREADS_WAVE_BOUNDED',pool_size:executor.size,waves:execution.waves,timings:execution.timings,failures:Object.fromEntries([...execution.failures].map(([taskId,error])=>[taskId,{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message}])),skipped:Object.fromEntries(execution.skipped)};
 
     const aggregate=aggregateTaskResults(taskResults),judgment=this.frame({request,context,taskResults,aggregate,lang:renderLang});
     judgment.requested_output_language=requestedOutput;
     judgment.localization={requested_language:requestedOutput,rendered_language:renderLang,status:['ja','en'].includes(requestedOutput.split('-')[0])?'NATIVE_CANONICAL_RENDER':'EXTERNAL_LOCALIZATION_REQUIRED'};
-    const material=this.material(judgment),fiveStage={schema_version:'astera.five-stage.v2',order:[...FIVE_STAGE],execution_waves:packet.execution_waves,tasks:taskResults.map((result)=>({task_id:result.task.id,lens_id:result.task.domain.primary?.id||null,claim_status:claimStatus(result.canonical),evidence_state:result.evidence.state,fact:result.lanes.fact,risk:result.lanes.risk,multi:result.lanes.multi,inquiry:result.lanes.inquiry,compare:result.lanes.compare}))};
-    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion,dialectic:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,hyperion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,judgment};
-    this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:packet.execution_waves.length,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
-    return{result,material,prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:packet.execution_waves.length,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
+    const material=this.material(judgment),fiveStage={schema_version:'astera.five-stage.v2',order:[...FIVE_STAGE],execution_waves:packet.execution_waves,execution:executionSummary,tasks:taskResults.map((result)=>({task_id:result.task.id,lens_id:result.task.domain.primary?.id||null,claim_status:claimStatus(result.canonical),evidence_state:result.evidence.state,fact:result.lanes.fact,risk:result.lanes.risk,multi:result.lanes.multi,inquiry:result.lanes.inquiry,compare:result.lanes.compare}))};
+    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion,dialectic:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,hyperion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,parallel_execution:executionSummary,judgment};
+    this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:execution.waves.length,task_failure_count:execution.failures.size,task_skipped_count:execution.skipped.size,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
+    return{result,material,prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:execution.waves.length,parallel_execution:executionSummary,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
   }
 
   frame({request,context,taskResults,aggregate,lang}){

@@ -3,6 +3,7 @@
 const ServerBase = require('./server-base');
 const AsteraEngine = require('./astera-engine');
 const { sanitizePublicDecisionInput } = require('./canonical-public-input');
+const { createRequestAbortContext } = require('./request-abort-context');
 
 function isLoopbackAddress(address = '') {
   return /^(127(?:\.\d{1,3}){3}|::1|::ffff:127(?:\.\d{1,3}){3})$/i.test(String(address || ''));
@@ -70,7 +71,13 @@ class AsteraServer extends ServerBase {
     }
 
     const publicInput = sanitizePublicDecisionInput(body);
-    const out = await this.engine.process(publicInput, tenant);
+    const requestExecution = createRequestAbortContext(req, res);
+    let out;
+    try {
+      out = await this.engine.process(publicInput, tenant, { signal: requestExecution.signal });
+    } finally {
+      requestExecution.dispose();
+    }
     if (!unlimited) {
       this.meter.record({ tenant, route, units: 1, status: 'ok', meta: { claim_status: out.result?.canonical_claims?.status || null } });
     }
