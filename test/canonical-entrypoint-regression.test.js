@@ -9,8 +9,16 @@ const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const silentLogger = { write() {}, async flush() {} };
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
 
-test('public AsteraEngine entrypoint resolves to the canonical non-recommendation runtime', () => {
-  assert.equal(AsteraEngine, CanonicalAsteraEngine);
+test('public AsteraEngine extends the canonical non-recommendation runtime and only adds the Evidence Search resolver boundary', async () => {
+  assert.notEqual(AsteraEngine, CanonicalAsteraEngine);
+  assert.equal(Object.getPrototypeOf(AsteraEngine.prototype), CanonicalAsteraEngine.prototype);
+  const engine = new AsteraEngine({ logger: silentLogger });
+  try {
+    assert.ok(engine instanceof CanonicalAsteraEngine);
+    assert.equal(typeof engine.resolveEvidenceForTask, 'function');
+  } finally {
+    await engine.destroy();
+  }
 });
 
 test('direct AsteraEngine use preserves canonical Main8 and material-only comparison invariants', async () => {
