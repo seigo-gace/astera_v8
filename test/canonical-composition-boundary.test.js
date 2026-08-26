@@ -25,7 +25,8 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   assert.match(asteraEngine, /resolveEvidenceForTask/);
   assert.doesNotMatch(asteraEngine, /async process\s*\(/);
   assert.match(canonicalBase, /await this\.resolveEvidenceForTask/);
-  assert.match(canonicalBase, /await Promise\.all\(tasks\.map/);
+  assert.match(canonicalBase, /executeTaskWaves/);
+  assert.doesNotMatch(canonicalBase, /await Promise\.all\(tasks\.map/);
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*pillars\//);
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*worker-pool['"]\)/);
   assert.match(compatibilityAuto, /require\('\.\/astera-engine'\)/);
