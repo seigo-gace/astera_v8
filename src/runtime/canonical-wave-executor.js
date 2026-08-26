@@ -1,5 +1,8 @@
 'use strict';
 
+const { canonicalConcurrency, positiveInteger } = require('./concurrency-policy');
+const { getGlobalCanonicalTaskAdmission } = require('./canonical-task-admission');
+
 function graphError(code, message, details = {}) {
   const error = new Error(message);
   error.code = code;
@@ -60,20 +63,44 @@ function normalizeWaves(tasks = [], executionWaves = []) {
   return waves;
 }
 
-async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null }) {
+async function mapBounded(items, maximumConcurrency, mapper) {
+  if (!items.length) return [];
+  const requested = maximumConcurrency === null || maximumConcurrency === undefined
+    ? items.length
+    : positiveInteger(maximumConcurrency, items.length);
+  const limit = Math.min(items.length, canonicalConcurrency(requested));
+  const output = new Array(items.length);
+  let nextIndex = 0;
+  const runners = Array.from({ length: limit }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      output[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return output;
+}
+
+async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null, maxConcurrency = 8, admission }) {
   if (typeof runTask !== 'function') throw new TypeError('runTask must be a function');
+  const effectiveAdmission = admission === undefined ? getGlobalCanonicalTaskAdmission() : admission;
+  if (effectiveAdmission && typeof effectiveAdmission.run !== 'function') throw new TypeError('admission.run must be a function');
   const waves = normalizeWaves(tasks, executionWaves);
   const byId = new Map(tasks.map((task) => [String(task.id), task]));
   const results = new Map();
   const failures = new Map();
   const skipped = new Map();
   const timings = [];
+  const effectiveConcurrency = canonicalConcurrency(maxConcurrency);
 
   for (let waveNo = 0; waveNo < waves.length; waveNo += 1) {
     if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled before next execution wave', { status: 499 });
     const wave = waves[waveNo];
     const startedAt = Date.now();
-    const settled = await Promise.all(wave.map(async (taskId) => {
+    const settled = await mapBounded(wave, effectiveConcurrency, async (taskId) => {
+      if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled during execution wave', { status: 499 });
       const task = byId.get(taskId);
       const failedDependencies = (task.depends_on || []).filter((dependency) => failures.has(String(dependency)) || skipped.has(String(dependency)));
       if (failedDependencies.length) {
@@ -86,23 +113,32 @@ async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null 
         return { taskId, status: 'skipped', value: skippedResult };
       }
       try {
-        const value = await runTask(task, { wave_index: waveNo, signal });
+        const execute = () => runTask(task, { wave_index: waveNo, signal });
+        const value = effectiveAdmission
+          ? await effectiveAdmission.run(execute, { signal })
+          : await execute();
         results.set(taskId, value);
         return { taskId, status: 'fulfilled', value };
       } catch (error) {
+        if (error?.code === 'TASK_CANCELLED' && signal?.aborted) {
+          throw graphError('REQUEST_CANCELLED', 'Request cancelled during execution wave', { status: 499 });
+        }
         failures.set(taskId, error);
         return { taskId, status: 'rejected', error };
       }
-    }));
+    });
     timings.push({
       wave_index: waveNo,
       task_ids: [...wave],
       duration_ms: Date.now() - startedAt,
+      maximum_concurrency: Math.min(wave.length, effectiveConcurrency),
       fulfilled: settled.filter((item) => item.status === 'fulfilled').length,
       rejected: settled.filter((item) => item.status === 'rejected').length,
       skipped: settled.filter((item) => item.status === 'skipped').length
     });
   }
+
+  if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled during task execution', { status: 499 });
 
   return {
     waves,
@@ -119,4 +155,4 @@ async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null 
   };
 }
 
-module.exports = { normalizeWaves, executeTaskWaves, graphError };
+module.exports = { normalizeWaves, executeTaskWaves, graphError, mapBounded };

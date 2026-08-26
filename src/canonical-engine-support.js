@@ -2,6 +2,8 @@
 
 const Logger = require('./logger');
 const { CanonicalTaskExecutor } = require('./runtime/canonical-task-executor');
+const { canonicalConcurrency } = require('./runtime/concurrency-policy');
+const { destroyGlobalCanonicalTaskAdmission } = require('./runtime/canonical-task-admission');
 
 const line = (value) => String(value ?? '-').replace(/\s+/g, ' ').trim() || '-';
 const join = (items, fallback = '-') => (items || []).map(line).filter((item) => item && item !== '-').join(' / ') || fallback;
@@ -12,9 +14,9 @@ function positiveInteger(value, fallback) {
 }
 
 class CanonicalEngineSupport {
-  constructor({ logger = new Logger(), poolSize = 4, workerTimeoutMs, workerQueueSize } = {}) {
+  constructor({ logger = new Logger(), poolSize = 8, workerTimeoutMs, workerQueueSize } = {}) {
     this.logger = logger;
-    this.poolSize = positiveInteger(poolSize, 4);
+    this.poolSize = canonicalConcurrency(poolSize, 8);
     this.workerTimeoutMs = positiveInteger(
       workerTimeoutMs || process.env.ASTERA_WORKER_TIMEOUT_MS || process.env.KAGURA_WORKER_TIMEOUT_MS,
       10_000
@@ -60,6 +62,7 @@ class CanonicalEngineSupport {
   async destroy() {
     const executor = this.canonicalTaskExecutor;
     this.canonicalTaskExecutor = null;
+    await destroyGlobalCanonicalTaskAdmission();
     if (executor) await executor.destroy();
   }
 }
