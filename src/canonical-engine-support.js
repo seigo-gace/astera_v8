@@ -14,9 +14,9 @@ function positiveInteger(value, fallback) {
 }
 
 class CanonicalEngineSupport {
-  constructor({ logger = new Logger(), poolSize = 8, workerTimeoutMs, workerQueueSize } = {}) {
+  constructor({ logger = new Logger(), poolSize = 4, workerTimeoutMs, workerQueueSize } = {}) {
     this.logger = logger;
-    this.poolSize = canonicalConcurrency(poolSize, 8);
+    this.poolSize = canonicalConcurrency(poolSize, 4);
     this.workerTimeoutMs = positiveInteger(
       workerTimeoutMs || process.env.ASTERA_WORKER_TIMEOUT_MS || process.env.KAGURA_WORKER_TIMEOUT_MS,
       10_000

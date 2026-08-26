@@ -26,7 +26,7 @@ if (legacyCommerceEnabled) {
 const server = new AsteraServer({
   port: Number(process.env.ASTERA_PORT || process.env.KAGURA_PORT || 7373),
   host: process.env.ASTERA_HOST || process.env.KAGURA_HOST || '127.0.0.1',
-  poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 8),
+  poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
   store,
   logger,
   ...commerce

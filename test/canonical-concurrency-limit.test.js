@@ -9,15 +9,21 @@ const CanonicalEngineSupport = require('../src/canonical-engine-support');
 const task = (id, depends_on = []) => ({ id, depends_on });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-test('canonical concurrency hard ceiling and engine default are 8', async () => {
+test('canonical task hard ceiling is 8 while the CPU worker pool default remains 4', async () => {
   assert.equal(MAX_CANONICAL_CONCURRENCY, 8);
   assert.equal(canonicalConcurrency(undefined), 8);
   assert.equal(canonicalConcurrency(8), 8);
   assert.equal(canonicalConcurrency(9), 8);
   assert.equal(canonicalConcurrency(128), 8);
+
   const defaultSupport = new CanonicalEngineSupport({ logger: { write() {} } });
-  assert.equal(defaultSupport.poolSize, 8);
+  assert.equal(defaultSupport.poolSize, 4);
   await defaultSupport.destroy();
+
+  const sixWorkerSupport = new CanonicalEngineSupport({ poolSize: 6, logger: { write() {} } });
+  assert.equal(sixWorkerSupport.poolSize, 6);
+  await sixWorkerSupport.destroy();
+
   const oversizedSupport = new CanonicalEngineSupport({ poolSize: 128, logger: { write() {} } });
   assert.equal(oversizedSupport.poolSize, 8);
   await oversizedSupport.destroy();
