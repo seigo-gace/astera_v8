@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { taskGraphBlockState, taskGraphView } = require('../src/server-with-evidence');
+const { taskGraphView } = require('../src/server-with-evidence');
 
 const silentLogger = { write() {}, async flush() {} };
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
@@ -76,7 +76,7 @@ test('hard Task Graph blocker stops canonical Task/Claim/Evidence processing bef
   });
 });
 
-test('Integrated boundary block state and Task Graph view preserve Canonical V3 branch/reference/context metadata', () => {
+test('Task Graph view preserves Canonical V3 branch/reference/context/blocker metadata', () => {
   const request = {
     instruction_understanding: { execution_allowed: false, blocked_reasons: ['TASK_GRAPH_CYCLE:T01,T02'] },
     analysis_task_packet: {
@@ -92,13 +92,11 @@ test('Integrated boundary block state and Task Graph view preserve Canonical V3 
       task_graph_validation: { valid: false, cycle: ['T01', 'T02'] }
     }
   };
-  const state = taskGraphBlockState(request);
-  assert.equal(state.blocked, true);
-  assert.ok(state.hard_blockers.includes('TASK_GRAPH_CYCLE:T01,T02'));
   const view = taskGraphView(request);
   assert.equal(view.branches.length, 1);
   assert.equal(view.branch_groups.length, 1);
   assert.equal(view.reference_resolutions.length, 1);
   assert.equal(view.context_bindings.length, 1);
+  assert.ok(view.hard_blockers.includes('TASK_GRAPH_CYCLE:T01,T02'));
   assert.equal(view.validation.valid, false);
 });
