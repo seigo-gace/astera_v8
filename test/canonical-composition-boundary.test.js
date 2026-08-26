@@ -29,8 +29,14 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   assert.doesNotMatch(canonicalBase, /await Promise\.all\(tasks\.map/);
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*pillars\//);
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*worker-pool['"]\)/);
-  assert.match(compatibilityAuto, /require\('\.\/astera-engine'\)/);
-  assert.doesNotMatch(compatibilityAuto, /process\s*\(/);
+
+  const compatibilityExecutable = compatibilityAuto
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && line !== "'use strict';");
+  assert.deepEqual(compatibilityExecutable, ["module.exports = require('./astera-engine');"]);
 });
 
 test('all active server entrypoints fail closed through the container runtime boundary before service initialization', () => {
