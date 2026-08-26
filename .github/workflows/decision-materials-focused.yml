@@ -1,0 +1,67 @@
+name: Decision Materials Focused Verification
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decision-materials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check changed decision-material files
+        run: |
+          node --check src/canonical-engine-support.js
+          node --check test/canonical-composition-boundary.test.js
+          node --check test/canonical-concurrency-limit.test.js
+          node --check test/canonical-decision-materials-load.test.js
+          node --check test/canonical-main8-trace.test.js
+          node --check test/canonical-runtime-flow-regression.test.js
+
+      - name: Decision materials core and regression tests
+        run: |
+          node --test \
+            test/all-domain-router.test.js \
+            test/canonical-composition-boundary.test.js \
+            test/canonical-concurrency-limit.test.js \
+            test/canonical-decision-materials-load.test.js \
+            test/canonical-entrypoint-regression.test.js \
+            test/canonical-lens-evidence-regression.test.js \
+            test/canonical-main8-trace.test.js \
+            test/canonical-parallel-execution.test.js \
+            test/canonical-runtime-flow-regression.test.js \
+            test/canonical-v4-pipeline-regression.test.js \
+            test/canonical-worker-boundaries.test.js \
+            test/engine.test.js \
+            test/evidence-binding-scope-regression.test.js \
+            test/false-confirmation-effect.test.js \
+            test/global-input-understanding.test.js \
+            test/human-reader-effect-boundary.test.js \
+            test/lens-output-integration.test.js \
+            test/lens-plan-integration.test.js \
+            test/purpose-effect-story.test.js \
+            test/request-abort-context.test.js \
+            test/task-decomposition-canon-regression.test.js \
+            test/task-decomposition-v2-regression.test.js \
+            test/task-target-lens-regression.test.js \
+            test/v4-canonical-fidelity.test.js \
+            test/v4-source-span-regression.test.js
+
+      - name: Decision materials public API cases
+        run: |
+          node --test \
+            --test-name-pattern='HTTP flow: signup -> process works with tenant key|HTTP flow: canonical process rejects caller-supplied LLM configuration|HTTP flow: context must be a string|HTTP flow: short process request returns clarification text|HTTP flow: bad JSON returns 400 instead of 500|HTTP flow: invalid question type returns 400|HTTP flow: unauthorized process returns 401|HTTP flow: payload over 1MB returns 413' \
+            test/api.test.js
