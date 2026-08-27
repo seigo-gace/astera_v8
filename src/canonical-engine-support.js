@@ -18,7 +18,7 @@ class CanonicalEngineSupport {
     this.logger = logger;
     this.poolSize = canonicalConcurrency(poolSize, 4);
     this.workerTimeoutMs = positiveInteger(
-      workerTimeoutMs || process.env.ASTERA_WORKER_TIMEOUT_MS || process.env.KAGURA_WORKER_TIMEOUT_MS,
+      workerTimeoutMs || process.env.ASTERA_WORKER_TIMEOUT_MS,
       10_000
     );
     this.workerQueueSize = positiveInteger(

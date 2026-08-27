@@ -294,14 +294,6 @@ Evidence Resolver Hookの実体は`AsteraEngine.resolveEvidenceForTask()`から`
 - `src/v4-canonical/confirmation.js` — G1-G7 Claim Confirmation
 - `src/evidence-search/` — 独立Evidence Search Module
 
-### Compatibility / Migration Boundary
-
-- `src/canonical-evidence-auto-engine.js` — 旧Import互換Shim。二重`process()`を持つActive Runtimeではない
-- `src/kagura-engine.js` — 旧Import互換Shim
-- `KAGURA_*`環境変数Fallback — 既存環境互換用。正式名は`ASTERA_*`
-
-Legacy FileがRepositoryに存在することは、Active Canonical Runtimeで使用中であることを意味しません。Legacy整理は、必要な決定論ロジックをCanonicalへ復旧した後に行います。
-
 ---
 
 ## HTTP / Module入口
@@ -312,7 +304,7 @@ Legacy FileがRepositoryに存在することは、Active Canonical Runtimeで�
 
 Canonical Search Planが外部確認を要求し、Evidence Search Clientが設定されている場合、**同じSingle Canonical Pipeline内でEvidence Search APIを自動実行**します。
 
-Evidence Search Clientが無い、またはProvider failureの場合は、そのClaimを推測でCONFIRMEDへ昇格せず、Evidence failure / `UNDETERMINED`として処理します。
+Evidence Search Clientが無い場合は`NOT_EXECUTED`、Provider/API失敗は`FAILED`、検索が正常完了して該当根拠が0件の場合だけ`EXECUTED_NO_EVIDENCE`として区別します。いずれもClaimを推測でCONFIRMEDへ昇格しません。
 
 通常Responseは`text/plain; charset=utf-8`のMain8材料です。
 
@@ -379,7 +371,6 @@ Astera Coreの責務は、API Key / Tenant解決、Rate Limit、Request Size、A
 
 Canonical起動では`/signup`と`/billing/*`を公開しません。Tenant CredentialはCore外のAccount / App境界で発行・管理し、Astera Coreへ渡します。
 
-旧環境との互換検証が必要な場合だけ、`ASTERA_ENABLE_LEGACY_COMMERCE=1`でLegacy Commerce Adapterを明示有効化できます。これは互換経路であり、Canonical Runtime責務ではありません。
 
 ---
 
@@ -436,7 +427,6 @@ npm run verify
 - `test/evidence-search-main-proxy.test.js` — Evidence / Integrated HTTP境界
 - `test/lens-plan-integration.test.js` — Primary + Secondary + Overlayが5 Laneへ効くこと
 - `test/evidence-binding-scope-regression.test.js` — Version / Jurisdiction / Time / Condition mismatchをFail-closedすること
-- `test/legacy-naming-boundary.test.js` — Compatibility naming / import境界
 - `test/task-decomposition-canon-regression.test.js` — Task Decomposition Canon
 - `test/task-decomposition-v2-regression.test.js` — Multi-parent / Branch / Reference等のTask Graph Regression
 - `test/lens-output-integration.test.js` — LensからCanonical出力までのIntegration
@@ -451,7 +441,7 @@ GitHub Actions Workflow Runが存在しないCommitをCI成功扱いしません
 
 ## 現在の修復状態
 
-現在は、過去の変更で混在した複数経路・Legacy責務・中抜きされたCanonical能力を整理し、Notion Canonicalへ戻す作業中です。
+現在は、過去の変更で混在した複数経路と中抜きされたCanonical能力を整理し、Notion Canonicalへ戻す作業中です。
 
 直近で修復済みの構造:
 
@@ -464,13 +454,10 @@ GitHub Actions Workflow Runが存在しないCommitをCI成功扱いしません
 
 - Risk / Multi / Inquiry / CompareをModule正本の深度まで復旧
 - Deterministic Perspective Expansionの成立条件・破綻条件・Evidence Trace強化
-- Legacy Worker / Worker Pool / overlap matcher等の参照Graph整理
-- 必要ロジック移植後のSafe Delete
 - `STRUCTURE.md` / Architecture Docsと実Runtimeの同期
 - `runtime_version` / `commit_sha` / `adapter_version`等のVersion Trace
 - Full Repository Test / API E2E / Runtime Story / Performance / Deploy Evidence
 
-Legacyを先に消して機能を失わせることはしません。必要な非AI・決定論ロジックをCanonical Runtimeへ戻し、Regression Testで固定した後に整理します。
 
 ---
 
@@ -484,7 +471,6 @@ Legacyを先に消して機能を失わせることはしません。必要な�
 - `ASTERA_EVALUATOR_*`: Quality Completion Evaluator境界
 - `ASTERA_CORS_ORIGINS`, `ASTERA_REQUIRE_HTTPS`, `ASTERA_ENABLE_HSTS`: HTTP Security
 - `ASTERA_TGS_*`: TGserver Log sink
-- `ASTERA_ENABLE_LEGACY_COMMERCE`: Legacy Commerce互換用。Canonical defaultは無効
 
 Secret / Token / Private Key / CredentialをRepositoryへCommitしません。
 

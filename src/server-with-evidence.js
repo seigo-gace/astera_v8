@@ -45,6 +45,7 @@ function integratedEvidenceByTask(result = {}) {
       schema_version: 'astera.evidence.integrated-view.v1',
       status: evidence.source_status || (evidence.state === 'NOT_REQUIRED' ? 'NOT_REQUIRED' : evidence.state || 'UNKNOWN'),
       state: evidence.state || 'UNKNOWN',
+      search_state: evidence.search_state || (evidence.state === 'NOT_REQUIRED' ? 'NOT_REQUIRED' : 'UNKNOWN'),
       evidence: evidence.evidence || [],
       quality_score_bp: evidence.quality_score_bp ?? null,
       coverage_state: evidence.coverage_state || 'UNKNOWN',

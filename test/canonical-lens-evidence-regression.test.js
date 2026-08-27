@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { routeDomainTemplates, TEMPLATES, medicalSafetyFallback } = require('../src/domain-template-router');
-const fact = require('../src/pillars/fact-worker');
+const { buildCanonicalTaskPlan, evaluateCanonicalTaskPlan, projectFiveLanes } = require('../src/canonical-claim-runtime');
 
 function syntheticG23Score() {
   const genre = TEMPLATES.find((item) => item.id === 'G23');
@@ -53,7 +53,8 @@ test('Fact keeps lens-specific evidence requirements even when Evidence Search i
       evidence_to_collect: ['現行仕様', '回帰Test', '互換性条件']
     }
   };
-  const result = await fact.run({ question: task.source_span.text, task, domain, evidence_packet: null });
-  assert.deepEqual(result.evidence_gaps.map((item) => item.item), ['現行仕様', '回帰Test', '互換性条件']);
-  assert.equal(result.evidence_state.state, 'NOT_PROVIDED');
+  const plan = buildCanonicalTaskPlan(task, domain);
+  const canonical = evaluateCanonicalTaskPlan(plan, { schema_version: 'astera.evidence-search.result.v1', status: 'NOT_REQUIRED', search_state: 'NOT_REQUIRED', evidence: [], provider_execution: { initial: [], reinforcement: [] }, query_execution: { initial: [], reinforcement: [] }, quality: { final: { status: 'NOT_REQUIRED', score_bp: null } }, ai_used: false, payment_executed: false });
+  const lanes = projectFiveLanes({ task, canonical, domain });
+  assert.deepEqual(lanes.fact.evidence_gaps.map((item) => item.item), ['現行仕様', '回帰Test', '互換性条件']);
 });

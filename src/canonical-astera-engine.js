@@ -3,7 +3,7 @@
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
 const inputUnderstanding = require('./input-understanding');
 const { enrichRequest } = require('./deterministic-task-decomposer');
-const { readHumanState } = require('./hyperion-human-reader');
+const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 
 function clarificationQuestions(request = {}, context = '') {
@@ -48,22 +48,6 @@ function blockedMaterial({ request, hardBlockers, lang }) {
         'No Task/Claim/Evidence processing was performed by guessing through the blocker.'
       ];
   return { text: lines.join('\n'), compact_text: lines.join(' / ') };
-}
-
-function preserveTextApiCompatibility(out) {
-  if (!out?.material || typeof out.material.text !== 'string') return out;
-  out.material.text = out.material.text
-    .replaceAll('導出根拠\n', '導出根拠（判断基準）\n')
-    .replaceAll('External Consumerへ渡す内容\n', '主役AIへ渡す内容 / 利用者へ渡す内容\n')
-    .replaceAll('08 主役AI／利用者への再指示', '08 主役AIへの再指示 / 利用者への再指示')
-    .replaceAll('Ranking・Recommendation・最終Decision', '順位付け・推奨・最終判断');
-  if (typeof out.material.compact_text === 'string') {
-    out.material.compact_text = out.material.compact_text.replaceAll(
-      '08 主役AI／利用者への再指示',
-      '08 主役AIへの再指示 / 利用者への再指示'
-    );
-  }
-  return out;
 }
 
 class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
@@ -235,7 +219,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       if (out.result.judgment) out.result.judgment.human_reader = out.result.judgment.human_reader || request.human_reader;
     }
     if (out?.runtime) out.runtime.human_reader_mode = request.human_reader.mode;
-    return preserveTextApiCompatibility(out);
+    return out;
   }
 }
 

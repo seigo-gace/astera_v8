@@ -3,9 +3,6 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const CanonicalAsteraEngine=require('../src/canonical-astera-engine');
-const legacyMulti=require('../src/pillars/multi-worker');
-const legacyDialectic=require('../src/pillars/dialectic-worker');
-const legacyCompare=require('../src/pillars/compare-worker');
 const {buildCanonicalTaskPlan,evaluateCanonicalTaskPlan,projectFiveLanes,deterministicPerspectiveExpansion}=require('../src/canonical-claim-runtime');
 
 const silentLogger={write(){}};
@@ -21,11 +18,6 @@ function canonicalFor(task,domain){
   return{plan,canonical:evaluateCanonicalTaskPlan(plan,notRequiredEvidence())};
 }
 
-test('legacy Multi/Dialectic/Compare modules remain importable only as compatibility components',()=>{
-  assert.equal(typeof legacyMulti.run,'function');
-  assert.equal(typeof legacyDialectic.run,'function');
-  assert.equal(typeof legacyCompare.run,'function');
-});
 
 test('Canonical five lanes are projected without legacy candidate scoring or selection',()=>{
   const task={...baseTask,evidence_need:{required:false}};
@@ -91,7 +83,7 @@ test('Deterministic Perspective Expansion restores fixed five material classes w
   }
 });
 
-test('Canonical Engine never exposes legacy scoring/selection even while compatibility workers exist',async()=>{
+test('Canonical Engine exposes no legacy scoring/selection aliases',async()=>{
   const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger});
   try{
     const out=await engine.process({question:'API互換性を比較する。'},tenant);
@@ -101,10 +93,10 @@ test('Canonical Engine never exposes legacy scoring/selection even while compati
     assert.deepEqual(out.result.comparison.candidate_ranking,[]);
     assert.deepEqual(out.result.comparison.rejected_candidates,[]);
     assert.equal(Object.hasOwn(out.result.comparison,'score'),false);
-    assert.equal(out.result.hyperion.mode,'MATERIAL_ONLY');
-    assert.deepEqual(out.result.hyperion.candidates,[]);
-    assert.equal(out.result.hyperion.selected,null);
-    assert.deepEqual(out.result.hyperion.rejected,[]);
+    assert.equal(out.result.perspective_expansion.mode,'MATERIAL_ONLY');
+    assert.deepEqual(out.result.perspective_expansion.candidates,[]);
+    assert.equal(out.result.perspective_expansion.selected,null);
+    assert.deepEqual(out.result.perspective_expansion.rejected,[]);
     assert.equal(out.result.judgment.order[6],'07_evidence_status');
     assert.equal(Object.hasOwn(out.result.judgment,'07_recommendation'),false);
   }finally{

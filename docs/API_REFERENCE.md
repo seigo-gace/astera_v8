@@ -54,7 +54,6 @@ Tenant CredentialはCore外のAccount / App境界でProvisioningする。
 - `evidencePacket` / `evidence_packet`
 - `taskEvidencePackets` / `task_evidence_packets`
 - `canonicalClaimRecordsByTask` / `canonical_claim_records_by_task`
-- `allow_shared_legacy_evidence`
 
 未知Fieldや`llm` / provider / model / adapter等のDecision Control FieldはHTTP `400`で拒否する。Sanitizer内部では`UNSUPPORTED_DECISION_INPUT_FIELD`または`UNTRUSTED_CANONICAL_INPUT_FIELD`として分類するが、現HTTP Error Bodyはその内部Codeを直接API Contractとして返さない。
 
@@ -67,7 +66,6 @@ Core Healthと有効境界を返す。
 - service / version
 - store
 - skill API有効状態
-- Legacy Commerce有効状態
 - logging状態
 - Node runtime / uptime / pid
 - time
@@ -204,7 +202,6 @@ EvaluatorはCoreと別Process / 別Portで運用可能。
 
 `KB_ELIGIBLE`は保存完了を意味しない。KBへ自動Publishしない。
 
-## 11. Legacy Commerce Compatibility
 
 次はCanonical Core APIではない:
 
@@ -212,31 +209,20 @@ EvaluatorはCoreと別Process / 別Portで運用可能。
 - `POST /billing/checkout`
 - `POST /billing/webhook`
 
-Defaultでは無効。
+これらのRouteは現行Astera Coreには存在しない。Account / Plan / Credit / Paymentは外部のAccount / App / Billing境界が所有する。
 
-```text
-ASTERA_ENABLE_LEGACY_COMMERCE=1
-```
+## 11. Canonical Naming
 
-を明示した場合だけCompatibility Routeを有効化する。
-
-新規ClientはこれらをCanonical Contractとして依存しない。
-
-## 12. Naming Compatibility
-
-Canonical:
+現行Runtime名は次だけを使用する:
 
 - `src/astera-engine.js`
 - `src/canonical-astera-engine.js`
 - `src/server-base.js`
 - `ASTERA_*`
 
-Compatibility:
+旧Runtime名・旧環境変数へのFallbackは持たない。
 
-- `src/kagura-engine.js`
-- 必要な`KAGURA_*` fallback
-
-## 13. Error / Trust原則
+## 12. Error / Trust原則
 
 - Invalid JSON → 4xx
 - Unsupported Public Field → 400
@@ -249,7 +235,7 @@ Compatibility:
 
 内部Error CodeとHTTP Response Bodyの公開Contractを混同しない。失敗を成功へ変換しない。
 
-## 14. 完成判定
+## 13. 完成判定
 
 Endpoint Codeの存在、Test Fileの存在、CI成功、Deploy、Runtime readbackは別状態。
 

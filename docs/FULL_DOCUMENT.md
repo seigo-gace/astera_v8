@@ -138,7 +138,6 @@ Compareは**比較材料の可視化のみ**である。
 
 AIでPerspectiveを生成しない。Score / Ranking / Selectionを持たない。
 
-旧`dialectic-worker.js`はCompatibility / Migration側であり、現Canonical処理段ではない。
 
 ## 第8部｜Human Reader
 
@@ -229,28 +228,11 @@ Coreが持たない:
 - Plan / Credit authority
 - Checkout / Subscription / Payment authority
 
-## 第15部｜Commerce Compatibility
+## 第15部｜Commerce責務境界
 
-Canonical defaultではLegacy Commerceを無効化する。
+Account / Plan / Credit / Checkout / Subscription / PaymentはAstera Core外の責務である。現行Source Treeに旧Commerce RuntimeやCompatibility Routeを保持しない。
 
-`ASTERA_ENABLE_LEGACY_COMMERCE=1`の場合だけ旧Stripe / Subscription互換Routeを有効化する。
-
-これはCore責務の復活ではない。
-
-## 第16部｜Compatibility / Migration
-
-現Repositoryには移行用資材が残る:
-
-- `kagura-engine.js` compatibility shim
-- `worker-pool.js`
-- `pillars/*`
-- `mood-detector.js`
-- Legacy Commerce Adapter
-- 一部`KAGURA_*` fallback
-
-存在しているだけでActive Canonicalとしない。参照Graphを確認してChange Unit単位で整理する。
-
-## 第17部｜HTTP API
+## 第16部｜HTTP API
 
 Core:
 
@@ -272,7 +254,7 @@ Quality Completion Evaluatorは別Process / 別Portで運用可能。
 
 詳細は`docs/API_REFERENCE.md`。
 
-## 第18部｜Test / CI / Deploy状態
+## 第17部｜Test / CI / Deploy状態
 
 必ず分離する:
 

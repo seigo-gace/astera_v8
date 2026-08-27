@@ -1,6 +1,6 @@
 'use strict';
 
-const legacy = require('./judgment-materials-analyzer');
+const analyzer = require('./judgment-materials-analyzer');
 
 const SCRIPT_TESTS = Object.freeze([
   ['Hira', /\p{Script=Hiragana}/u],
@@ -173,7 +173,7 @@ function analyzeRequest(input = {}) {
   const metadata = detectLanguageMetadata(`${input.question || ''}\n${input.context || ''}`, input);
   const primary = metadata.language.split('-')[0];
   if (primary === 'ja' || primary === 'en') {
-    const request = legacy.analyzeRequest({ question: input.question, context: input.context });
+    const request = analyzer.analyzeRequest({ question: input.question, context: input.context });
     return {
       ...request,
       language: metadata.language,

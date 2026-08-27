@@ -17,7 +17,7 @@ const pkg = require('../package.json');
 const ONE_MB = 1024 * 1024;
 
 function parseAllowedOrigins() {
-  const raw = process.env.ASTERA_CORS_ORIGINS || process.env.ASTERA_CORS_ORIGIN || process.env.KAGURA_CORS_ORIGINS || process.env.KAGURA_CORS_ORIGIN || '';
+  const raw = process.env.ASTERA_CORS_ORIGINS || process.env.ASTERA_CORS_ORIGIN || '';
   const list = String(raw || '')
     .split(',')
     .map((x) => x.trim())
@@ -39,9 +39,6 @@ class AsteraServerBase {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port, 7373);
     this.host = options.host || '127.0.0.1';
     this.store = options.store;
-    this.stripe = options.stripe || null;
-    this.subSync = options.subSync || null;
-    this.legacyCommerceEnabled = Boolean(this.stripe && this.subSync);
     this.logger = options.logger || new Logger();
     this.engine = options.engine || new AsteraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
     this.tenants = new TenantManager(this.store);
@@ -122,9 +119,7 @@ class AsteraServerBase {
 
   _headers(req, extra = {}) {
     const origin = this._corsOriginFor(req);
-    const allowedHeaders = this.legacyCommerceEnabled
-      ? 'Content-Type, X-API-Key, Stripe-Signature'
-      : 'Content-Type, X-API-Key';
+    const allowedHeaders = 'Content-Type, X-API-Key';
     const headers = {
       'Access-Control-Allow-Headers': allowedHeaders,
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -137,7 +132,7 @@ class AsteraServerBase {
       ...extra
     };
     if (origin) headers['Access-Control-Allow-Origin'] = origin;
-    if ((process.env.ASTERA_ENABLE_HSTS || process.env.KAGURA_ENABLE_HSTS) === '1') {
+    if (process.env.ASTERA_ENABLE_HSTS === '1') {
       headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
     }
     return headers;
@@ -150,7 +145,7 @@ class AsteraServerBase {
   }
 
   _requiresHttps(req) {
-    if ((process.env.ASTERA_REQUIRE_HTTPS || process.env.KAGURA_REQUIRE_HTTPS) !== '1') return false;
+    if (process.env.ASTERA_REQUIRE_HTTPS !== '1') return false;
     if (isLoopbackAddress(req.socket.remoteAddress)) return false;
     return !this._isSecureRequest(req);
   }
@@ -204,7 +199,7 @@ class AsteraServerBase {
 
   async _authenticate(req) {
     const key = req.headers['x-api-key'];
-    const localNoAuth = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1' && ['127.0.0.1', 'localhost', '::1'].includes(this.host);
+    const localNoAuth = process.env.ASTERA_LOCAL_NO_AUTH === '1' && ['127.0.0.1', 'localhost', '::1'].includes(this.host);
     if (!key && localNoAuth) return { id: 'local-dev', plan: 'admin', status: 'active', is_global: true };
     return this.tenants.resolve(key);
   }
@@ -280,19 +275,18 @@ class AsteraServerBase {
           pending_deliveries: this.logger.pending?.size || 0,
           outbox: null
         };
-        return this._json(req, res, 200, {
-          ok: true,
+        const storageReady = this.store?.mode === 'sqlite' && !this.store?.sqliteError;
+        return this._json(req, res, storageReady ? 200 : 503, {
+          ok: storageReady,
+          status: storageReady ? 'READY' : 'DEGRADED_STORAGE',
           service: 'astera-v8',
           version: pkg.version,
-          store: this.store.mode,
-          sqlite_error: this.store.sqliteError || null,
+          store: this.store?.mode || 'unavailable',
+          sqlite_error: this.store?.sqliteError || null,
           tgserver_logging: this.logger.tgsEnabled,
           skill_api: {
             enabled: isSkillApiConfigured(),
             process_endpoint: '/v1/skill/process'
-          },
-          commerce_boundary: {
-            legacy_routes_enabled: this.legacyCommerceEnabled
           },
           logging,
           runtime: {
@@ -302,70 +296,6 @@ class AsteraServerBase {
           },
           time: new Date().toISOString()
         });
-      }
-
-      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/signup') {
-        const ip = req.socket.remoteAddress || 'unknown';
-        const rl = this.limiter.check({ key: `signup:${ip}`, limit: 10, windowMs: 60_000 });
-        if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
-        const { apiKey, tenant } = this.tenants.issueKey({ plan: 'free' });
-        context.tenantId = tenant.id;
-        this.logger.write({ tenantId: tenant.id, type: 'tenant_created', text: 'Free tenant API key issued', payload: { tenant_id: tenant.id, plan: tenant.plan } });
-        return this._json(req, res, 200, {
-          apiKey,
-          tenantId: tenant.id,
-          plan: tenant.plan,
-          note: 'このAPIキーは二度と表示されません。安全な場所に保存してください。'
-        }, { mask: false });
-      }
-
-      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/billing/webhook') {
-        const raw = await this._readRawBody(req, ONE_MB);
-        const event = this.stripe.verifyWebhook(raw, req.headers['stripe-signature']);
-        const result = await this.subSync.handleEvent(event);
-        context.tenantId = result.tenantId || 'stripe';
-        this.logger.write({ tenantId: context.tenantId, type: 'stripe_webhook', text: `Stripe webhook ${event.type}`, payload: { event_id: event.id, event_type: event.type, result } });
-        return this._json(req, res, 200, { received: true, result });
-      }
-
-      if (this.legacyCommerceEnabled && req.method === 'POST' && url.pathname === '/billing/checkout') {
-        const tenant = await this._authenticate(req);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
-        context.tenantId = tenant.id;
-        const body = await this._readJsonObject(req);
-        const rl = this.limiter.check({ key: `checkout:${tenant.id}`, limit: 10, windowMs: 60_000 });
-        if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
-        const requestedPlan = String(body.plan || 'pro').toLowerCase();
-        if (!['pro', 'business'].includes(requestedPlan)) {
-          const error = new Error('plan must be pro or business');
-          error.status = 400;
-          throw error;
-        }
-        const configuredPrice = requestedPlan === 'business'
-          ? process.env.STRIPE_BUSINESS_PRICE_ID
-          : process.env.STRIPE_PRO_PRICE_ID;
-        const allowCustomPrice = process.env.ASTERA_ALLOW_CUSTOM_STRIPE_PRICE === '1';
-        if (body.priceId && !allowCustomPrice && body.priceId !== configuredPrice) {
-          const error = new Error('priceId is not allowed');
-          error.status = 400;
-          throw error;
-        }
-        const priceId = configuredPrice || (allowCustomPrice ? body.priceId : '');
-        if (!priceId) {
-          const error = new Error(`Stripe price is not configured for ${requestedPlan}`);
-          error.status = 503;
-          throw error;
-        }
-        const publicBaseUrl = process.env.ASTERA_PUBLIC_BASE_URL || process.env.KAGURA_PUBLIC_BASE_URL || 'http://127.0.0.1:7373';
-        const session = await this.stripe.createCheckoutSession({
-          tenant,
-          priceId,
-          plan: requestedPlan,
-          successUrl: body.successUrl || `${publicBaseUrl}/?success=1`,
-          cancelUrl: body.cancelUrl || `${publicBaseUrl}/?cancel=1`
-        });
-        this.logger.write({ tenantId: tenant.id, type: 'checkout_created', text: 'Stripe checkout session created', payload: { session_id: session.id, price_id: priceId, plan: requestedPlan } });
-        return this._json(req, res, 200, { checkoutUrl: session.url, sessionId: session.id });
       }
 
       if (req.method === 'POST' && url.pathname === '/process') {
@@ -384,9 +314,7 @@ class AsteraServerBase {
       return this._json(req, res, 404, { error: 'not_found' });
     } catch (error) {
       const requestedStatus = Number(error?.status);
-      const status = requestedStatus >= 400 && requestedStatus <= 599
-        ? requestedStatus
-        : (error?.message && error.message.includes('Stripe signature') ? 400 : 500);
+      const status = requestedStatus >= 400 && requestedStatus <= 599 ? requestedStatus : 500;
       this.logger.write({
         tenantId: context.tenantId,
         type: 'request_failed',

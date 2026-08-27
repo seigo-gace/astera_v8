@@ -25,7 +25,7 @@ class AsteraServer extends ServerBase {
 
   async _authenticate(req) {
     const key = req.headers['x-api-key'];
-    const localNoAuthRequested = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1';
+    const localNoAuthRequested = process.env.ASTERA_LOCAL_NO_AUTH === '1';
     const localNoAuthAllowed = localNoAuthRequested
       && process.env.NODE_ENV !== 'production'
       && isLoopbackHost(this.host)

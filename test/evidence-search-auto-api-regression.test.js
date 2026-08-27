@@ -146,7 +146,8 @@ test('missing Evidence Search API client fails closed instead of silently contin
       && result.task.canonical_plan.search_plan.queries.length > 0
   );
   assert.ok(searched.length >= 1);
-  assert.ok(searched.every((result) => result.evidence?.source_status === 'REJECTED_PROVIDER_FAILURE'));
+  assert.ok(searched.every((result) => result.evidence?.source_status === 'REJECTED_SEARCH_NOT_EXECUTED'));
+  assert.ok(searched.every((result) => result.evidence?.search_state === 'NOT_EXECUTED'));
   assert.ok(searched.every((result) => result.canonical?.records?.every((record) => record.confirmation?.status === 'UNDETERMINED')));
   assert.equal(events.filter((event) => event.type === 'process_completed').length, 1);
 });

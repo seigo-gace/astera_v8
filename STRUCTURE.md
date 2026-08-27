@@ -1,6 +1,6 @@
 # Astera v8 — STRUCTURE（現行構成・依存境界）
 
-> 本ファイルはWorking Branch上の現行実装構造を説明する。設計・仕様の唯一の決定源はNotion正本であり、GitHubの現状・Legacy・Archiveから正本を逆上書きしない。
+> 本ファイルはWorking Branch上の現行実装構造を説明する。設計・仕様の唯一の決定源はNotion正本であり、GitHubの現状・過去資料から正本を逆上書きしない。
 
 ## 1. Core定義
 
@@ -49,13 +49,10 @@ start.js
                   → v4-canonical/confirmation.js
                   → v4-canonical/lanes.js
                 → lens-plan.js
-                → hyperion-human-reader.js
+                → human-reader.js
                 → Main8 material
 ```
 
-`src/worker-pool.js`と`src/pillars/*`は現Canonical Code Pathではない。Compatibility / Migration対象としてRepositoryに残るが、新規Canonical処理の設計起点にしない。
-
-`src/kagura-engine.js`は旧Importを`src/astera-engine.js`へ転送するCompatibility Shimである。
 
 ## 3. Canonical Runtime Flow
 
@@ -197,7 +194,6 @@ Canonical Compareは`MATERIAL_ONLY`である。
 - Recommendation
 - Final Decision
 
-Compatibility上、一部Resultに`dialectic`名のAliasが残る場合があるが、現Canonical実体は`Deterministic Perspective Expansion`であり、旧`pillars/dialectic-worker.js`を実行段として使用しない。
 
 ## 7. Main8
 
@@ -291,43 +287,21 @@ Core外:
 - Plan / Credit正本
 - Checkout / Subscription / Payment正本
 
-## 12. Commerce Compatibility
 
-Canonical defaultではLegacy Commerceは無効。
-
-`ASTERA_ENABLE_LEGACY_COMMERCE=1`を明示した場合だけStripe / Subscription Adapterを注入する。
-
-これは互換経路であり、Canonical Core責務ではない。
-
-## 13. Active / Compatibility / Archive
-
-### ACTIVE
+## 12. Current Source Boundary
 
 - Canonical Engine群
 - `canonical-claim-runtime.js`
-- `v4-canonical/*`
+- `v4-canonical/*`（現行Canonとして保持）
 - Lens Router / Lens Plan
 - Evidence Search
 - Quality Completion Evaluator
 - HTTP/Auth/Guard/Usage/Logging
-- `hyperion-human-reader.js`
+- `human-reader.js`
 
-### COMPATIBILITY / MIGRATION
+旧Runtime、旧互換Shim、旧Commerce実装、旧Archiveは現行Source Treeへ含めない。
 
-- `kagura-engine.js`
-- `worker-pool.js`
-- `pillars/*`
-- `mood-detector.js`（旧Inquiry依存）
-- Legacy Commerce Adapter
-- 必要な`KAGURA_*` fallback
-
-Compatibility Fileが存在することを、Canonical実行経路で使用中と解釈しない。
-
-### ARCHIVE
-
-`archive/`は履歴・旧資材であり現行Canonへ混入しない。
-
-## 14. Test / Evidence境界
+## 13. Test / Evidence境界
 
 次を分離する:
 

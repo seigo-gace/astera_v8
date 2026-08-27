@@ -58,7 +58,7 @@ astera_v8/
 
 ## 4. 呼出境界
 
-現行 `src/server.js` の `/process` と `src/kagura-engine.js` へ自動挿入しない。成果物・Requirement・Evidenceを確定できる処理から、明示的に呼び出す。
+現行 `src/server.js` の `/process` と `src/astera-engine.js` へ自動挿入しない。成果物・Requirement・Evidenceを確定できる処理から、明示的に呼び出す。
 
 ```text
 成果物・Requirement・Evidence確定

@@ -49,12 +49,10 @@ async function withCanonicalServer(fn) {
   }
 }
 
-test('Canonical Astera Core runtime does not expose legacy commerce routes without explicit adapters', async () => {
+test('Astera Core does not expose account or billing routes', async () => {
   await withCanonicalServer(async (port) => {
     const health = await request({ port, path: '/healthz' });
     assert.equal(health.status, 200);
-    assert.deepEqual(health.json.commerce_boundary, { legacy_routes_enabled: false });
-
     const signup = await request({ port, method: 'POST', path: '/signup' });
     assert.equal(signup.status, 404);
 

@@ -12,7 +12,6 @@
 
 ## 2. Canonical Core Boundary
 
-- [ ] `ASTERA_ENABLE_LEGACY_COMMERCE`が未設定または`0`である。
 - [ ] `GET /healthz`の`commerce_boundary.legacy_routes_enabled=false`を実Runtimeで確認した。
 - [ ] `POST /signup`がCanonical Runtimeで404である。
 - [ ] `POST /billing/checkout`がCanonical Runtimeで404である。
@@ -25,10 +24,8 @@
 
 - [ ] Canonical Engine実装が`src/astera-engine.js`である。
 - [ ] Runtimeの現行Class名が`AsteraEngine` / `AsteraServerBase`系である。
-- [ ] `src/kagura-engine.js`がLegacy compatibility shimとしてのみ機能する。
 - [ ] 新規Canonical Codeが旧`Kagura`内部名へ逆戻りしていない。
 - [ ] `ASTERA_*`を正式Env名として使用している。
-- [ ] 必要な`KAGURA_*` fallbackを互換理由なく削除していない。
 
 ## 4. Authentication / Guard
 

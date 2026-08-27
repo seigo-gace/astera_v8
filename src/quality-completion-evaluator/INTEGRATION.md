@@ -136,6 +136,6 @@ Idempotency KeyにもGenre ID、Path、Taxonomy Versionを含めます。
 
 - 配置先は`src/quality-completion-evaluator`です。
 - `src/server.js`の既存`/process`契約は変更しません。
-- `src/kagura-engine.js`の処理へ自動挿入しません。
+- `src/astera-engine.js`の処理へ自動挿入しません。
 - 現行ASTERAではKB接続が未実装のため、`evaluateAndPublish`は正式なKB System Adapterが接続された処理からだけ使用します。
 - 本Module追加だけでKBへ自動掲載された状態とは扱いません。

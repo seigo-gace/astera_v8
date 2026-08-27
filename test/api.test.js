@@ -6,10 +6,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const KaguraServer = require('../src/server');
+const AsteraServer = require('../src/server');
 const SQLiteStore = require('../src/store/sqlite-store');
-const StripeClient = require('../src/billing/stripe-client');
-const SubscriptionSync = require('../src/billing/subscription-sync');
 const Logger = require('../src/logger');
 
 function request({ port, method = 'GET', path = '/', headers = {}, body = '' }) {
@@ -29,12 +27,17 @@ function request({ port, method = 'GET', path = '/', headers = {}, body = '' }) 
   });
 }
 
+const PUBLIC_KEY = 'astera-test-public-key-0123456789abcdef';
+
 async function withServer(fn, options = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-api-'));
+  const previousApiKey = process.env.ASTERA_API_KEY;
+  const previousPepper = process.env.ASTERA_KEY_PEPPER;
+  process.env.ASTERA_API_KEY = options.publicKey || PUBLIC_KEY;
+  process.env.ASTERA_KEY_PEPPER = 'astera-test-pepper-0123456789abcdef0123456789';
   const store = new SQLiteStore(path.join(dir, 'test.db'));
   const logger = options.logger || new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
-  const stripe = options.stripe || new StripeClient();
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, store, stripe, subSync: new SubscriptionSync(store, stripe), logger, limiter: options.limiter });
+  const server = new AsteraServer({ port: 0, host: '127.0.0.1', poolSize: 1, store, logger, limiter: options.limiter });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;
@@ -42,6 +45,8 @@ async function withServer(fn, options = {}) {
     await fn(port, logger);
   } finally {
     await server.stop();
+    if (previousApiKey === undefined) delete process.env.ASTERA_API_KEY; else process.env.ASTERA_API_KEY = previousApiKey;
+    if (previousPepper === undefined) delete process.env.ASTERA_KEY_PEPPER; else process.env.ASTERA_KEY_PEPPER = previousPepper;
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }
@@ -70,41 +75,33 @@ test('HTTP flow: successful health checks are not written to TGserver access log
   }, { logger });
 });
 
-test('HTTP flow: signup -> process works with tenant key', async () => {
+test('HTTP flow: process works with externally provisioned Astera key', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
-    assert.equal(signup.status, 200);
-    assert.match(signup.json.apiKey, /^kg_/);
-
     const process = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。' })
     });
     assert.equal(process.status, 200);
     assert.match(process.headers['content-type'], /text\/plain/);
     assert.equal(process.json, null);
     assert.match(process.body, /01 本当の目的/);
-    assert.match(process.body, /判断基準/);
-    assert.match(process.body, /主役AIへ渡す内容/);
-    assert.match(process.body, /08 主役AIへの再指示/);
+    assert.match(process.body, /導出根拠/);
+    assert.match(process.body, /External Consumerへ渡す内容/);
+    assert.match(process.body, /08 主役AI／利用者への再指示/);
     assert.equal((process.body.match(/^---$/gm) || []).length, 7);
-    assert.doesNotMatch(process.body, /"result"/);
-    assert.doesNotMatch(process.body, /"prompt"/);
-    assert.doesNotMatch(process.body, /"answer"/);
   });
 });
 
 test('HTTP flow: canonical process rejects caller-supplied LLM configuration', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const response = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: JSON.stringify({ question: '判断材料を作る。', llm: { chain: ['null'] } })
     });
     assert.equal(response.status, 400);
@@ -119,8 +116,7 @@ test('Skill API rejects missing and public tenant keys', async () => {
     await withServer(async (port) => {
       const missing = await request({ port, method: 'POST', path: '/v1/skill/process', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: '十分な長さの検証質問です。目的と成功条件を確認します。' }) });
       assert.equal(missing.status, 401);
-      const signup = await request({ port, method: 'POST', path: '/signup' });
-      const publicKey = await request({ port, method: 'POST', path: '/v1/skill/process', headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey }, body: JSON.stringify({ question: '十分な長さの検証質問です。目的と成功条件を確認します。' }) });
+      const publicKey = await request({ port, method: 'POST', path: '/v1/skill/process', headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY }, body: JSON.stringify({ question: '十分な長さの検証質問です。目的と成功条件を確認します。' }) });
       assert.equal(publicKey.status, 401);
     });
   } finally {
@@ -151,7 +147,7 @@ test('Skill API rejects missing, short, and public-key-shared configuration', as
     await withServer(async (port) => {
       const shared = await request({ port, method: 'POST', path: '/v1/skill/process', headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.ASTERA_SKILL_API_KEY }, body: '{}' });
       assert.equal(shared.status, 503);
-    });
+    }, { publicKey: process.env.ASTERA_SKILL_API_KEY });
   } finally {
     if (previousSkill === undefined) delete process.env.ASTERA_SKILL_API_KEY;
     else process.env.ASTERA_SKILL_API_KEY = previousSkill;
@@ -184,12 +180,11 @@ test('Skill process API uses dedicated key and bypasses public rate and billing'
 
 test('HTTP flow: context must be a string', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: JSON.stringify({ question: '対象はAstera。成功条件は8項目出力。', context: { unexpected: true } })
     });
     assert.equal(bad.status, 400);
@@ -199,12 +194,11 @@ test('HTTP flow: context must be a string', async () => {
 
 test('HTTP flow: short process request returns clarification text', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const process = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: JSON.stringify({ question: 'どう？' })
     });
     assert.equal(process.status, 200);
@@ -233,12 +227,11 @@ test('HTTP flow: healthz exposes runtime and logging diagnostics', async () => {
 
 test('HTTP flow: bad JSON returns 400 instead of 500', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: '{bad'
     });
     assert.equal(bad.status, 400);
@@ -248,12 +241,11 @@ test('HTTP flow: bad JSON returns 400 instead of 500', async () => {
 
 test('HTTP flow: invalid question type returns 400', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: JSON.stringify({ question: { unexpected: true } })
     });
     assert.equal(bad.status, 400);
@@ -276,13 +268,12 @@ test('HTTP flow: unauthorized process returns 401', async () => {
 
 test('HTTP flow: payload over 1MB returns 413', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const huge = JSON.stringify({ question: 'x'.repeat(1024 * 1024 + 50) });
     const res = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY },
       body: huge
     });
     assert.equal(res.status, 413);
@@ -304,39 +295,11 @@ test('HTTP flow: disallowed CORS origin returns 403', async () => {
   }
 });
 
-test('HTTP flow: checkout rejects a client-selected Stripe price', async () => {
-  const oldPrice = process.env.STRIPE_PRO_PRICE_ID;
-  delete process.env.STRIPE_PRO_PRICE_ID;
-  try {
-    await withServer(async (port) => {
-      const signup = await request({ port, method: 'POST', path: '/signup' });
-      const res = await request({
-        port,
-        method: 'POST',
-        path: '/billing/checkout',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-        body: JSON.stringify({ plan: 'pro', priceId: 'price_attacker_selected' })
-      });
-      assert.equal(res.status, 400);
-      assert.equal(res.json.error, 'priceId is not allowed');
-    });
-  } finally {
-    if (oldPrice === undefined) delete process.env.STRIPE_PRO_PRICE_ID;
-    else process.env.STRIPE_PRO_PRICE_ID = oldPrice;
-  }
-});
-
-test('HTTP flow: checkout rejects a non-object JSON body', async () => {
+test('HTTP flow: removed account and billing routes stay absent from Astera Core', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
-    const res = await request({
-      port,
-      method: 'POST',
-      path: '/billing/checkout',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: 'null'
-    });
-    assert.equal(res.status, 400);
-    assert.equal(res.json.error, 'JSON body must be an object');
+    for (const route of ['/signup', '/billing/checkout', '/billing/webhook']) {
+      const response = await request({ port, method: 'POST', path: route, headers: { 'Content-Type': 'application/json', 'X-API-Key': PUBLIC_KEY }, body: '{}' });
+      assert.equal(response.status, 404, route);
+    }
   });
 });

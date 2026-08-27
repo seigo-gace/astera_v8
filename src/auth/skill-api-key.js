@@ -15,7 +15,7 @@ function configuredSkillApiKey() {
 
 function isSkillApiConfigured() {
   const skillKey = configuredSkillApiKey();
-  const publicKey = String(process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '');
+  const publicKey = String(process.env.ASTERA_API_KEY || '');
   if (skillKey.length < 32 || skillKey.length > 256) return false;
   return !publicKey || !timingSafeStringEqual(skillKey, publicKey);
 }

@@ -105,7 +105,7 @@ class ProviderRegistry {
   select(plan, phase = 'INITIAL') {
     const allow = new Set(plan.source_policy.provider_allowlist);
     const deny = new Set(plan.source_policy.provider_denylist);
-    return this.providers.filter((provider) => {
+    const selected = this.providers.filter((provider) => {
       if (!provider.certified) return false;
       if (provider.source_class === 'PAID_PROVIDER') return false;
       if (allow.size && !allow.has(provider.provider_id)) return false;
@@ -120,6 +120,13 @@ class ProviderRegistry {
       )) return false;
       return true;
     });
+    if (phase === 'INITIAL' && selected.length === 0) {
+      const error = new Error('Evidence Search has no active provider for the canonical search plan');
+      error.code = 'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER';
+      error.status = 503;
+      throw error;
+    }
+    return selected;
   }
 
   health() {

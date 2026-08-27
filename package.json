@@ -1,7 +1,7 @@
 {
   "name": "astera-v8-runtime",
   "version": "1.1.1",
-  "description": "Astera v8 deterministic multi-perspective cognition runtime with 38-genre lenses, five pillars, and eight-section judgment material.",
+  "description": "Astera v8 deterministic multi-perspective cognition runtime with 38-genre lenses, five independent lanes, and fixed Main 8 judgment material.",
   "main": "start.js",
   "type": "commonjs",
   "private": true,
@@ -25,7 +25,6 @@
     "test:evidence-user": "node --test test/evidence-search-user-journey.test.js",
     "test:evidence-api": "node --test test/evidence-search-api.test.js",
     "test:evidence-main": "node --test test/evidence-search-main-proxy.test.js",
-    "test:evidence-live": "node --test test/evidence-search-live-provider.test.js",
     "test:evidence-evaluator": "node --test test/evidence-search-evaluator-api.test.js",
     "test:evidence-recovery": "node --test test/evidence-search-recovery.test.js",
     "test:evidence-projection": "node --test test/evidence-search-projection-index.test.js",
@@ -33,10 +32,11 @@
     "test:information-quality": "node --test src/quality-completion-evaluator/tests/unit/information-quality.test.js",
     "check:evidence": "node --check src/internal-service-auth.js && node --check src/evidence-search/module.js && node --check src/evidence-search/core/search-orchestrator.js && node --check src/evidence-search/core/query-plan-compiler.js && node --check src/evidence-search/core/bounded-scheduler.js && node --check src/evidence-search/api/internal-auth.js && node --check src/evidence-search/api/client.js && node --check src/evidence-search/api/information-quality-client.js && node --check src/evidence-search/api/server.js && node --check src/evidence-search/api/start.js && node --check src/evidence-search/providers/config-loader.js && node --check src/evidence-search/providers/json-projection-provider.js && node --check src/evidence-search/providers/secure-http-transport.js && node --check src/evidence-search/providers/free-official-live-provider.js && node --check src/evidence-search/recovery/job-store.js && node --check src/evidence-search/recovery/durable-spool.js && node --check src/evidence-search/recovery/job-manager.js && node --check src/server-with-evidence.js && node --check src/quality-completion-evaluator/api/server-with-internal.js && node --check src/quality-completion-evaluator/information-quality/engine.js && node --check scripts/validate-evidence-modular-architecture.js",
     "validate:evidence-architecture": "node scripts/validate-evidence-modular-architecture.js",
-    "verify:evidence": "npm run check:evidence && npm run validate:evidence-architecture && npm run test:evidence && npm run test:evidence-user && npm run test:evidence-api && npm run test:evidence-main && npm run test:evidence-live && npm run test:evidence-evaluator && npm run test:evidence-recovery && npm run test:evidence-projection && npm run test:evidence-architecture && npm run test:information-quality",
+    "verify:evidence": "npm run check:evidence && npm run validate:evidence-architecture && npm run test:evidence && npm run test:evidence-user && npm run test:evidence-api && npm run test:evidence-main && npm run test:evidence-provider-adapter && npm run test:evidence-evaluator && npm run test:evidence-recovery && npm run test:evidence-projection && npm run test:evidence-architecture && npm run test:information-quality",
     "smoke": "bash scripts/smoke.sh",
     "verify:source": "npm run check:syntax && npm run check:json && npm run check:shell && npm test && npm run validate:evidence-architecture",
-    "verify": "npm run verify:source && bash scripts/smoke.sh"
+    "verify": "npm run verify:source && bash scripts/smoke.sh",
+    "test:evidence-provider-adapter": "node --test test/evidence-search-provider-adapter.test.js"
   },
   "dependencies": {},
   "devDependencies": {},
@@ -49,8 +49,8 @@
     "v8",
     "worker-threads",
     "cognitive-preprocessing",
-    "pce",
-    "dialectic-engine",
-    "hyperion"
+    "five-independent-lanes",
+    "evidence-binding",
+    "claim-confirmation"
   ]
 }

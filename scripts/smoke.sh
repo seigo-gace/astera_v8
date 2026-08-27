@@ -15,16 +15,12 @@ fi
 
 # Smoke is isolated from running service ports, databases and credentials.
 export ASTERA_HOST=127.0.0.1
-export KAGURA_HOST=127.0.0.1
 export ASTERA_PORT=${ASTERA_SMOKE_PORT:-17373}
-export KAGURA_PORT=${ASTERA_PORT}
 export ASTERA_DB=${ASTERA_SMOKE_DB:-/tmp/astera-smoke.db}
-export KAGURA_DB=${ASTERA_DB}
 export ASTERA_TGS_ENABLED=0
 export ASTERA_LOCAL_NO_AUTH=0
-export KAGURA_LOCAL_NO_AUTH=0
 export ASTERA_API_KEY='astera-smoke-ephemeral-key'
-export ASTERA_ENABLE_LEGACY_COMMERCE=0
+export ASTERA_KEY_PEPPER='astera-smoke-ephemeral-pepper-32-bytes-minimum'
 
 rm -f "${ASTERA_DB}" "${ASTERA_DB}-shm" "${ASTERA_DB}-wal"
 node start.js >/tmp/astera-smoke.log 2>&1 &
@@ -50,27 +46,6 @@ if [[ "$ready" -ne 1 ]]; then
   exit 1
 fi
 
-node -e "
-const port=process.env.ASTERA_PORT;
-fetch('http://127.0.0.1:'+port+'/healthz')
-  .then(async r=>{
-    const j=await r.json();
-    if(!r.ok) throw new Error('healthz failed: '+r.status);
-    if(j?.commerce_boundary?.legacy_routes_enabled!==false) throw new Error('legacy commerce must be disabled in canonical smoke');
-    console.log('health ok: canonical commerce boundary disabled');
-  })
-  .catch(err=>{console.error(err.message);process.exit(1);});
-"
-
-node -e "
-const port=process.env.ASTERA_PORT;
-fetch('http://127.0.0.1:'+port+'/signup',{method:'POST'})
-  .then(async r=>{
-    if(r.status!==404){console.error('expected /signup=404, got '+r.status);process.exit(1);}
-    console.log('legacy route ok: /signup disabled');
-  })
-  .catch(err=>{console.error(err.message);process.exit(1);});
-"
 
 node -e "
 const port=process.env.ASTERA_PORT;
@@ -101,7 +76,7 @@ const AsteraEngine = require('./src/astera-engine');
 const CanonicalAsteraEngine = require('./src/canonical-astera-engine');
 
 (async () => {
-  if (AsteraEngine !== CanonicalAsteraEngine) throw new Error('AsteraEngine public entrypoint is not canonical');
+  if (!(AsteraEngine.prototype instanceof CanonicalAsteraEngine)) throw new Error('AsteraEngine public entrypoint does not inherit the canonical runtime');
   const engine = new AsteraEngine({ logger: { write() {}, async flush() {} } });
   try {
     const out = await engine.process({ question: 'APIを検証する。', language: 'ja' }, { id: 'smoke' });

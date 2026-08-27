@@ -15,7 +15,6 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   const evidenceServer = read('src/server-with-evidence.js');
   const asteraEngine = read('src/astera-engine.js');
   const canonicalBase = read('src/canonical-astera-engine-base.js');
-  const compatibilityAuto = read('src/canonical-evidence-auto-engine.js');
 
   assert.match(start, /require\('\.\/src\/server-with-module-switch'\)/);
   assert.match(moduleSwitchServer, /require\('\.\/astera-engine'\)/);
@@ -30,13 +29,10 @@ test('Composition Root exposes one Astera decision-material pipeline with Eviden
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*pillars\//);
   assert.doesNotMatch(canonicalBase, /require\(['"][^'"]*worker-pool['"]\)/);
 
-  const compatibilityExecutable = compatibilityAuto
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && line !== "'use strict';");
-  assert.deepEqual(compatibilityExecutable, ["module.exports = require('./astera-engine');"]);
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/canonical-evidence-auto-engine.js')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/kagura-engine.js')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/worker-pool.js')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/pillars')), false);
 });
 
 test('all active server entrypoints fail closed through the container runtime boundary before service initialization', () => {

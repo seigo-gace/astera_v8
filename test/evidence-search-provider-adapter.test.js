@@ -67,11 +67,11 @@ test('secure transport rejects a registered hostname resolving to a private addr
   assert.equal(requested, false);
 });
 
-test('free official live provider queries only its fixed endpoint and maps current records', async () => {
+test('free official adapter provider queries only its fixed endpoint and maps current records', async () => {
   const requests = [];
   const provider = createFreeOfficialLiveProvider({
-    provider_id: 'official-live-test',
-    source_family_id: 'official-live-family',
+    provider_id: 'official-adapter-test',
+    source_family_id: 'official-adapter-family',
     allowed_hosts: ['api.official.example'],
     domains: ['G29'],
     capabilities: ['NO_REINFORCEMENT'],
@@ -126,7 +126,7 @@ test('free official live provider queries only its fixed endpoint and maps curre
   });
 
   const result = await provider.search({
-    request_id: 'live-request-1',
+    request_id: 'adapter-request-1',
     effective_as_of: '2026-07-18T02:00:00.000Z',
     domain_lens: { id: 'G29' },
     query_set: [{ text: 'Node.js current release' }]

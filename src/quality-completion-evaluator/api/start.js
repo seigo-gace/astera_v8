@@ -8,9 +8,7 @@ const EvaluatorApiServer = require('./server-with-internal');
 const SQLiteStore = require('../../store/sqlite-store');
 
 const store = new SQLiteStore(
-  process.env.ASTERA_DB
-  || process.env.KAGURA_DB
-  || 'astera.db'
+  process.env.ASTERA_DB || 'astera.db'
 );
 const api = new EvaluatorApiServer({ store });
 api.start();

@@ -1,7 +1,7 @@
 'use strict';
 
-const SECRET_KEY_RE = /(api[_-]?key|authorization|secret|token|password|stripe|bearer|webhook|client_secret|access[_-]?key)/i;
-const SECRET_VALUE_RE = /(sk_(live|test)_[A-Za-z0-9_\-]+|sk-(?:proj-|ant-)?[A-Za-z0-9_\-]{8,}|whsec_[A-Za-z0-9_\-]+|kg_[A-Za-z0-9_\-]+|Bearer\s+[A-Za-z0-9._\-]+)/g;
+const SECRET_KEY_RE = /(api[_-]?key|authorization|secret|token|password|bearer|webhook|client_secret|access[_-]?key)/i;
+const SECRET_VALUE_RE = /(sk_(live|test)_[A-Za-z0-9_\-]+|sk-(?:proj-|ant-)?[A-Za-z0-9_\-]{8,}|whsec_[A-Za-z0-9_\-]+|ast_[A-Za-z0-9_\-]+|kg_[A-Za-z0-9_\-]+|Bearer\s+[A-Za-z0-9._\-]+)/g;
 
 function maskValue(value) {
   if (typeof value !== 'string') return value;

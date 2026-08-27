@@ -205,8 +205,8 @@ test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/rec
     assert.equal(out.result.comparison.selected_candidate,null);
     assert.deepEqual(out.result.comparison.candidate_ranking,[]);
     assert.equal(Object.hasOwn(out.result.comparison,'score'),false);
-    assert.deepEqual(out.result.hyperion.candidates,[]);
-    assert.equal(out.result.hyperion.selected,null);
+    assert.deepEqual(out.result.perspective_expansion.candidates,[]);
+    assert.equal(out.result.perspective_expansion.selected,null);
     assert.match(out.material.text,/根拠成立状態|Evidence Status/);
   });
 });

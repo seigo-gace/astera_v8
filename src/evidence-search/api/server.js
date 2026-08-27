@@ -169,10 +169,15 @@ class EvidenceSearchApiServer {
           schema_version: 'astera.evidence-search.module-request.v1',
           operation: 'HEALTH'
         });
-        return this._json(res, 200, {
-          ok: true,
+        const providerRecords = Array.isArray(health.result?.providers) ? health.result.providers : [];
+        const activeProviderCount = providerRecords.filter((item) => item.certified === true && item.active_search_eligible === true).length;
+        const searchAvailable = activeProviderCount > 0;
+        return this._json(res, searchAvailable ? 200 : 503, {
+          ok: searchAvailable,
+          status: searchAvailable ? 'READY' : 'UNAVAILABLE_NO_ACTIVE_PROVIDER',
           service: 'astera-evidence-search-api',
           active_search_mode: 'FREE_ONLY',
+          active_provider_count: activeProviderCount,
           durable_recovery: Boolean(this.jobManager),
           module: health.result,
           time: new Date().toISOString()

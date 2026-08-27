@@ -2,18 +2,16 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
 const { maskSecrets, parseJsonStrict } = require('../src/safe-json');
-const StripeClient = require('../src/billing/stripe-client');
 const { sanitizePublicDecisionInput } = require('../src/canonical-public-input');
 
 test('safe-json masks keys and secret-looking values deeply', () => {
   const out = maskSecrets({
     nested: { apiKey: 'sk_test_abcdefghijklmnopqrstuvwxyz' },
-    text: 'token kg_abcdefghijklmnop and whsec_abcdefghijklmnop'
+    text: 'token ast_abcdefghijklmnop and whsec_abcdefghijklmnop'
   });
   assert.notEqual(out.nested.apiKey, 'sk_test_abcdefghijklmnopqrstuvwxyz');
-  assert.doesNotMatch(out.text, /kg_abcdefghijklmnop/);
+  assert.doesNotMatch(out.text, /ast_abcdefghijklmnop/);
   assert.doesNotMatch(out.text, /whsec_abcdefghijklmnop/);
 });
 
@@ -44,41 +42,12 @@ test('public decision input rejects legacy llm control fields', () => {
   );
 });
 
-test('Stripe webhook verification accepts valid v1 signature over raw Buffer body', () => {
-  const secret = 'whsec_test_secret';
-  const body = Buffer.from(JSON.stringify({ id: 'evt_test', type: 'checkout.session.completed', data: { object: { id: 'cs_test' } } }));
-  const t = Math.floor(Date.now() / 1000);
-  const signedPayload = Buffer.concat([Buffer.from(`${t}.`), body]);
-  const sig = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-  const client = new StripeClient({ webhookSecret: secret });
-  const event = client.verifyWebhook(body, `t=${t},v1=${sig}`);
-  assert.equal(event.id, 'evt_test');
-});
 
-test('Stripe webhook verification rejects invalid signature', () => {
-  const client = new StripeClient({ webhookSecret: 'whsec_test_secret' });
-  const body = Buffer.from('{"id":"evt_test"}');
-  const t = Math.floor(Date.now() / 1000);
-  assert.throws(() => client.verifyWebhook(body, `t=${t},v1=deadbeef`), /mismatch/);
-});
+const { readHumanState } = require('../src/human-reader');
 
-const { readHumanState } = require('../src/hyperion-human-reader');
-
-test('Hyperion human reader detects high pressure build mode', () => {
+test('Human Reader detects high pressure build mode', () => {
   const state = readHumanState('全部完璧にしてDL式で今すぐ出してくれ', { score: -1 });
   assert.equal(state.mode, 'high_pressure');
   assert.ok(state.likely_needs.includes('実行ファイル'));
   assert.ok(state.response_policy.some((x) => /問い返し/.test(x)));
-});
-
-
-test('Stripe webhook verification accepts one valid signature among multiple v1 signatures', () => {
-  const secret = 'whsec_test_secret';
-  const body = Buffer.from(JSON.stringify({ id: 'evt_multi', type: 'checkout.session.completed', data: { object: { id: 'cs_test' } } }));
-  const t = Math.floor(Date.now() / 1000);
-  const signedPayload = Buffer.concat([Buffer.from(`${t}.`), body]);
-  const sig = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-  const client = new StripeClient({ webhookSecret: secret });
-  const event = client.verifyWebhook(body, `t=${t},v1=deadbeef,v1=${sig}`);
-  assert.equal(event.id, 'evt_multi');
 });

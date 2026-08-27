@@ -1,6 +1,6 @@
 # Astera v8 — Current Architecture
 
-> 本文書はWorking Branch上の現行実装Architectureを説明する。仕様決定源はNotion正本であり、Legacy Codeや過去READMEをCanonとして扱わない。
+> 本文書はWorking Branch上の現行実装Architectureを説明する。仕様決定源はNotion正本であり、過去READMEや旧設計資料をCanonとして扱わない。
 
 ## 1. 定義
 
@@ -154,7 +154,6 @@ Compareは**Material Only**であり、次を禁止する:
 
 ## 8. Deterministic Perspective Expansion
 
-旧Dialectic WorkerをCanonical実行段として使用しない。
 
 現行固定5分類:
 
@@ -168,7 +167,6 @@ Perspectiveごとに成立条件、失敗条件、Support / Counter / Missing Ev
 
 Score / Ranking / Selection / Recommendationは行わない。
 
-Result互換のため`dialectic`名Aliasが残る場合があるが、実体はDeterministic Perspective Expansionである。
 
 ## 9. Human Reader Boundary
 
@@ -198,7 +196,7 @@ Human Readerは利用者の要求強度や応答上の配慮をResponse Control�
 
 Main8は判断材料の固定表示順であり、第7段をRecommendationにしない。
 
-Decision TraceはRule / Task / Lens / Evidence / Constraint / Risk / Uncertainty / Blocking / Source Spanを保持する。Candidate rankingやscore breakdownは空配列を保持するCompatibility surfaceがあっても、Decision Authorityを意味しない。
+Decision TraceはRule / Task / Lens / Evidence / Constraint / Risk / Uncertainty / Blocking / Source Spanを保持する。Candidate rankingやscore breakdownの固定空配列は「AsteraがRanking/選択を行わない」ことを明示するResponse Contractであり、Decision Authorityを意味しない。
 
 ## 11. Evidence Architecture
 
@@ -222,27 +220,11 @@ Module Switch:
 
 Quality Completion Evaluatorは独立した固定Rule Module。KBへ自動Publishしない。
 
-## 13. Compatibility Architecture
+## 13. Commerce Separation
 
-現Repositoryには移行・互換目的の旧Moduleが残る。
+Account / Plan / Credit / Checkout / Subscription / PaymentはAstera Core外の責務であり、現行Runtimeに旧Commerce Routeや互換実装を保持しない。
 
-- `src/kagura-engine.js`
-- `src/worker-pool.js`
-- `src/pillars/*`
-- `src/mood-detector.js`
-- Legacy Commerce Adapter
-
-これらを現Canonical Execution Pathと混同しない。削除は参照Graph・Compatibility Contract・Testを確認したChange Unitでのみ行う。
-
-## 14. Commerce Separation
-
-DefaultではLegacy Commerce Adapterを生成しない。
-
-`ASTERA_ENABLE_LEGACY_COMMERCE=1`を明示した場合だけ旧Route互換を有効化する。
-
-Coreの通常責務はAccount / Plan / Credit / Payment正本ではない。
-
-## 15. Completion Evidence
+## 14. Completion Evidence
 
 次の状態を別々に扱う:
 

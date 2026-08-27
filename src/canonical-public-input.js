@@ -17,8 +17,7 @@ const INTERNAL_TRUST_FIELDS = Object.freeze([
   'taskEvidencePackets',
   'task_evidence_packets',
   'canonicalClaimRecordsByTask',
-  'canonical_claim_records_by_task',
-  'allow_shared_legacy_evidence'
+  'canonical_claim_records_by_task'
 ]);
 
 const allowedSet = new Set(ALLOWED_PUBLIC_FIELDS);

@@ -5,7 +5,6 @@
 - サーバー側: Ubuntu Bash
 - Docker / Docker Compose
 - Astera v8本体は `127.0.0.1:7373` で起動し、Nginx / Caddy / Cloudflare Tunnel などでHTTPS終端する
-- 正式環境変数は `ASTERA_*`。旧 `KAGURA_*` は後方互換のみ
 
 ---
 
@@ -107,6 +106,4 @@ sudo systemctl reload nginx
 - `ASTERA_KEY_PEPPER` は必ず本番専用の長いランダム値に変える
 - `ASTERA_CORS_ORIGINS` は本番ドメインへ固定する
 - `ASTERA_REQUIRE_HTTPS=1` はHTTPS終端後に有効化する
-- Stripeを使う場合は `STRIPE_WEBHOOK_SECRET` と `STRIPE_SECRET_KEY` を本番値にする
-- Stripe webhook URLは `https://<domain>/billing/webhook`
 - 本番のNode直接常駐、systemd、pm2、nohup、screen、tmuxは禁止

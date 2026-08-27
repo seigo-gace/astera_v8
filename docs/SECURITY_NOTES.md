@@ -9,7 +9,6 @@
 - Evidence Provider credential
 - LLM API Key（外部Adapter利用時）
 - ユーザーがRequestで許可された形で渡すBYOK Key
-- Legacy Commerceを明示有効化する場合のみ`STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
 
 ## 2. Core Security Boundary
 
@@ -40,33 +39,11 @@ Plan / Credit / Checkout / Subscription / PaymentはCoreのSecurity authorityで
 - Skill API Keyを公開Tenant Keyと分離する。
 - Evidence SearchでPaid Searchを現行無効とする。
 
-## 4. Canonical Commerce Security
+## 4. Account / Billing Boundary
 
-Canonical default:
+Astera CoreはAccount発行・Checkout・Subscription・Payment・Billing Webhookを公開しない。これらは外部のAccount / App / Billing境界で認証・冪等性・決済検証を行う。
 
-```text
-ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
-```
-
-ではLegacy Commerce Adapterを生成せず、`/signup`、`/billing/checkout`、`/billing/webhook`を公開しない。
-
-これによりCoreの通常Attack SurfaceからAccount発行・Checkout・Webhookを外す。
-
-## 5. Legacy Commerce Compatibility
-
-旧互換検証で`ASTERA_ENABLE_LEGACY_COMMERCE=1`を明示した場合のみ、Legacy Stripe Adapterが有効になる。
-
-その場合に必要な防御:
-
-- Webhook raw bodyを改変せず署名検証する
-- `Stripe-Signature`のtimestamp / HMACを検証する
-- Event IDで重複処理を防止する
-- Price IDをServer側allowlistへ固定する
-- Stripe SecretをLogへ出さない
-
-これはLegacy compatibilityのSecurity要件であり、Canonical Coreの通常責務ではない。
-
-## 6. Local No-Auth
+## 5. Local No-Auth
 
 `ASTERA_LOCAL_NO_AUTH=1`はLoopback開発・Smoke専用。
 
@@ -74,7 +51,7 @@ ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
 - Public bindへNo-Authを持ち出さない
 - Smoke終了後のRuntime設定へ継承しない
 
-## 7. Evidence / Internal Service
+## 6. Evidence / Internal Service
 
 - Internal Service Secretは十分長い値またはSecret Fileで管理する。
 - Evidence Provider failureを成功へ変換しない。
@@ -82,7 +59,7 @@ ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
 - 有料Providerを無断実行しない。
 - External source dataをSecretとしてLogへ丸ごと複製しない。
 
-## 8. Logging
+## 7. Logging
 
 - Secret Mask後のEventだけを外部Log sinkへ送る。
 - 未送信EventだけをTemporary Outboxへ保持する。
@@ -90,7 +67,7 @@ ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
 - Health successの大量Noiseを通常Access Logへ残さない。
 - Error / Auth failure / abnormal closeは監査対象とする。
 
-## 9. Production前に確認すること
+## 8. Production前に確認すること
 
 - HTTPS終端
 - CORS allowlist
@@ -106,6 +83,6 @@ ASTERA_ENABLE_LEGACY_COMMERCE=0 or unset
 
 詳細は`docs/PRODUCTION_CHECKLIST.md`を参照する。
 
-## 10. 状態の扱い
+## 9. 状態の扱い
 
 Security Codeが存在することと、本番で有効であることは別である。設定・Test・CI・Deploy・Runtime readbackを個別Evidenceとして確認する。

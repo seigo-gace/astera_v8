@@ -9,6 +9,8 @@ const { once } = require('node:events');
 const AsteraServer = require('../src/server-with-evidence');
 const SQLiteStore = require('../src/store/sqlite-store');
 
+process.env.ASTERA_KEY_PEPPER = 'astera-test-key-pepper-32-bytes-minimum-value';
+
 function createLogger(events = []) {
   return {
     write(event) { events.push(event); },
@@ -280,6 +282,6 @@ test('task evidence provider failure is isolated and remains UNDETERMINED', asyn
     assert.equal(result.evidence.status, 'REJECTED_TASK_EVIDENCE');
     assert.ok(result.evidence.rejected_task_count >= 1);
     assert.equal(result.canonical.claim_summary.status, 'UNDETERMINED');
-    assert.ok(Object.values(result.evidence.by_task).some((packet) => packet.status === 'REJECTED_PROVIDER_FAILURE'));
+    assert.ok(Object.values(result.evidence.by_task).some((packet) => packet.status === 'REJECTED_SEARCH_FAILED' && packet.search_state === 'FAILED'));
   } finally { await stopMain(runtime); }
 });
