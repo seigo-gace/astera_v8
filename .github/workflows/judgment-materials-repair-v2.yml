@@ -24,7 +24,7 @@ jobs:
           node-version: '22'
 
       - name: Apply canonical repair
-        run: python scripts/.judgment-materials-repair.py
+        run: python scripts/.judgment-materials-repair-runner.py
 
       - name: Syntax and static checks
         run: |
@@ -81,7 +81,8 @@ jobs:
           rm -f \
             .github/workflows/judgment-materials-no-shortcuts-repair.yml \
             .github/workflows/judgment-materials-repair-v2.yml \
-            scripts/.judgment-materials-repair.py
+            scripts/.judgment-materials-repair.py \
+            scripts/.judgment-materials-repair-runner.py
           git add -A
           git diff --cached --check
           git commit -m "fix: remove judgment materials shortcuts and false coverage"
