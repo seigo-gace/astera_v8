@@ -262,6 +262,28 @@ test('health reports unavailable when no active provider exists', async () => {
   assert.equal(response.result.active_provider_count, 0);
 });
 
+test('uncertified providers are not counted as active and cannot satisfy search selection', async () => {
+  const uncertified = createJsonProjectionProvider({
+    provider_id: 'uncertified-provider',
+    source_class: 'FREE_PROJECTION',
+    certified: false,
+    domains: ['G29'],
+    capabilities: ['NO_REINFORCEMENT'],
+    records: []
+  });
+  const module = createEvidenceSearchModule({ providers: [uncertified] });
+  const health = await module.execute({ schema_version: SCHEMA, operation: 'HEALTH' });
+  assert.equal(health.result.status, 'UNAVAILABLE_NO_ACTIVE_PROVIDER');
+  assert.equal(health.result.provider_count, 1);
+  assert.equal(health.result.active_provider_count, 0);
+  assert.equal(health.result.providers[0].certified, false);
+  assert.equal(health.result.providers[0].active_search_eligible, false);
+  await assert.rejects(
+    () => module.execute(request()),
+    (error) => error.code === 'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER'
+  );
+});
+
 test('health reports no AI and no payment execution', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });
   const response = await module.execute({
