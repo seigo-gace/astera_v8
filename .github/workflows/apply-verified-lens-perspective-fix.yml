@@ -1,0 +1,87 @@
+name: Apply verified Lens perspective fix
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+    paths:
+      - .github/workflows/apply-verified-lens-perspective-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: "github.event.head_commit.message == 'ci: apply verified Lens perspective fix'"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/evidence-search-v2-4
+          fetch-depth: 2
+
+      - name: Verify locked parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "0d8b6fc8c78d65172023e348e4bdff73abb2e355"
+
+      - name: Apply exact Lens perspective patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/v4-canonical/lanes.js')
+          text = path.read_text()
+          old = """  if (domainEntries.length) {
+            base.push({
+              id: 'domain',
+              class: 'DOMAIN',
+              focus: domainEntries.map((entry) => entry.value),
+              conditions: domainEntries.map((entry) => entry.value),
+              weaknesses: [],
+              claim_ids: claims.map((claim) => claim.claim_id).sort(),
+              evidence_refs: evidenceRefs,
+              lens_sources: uniqueStrings(domainEntries.flatMap((entry) => entry.sources || [])),
+              source: 'LENS_PLAN'
+            });
+          }
+          """
+          new = """  for (const [index, entry] of domainEntries.entries()) {
+            base.push({
+              id: `domain:${index + 1}`,
+              class: 'DOMAIN',
+              focus: entry.value,
+              conditions: [entry.value],
+              weaknesses: [],
+              claim_ids: claims.map((claim) => claim.claim_id).sort(),
+              evidence_refs: evidenceRefs,
+              lens_sources: entry.sources || [],
+              source: 'LENS_PLAN'
+            });
+          }
+          """
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one locked Lens block, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Validate focused Lens behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check src/v4-canonical/lanes.js
+          node --test test/lens-plan-integration.test.js test/lens-output-integration.test.js
+
+      - name: Commit verified final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/apply-verified-lens-perspective-fix.yml
+          git add src/v4-canonical/lanes.js
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: preserve individual Lens perspectives"
+          git push origin HEAD:feature/evidence-search-v2-4
