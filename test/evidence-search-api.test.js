@@ -12,7 +12,7 @@ const {
   createJsonProjectionProvider
 } = require('../src/evidence-search/providers/json-projection-provider');
 
-const SECRET = '0123456789abcdef0123456789abcdef0123456789abcdef';
+const SECRET = 'test-only-internal-secret-not-for-production-0000000000000000';
 const EXECUTION_TIME = '2026-07-18T02:00:00.000Z';
 
 const logger = {
@@ -97,6 +97,7 @@ function providers() {
 
 function payload() {
   return {
+    as_of: EXECUTION_TIME,
     question: 'ASTERA free evidence search verified record',
     domain_lens: { id: 'G29', taxonomy_version: '1.0.0' },
     conditions: [{
