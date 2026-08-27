@@ -10,23 +10,83 @@ const FREE_SOURCE_CLASSES = new Set([
   'FREE_OFFICIAL_LIVE'
 ]);
 
+const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze([
+  'example.com',
+  'example.net',
+  'example.org'
+]);
+const RESERVED_PLACEHOLDER_TLDS = Object.freeze([
+  'example',
+  'invalid',
+  'localhost',
+  'test'
+]);
+
+function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function normalizeConfiguredHost(value) {
+  return String(value || '').trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isReservedPlaceholderHost(value) {
+  const host = normalizeConfiguredHost(value);
+  if (!host) return false;
+  if (RESERVED_PLACEHOLDER_TLDS.some((tld) => host === tld || host.endsWith(`.${tld}`))) {
+    return true;
+  }
+  return RESERVED_PLACEHOLDER_BASE_HOSTS.some(
+    (base) => host === base || host.endsWith(`.${base}`)
+  );
+}
+
+function assertNoPlaceholderOfficialHosts(raw, index) {
+  const allowedHosts = Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [];
+  for (const host of allowedHosts) {
+    if (isReservedPlaceholderHost(host)) {
+      throw configError(
+        `providers[${index}] placeholder host is forbidden for an enabled runtime provider: ${host}`,
+        'EVIDENCE_PROVIDER_PLACEHOLDER_HOST_FORBIDDEN'
+      );
+    }
+  }
+
+  const endpoints = Array.isArray(raw.endpoints) ? raw.endpoints : [];
+  for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
+    const template = String(endpoints[endpointIndex]?.url_template || '').trim();
+    if (!template) continue;
+    let hostname;
+    try {
+      hostname = new URL(template.replace(/\{[a-z_]+\}/g, 'probe')).hostname;
+    } catch {
+      continue;
+    }
+    if (isReservedPlaceholderHost(hostname)) {
+      throw configError(
+        `providers[${index}].endpoints[${endpointIndex}] placeholder host is forbidden for an enabled runtime provider: ${hostname}`,
+        'EVIDENCE_PROVIDER_PLACEHOLDER_HOST_FORBIDDEN'
+      );
+    }
+  }
+}
+
 function readConfig(filePath) {
   const absolute = path.resolve(filePath);
   const parsed = JSON.parse(fs.readFileSync(absolute, 'utf8'));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    const error = new Error('evidence provider configuration must be an object');
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError('evidence provider configuration must be an object');
   }
   if (parsed.schema_version !== 'astera.evidence-providers.v1') {
-    const error = new Error('unsupported evidence provider configuration schema');
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_SCHEMA_UNSUPPORTED';
-    throw error;
+    throw configError(
+      'unsupported evidence provider configuration schema',
+      'EVIDENCE_PROVIDER_CONFIG_SCHEMA_UNSUPPORTED'
+    );
   }
   if (!Array.isArray(parsed.providers)) {
-    const error = new Error('evidence provider configuration providers must be an array');
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError('evidence provider configuration providers must be an array');
   }
   return { absolute, parsed };
 }
@@ -34,25 +94,19 @@ function readConfig(filePath) {
 function safeProviderId(value, index) {
   const id = String(value || '').trim();
   if (!/^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$/i.test(id)) {
-    const error = new Error(`providers[${index}].provider_id is invalid`);
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError(`providers[${index}].provider_id is invalid`);
   }
   return id;
 }
 
 function resolveDataFile(configFile, value, index) {
   if (typeof value !== 'string' || !value.trim()) {
-    const error = new Error(`providers[${index}].file_path is required`);
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError(`providers[${index}].file_path is required`);
   }
   const filePath = path.resolve(path.dirname(configFile), value);
   const stat = fs.statSync(filePath);
   if (!stat.isFile()) {
-    const error = new Error(`providers[${index}].file_path must reference a file`);
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError(`providers[${index}].file_path must reference a file`);
   }
   return filePath;
 }
@@ -76,9 +130,7 @@ function sharedProviderFields(raw, index) {
 
 function buildProvider(configFile, raw, index) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    const error = new Error(`providers[${index}] must be an object`);
-    error.code = 'EVIDENCE_PROVIDER_CONFIG_INVALID';
-    throw error;
+    throw configError(`providers[${index}] must be an object`);
   }
 
   const type = String(raw.type || 'JSON_PROJECTION').toUpperCase();
@@ -87,9 +139,10 @@ function buildProvider(configFile, raw, index) {
   if (type === 'JSON_PROJECTION') {
     const sourceClass = String(raw.source_class || 'FREE_PROJECTION').toUpperCase();
     if (!FREE_SOURCE_CLASSES.has(sourceClass)) {
-      const error = new Error(`providers[${index}] must use a free source_class`);
-      error.code = 'PAID_PROVIDER_CONFIGURATION_FORBIDDEN';
-      throw error;
+      throw configError(
+        `providers[${index}] must use a free source_class`,
+        'PAID_PROVIDER_CONFIGURATION_FORBIDDEN'
+      );
     }
     return createJsonProjectionProvider({
       ...common,
@@ -100,6 +153,7 @@ function buildProvider(configFile, raw, index) {
   }
 
   if (type === 'FREE_OFFICIAL_HTTP') {
+    assertNoPlaceholderOfficialHosts(raw, index);
     return createFreeOfficialLiveProvider({
       ...common,
       allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [],
@@ -109,9 +163,10 @@ function buildProvider(configFile, raw, index) {
     });
   }
 
-  const error = new Error(`providers[${index}].type is unsupported: ${type}`);
-  error.code = 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED';
-  throw error;
+  throw configError(
+    `providers[${index}].type is unsupported: ${type}`,
+    'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED'
+  );
 }
 
 function loadEvidenceProviders(options = {}) {
@@ -124,9 +179,10 @@ function loadEvidenceProviders(options = {}) {
   const ids = new Set();
   for (const provider of providers) {
     if (ids.has(provider.provider_id)) {
-      const error = new Error(`duplicate configured provider_id: ${provider.provider_id}`);
-      error.code = 'EVIDENCE_PROVIDER_DUPLICATE';
-      throw error;
+      throw configError(
+        `duplicate configured provider_id: ${provider.provider_id}`,
+        'EVIDENCE_PROVIDER_DUPLICATE'
+      );
     }
     ids.add(provider.provider_id);
   }
@@ -135,5 +191,6 @@ function loadEvidenceProviders(options = {}) {
 
 module.exports = {
   FREE_SOURCE_CLASSES,
+  isReservedPlaceholderHost,
   loadEvidenceProviders
 };
