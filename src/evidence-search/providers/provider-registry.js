@@ -133,7 +133,7 @@ class ProviderRegistry {
     return this.providers.map((provider) => ({
       provider_id: provider.provider_id,
       source_class: provider.source_class,
-      active_search_eligible: provider.source_class !== 'PAID_PROVIDER',
+      active_search_eligible: provider.certified && provider.source_class !== 'PAID_PROVIDER',
       certified: provider.certified,
       capabilities: provider.capabilities
     }));
