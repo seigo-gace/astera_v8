@@ -17,6 +17,11 @@ replacements = [
         "    assert.deepEqual(out.result.comparison.comparison_candidates.map((item) => item.label), ['A案','B案を費用と安全性で']);",
         "    assert.deepEqual(out.result.comparison.comparison_candidates.map((item) => item.label), ['A案','B案']);",
         'candidate golden expectation'
+    ),
+    (
+        "test_content = r'''\\\n'use strict';",
+        "test_content = r'''\n'use strict';",
+        'adversarial test leading backslash'
     )
 ]
 for old, new, label in replacements:
