@@ -26,6 +26,8 @@ function post(baseUrl, apiKey, body, pathname = '/v1/astera/execute') {
 
 async function startRuntime({ engine, evidenceClient, qualityEvaluator }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-module-switch-'));
+  const previousPepper = process.env.ASTERA_KEY_PEPPER;
+  process.env.ASTERA_KEY_PEPPER = 'astera-test-pepper-0123456789abcdef0123456789';
   const store = new SQLiteStore(path.join(root, 'astera.db'));
   const server = new AsteraServer({
     port: 0,
@@ -40,11 +42,13 @@ async function startRuntime({ engine, evidenceClient, qualityEvaluator }) {
   server.start();
   await once(server.server, 'listening');
   const address = server.server.address();
-  return { root, store, server, apiKey: issued.apiKey, tenant: issued.tenant, baseUrl: `http://127.0.0.1:${address.port}` };
+  return { root, store, server, apiKey: issued.apiKey, tenant: issued.tenant, baseUrl: `http://127.0.0.1:${address.port}`, previousPepper };
 }
 
 async function stopRuntime(runtime) {
   await runtime.server.stop();
+  if (runtime.previousPepper === undefined) delete process.env.ASTERA_KEY_PEPPER;
+  else process.env.ASTERA_KEY_PEPPER = runtime.previousPepper;
   await fs.rm(runtime.root, { recursive: true, force: true });
 }
 
