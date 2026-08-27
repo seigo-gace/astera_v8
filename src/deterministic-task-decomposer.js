@@ -188,9 +188,14 @@ function inferTarget(text, actionMatch, fallback = '') {
     const before = value.slice(0, match.index).replace(/^(?:そして|その後|次に|最後に|then|next|and then)\s*/i, '').trim();
     const jp = before.match(/([^。！？!?\n、,]{1,120}?)(?:を|について|に対して)\s*$/i);
     if (jp) {
-      const candidate = norm(jp[1])
-        .replace(/^(?:問題なければ|問題がなければ|問題があれば|成功したら|失敗したら|成立したら|不成立なら|確認できたら|確認できなければ|検証できたら|検証できなければ|ただし|例外として)\s*/u, '')
+      let candidate = norm(jp[1])
+        .replace(/^(?:訂正[、,]?\s*)/u, '')
+        .replace(/^(?:問題なければ|問題がなければ|問題があれば|成功したら|成功した場合(?:に|は)?|失敗したら|失敗した場合(?:に|は)?|成立したら|成立した場合(?:に|は)?|不成立なら|確認できたら|確認できなければ|検証できたら|検証できなければ|ただし|例外として)\s*/u, '')
         .replace(/^(?:これ|それ|あれ|これら|それら)$/u, '');
+      const replacement = candidate.match(/(?:ではなく|じゃなく)\s*(.+)$/u);
+      if (replacement) candidate = norm(replacement[1]);
+      const conditionalTail = candidate.match(/^.+?(?:場合に|場合は|場合、|ならば|なら)\s*(.+)$/u);
+      if (conditionalTail) candidate = norm(conditionalTail[1]);
       if (candidate) return candidate;
     }
     if (/^[A-Za-z]/.test(value.slice(match.index))) {
@@ -257,6 +262,59 @@ function splitCompoundTask(task) {
   }
   if (parts.length !== matches.length) return [cloneTaskPart(task, { start: task.source_span.start, end: task.source_span.end, text: task.source_span.text, local_start: 0 }, matches[0], 0, 1)];
   return parts.map((part, index) => cloneTaskPart(task, part, matches[index], index, parts.length));
+}
+
+function dependencyPrefixTask(task) {
+  const raw = norm(task.raw_text || task.source_span?.text || '');
+  if (!raw || !DEPENDENCY_CUE.test(raw)) return false;
+  return /(?:完了後|終了後|検証後|確認後|成立後|終わったら|完了したら|終了したら|after\s+.+\s+complete(?:s|d)?|once\s+.+\s+complete(?:s|d)?)\s*[、,]?\s*$/iu.test(raw);
+}
+
+function collapseDependencyPrefixes(tasks, question = '') {
+  const output = [];
+  const aliases = new Map();
+  const collapsed = [];
+  for (let index = 0; index < tasks.length; index += 1) {
+    const task = tasks[index];
+    const next = tasks[index + 1] || null;
+    if (!next || !dependencyPrefixTask(task)) {
+      output.push(task);
+      continue;
+    }
+    const start = task.source_span?.start;
+    const end = next.source_span?.end;
+    const exact = Number.isInteger(start) && Number.isInteger(end) && end > start
+      ? String(question || '').slice(start, end)
+      : `${task.source_span?.text || task.raw_text || ''}${next.source_span?.text || next.raw_text || ''}`;
+    const mergedText = exact || `${task.raw_text || ''}${next.raw_text || ''}`;
+    const merged = {
+      ...next,
+      source_span: {
+        start: Number.isInteger(start) ? start : next.source_span?.start,
+        end: Number.isInteger(end) ? end : next.source_span?.end,
+        text: mergedText
+      },
+      raw_text: norm(mergedText),
+      dependency_prefixes: unique([
+        ...((next.dependency_prefixes || []).map((item) => JSON.stringify(item))),
+        JSON.stringify({ source_task_id: task.id, source_span: task.source_span, text: norm(task.raw_text || task.source_span?.text || '') })
+      ]).map((item) => JSON.parse(item))
+    };
+    output.push(merged);
+    aliases.set(task.id, next.id);
+    collapsed.push({ prefix_task_id: task.id, merged_into_task_id: next.id, source_span: task.source_span });
+    index += 1;
+  }
+  return { tasks: output, aliases, collapsed };
+}
+
+function applyOriginAliases(originMap, aliases) {
+  const mapped = new Map(originMap);
+  for (const [alias, target] of aliases.entries()) {
+    const children = mapped.get(target);
+    if (children?.length) mapped.set(alias, [...children]);
+  }
+  return mapped;
 }
 
 function expandCompoundTasks(tasks) {
@@ -350,7 +408,7 @@ function applyContextBindings(tasks, bindings) {
     for (const taskId of binding.task_ids) byTask.get(taskId)?.push(binding);
   }
   for (const task of tasks) {
-    task.field_sources = baseFieldSources(task);
+    task.field_sources = task.field_sources || baseFieldSources(task);
     for (const binding of byTask.get(task.id) || []) {
       const source = { source: 'context', source_span: binding.source_span, scope: binding.scope, value: binding.value };
       if (binding.kind === 'premise') { task.premises = unique([...(task.premises || []), binding.value]); appendSource(task.field_sources, 'premises', source); }
@@ -434,8 +492,8 @@ function semanticDependencies(task, tasks, index) {
 
 function branchOutcome(text) {
   const value = norm(text);
-  if (/(?:問題なければ|問題がなければ|成功したら|成立したら|確認できたら|検証できたら|if\b[^.!?]*(?:pass|valid|success)|when\b[^.!?]*(?:pass|valid|success))/i.test(value)) return 'TRUE';
-  if (/(?:問題があれば|失敗したら|不成立|確認できなければ|検証できなければ|unless\b|if\b[^.!?]*(?:fail|invalid|error))/i.test(value)) return 'FALSE';
+  if (/(?:問題なければ|問題がなければ|問題がない場合|成功したら|成功した場合|成立したら|成立した場合|確認できたら|確認できた場合|検証できたら|検証できた場合|if\b[^.!?]*(?:pass|valid|success)|when\b[^.!?]*(?:pass|valid|success))/i.test(value)) return 'TRUE';
+  if (/(?:問題があれば|問題がある場合|失敗したら|失敗した場合|不成立|確認できなければ|確認できない場合|検証できなければ|検証できない場合|unless\b|if\b[^.!?]*(?:fail|invalid|error))/i.test(value)) return 'FALSE';
   if (/(?:ただし|例外|except|however)/i.test(value)) return 'EXCEPTION';
   return BRANCH_CUE.test(value) ? 'CONDITIONAL' : null;
 }
@@ -444,29 +502,64 @@ function buildBranchRelations(tasks) {
   const relations = [];
   const dependencyEdges = [];
   const unresolved = [];
+  const relationType = (outcome) => outcome === 'EXCEPTION' ? 'EXCEPTION' : outcome === 'FALSE' ? 'ELSE' : 'IF';
+  const makeRelation = ({ task, parentId = null, outcome = 'CONDITIONAL', conditions = [], inline = false, suffix = '' }) => ({
+    branch_id: inline ? `BR-INLINE-${task.id}${suffix}` : `BR-${parentId}-${task.id}${suffix}`,
+    branch_group_id: inline ? `BR-INLINE-${task.id}` : `BR-${parentId}`,
+    condition_task_id: inline ? null : parentId,
+    source_task_id: inline ? task.id : parentId,
+    target_task_id: task.id,
+    type: relationType(outcome),
+    outcome,
+    inline_condition: inline,
+    conditions: unique(conditions),
+    source_span: task.source_span
+  });
+
   for (let index = 0; index < tasks.length; index += 1) {
     const task = tasks[index];
     const raw = norm(task.raw_text || task.source_span?.text || '');
     const outcome = branchOutcome(raw);
-    if (!outcome && !(task.conditions || []).length && !(task.exceptions || []).length) continue;
+    const taskConditions = unique(task.conditions || []);
+    const taskExceptions = unique(task.exceptions || []);
+    if (!outcome && !taskConditions.length && !taskExceptions.length) continue;
     const previous = tasks[index - 1] || null;
     const siblingSource = previous?.conditional_branch && ['TRUE', 'FALSE'].includes(outcome)
       ? previous.conditional_branch.condition_task_id
       : null;
     const parentId = siblingSource || (task.depends_on || []).at(-1) || previous?.id || null;
+
     if (!parentId) {
-      unresolved.push(`${task.id}:branch_source`);
+      const exceptionSet = new Set(taskExceptions.map((item) => norm(item)));
+      const inlineConditions = taskConditions.filter((item) => !exceptionSet.has(norm(item)) && !/(?:ただし|例外|except|however)/i.test(item));
+      const primaryOutcome = outcome && outcome !== 'EXCEPTION' ? outcome : (inlineConditions.length ? 'TRUE' : null);
+      if (primaryOutcome) {
+        relations.push(makeRelation({
+          task,
+          outcome: primaryOutcome,
+          conditions: unique([...inlineConditions, ...(BRANCH_CUE.test(raw) ? [raw] : [])]),
+          inline: true,
+          suffix: '-IF'
+        }));
+      }
+      if (taskExceptions.length) {
+        relations.push(makeRelation({ task, outcome: 'EXCEPTION', conditions: taskExceptions, inline: true, suffix: '-EXCEPTION' }));
+      }
+      if (!primaryOutcome && !taskExceptions.length) {
+        unresolved.push(`${task.id}:branch_source`);
+        continue;
+      }
+      task.conditional_branch = relations.find((item) => item.target_task_id === task.id && item.inline_condition) || null;
+      task.execution_gate = 'CONDITIONAL';
       continue;
     }
-    const relation = {
-      branch_id: `BR-${parentId}-${task.id}`,
-      branch_group_id: `BR-${parentId}`,
-      condition_task_id: parentId,
-      target_task_id: task.id,
+
+    const relation = makeRelation({
+      task,
+      parentId,
       outcome: outcome || 'CONDITIONAL',
-      conditions: unique([...(task.conditions || []), ...(task.exceptions || []), ...(BRANCH_CUE.test(raw) ? [raw] : [])]),
-      source_span: task.source_span
-    };
+      conditions: unique([...taskConditions, ...taskExceptions, ...(BRANCH_CUE.test(raw) ? [raw] : [])])
+    });
     relations.push(relation);
     dependencyEdges.push({ from: parentId, to: task.id, type: 'CONDITIONAL_DEPENDENCY', reason: relation.outcome });
     task.conditional_branch = relation;
@@ -478,6 +571,7 @@ function buildBranchRelations(tasks) {
     groups.push({
       branch_group_id: groupId,
       condition_task_id: items[0].condition_task_id,
+      source_task_id: items[0].source_task_id,
       on_true: items.filter((item) => item.outcome === 'TRUE').map((item) => item.target_task_id),
       on_false: items.filter((item) => item.outcome === 'FALSE').map((item) => item.target_task_id),
       exceptions: items.filter((item) => item.outcome === 'EXCEPTION').map((item) => item.target_task_id),
@@ -492,7 +586,7 @@ function correctionRelations(question, tasks) {
   const relations = [];
   const unresolved = [];
   for (const correction of corrections) {
-    const current = tasks.find((task) => task.source_span.start <= correction.end && task.source_span.end >= correction.start) || tasks.find((task) => task.source_span.start >= correction.start);
+    const current = tasks.find((task) => task.source_span.start < correction.end && task.source_span.end > correction.start) || tasks.find((task) => task.source_span.start >= correction.start);
     const priorTasks = tasks.filter((task) => task.source_span.end <= correction.start && task.id !== current?.id);
     const named = priorTasks.filter((task) => task.target && norm(correction.text).toLowerCase().includes(norm(task.target).toLowerCase()));
     const prior = (named.length === 1 ? named[0] : priorTasks.sort((a, b) => b.source_span.end - a.source_span.end)[0]);
@@ -534,7 +628,8 @@ function enrichRequest(request, input = {}) {
   const kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
   const removed = (packet.tasks || []).filter((task) => !kept.includes(task));
 
-  const expanded = expandCompoundTasks(kept);
+  const collapsedPrefixes = collapseDependencyPrefixes(kept, question);
+  const expanded = expandCompoundTasks(collapsedPrefixes.tasks);
   const remapped = remapTasks(expanded.tasks);
   const tasks = remapped.tasks.map((task) => ({
     ...task,
@@ -549,7 +644,7 @@ function enrichRequest(request, input = {}) {
     superseded_by: []
   }));
 
-  const originFinalMap = remapOriginMap(expanded.originMap, remapped.idMap);
+  const originFinalMap = remapOriginMap(applyOriginAliases(expanded.originMap, collapsedPrefixes.aliases), remapped.idMap);
   const baseDeps = [];
   for (const edge of packet.dependencies || []) {
     const fromChildren = originFinalMap.get(edge.from) || [];
@@ -558,7 +653,10 @@ function enrichRequest(request, input = {}) {
   }
   for (const task of tasks) for (const parent of task.depends_on || []) baseDeps.push({ from: parent, to: task.id, type: 'INTRA_SENTENCE_ORDER', reason: 'compound_action_sequence' });
 
-  for (const task of tasks) task.field_sources = baseFieldSources(task);
+  for (const task of tasks) {
+    task.field_sources = baseFieldSources(task);
+    if (!genericTarget(task.target)) task.unresolved = unique((task.unresolved || []).filter((item) => item !== 'target'));
+  }
   const references = resolveReferences(tasks);
   const scopedContext = scopeContextBindings(contextBindings(context), tasks);
   const contextUnresolved = applyContextBindings(tasks, scopedContext);
@@ -585,7 +683,13 @@ function enrichRequest(request, input = {}) {
     const match = /^(T\d+):(.*)$/.exec(String(item));
     if (!match) return item;
     const children = originFinalMap.get(match[1]) || [];
-    return children.length ? `${children[0]}:${match[2]}` : null;
+    if (!children.length) return null;
+    const childId = children[0];
+    const child = tasks.find((task) => task.id === childId);
+    const reason = match[2];
+    if (reason === 'target' && child && !genericTarget(child.target)) return null;
+    if (reason === 'reference' && child?.reference_resolution) return null;
+    return `${childId}:${reason}`;
   }).filter(Boolean);
 
   for (const task of tasks) {
@@ -633,6 +737,7 @@ function enrichRequest(request, input = {}) {
       branch_count: branches.relations.length,
       reference_resolution_count: references.resolutions.length,
       compound_split_count: expanded.splitCount,
+      dependency_prefix_collapse_count: collapsedPrefixes.collapsed.length,
       unresolved_context_binding_count: contextUnresolved.length
     },
     source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span })),
