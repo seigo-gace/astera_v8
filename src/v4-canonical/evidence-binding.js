@@ -5,6 +5,7 @@ const {
   normalizeText,
   parseNaturalStructure,
   detectPolarity,
+  Polarity,
   deepFreeze
 } = require('./core');
 
@@ -33,7 +34,12 @@ function candidateClaim(candidate) {
   if (!text) return { resolved: false, diagnostic: 'EMPTY_CANDIDATE_TEXT' };
   const structure = parseNaturalStructure(text);
   if (structure.unresolved) return { resolved: false, diagnostic: structure.diagnostic, text };
-  return { resolved: true, ...structure, polarity: detectPolarity(text), text };
+  return {
+    resolved: true,
+    ...structure,
+    polarity: structure.condition ? Polarity.CONDITIONAL : detectPolarity(text),
+    text
+  };
 }
 function sourceSpan(candidate) {
   return candidate?.canonical_locator?.url || candidate?.url || candidate?.canonical_record_id || candidate?.candidate_id || 'UNKNOWN';
