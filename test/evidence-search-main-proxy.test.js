@@ -212,6 +212,7 @@ test('integrated process is a JSON facade over the same single AsteraEngine pipe
     assert.ok(evidenceCalls.length >= 1);
     assert.equal(result.evidence.searched_task_count, evidenceCalls.length);
     assert.equal(result.evidence.valid_task_count, evidenceCalls.length);
+    assert.ok(Object.values(result.evidence.by_task).some((packet) => packet.search_state === 'NOT_EXECUTED'));
     for (const call of evidenceCalls) {
       assert.equal(call.payload.search.free_projection, true);
       assert.equal(call.payload.search.free_current, true);
