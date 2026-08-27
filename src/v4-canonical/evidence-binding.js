@@ -4,6 +4,7 @@ const {
   createEvidenceBindingId,
   normalizeText,
   parseNaturalStructure,
+  parseVersionScheme,
   detectPolarity,
   Polarity,
   deepFreeze
@@ -29,6 +30,11 @@ function fixedContains(haystack, needle) {
   const right = normalizeText(needle).toLocaleLowerCase('und');
   return Boolean(right) && left.includes(right);
 }
+function explicitVersionScope(text) {
+  const value = normalizeText(text);
+  const candidate = value.match(/\bv?\d+(?:\.\d+){0,2}\b|\b\d{4}-\d{2}(?:-\d{2})?\b|\bRev\.?\s*\d+\b/iu)?.[0];
+  return candidate ? parseVersionScheme(candidate).normalized : 'UNKNOWN';
+}
 function candidateClaim(candidate) {
   const text = candidateText(candidate);
   if (!text) return { resolved: false, diagnostic: 'EMPTY_CANDIDATE_TEXT' };
@@ -38,6 +44,7 @@ function candidateClaim(candidate) {
     resolved: true,
     ...structure,
     polarity: structure.condition ? Polarity.CONDITIONAL : detectPolarity(text),
+    version_scope: explicitVersionScope(text),
     text
   };
 }
@@ -168,7 +175,7 @@ function bindExternalCandidate(claim, candidate, policy = {}) {
     property: extracted.predicate,
     time_scope: candidate.updated_at || candidate.published_at || 'UNKNOWN',
     jurisdiction: candidate.jurisdiction || candidate.fields?.jurisdiction || 'UNKNOWN',
-    version_scope: candidate.version || candidate.fields?.version || 'UNKNOWN'
+    version_scope: candidate.version || candidate.fields?.version || extracted.version_scope || 'UNKNOWN'
   };
   const scope = scopeCompatibility(claim, extractedScope, policy, extracted.condition || null);
   const relation = semanticRelation !== CandidateRelation.NO_MATCH && !scope.compatible
