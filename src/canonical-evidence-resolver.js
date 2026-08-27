@@ -173,8 +173,10 @@ async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'u
     };
   }
 
+  let searchAttempted = false;
   try {
     const payload = searchRequestFor(task, input, tenant, requestId);
+    searchAttempted = true;
     const packet = await client.search(payload, { requestId, tenantId: tenant.id, signal });
     const searchState = deriveSearchState(packet);
     const summary = executionSummary(packet);
@@ -192,8 +194,9 @@ async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'u
     };
   } catch (error) {
     if (signal?.aborted || error?.code === 'EVIDENCE_API_CANCELLED') throw error;
+    const searchState = searchAttempted ? SEARCH_STATES.FAILED : SEARCH_STATES.NOT_EXECUTED;
     return {
-      ...failedEvidence(task.id, error, SEARCH_STATES.FAILED),
+      ...failedEvidence(task.id, error, searchState),
       planning_authority: 'UPSTREAM_CANONICAL',
       planned_query_roles: upstreamPlan.planned_query_roles || []
     };
