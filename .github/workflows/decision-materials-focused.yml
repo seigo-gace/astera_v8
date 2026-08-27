@@ -63,6 +63,41 @@ jobs:
             test/v4-source-span-regression.test.js \
             2>&1 | tee decision-materials-core.tap
 
+      - name: Capture Task Decomposition diagnostics
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          'use strict';
+          const fs = require('node:fs');
+          const inputUnderstanding = require('./src/input-understanding');
+          const { enrichRequest } = require('./src/deterministic-task-decomposer');
+          function understand(question, context = '') {
+            return enrichRequest(inputUnderstanding.analyzeRequest({ question, context }), { question, context });
+          }
+          const cases = {
+            reference_with_context: understand('APIサーバーを検証する。それを改善する。', 'APIサーバーはmainを変更するな。'),
+            natural_multi_parent: understand('API仕様を検証する。互換性を検証する。API仕様と互換性の検証完了後、移行を実装する。'),
+            conditional_exception: understand('検証が成功した場合にAPIを実装する。ただし互換性がない場合は停止する。'),
+            correction_supersession: understand('Aを実装する。訂正、AではなくBを実装する。')
+          };
+          const compact = Object.fromEntries(Object.entries(cases).map(([key, value]) => [key, {
+            instruction_understanding: value.instruction_understanding,
+            task_graph: {
+              tasks: value.analysis_task_packet?.tasks,
+              dependencies: value.analysis_task_packet?.dependencies,
+              branches: value.analysis_task_packet?.branches,
+              branch_groups: value.analysis_task_packet?.branch_groups,
+              supersession_relations: value.analysis_task_packet?.supersession_relations,
+              reference_resolutions: value.analysis_task_packet?.reference_resolutions,
+              unresolved: value.analysis_task_packet?.unresolved,
+              hard_blockers: value.analysis_task_packet?.hard_blockers,
+              validation: value.analysis_task_packet?.task_graph_validation
+            }
+          }]));
+          fs.writeFileSync('decision-materials-task-diagnostics.json', JSON.stringify(compact, null, 2));
+          NODE
+
       - name: Decision materials public API cases
         if: always()
         shell: bash
@@ -83,3 +118,4 @@ jobs:
           path: |
             decision-materials-core.tap
             decision-materials-api.tap
+            decision-materials-task-diagnostics.json
