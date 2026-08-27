@@ -130,7 +130,10 @@ function scoreGenre(genre, text) {
     const term = normalize(rawTerm);
     if (!term) continue;
     const shortAsciiToken = /^[a-z0-9.+#-]{1,3}$/.test(term);
-    const exactMatch = shortAsciiToken ? queryTokens.has(term) : normalizedText.includes(term);
+    const shortAsciiBoundaryMatch = shortAsciiToken
+      ? new RegExp(`(^|[^a-z0-9.+#-])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^a-z0-9.+#-])`, 'i').test(normalizedText)
+      : false;
+    const exactMatch = shortAsciiToken ? shortAsciiBoundaryMatch : normalizedText.includes(term);
     if (exactMatch) {
       const compactLength = term.replace(/\s/g, '').length;
       score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
