@@ -1,0 +1,146 @@
+name: Reflect Decision Materials Truthful Runtime Candidate
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+
+permissions:
+  contents: write
+
+jobs:
+  reflect:
+    if: github.event.head_commit.message == 'ci: stage verified decision-materials reflection'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout staged candidate carrier
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconstruct and verify exact candidate patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .astera-reflect/chunk-* | base64 -d > /tmp/astera-reflect.patch.gz
+          echo '3fa6312ca75d713a9222d0176b03f6a6749be594cc9d9a11f6fbb8478ef0a1d7  /tmp/astera-reflect.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/astera-reflect.patch.gz > /tmp/astera-reflect.patch
+          echo '8fc91e7e68f8f00b62244a982eb02d4432b644c3f525c75302e4412a77f26ccd  /tmp/astera-reflect.patch' | sha256sum -c -
+          git apply --check /tmp/astera-reflect.patch
+
+      - name: Apply candidate and remove all old archive/runtime carriers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --index /tmp/astera-reflect.patch
+          if git ls-files archive | grep -q .; then
+            git rm -r archive
+          fi
+          git rm -r .astera-reflect .github/workflows/reflect-decision-materials-candidate.yml
+          git diff --cached --check
+          git diff --cached --name-status > reflect-changed-files.txt
+          git diff --cached --stat > reflect-diff-stat.txt
+
+      - name: Legacy escape and secret boundary checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \
+            src/kagura-engine.js \
+            src/worker-pool.js \
+            src/mood-detector.js \
+            src/canonical-evidence-auto-engine.js \
+            src/billing/stripe-client.js \
+            src/billing/subscription-sync.js \
+            src/pillars \
+            docs/HYPERION_PCE_INTEGRATION.md \
+            RELEASE_MANIFEST.txt \
+            src/quality-completion-evaluator/TEST_REPORT.md; do
+            test ! -e "$path"
+          done
+          test -z "$(git ls-files archive)"
+          if grep -RInE 'KAGURA_|allow_shared_legacy_evidence|legacyCommerceEnabled|STRIPE_|\bhyperion\b|\bdialectic\b' \
+            src docs start.js package.json .env.example README.md STRUCTURE.md; then
+            echo 'Legacy active-runtime reference remains' >&2
+            exit 1
+          fi
+          if grep -RInE 'sk_live_[A-Za-z0-9]+|ghp_[A-Za-z0-9]+|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY' \
+            --exclude-dir=.git --exclude='reflect-*.txt' .; then
+            echo 'Potential committed secret detected' >&2
+            exit 1
+          fi
+
+      - name: Static validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-active-js.js | tee reflect-static-js.log
+          node scripts/check-active-json.js | tee reflect-static-json.log
+          bash -n scripts/*.sh
+
+      - name: Decision Materials truthful-runtime acceptance tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          node --test \
+            test/api.test.js \
+            test/commerce-boundary.test.js \
+            test/evidence-search-truthful-state.test.js \
+            test/health-truthful-state.test.js \
+            test/canonical-composition-boundary.test.js \
+            test/canonical-concurrency-limit.test.js \
+            test/canonical-decision-materials-load.test.js \
+            test/canonical-entrypoint-regression.test.js \
+            test/canonical-lens-evidence-regression.test.js \
+            test/canonical-main8-trace.test.js \
+            test/canonical-parallel-execution.test.js \
+            test/canonical-runtime-flow-regression.test.js \
+            test/canonical-worker-boundaries.test.js \
+            test/evidence-client-cancel.test.js \
+            test/evidence-search-core.test.js \
+            test/evidence-search-provider-adapter.test.js \
+            test/false-confirmation-effect.test.js \
+            test/global-input-understanding.test.js \
+            test/human-reader-effect-boundary.test.js \
+            test/request-abort-context.test.js \
+            test/runtime-hardening.test.js \
+            test/security.test.js \
+            test/task-decomposition-canon-regression.test.js \
+            test/task-decomposition-v2-regression.test.js \
+            test/task-target-lens-regression.test.js \
+            test/v4-canonical-fidelity.test.js \
+            test/v4-source-span-regression.test.js \
+            2>&1 | tee reflect-acceptance.tap
+
+      - name: Commit verified candidate atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git status --short
+          git commit -m 'fix: remove legacy runtime and make evidence state truthful'
+          git push origin HEAD:feature/evidence-search-v2-4
+          git rev-parse HEAD | tee reflect-final-sha.txt
+
+      - name: Upload reflection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decision-materials-reflection-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reflect-changed-files.txt
+            reflect-diff-stat.txt
+            reflect-static-js.log
+            reflect-static-json.log
+            reflect-acceptance.tap
+            reflect-final-sha.txt
