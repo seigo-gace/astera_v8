@@ -119,3 +119,4 @@ jobs:
             decision-materials-core.tap
             decision-materials-api.tap
             decision-materials-task-diagnostics.json
+            src/deterministic-task-decomposer.js
