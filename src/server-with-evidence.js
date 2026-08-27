@@ -65,8 +65,8 @@ function integratedEvidenceByTask(result = {}) {
 
 function aggregateEvidence(byTask) {
   const entries = Object.entries(byTask);
-  const searched = entries.filter(([, value]) => value.status !== 'NOT_REQUIRED');
-  if (!searched.length) {
+  const required = entries.filter(([, value]) => value.status !== 'NOT_REQUIRED');
+  if (!required.length) {
     return {
       status: 'NOT_REQUIRED',
       searched_task_count: 0,
@@ -75,18 +75,19 @@ function aggregateEvidence(byTask) {
       evidence: []
     };
   }
-  const valid = searched.filter(([, value]) => value.state === 'VALID' || value.status === 'FINAL_VALID');
-  const rejected = searched.filter(([, value]) => value.state === 'REJECTED' || String(value.status || '').startsWith('REJECTED'));
+  const searched = required.filter(([, value]) => !['NOT_REQUIRED', 'NOT_EXECUTED'].includes(String(value.search_state || 'UNKNOWN')));
+  const valid = required.filter(([, value]) => value.state === 'VALID' || value.status === 'FINAL_VALID');
+  const rejected = required.filter(([, value]) => value.state === 'REJECTED' || String(value.status || '').startsWith('REJECTED'));
   return {
-    status: valid.length === searched.length
+    status: valid.length === required.length
       ? 'FINAL_VALID'
-      : rejected.length === searched.length
+      : rejected.length === required.length
         ? 'REJECTED_TASK_EVIDENCE'
         : 'PARTIAL_TASK_EVIDENCE',
     searched_task_count: searched.length,
     valid_task_count: valid.length,
     rejected_task_count: rejected.length,
-    evidence: searched.flatMap(([taskId, value]) =>
+    evidence: required.flatMap(([taskId, value]) =>
       (value.evidence || []).map((item) => ({ task_id: taskId, ...item })))
   };
 }
