@@ -92,6 +92,17 @@ test('短いASCII分類語を単語途中で誤発火させない', () => {
   assert.equal((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('ai'), false);
 });
 
+test('短いASCII分類語は日本語Script境界でも正しく一致する', () => {
+  const result = routeDomainTemplates({ question: 'APIサーバーの現行仕様を公式根拠で検証する。' });
+  assert.equal(result.primary?.id, 'G29');
+  assert.ok((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('api'));
+});
+
+test('短いASCII分類語はLatin単語内部では引き続き誤発火しない', () => {
+  const result = routeDomainTemplates({ question: 'rapidサーバーの現行仕様を検証する。' });
+  assert.equal((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('api'), false);
+});
+
 test('会話ContextはGenre採点へ混ぜず現在Taskを優先する', () => {
   const result = routeDomainTemplates({
     question: 'APIサーバーのシステム開発を改善する',
