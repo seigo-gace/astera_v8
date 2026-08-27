@@ -43,6 +43,15 @@ jobs:
             git rm -r archive
           fi
           git rm -r .astera-reflect .github/workflows/reflect-decision-materials-candidate.yml
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('test/security.test.js')
+          data = path.read_bytes()
+          if not data.endswith(b'\n\n'):
+              raise SystemExit('expected candidate EOF blank line not found')
+          path.write_bytes(data.rstrip(b'\n') + b'\n')
+          PY
+          git add test/security.test.js
           git diff --cached --check
           git diff --cached --name-status > reflect-changed-files.txt
           git diff --cached --stat > reflect-diff-stat.txt
