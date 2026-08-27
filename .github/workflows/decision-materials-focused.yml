@@ -32,7 +32,9 @@ jobs:
           node --check test/canonical-runtime-flow-regression.test.js
 
       - name: Decision materials core and regression tests
+        shell: bash
         run: |
+          set -o pipefail
           node --test \
             test/all-domain-router.test.js \
             test/canonical-composition-boundary.test.js \
@@ -58,11 +60,26 @@ jobs:
             test/task-decomposition-v2-regression.test.js \
             test/task-target-lens-regression.test.js \
             test/v4-canonical-fidelity.test.js \
-            test/v4-source-span-regression.test.js
+            test/v4-source-span-regression.test.js \
+            2>&1 | tee decision-materials-core.tap
 
       - name: Decision materials public API cases
         if: always()
+        shell: bash
         run: |
+          set -o pipefail
           node --test \
             --test-name-pattern='HTTP flow: signup -> process works with tenant key|HTTP flow: canonical process rejects caller-supplied LLM configuration|HTTP flow: context must be a string|HTTP flow: short process request returns clarification text|HTTP flow: bad JSON returns 400 instead of 500|HTTP flow: invalid question type returns 400|HTTP flow: unauthorized process returns 401|HTTP flow: payload over 1MB returns 413' \
-            test/api.test.js
+            test/api.test.js \
+            2>&1 | tee decision-materials-api.tap
+
+      - name: Upload decision-materials focused evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decision-materials-focused-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            decision-materials-core.tap
+            decision-materials-api.tap
