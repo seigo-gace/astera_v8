@@ -250,6 +250,18 @@ test('keeps future usage calculation isolated from provider execution and paymen
   assert.equal(Object.hasOwn(response.result, 'reservation_id'), false);
 });
 
+test('health reports unavailable when no active provider exists', async () => {
+  const module = createEvidenceSearchModule({ providers: [] });
+  const response = await module.execute({
+    schema_version: SCHEMA,
+    operation: 'HEALTH'
+  });
+  assert.equal(response.status, 'OK');
+  assert.equal(response.result.status, 'UNAVAILABLE_NO_ACTIVE_PROVIDER');
+  assert.equal(response.result.provider_count, 0);
+  assert.equal(response.result.active_provider_count, 0);
+});
+
 test('health reports no AI and no payment execution', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });
   const response = await module.execute({
@@ -258,6 +270,7 @@ test('health reports no AI and no payment execution', async () => {
   });
   assert.equal(response.result.status, 'OK');
   assert.equal(response.result.provider_count, 3);
+  assert.equal(response.result.active_provider_count, 3);
   assert.equal(response.result.ai_used, false);
   assert.equal(response.result.payment_execution, false);
 });
