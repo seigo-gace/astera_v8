@@ -1,0 +1,89 @@
+name: Judgment Materials Repair V2
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.event.head_commit.message == 'ci: run judgment materials repair v2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Apply canonical repair
+        run: python scripts/.judgment-materials-repair.py
+
+      - name: Syntax and static checks
+        run: |
+          node --check src/deterministic-task-decomposer.js
+          node --check src/v4-canonical/lanes.js
+          node --check src/canonical-claim-runtime.js
+          node --check src/canonical-task-projection.js
+          node --check src/canonical-astera-engine-base.js
+          node --check src/server-with-evidence.js
+          node --check test/judgment-materials-no-shortcuts-regression.test.js
+          node --check test/lens-output-integration.test.js
+          npm run check:json
+          npm run check:shell
+
+      - name: Adversarial and focused regressions
+        run: |
+          node --test \
+            test/judgment-materials-no-shortcuts-regression.test.js \
+            test/task-decomposition-canon-regression.test.js \
+            test/task-decomposition-v2-regression.test.js \
+            test/global-input-understanding.test.js \
+            test/lens-output-integration.test.js \
+            test/lens-plan-integration.test.js \
+            test/canonical-main8-trace.test.js \
+            test/canonical-v4-pipeline-regression.test.js \
+            test/engine.test.js \
+            test/canonical-runtime-flow-regression.test.js \
+            test/canonical-composition-boundary.test.js \
+            test/canonical-worker-boundaries.test.js \
+            test/canonical-parallel-execution.test.js \
+            test/false-confirmation-effect.test.js \
+            test/human-reader-effect-boundary.test.js
+
+      - name: Real public API and module switch
+        run: node --test test/api.test.js test/module-switch.test.js
+
+      - name: Runtime regression excluding separately-owned Evidence Search internals
+        shell: bash
+        run: |
+          files=()
+          for f in test/*.test.js; do
+            case "$f" in
+              test/evidence-search-*.test.js|test/evidence-paid-usage.test.js) ;;
+              *) files+=("$f") ;;
+            esac
+          done
+          node --test "${files[@]}"
+
+      - name: Commit verified repair atomically
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f \
+            .github/workflows/judgment-materials-no-shortcuts-repair.yml \
+            .github/workflows/judgment-materials-repair-v2.yml \
+            scripts/.judgment-materials-repair.py
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: remove judgment materials shortcuts and false coverage"
+          git push origin HEAD:feature/evidence-search-v2-4
