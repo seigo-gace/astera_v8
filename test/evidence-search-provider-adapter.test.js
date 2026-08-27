@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
   isPublicIp,
   secureGet
@@ -9,6 +12,20 @@ const {
 const {
   createFreeOfficialLiveProvider
 } = require('../src/evidence-search/providers/free-official-live-provider');
+const {
+  loadEvidenceProviders
+} = require('../src/evidence-search/providers/config-loader');
+
+function withProviderConfig(config, callback) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-provider-config-'));
+  const configFile = path.join(dir, 'evidence-providers.json');
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+  try {
+    return callback(configFile);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 test('SSRF address policy rejects private, loopback, link-local, and documentation ranges', () => {
   for (const address of [
@@ -65,6 +82,77 @@ test('secure transport rejects a registered hostname resolving to a private addr
     (error) => error.code === 'SOURCE_ADDRESS_FORBIDDEN'
   );
   assert.equal(requested, false);
+});
+
+test('runtime provider config rejects reserved placeholder hosts instead of treating them as real providers', () => {
+  withProviderConfig({
+    schema_version: 'astera.evidence-providers.v1',
+    providers: [{
+      provider_id: 'placeholder-runtime-provider',
+      type: 'FREE_OFFICIAL_HTTP',
+      enabled: true,
+      certified: true,
+      allowed_hosts: ['api.official.example'],
+      domains: ['G29'],
+      capabilities: ['NO_REINFORCEMENT'],
+      endpoints: [{
+        endpoint_id: 'placeholder-search',
+        url_template: 'https://api.official.example/search?q={query}',
+        response_format: 'JSON',
+        records_path: 'results'
+      }]
+    }]
+  }, (configFile) => {
+    assert.throws(
+      () => loadEvidenceProviders({ configFile }),
+      (error) => error.code === 'EVIDENCE_PROVIDER_PLACEHOLDER_HOST_FORBIDDEN'
+    );
+  });
+});
+
+test('disabled example providers stay inert and do not become runtime providers', () => {
+  withProviderConfig({
+    schema_version: 'astera.evidence-providers.v1',
+    providers: [{
+      provider_id: 'disabled-placeholder-provider',
+      type: 'FREE_OFFICIAL_HTTP',
+      enabled: false,
+      certified: true,
+      allowed_hosts: ['api.official.example'],
+      endpoints: [{
+        endpoint_id: 'placeholder-search',
+        url_template: 'https://api.official.example/search?q={query}',
+        response_format: 'JSON'
+      }]
+    }]
+  }, (configFile) => {
+    assert.deepEqual(loadEvidenceProviders({ configFile }), []);
+  });
+});
+
+test('runtime provider config accepts a non-placeholder public HTTPS host without performing retrieval', () => {
+  withProviderConfig({
+    schema_version: 'astera.evidence-providers.v1',
+    providers: [{
+      provider_id: 'public-host-config-test',
+      type: 'FREE_OFFICIAL_HTTP',
+      enabled: true,
+      certified: true,
+      allowed_hosts: ['api.github.com'],
+      domains: ['G29'],
+      capabilities: ['NO_REINFORCEMENT'],
+      endpoints: [{
+        endpoint_id: 'public-search-config-test',
+        url_template: 'https://api.github.com/search/repositories?q={query}',
+        response_format: 'JSON',
+        records_path: 'items'
+      }]
+    }]
+  }, (configFile) => {
+    const providers = loadEvidenceProviders({ configFile });
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0].provider_id, 'public-host-config-test');
+  });
 });
 
 test('free official adapter provider queries only its fixed endpoint and maps current records', async () => {
