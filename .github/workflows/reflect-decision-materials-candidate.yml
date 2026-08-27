@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   reflect:
-    if: github.event.head_commit.message == 'ci: stage verified decision-materials reflection'
+    if: "github.event.head_commit.message == 'ci: stage verified decision-materials reflection'"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
