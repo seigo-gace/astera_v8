@@ -182,6 +182,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
           result: {
             type: 'clarification_needed',
             non_ai: true,
+            decision_authority: 'EXTERNAL_ONLY',
             request_model: request,
             instruction_understanding: request.instruction_understanding || null,
             analysis_task_packet: request.analysis_task_packet,

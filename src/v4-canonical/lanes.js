@@ -267,16 +267,16 @@ function multiLane(claims, results, domain, task = {}, searchPlan = {}) {
       source: 'CANONICAL_POLICY_SEARCH_ROLE'
     }
   ];
-  if (domainEntries.length) {
+  for (const [index, entry] of domainEntries.entries()) {
     base.push({
-      id: 'domain',
+      id: `domain:${index + 1}`,
       class: 'DOMAIN',
-      focus: domainEntries.map((entry) => entry.value),
-      conditions: domainEntries.map((entry) => entry.value),
+      focus: entry.value,
+      conditions: [entry.value],
       weaknesses: [],
       claim_ids: claims.map((claim) => claim.claim_id).sort(),
       evidence_refs: evidenceRefs,
-      lens_sources: uniqueStrings(domainEntries.flatMap((entry) => entry.sources || [])),
+      lens_sources: entry.sources || [],
       source: 'LENS_PLAN'
     });
   }

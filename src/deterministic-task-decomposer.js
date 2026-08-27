@@ -125,12 +125,23 @@ function deliverables(text) {
   return unique(out);
 }
 
+function decisionMaterialRanges(text) {
+  const ranges = [];
+  const re = /(?:採用|選定)?判断(?:材料|に必要な(?:材料|情報|根拠|条件))|(?:採用|選定)(?:判断)?に必要な(?:材料|情報|根拠|条件)/gu;
+  for (const match of String(text || '').matchAll(re)) ranges.push({ start: match.index, end: match.index + match[0].length });
+  return ranges;
+}
+
 function actionOccurrences(text) {
   const found = [];
+  const protectedDecisionRanges = decisionMaterialRanges(text);
   for (const [id, pattern] of ACTION_PATTERNS) {
     const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
     const re = new RegExp(pattern.source, flags);
-    for (const match of String(text || '').matchAll(re)) found.push({ id, index: match.index, end: match.index + match[0].length, match: match[0] });
+    for (const match of String(text || '').matchAll(re)) {
+      if (id === 'decide' && protectedDecisionRanges.some((range) => match.index >= range.start && match.index < range.end)) continue;
+      found.push({ id, index: match.index, end: match.index + match[0].length, match: match[0] });
+    }
   }
   found.sort((a, b) => a.index - b.index || a.end - b.end || a.id.localeCompare(b.id));
   const dedup = [];

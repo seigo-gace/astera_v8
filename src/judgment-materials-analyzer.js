@@ -52,11 +52,20 @@ function terms(text) {
   return unique([...ascii, ...ja]).map((item) => item.toLowerCase()).filter((item) => !STOP.has(item) && item.length >= 2).slice(0, 64);
 }
 
+function decisionMaterialRanges(text) {
+  const ranges = [];
+  const re = /(?:採用|選定)?判断(?:材料|に必要な(?:材料|情報|根拠|条件))|(?:採用|選定)(?:判断)?に必要な(?:材料|情報|根拠|条件)/gu;
+  for (const match of String(text || '').matchAll(re)) ranges.push({ start: match.index, end: match.index + match[0].length });
+  return ranges;
+}
+
 function actionMatches(text) {
+  const protectedDecisionRanges = decisionMaterialRanges(text);
   return ACTIONS.map((entry) => {
     const match = entry.re.exec(text);
     return match ? { id: entry.id, match: match[0], index: match.index } : null;
-  }).filter(Boolean).sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
+  }).filter((item) => item && !(item.id === 'decide' && protectedDecisionRanges.some((range) => item.index >= range.start && item.index < range.end)))
+    .sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
 }
 
 function action(text) {
@@ -69,7 +78,7 @@ function clauseType(text) {
   if (RX.prohibit.test(text)) return 'prohibition';
   if (RX.preserve.test(text)) return 'preserve';
   if (RX.verify.test(text)) return 'verification';
-  if (/決定|採用|選定|判断|decide|select|choose|adopt/i.test(text)) return 'decision';
+  if (/決定|採用|選定|判断|decide|select|choose|adopt/i.test(text) && actionMatches(text).some((item) => item.id === 'decide')) return 'decision';
   if (/[?？]$|教え|どう|何を|なぜ|why|how|what/i.test(text)) return 'question';
   if (/実装|作成|構築|変更|修正|改善|分析|解析|比較|移行|削除|統合|接続|行え|しろ|せよ|してください|implement|build|change|fix|analy[sz]|compare|migrate|remove|integrate/i.test(text)) return 'instruction';
   return 'statement';

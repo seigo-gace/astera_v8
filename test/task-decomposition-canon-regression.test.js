@@ -66,6 +66,16 @@ test('multiple actions in one sentence are split even without comma punctuation 
   }
 });
 
+test('decision-material wording remains a compare-material request instead of becoming a decision Task', () => {
+  const request = understand('A案とB案を比較し、採用判断に必要な材料を出す。');
+  assert.equal(request.analysis_task_packet.tasks.length, 1);
+  const [task] = request.analysis_task_packet.tasks;
+  assert.equal(task.action, 'compare');
+  assert.equal(task.target, 'A案とB案');
+  assert.equal(task.unresolved.includes('target'), false);
+  assert.equal(request.analysis_task_packet.tasks.some((item) => item.action === 'decide'), false);
+});
+
 test('required Task contract fields and per-field provenance are retained in the canonical output', () => {
   const request = understand('APIを実装する。成功条件はRollback可能であること。検証はテストで行う。', '必ず互換性を維持する。');
   const task = request.analysis_task_packet.tasks[0];
