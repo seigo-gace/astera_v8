@@ -108,7 +108,7 @@ jobs:
             test/api.test.js \
             2>&1 | tee decision-materials-api.tap
 
-      - name: Upload decision-materials focused evidence
+      - name: Upload decision-materials focused evidence and exact source snapshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -119,4 +119,16 @@ jobs:
             decision-materials-core.tap
             decision-materials-api.tap
             decision-materials-task-diagnostics.json
-            src/deterministic-task-decomposer.js
+            .env.example
+            Dockerfile
+            docker-compose*.yml
+            package.json
+            README.md
+            RELEASE_MANIFEST.txt
+            STRUCTURE.md
+            start.js
+            config/**
+            docs/**
+            scripts/**
+            src/**
+            test/**
