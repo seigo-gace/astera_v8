@@ -184,7 +184,7 @@ test('Compare separates candidate identity from explicit criteria and carries bo
     assert.deepEqual(out.result.comparison.comparison_candidates.map((item) => item.label), ['A案','B案']);
     assert.ok(out.result.comparison.dimensions.includes('費用'));
     assert.ok(out.result.comparison.dimensions.includes('安全性'));
-    const main06 = out.result.main8['06_comparison'];
+    const main06 = out.result.judgment['06_comparison'];
     const serialized = JSON.stringify(main06);
     for (const required of ['A案','B案','費用','安全性']) assert.ok(serialized.includes(required), required);
     assert.equal(main06.selected_candidate, null);
