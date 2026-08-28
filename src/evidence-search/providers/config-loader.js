@@ -9,17 +9,19 @@ const { loadEvidenceSourceCatalog, validateCatalogProviderCoverage } = require('
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ROUTING_OVERRIDES } = require('./public-specialist-provider-definitions');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ROUTING_OVERRIDES_ALL_DOMAIN } = require('./public-specialist-provider-definitions-all-domain');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION, ROUTING_OVERRIDES_SPECIALIST_EXPANSION } = require('./public-specialist-provider-definitions-specialist-expansion');
+const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB, ROUTING_OVERRIDES_WORLD_KB } = require('./public-specialist-provider-definitions-world-kb');
 
 const FREE_SOURCE_CLASSES = new Set(['FREE_PROJECTION', 'FREE_OFFICIAL_LIVE']);
 const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze(['example.com', 'example.net', 'example.org']);
 const RESERVED_PLACEHOLDER_TLDS = Object.freeze(['example', 'invalid', 'localhost', 'test']);
-const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION });
+const BLOCKED_PUBLIC_PROVIDER_IDS = new Set(['cpsc-recalls-search', 'swift-package-index-search']);
+const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id)));
+const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION, ...ROUTING_OVERRIDES_WORLD_KB });
 
 function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') { const error = new Error(message); error.code = code; return error; }
 function normalizeConfiguredHost(value) { return String(value || '').trim().toLowerCase().replace(/\.$/, ''); }
 function isReservedPlaceholderHost(value) {
-  const host = normalizeConfiguredHost(value);
-  if (!host) return false;
+  const host = normalizeConfiguredHost(value); if (!host) return false;
   if (RESERVED_PLACEHOLDER_TLDS.some((tld) => host === tld || host.endsWith(`.${tld}`))) return true;
   return RESERVED_PLACEHOLDER_BASE_HOSTS.some((base) => host === base || host.endsWith(`.${base}`));
 }
@@ -39,48 +41,20 @@ function readConfig(filePath) {
   if (base.schema_version !== 'astera.evidence-providers.v1') throw configError('unsupported evidence provider configuration schema', 'EVIDENCE_PROVIDER_CONFIG_SCHEMA_UNSUPPORTED');
   if (!Array.isArray(base.providers)) throw configError('evidence provider configuration providers must be an array');
   const publicCatalog = String(base.source_catalog || '') === './evidence-source-catalog.public.json';
-  const providers = publicCatalog ? [...base.providers, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION] : [...base.providers];
+  const providers = publicCatalog ? [...base.providers, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...ACTIVE_SPECIALIST_EXPANSION, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB] : [...base.providers];
   const ids = new Set();
-  for (const provider of providers) {
-    const id = String(provider?.provider_id || '');
-    if (!id) continue;
-    if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE');
-    ids.add(id);
-  }
+  for (const provider of providers) { const id = String(provider?.provider_id || ''); if (!id) continue; if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(id); }
   return { absolute, parsed: { ...base, providers } };
 }
 function safeProviderId(value, index) { const id = String(value || '').trim(); if (!/^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$/i.test(id)) throw configError(`providers[${index}].provider_id is invalid`); return id; }
 function resolveDataFile(configFile, value, index) { if (typeof value !== 'string' || !value.trim()) throw configError(`providers[${index}].file_path is required`); const filePath = path.resolve(path.dirname(configFile), value); const stat = fs.statSync(filePath); if (!stat.isFile()) throw configError(`providers[${index}].file_path must reference a file`); return filePath; }
-function sharedProviderFields(raw, index) {
-  return {
-    provider_id: safeProviderId(raw.provider_id, index),
-    source_family_id: String(raw.source_family_id || raw.provider_id),
-    priority: Number.isInteger(raw.priority) ? raw.priority : 100,
-    domains: Array.isArray(raw.domains) ? raw.domains : [],
-    capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : [],
-    routing_terms: Array.isArray(raw.routing_terms) ? raw.routing_terms : (PUBLIC_ROUTING_OVERRIDES[raw.provider_id] || []),
-    latency_p50_ms: Number.isFinite(Number(raw.latency_p50_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p50_ms))) : undefined,
-    latency_p95_ms: Number.isFinite(Number(raw.latency_p95_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p95_ms))) : undefined,
-    certified: raw.certified !== false
-  };
-}
+function sharedProviderFields(raw, index) { return { provider_id: safeProviderId(raw.provider_id, index), source_family_id: String(raw.source_family_id || raw.provider_id), priority: Number.isInteger(raw.priority) ? raw.priority : 100, domains: Array.isArray(raw.domains) ? raw.domains : [], capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : [], routing_terms: Array.isArray(raw.routing_terms) ? raw.routing_terms : (PUBLIC_ROUTING_OVERRIDES[raw.provider_id] || []), latency_p50_ms: Number.isFinite(Number(raw.latency_p50_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p50_ms))) : undefined, latency_p95_ms: Number.isFinite(Number(raw.latency_p95_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p95_ms))) : undefined, certified: raw.certified !== false }; }
 function buildProvider(configFile, raw, index) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw configError(`providers[${index}] must be an object`);
   const type = String(raw.type || 'JSON_PROJECTION').toUpperCase(); const common = sharedProviderFields(raw, index);
-  if (type === 'JSON_PROJECTION') {
-    const sourceClass = String(raw.source_class || 'FREE_PROJECTION').toUpperCase();
-    if (!FREE_SOURCE_CLASSES.has(sourceClass)) throw configError(`providers[${index}] must use a free source_class`, 'PAID_PROVIDER_CONFIGURATION_FORBIDDEN');
-    return createJsonProjectionProvider({ ...common, filePath: resolveDataFile(configFile, raw.file_path, index), source_class: sourceClass, latency_p95_ms: common.latency_p95_ms || 50 });
-  }
-  if (Array.isArray(raw.catalog_source_ids) && raw.catalog_source_ids.includes('BSDD')) {
-    assertNoPlaceholderOfficialHosts(raw, index);
-    if (type !== 'FREE_OFFICIAL_HTTP' && type !== 'FREE_PUBLIC_HTTP' && type !== 'BSDD_PUBLIC_HTTP') throw configError(`providers[${index}] bSDD adapter requires a free HTTP provider type`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED');
-    return createBsddLiveProvider({ ...common, allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : ['api.bsdd.buildingsmart.org'], preferred_dictionary_codes: ['IFC', 'ETIM'], max_dictionary_scan: 80, dictionary_batch_size: 10, result_limit: 20, timeout_ms: 12000 });
-  }
-  if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') {
-    assertNoPlaceholderOfficialHosts(raw, index);
-    return createFreeOfficialLiveProvider({ ...common, source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE', allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [], latency_p50_ms: common.latency_p50_ms || 500, latency_p95_ms: common.latency_p95_ms || 1500 });
-  }
+  if (type === 'JSON_PROJECTION') { const sourceClass = String(raw.source_class || 'FREE_PROJECTION').toUpperCase(); if (!FREE_SOURCE_CLASSES.has(sourceClass)) throw configError(`providers[${index}] must use a free source_class`, 'PAID_PROVIDER_CONFIGURATION_FORBIDDEN'); return createJsonProjectionProvider({ ...common, filePath: resolveDataFile(configFile, raw.file_path, index), source_class: sourceClass, latency_p95_ms: common.latency_p95_ms || 50 }); }
+  if (Array.isArray(raw.catalog_source_ids) && raw.catalog_source_ids.includes('BSDD')) { assertNoPlaceholderOfficialHosts(raw, index); if (type !== 'FREE_OFFICIAL_HTTP' && type !== 'FREE_PUBLIC_HTTP' && type !== 'BSDD_PUBLIC_HTTP') throw configError(`providers[${index}] bSDD adapter requires a free HTTP provider type`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED'); return createBsddLiveProvider({ ...common, allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : ['api.bsdd.buildingsmart.org'], preferred_dictionary_codes: ['IFC', 'ETIM'], max_dictionary_scan: 80, dictionary_batch_size: 10, result_limit: 20, timeout_ms: 12000 }); }
+  if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') { assertNoPlaceholderOfficialHosts(raw, index); return createFreeOfficialLiveProvider({ ...common, source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE', allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [], latency_p50_ms: common.latency_p50_ms || 500, latency_p95_ms: common.latency_p95_ms || 1500 }); }
   throw configError(`providers[${index}].type is unsupported: ${type}`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED');
 }
 function loadEvidenceProviders(options = {}) {
@@ -90,4 +64,4 @@ function loadEvidenceProviders(options = {}) {
   const ids = new Set(); for (const provider of providers) { if (ids.has(provider.provider_id)) throw configError(`duplicate configured provider_id: ${provider.provider_id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(provider.provider_id); }
   return Object.freeze(providers);
 }
-module.exports = { FREE_SOURCE_CLASSES, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };
+module.exports = { FREE_SOURCE_CLASSES, BLOCKED_PUBLIC_PROVIDER_IDS, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };
