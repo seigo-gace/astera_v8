@@ -118,7 +118,7 @@ services:
       - evidence-data:/data
       - evidence-log-cache:/cache
       - type: bind
-        source: ${ASTERA_EVIDENCE_PROVIDER_CONFIG_HOST:?Set ASTERA_EVIDENCE_PROVIDER_CONFIG_HOST}
+        source: ${ASTERA_EVIDENCE_PROVIDER_CONFIG_HOST:-./config/evidence-providers.public.json}
         target: /config/evidence-providers.json
         read_only: true
       - type: bind
