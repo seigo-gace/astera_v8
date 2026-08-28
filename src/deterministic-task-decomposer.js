@@ -6,7 +6,7 @@ const norm = (value) => String(value || '').normalize('NFKC').replace(/\r\n?/g, 
 const genericTarget = (value) => !value || /^(?:入力対象|input target|対象|target|これ|それ|あれ|これら|それら)$/iu.test(norm(value));
 
 const ACTION_PATTERNS = Object.freeze([
-  ['verify', /検証|確認|監査|調査|分析|解析|評価|verify|validate|audit|investigat|analy[sz]|evaluate|check/i],
+  ['verify', /検証|確認|監査|調査|分析|解析|評価|テスト|試験|verify|validate|audit|investigat|analy[sz]|evaluate|check|test/i],
   ['compare', /比較|比べ|compare|versus|\bvs\b/i],
   ['decide', /判断|選定|選ぶ|決め|採用|decid|select|choose/i],
   ['improve', /改善|改良|修正|直(?:す|せ|し)|最適化|強化|更新|improv|optimi[sz]e|fix|refactor|strengthen|update/i],
@@ -17,6 +17,16 @@ const ACTION_PATTERNS = Object.freeze([
   ['preserve', /維持|保持|残す|壊さず|変えず|keep|preserve|retain/i],
   ['explain', /説明|教え|解説|explain|describe|tell me/i]
 ]);
+
+const NEGATED_DECIDE_PATTERNS = [
+  /do\s+not\s+(?:decide|select|choose|adopt|recommend)/gi,
+  /must\s+not\s+(?:decide|select|choose)/gi,
+  /never\s+(?:decide|select|choose)/gi,
+  /(?:最終)?判断(?:は)?(?:するな|しない|しないで)/gu,
+  /(?:候補|A案|B案)?を?(?:選ぶな|選定するな|採用するな)/gu,
+  /(?:採用|選定|選ぶ)(?:するな|するな。)/gu
+];
+const PROHIBITION_CUE = /(?:禁止|するな|しない(?:で|。|$)|変更しない|変更せず|してはいけ|勝手に|must not|do not|never)/i;
 
 const GLOBAL_SCOPE_CUE = /(?:全体|すべて|全て|全部|共通|各Task|各タスク|全Task|全タスク|globally|across all|all tasks|every task)/i;
 const GLOBAL_BOUNDARY_CUE = /(?:\bmain\b|\bmaster\b|branch|ブランチ|repository|repo\b|リポジトリ|本番|production|server|サーバー|直置き|deploy|release)/i;
@@ -92,8 +102,9 @@ function contextBindings(context) {
     if (!text) continue;
     const source = { source: 'context', source_span: { start: span.start, end: span.end, text: span.text } };
     const push = (kind) => bindings.push({ kind, value: text, scope: 'UNRESOLVED', task_ids: [], ...source });
-    if (/前提|現状|現在|既存|対象は|given\b|assume|existing|currently/i.test(text)) push('premise');
-    if (/禁止|するな|しないで|してはいけ|勝手に|must not|do not|never/i.test(text)) push('prohibition');
+    if (/前提|現状|現在|既存|対象は|given\b|assume|existing|currently|予算|円|万円/i.test(text)) push('premise');
+    if (/[^。！？!?\n]{1,80}は[^。！？!?\n]{1,80}/u.test(text) && /予算|円|万円|現状|現在|既存|対象|環境|version|バージョン/i.test(text)) push('premise');
+    if (/禁止|するな|しない(?:で|。|$)|変更しない|変更せず|してはいけ|勝手に|must not|do not|never/i.test(text)) push('prohibition');
     if (/維持|保持|残す|壊さず|変えず|そのまま|keep|preserve|retain/i.test(text)) push('preserve');
     if (/置換|差し替|変更対象|replace|swap/i.test(text) && !/禁止|するな|must not|do not|never/i.test(text)) push('replace');
     if (/必ず|のみ|限定|守る|変更せず|must\b|only\b|without/i.test(text)) push('constraint');
@@ -132,6 +143,28 @@ function decisionMaterialRanges(text) {
   return ranges;
 }
 
+function negatedDecisionRanges(text) {
+  const ranges = [];
+  const value = String(text || '');
+  for (const re of NEGATED_DECIDE_PATTERNS) {
+    const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+    const pattern = new RegExp(re.source, flags);
+    for (const match of value.matchAll(pattern)) ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  for (const span of splitWithSpans(value)) {
+    if (!PROHIBITION_CUE.test(span.text)) continue;
+    for (const match of span.text.matchAll(/判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/gi)) {
+      ranges.push({ start: span.start + match.index, end: span.start + match.index + match[0].length });
+    }
+  }
+  return ranges;
+}
+
+function isNegatedDecideMatch(text, item) {
+  if (item.id !== 'decide') return false;
+  return negatedDecisionRanges(text).some((range) => item.index >= range.start && item.index < range.end);
+}
+
 function actionOccurrences(text) {
   const found = [];
   const protectedDecisionRanges = decisionMaterialRanges(text);
@@ -139,8 +172,10 @@ function actionOccurrences(text) {
     const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
     const re = new RegExp(pattern.source, flags);
     for (const match of String(text || '').matchAll(re)) {
-      if (id === 'decide' && protectedDecisionRanges.some((range) => match.index >= range.start && match.index < range.end)) continue;
-      found.push({ id, index: match.index, end: match.index + match[0].length, match: match[0] });
+      const item = { id, index: match.index, end: match.index + match[0].length, match: match[0] };
+      if (id === 'decide' && protectedDecisionRanges.some((range) => item.index >= range.start && item.index < range.end)) continue;
+      if (isNegatedDecideMatch(text, item)) continue;
+      found.push(item);
     }
   }
   found.sort((a, b) => a.index - b.index || a.end - b.end || a.id.localeCompare(b.id));
@@ -194,9 +229,16 @@ function inferTarget(text, actionMatch, fallback = '') {
   if (!value) return fallback;
   const named = /(?:対象|target)(?:は|:|=)\s*([^。！？!?\n]{1,140})/i.exec(value);
   if (named) return norm(named[1]);
-  const match = actionMatch || actionOccurrences(value)[0];
+  const matches = actionOccurrences(value);
+  const match = actionMatch && matches.some((item) => item.index === actionMatch.index && item.id === actionMatch.id)
+    ? actionMatch
+    : (matches.find((item) => item.id !== 'decide') || matches[0] || actionMatch);
   if (match) {
     const before = value.slice(0, match.index).replace(/^(?:そして|その後|次に|最後に|then|next|and then)\s*/i, '').trim();
+    if (/^(?:do\s+not|don'?t|must\s+not|never)\b/i.test(before)) {
+      const nextMatch = matches.find((item) => item.index > match.index);
+      if (nextMatch) return inferTarget(value, nextMatch, fallback);
+    }
     const jp = before.match(/([^。！？!?\n、,]{1,120}?)(?:を|について|に対して)\s*$/i);
     if (jp) {
       let candidate = norm(jp[1])
@@ -678,6 +720,17 @@ function enrichRequest(request, input = {}) {
   if (branches.dependencyEdges.length) {
     graph = buildGraph(tasks, [...graph.dependencies, ...branches.dependencyEdges]);
     for (const task of tasks) task.depends_on = unique(graph.dependencies.filter((edge) => edge.to === task.id).map((edge) => edge.from));
+  }
+
+  for (const task of tasks) {
+    if (!genericTarget(task.target) || !(task.depends_on || []).length) continue;
+    const parent = tasks.find((item) => item.id === task.depends_on[task.depends_on.length - 1]);
+    if (!parent?.target || genericTarget(parent.target)) continue;
+    if (!['verify', 'improve', 'implement', 'integrate', 'migrate', 'remove'].includes(task.action)) continue;
+    task.target = parent.target;
+    task.objective = taskPurpose(task.action, task.target, task.objective);
+    task.purpose = explicitPurpose(task.raw_text || task.source_span?.text || '', task.objective);
+    task.unresolved = unique((task.unresolved || []).filter((item) => item !== 'target'));
   }
 
   const corrections = correctionRelations(question, tasks);

@@ -1,7 +1,16 @@
 'use strict';
 
+const NEGATED_DECIDE_PATTERNS = [
+  /do\s+not\s+(?:decide|select|choose|adopt|recommend)/gi,
+  /must\s+not\s+(?:decide|select|choose)/gi,
+  /never\s+(?:decide|select|choose)/gi,
+  /(?:最終)?判断(?:は)?(?:するな|しない|しないで)/gu,
+  /(?:候補|A案|B案)?を?(?:選ぶな|選定するな|採用するな)/gu,
+  /(?:採用|選定|選ぶ)(?:するな|するな。)/gu
+];
+
 const ACTIONS = [
-  ['verify', /検証|確認|監査|調査|分析|解析|評価|verify|validate|audit|investigat|analy[sz]|evaluate|check/i],
+  ['verify', /検証|確認|監査|調査|分析|解析|評価|テスト|試験|verify|validate|audit|investigat|analy[sz]|evaluate|check|test/i],
   ['compare', /比較|比べ|選択肢|compare|versus|\bvs\b/i],
   ['decide', /判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/i],
   ['improve', /改善|改良|修正|直(?:す|せ|し)|最適化|強化|精度.{0,8}(?:上げ|向上)|improv|optimi[sz]e|fix|refactor|strengthen/i],
@@ -27,7 +36,7 @@ const RX = {
   deadline: /(?:期限|までに|今日中|明日まで|今週中|deadline|by\s+\w+|before\s+\w+)/i,
   priority: /(?:最優先|優先|先に|まず|第一に|priority|first|before)/i,
   success: /(?:成功条件|完了条件|合格条件|acceptance(?: criteria)?|success(?: criteria)?)(?:は|:|=)?\s*(.*)/i,
-  verify: /(?:検証|確認|test|verify|validate|assert|check)/i,
+  verify: /(?:検証|確認|テスト|試験|test|verify|validate|assert|check)/i,
   prohibit: /(?:禁止|するな|しない|しないで|してはいけ|勝手に|must not|do not|never|without changing)/i,
   preserve: /(?:維持|保持|残す|壊さず|変えず|そのまま|keep|preserve|retain|without breaking)/i,
   replace: /(?:置換|差し替|入れ替|変更対象|変更|replace|swap|change)/i,
@@ -59,12 +68,36 @@ function decisionMaterialRanges(text) {
   return ranges;
 }
 
+function negatedDecisionRanges(text) {
+  const ranges = [];
+  const value = String(text || '');
+  for (const re of NEGATED_DECIDE_PATTERNS) {
+    const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+    const pattern = new RegExp(re.source, flags);
+    for (const match of value.matchAll(pattern)) ranges.push({ start: match.index, end: match.index + match[0].length });
+  }
+  for (const span of segment(value)) {
+    if (!RX.prohibit.test(span.text)) continue;
+    for (const match of span.text.matchAll(/判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/gi)) {
+      ranges.push({ start: span.start + match.index, end: span.start + match.index + match[0].length });
+    }
+  }
+  return ranges;
+}
+
+function isNegatedDecideMatch(text, item) {
+  if (item.id !== 'decide') return false;
+  return negatedDecisionRanges(text).some((range) => item.index >= range.start && item.index < range.end);
+}
+
 function actionMatches(text) {
   const protectedDecisionRanges = decisionMaterialRanges(text);
   return ACTIONS.map((entry) => {
     const match = entry.re.exec(text);
     return match ? { id: entry.id, match: match[0], index: match.index } : null;
-  }).filter((item) => item && !(item.id === 'decide' && protectedDecisionRanges.some((range) => item.index >= range.start && item.index < range.end)))
+  }).filter((item) => item
+    && !(item.id === 'decide' && protectedDecisionRanges.some((range) => item.index >= range.start && item.index < range.end))
+    && !isNegatedDecideMatch(text, item))
     .sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
 }
 
@@ -193,7 +226,8 @@ function makeTask(sourceSpan, index, lang, globalSuccess) {
   const detected = action(text);
   const type = clauseType(text);
   const taskTarget = target(text, detected);
-  const actionable = detected.id !== 'analyze' || ['verification','decision'].includes(type);
+  const actionable = (detected.id !== 'analyze' || ['verification','decision'].includes(type))
+    && !(type === 'prohibition' && detected.id === 'decide');
   const taskSuccess = unique([...success(text), ...globalSuccess.filter((item) => text.includes(item))]);
   return { id:`T${String(index + 1).padStart(2, '0')}`, source_span:{start:sourceSpan.start,end:sourceSpan.end,text}, raw_text:norm(sourceSpan.text), clause_type:type, actionable, action:detected.id, target:taskTarget, objective:objective(taskTarget,detected.id,lang), deliverables:[], premises:[], constraints:constraints(text), prohibitions:prohibitions(text), preserve:preserves(text), replace:replacements(text), conditions:conditions(text), exceptions:exceptions(text), deadlines:deadlines(text), priority:RX.priority.test(text)?'high':'normal', order:index+1, depends_on:[], parallelizable:true, success_criteria:taskSuccess, verification:verifications(text), completion_criteria:taskSuccess, unresolved:[], evidence_need:{required:RX.evidence.test(text),reasons:[],queries:terms(text).slice(0,12)}, external_action:['implement','improve','integrate','migrate','remove'].includes(detected.id), hard_blockers:[] };
 }
@@ -212,10 +246,24 @@ function attach(tasks, others) {
 }
 
 function resolveRefs(tasks) {
-  for (const task of tasks) {
+  for (let index = 0; index < tasks.length; index += 1) {
+    const task = tasks[index];
     if (!/^(?:入力対象|input target)$/.test(task.target || '')) continue;
-    const premise=(task.premises||[]).find((item)=>!RX.success.test(item)), match=premise&&clean(premise).match(/^(.{1,100}?)(?:は|が|について|を)/);
-    if(match&&clean(match[1])) { task.target=clean(match[1]); task.objective=objective(task.target,task.action,language(task.source_span.text)); task.unresolved=task.unresolved.filter((item)=>item!=='target'); }
+    const premise = (task.premises || []).find((item) => !RX.success.test(item));
+    const match = premise && clean(premise).match(/^(.{1,100}?)(?:は|が|について|を)/);
+    if (match && clean(match[1])) {
+      task.target = clean(match[1]);
+      task.objective = objective(task.target, task.action, language(task.source_span.text));
+      task.unresolved = (task.unresolved || []).filter((item) => item !== 'target');
+      continue;
+    }
+    const parentId = (task.depends_on || [])[task.depends_on.length - 1];
+    const parent = parentId ? tasks.find((item) => item.id === parentId) : (index > 0 ? tasks[index - 1] : null);
+    if (parent?.target && !/^(?:入力対象|input target)$/.test(parent.target) && ['verify', 'improve', 'implement', 'integrate', 'migrate', 'remove'].includes(task.action)) {
+      task.target = parent.target;
+      task.objective = objective(task.target, task.action, language(task.source_span.text));
+      task.unresolved = (task.unresolved || []).filter((item) => item !== 'target');
+    }
   }
 }
 
@@ -229,7 +277,7 @@ function buildExecutionWaves(tasks=[],dependencies=[]){const ids=new Set(tasks.m
 
 function analyzeRequest({question='',context=''}={}){const q=norm(question),ctx=norm(context),lang=language(q),spans=segment(q),globalSuccess=success(q),clauses=spans.map((sourceSpan,index)=>makeTask(sourceSpan,index,lang,globalSuccess));let tasks=clauses.filter((item)=>item.actionable);const others=clauses.filter((item)=>!item.actionable);if(!tasks.length&&q){tasks=[makeTask(spans[0]||{start:0,end:q.length,text:q},0,lang,globalSuccess)];tasks[0].actionable=true;}tasks=tasks.map((task,index)=>({...task,id:`T${String(index+1).padStart(2,'0')}`,order:index+1}));attach(tasks,others);resolveRefs(tasks);const dependencies=inferDeps(tasks),globalConstraints=constraints(q),globalProhibitions=prohibitions(q),globalPreserves=preserves(q),globalReplacements=replacements(q),globalVerification=verifications(q),conflicts=[];if(globalProhibitions.some((prohibition)=>globalReplacements.some((replacement)=>tokenOverlap(prohibition,replacement)>=0.5)))conflicts.push({type:'PROHIBITION_REPLACE_OVERLAP',note:'同一対象に禁止と変更指示が重なる可能性がある。'});for(const task of tasks){if(!task.target||/^(?:入力対象|input target)$/.test(task.target))task.unresolved.push('target');if(!task.success_criteria.length&&['implement','improve','migrate','integrate','remove'].includes(task.action))task.unresolved.push('completion_criteria');}const unresolved=unique(tasks.flatMap((task)=>task.unresolved.map((item)=>`${task.id}:${item}`))),hardBlockers=unique(conflicts.map((item)=>item.type)),packet={schema_version:'astera.analysis-task-packet.v1',intent:tasks[0]?.action||'analyze',tasks,dependencies,execution_waves:buildExecutionWaves(tasks,dependencies),constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,completion_criteria:globalSuccess,unresolved,conflicts,hard_blockers:hardBlockers,source_spans:tasks.map((task)=>({task_id:task.id,...task.source_span}))},primary=tasks[0];return{schema_version:'astera.request-model.v2',language:lang,normalized_question:q,target:primary?.target||'',target_confidence:primary?.unresolved?.includes('target')?'low':'high',action:primary?.action||'analyze',objective:primary?.objective||objective('','analyze',lang),success_criteria:globalSuccess,constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,query_terms:terms(`${q}\n${ctx}`),context_present:Boolean(ctx),context_length:ctx.length,instruction_map:{clause_count:clauses.length,task_count:tasks.length,correction_count:clauses.filter((item)=>item.clause_type==='correction').length,prohibition_count:globalProhibitions.length,preserve_count:globalPreserves.length,verification_count:globalVerification.length},instruction_understanding:{mode:'INTERNAL_DETERMINISTIC',parser:null,execution_allowed:hardBlockers.length===0,blocked_reasons:hardBlockers},analysis_task_packet:packet};}
 
-function deriveEvidenceNeed(task={},domain={}){const reasons=unique(task.evidence_need?.reasons||[]),domainEvidence=Array.isArray(domain.primary?.evidence_to_collect)?domain.primary.evidence_to_collect:[],overlays=(domain.overlays||[]).map((item)=>item.id),sourceEvidenceText=[task.raw_text||'',...(task.verification||[]),...(task.success_criteria||[]),...(task.completion_criteria||[]),...(task.conditions||[]),task.target||''].join(' '),internalVerification=RX.internalTest.test(sourceEvidenceText),externalEvidenceSignal=RX.evidence.test(sourceEvidenceText),explicitEvidenceOverlay=overlays.includes('current_information')||overlays.includes('evidence_strict');if(task.evidence_need?.required)reasons.push('task_contract_requires_evidence');if(externalEvidenceSignal)reasons.push('task_criteria_requires_external_evidence');if(explicitEvidenceOverlay)reasons.push(overlays.includes('current_information')?'overlay:current_information':'overlay:evidence_strict');if(['verify','compare','decide'].includes(task.action)&&domainEvidence.length&&(externalEvidenceSignal||explicitEvidenceOverlay)&&!internalVerification)reasons.push(`action:${task.action}:external_evidence`);const required=reasons.length>0,queries=required?unique([...(task.evidence_need?.queries||[]),task.target||'',task.objective||'',...domainEvidence,...(task.verification||[]),...(task.conditions||[])]).slice(0,20):[];return{required,reasons:unique(reasons),queries};}
+function deriveEvidenceNeed(task={},domain={}){const reasons=unique(task.evidence_need?.reasons||[]),domainEvidence=Array.isArray(domain.primary?.evidence_to_collect)?domain.primary.evidence_to_collect:[],overlays=(domain.overlays||[]).map((item)=>item.id),clauseEvidenceText=[task.raw_text||'',...(task.verification||[]),...(task.success_criteria||[]),...(task.completion_criteria||[]),...(task.conditions||[])].join(' '),sourceEvidenceText=[clauseEvidenceText,task.target||'',task.objective||''].join(' '),internalVerification=RX.internalTest.test(clauseEvidenceText),externalEvidenceSignal=RX.evidence.test(clauseEvidenceText),explicitEvidenceOverlay=overlays.includes('current_information')||overlays.includes('evidence_strict');if(task.evidence_need?.required)reasons.push('task_contract_requires_evidence');if(externalEvidenceSignal&&!internalVerification)reasons.push('task_criteria_requires_external_evidence');if(explicitEvidenceOverlay&&!internalVerification)reasons.push(overlays.includes('current_information')?'overlay:current_information':'overlay:evidence_strict');if(['verify','compare','decide'].includes(task.action)&&domainEvidence.length&&(externalEvidenceSignal||explicitEvidenceOverlay)&&!internalVerification)reasons.push(`action:${task.action}:external_evidence`);const required=reasons.length>0,queries=required?unique([...(task.evidence_need?.queries||[]),task.target||'',task.objective||'',...domainEvidence,...(task.verification||[]),...(task.conditions||[])]).slice(0,20):[];return{required,reasons:unique(reasons),queries};}
 
 function evidenceClaim(item){return norm(item?.fields?.claim||item?.excerpt||item?.title||item?.canonical_record_id||'');}
 function emptyEvidencePacket(state='NOT_PROVIDED'){return Object.freeze({schema_version:'astera.evidence-packet.compact.v2',state,source_status:null,eligibility_reasons:Object.freeze([]),quality_score_bp:null,quality_gate_bp:9500,initial_quality_score_bp:null,initial_quality_gate_bp:8000,final_phase:null,reinforcement_attempt_count:0,reinforcement_fulfilled_count:0,new_corroboration_count:0,unique_evidence_count:0,coverage_state:'UNKNOWN',conflict_detected:false,result_hash:null,evidence:Object.freeze([]),provider_failures:Object.freeze([]),role_counts:Object.freeze({}),distinct_authority_count:0,distinct_source_family_count:0});}

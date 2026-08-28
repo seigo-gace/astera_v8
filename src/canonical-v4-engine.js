@@ -334,8 +334,16 @@ class CanonicalV4Engine {
     const domainPerspectives = unique(taskResults.flatMap((r) => r.task.domain.primary?.multi_lens || []));
     const blockers = unique([...(packet.hard_blockers || []), ...(packet.unresolved || []), ...(packet.conflicts || []).map((x) => x.type), ...taskResults.flatMap((r) => r.task.hard_blockers || []), ...canonicalClaimRecords.filter((record) => record.status === 'UNDETERMINED').flatMap((record) => record.undetermined_reasons || [])]);
     const trace = (ruleIds, extra = {}) => ({ trace_schema: 'astera.canonical-v4-trace.v1', rule_ids: ruleIds, task_ids: taskIds, lens_ids: lensIds, evidence_refs: evidenceRefs, source_spans: packet.source_spans || [], instruction_understanding: request.instruction_understanding || null, ...extra });
+    const contextPremises = unique([
+      ...(packet.context_bindings || []).filter((item) => item.kind === 'premise').map((item) => item.value),
+      ...taskResults.flatMap((r) => (r.task.premises || []))
+    ]);
+    const contextProhibitions = unique([
+      ...(packet.prohibitions || []),
+      ...(packet.context_bindings || []).filter((item) => item.kind === 'prohibition').map((item) => item.value)
+    ]);
     const purposeItems = taskResults.map((r) => `${r.task.id}[${r.task.action}] ${r.task.objective}`);
-    const premiseItems = unique([...(packet.unresolved || []).map((x) => `unresolved=${x}`), ...(packet.conflicts || []).map((x) => `conflict=${x.type}:${x.note}`), ...taskResults.flatMap((r) => (r.task.constraints || []).map((x) => `${r.task.id}:constraint=${x}`)), ...(context ? [`context_length=${context.length}`] : [])]);
+    const premiseItems = unique([...(packet.unresolved || []).map((x) => `unresolved=${x}`), ...(packet.conflicts || []).map((x) => `conflict=${x.type}:${x.note}`), ...taskResults.flatMap((r) => (r.task.constraints || []).map((x) => `${r.task.id}:constraint=${x}`)), ...contextPremises.map((x) => `premise=${x}`), ...contextProhibitions.map((x) => `prohibition=${x}`)]);
     const factItems = canonicalClaimRecords.map((record) => `${record.task_id}:${record.status}:${record.statement}`);
     const riskItems = aggregate.risks.risks.map((risk) => `${risk.task_id}:${risk.key}:${risk.observation || risk.impact || '-'}`);
     const oppositionItems = taskResults.map((r) => {
