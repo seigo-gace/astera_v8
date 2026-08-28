@@ -1,6 +1,6 @@
 'use strict';
 
-function textDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, routing_terms = [], headers = {}, public_source = false }) {
+function textDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, routing_terms = [], headers = {}, public_source = false, direct_record = false }) {
   return Object.freeze({
     provider_id,
     catalog_source_ids: [source_id],
@@ -17,6 +17,7 @@ function textDefinition({ provider_id, source_id, authority, domains, host, url_
       endpoint_id: `${provider_id}-endpoint`,
       url_template,
       response_format: 'TEXT',
+      text_record_mode: direct_record ? 'DIRECT_RECORD' : 'DISCOVERY_ONLY',
       authority_id: provider_id,
       publisher_name: authority,
       capability_id: 'world_kb_search',
@@ -33,14 +34,14 @@ function textDefinition({ provider_id, source_id, authority, domains, host, url_
   });
 }
 
-function jsonDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, records_path = '', field_map = {}, routing_terms = [], headers = {}, public_source = false }) {
+function jsonDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, records_path = '', field_map = {}, routing_terms = [], headers = {}, public_source = false, source_family_id = null }) {
   return Object.freeze({
     provider_id,
     catalog_source_ids: [source_id],
     type: public_source ? 'FREE_PUBLIC_HTTP' : 'FREE_OFFICIAL_HTTP',
     enabled: true,
     certified: true,
-    source_family_id: provider_id,
+    source_family_id: source_family_id || provider_id,
     priority: 8,
     domains,
     capabilities: [],
@@ -80,7 +81,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB = Object.freeze([
   jsonDefinition({
     provider_id: 'wikipedia-search', source_id: 'WIKIPEDIA', authority: 'Wikimedia Foundation', domains: ALL_DOMAINS, host: 'en.wikipedia.org',
     url_template: 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={query}&format=json&srlimit=5', smoke_query: 'knowledge', records_path: 'query.search',
-    field_map: { canonical_record_id: 'pageid', title: 'title', excerpt: { path: 'snippet', default: '' }, fields: { timestamp: { path: 'timestamp', default: null } } },
+    field_map: { canonical_record_id: 'pageid', title: 'title', excerpt: { path: 'snippet', default: '' } },
     routing_terms: ['wikipedia', 'encyclopedia', 'general knowledge', '百科', '一般知識'], public_source: true
   }),
   textDefinition({
@@ -107,15 +108,16 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB = Object.freeze([
     field_map: { canonical_record_id: 'id', canonical_url: { path: 'api_link', default: '' }, title: 'title', excerpt: { path: 'artist_display', default: '' }, fields: { date_display: { path: 'date_display', default: '' } } },
     routing_terms: ['art', 'artwork', 'painting', 'museum collection', 'visual art', '美術', '作品', '絵画']
   }),
-  textDefinition({
+  jsonDefinition({
     provider_id: 'zenodo-records-search', source_id: 'ZENODO', authority: 'CERN / OpenAIRE', domains: ['G01', 'G03', 'G18', 'G19', 'G20', 'G21', 'G22', 'G23', 'G24', 'G25', 'G26', 'G27', 'G28', 'G29', 'G30', 'G31', 'G32', 'G37'], host: 'zenodo.org',
-    url_template: 'https://zenodo.org/api/records?q={query}&size=5', smoke_query: 'climate',
+    url_template: 'https://zenodo.org/api/records?q={query}&size=5', smoke_query: 'climate', records_path: 'hits.hits',
+    field_map: { canonical_record_id: 'id', canonical_url: { path: 'links.self', default: '' }, title: { path: 'metadata.title', default: '' }, excerpt: { path: 'metadata.description', default: '' }, published_at: { path: 'metadata.publication_date', default: null }, updated_at: { path: 'updated', default: null }, fields: { doi: { path: 'doi', default: '' }, resource_type: { path: 'metadata.resource_type', stringify: true } } },
     routing_terms: ['zenodo', 'research repository', 'dataset', 'publication', 'doi', '研究リポジトリ', 'データセット'], public_source: true
   }),
   jsonDefinition({
     provider_id: 'internet-archive-search', source_id: 'INTERNET_ARCHIVE', authority: 'Internet Archive', domains: ['G01', 'G02', 'G04', 'G14', 'G15', 'G16', 'G17', 'G37', 'G38'], host: 'archive.org',
     url_template: 'https://archive.org/advancedsearch.php?q={query}&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=description&rows=5&page=1&output=json', smoke_query: 'history', records_path: 'response.docs',
-    field_map: { canonical_record_id: 'identifier', canonical_url: { path: 'identifier', default: '' }, title: { path: 'title', default: '' }, excerpt: { path: 'description', stringify: true } },
+    field_map: { canonical_record_id: 'identifier', title: { path: 'title', default: '' }, excerpt: { path: 'description', stringify: true } },
     routing_terms: ['internet archive', 'archive', 'book', 'audio', 'video', 'history', 'アーカイブ', '書籍', '映像'], public_source: true
   }),
   textDefinition({
@@ -133,6 +135,42 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB = Object.freeze([
     provider_id: 'pubmed-search', source_id: 'PUBMED', authority: 'U.S. National Library of Medicine / NCBI', domains: ['G03', 'G22', 'G23', 'G24', 'G37'], host: 'eutils.ncbi.nlm.nih.gov',
     url_template: 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={query}&retmode=json&retmax=5&tool=ASTERA', smoke_query: 'cancer',
     routing_terms: ['pubmed', 'biomedical literature', 'medicine', 'health', 'biology', '医学', '医療', '生物医学']
+  }),
+  jsonDefinition({
+    provider_id: 'un-digital-library-search', source_id: 'UN_DIGITAL_LIBRARY', authority: 'United Nations', domains: ['G06', 'G07', 'G08', 'G34', 'G35', 'G37'], host: 'digitallibrary.un.org',
+    url_template: 'https://digitallibrary.un.org/search?p={query}&of=recjson&ot=recid,title,creation_date&rg=5', smoke_query: 'peacekeeping', records_path: '',
+    field_map: { canonical_record_id: 'recid', title: { path: 'title.title', default: '' }, excerpt: { path: 'title.title', default: '' }, published_at: { path: 'creation_date', default: null }, fields: { title: { path: 'title', stringify: true } } },
+    routing_terms: ['united nations', 'international relations', 'human rights', 'security', 'peacekeeping', 'criminal justice', '国連', '国際関係', '人権', '安全保障']
+  }),
+  jsonDefinition({
+    provider_id: 'go-packages-search', source_id: 'GO_PACKAGES', authority: 'Go project', domains: ['G29'], host: 'pkg.go.dev',
+    url_template: 'https://pkg.go.dev/v1/search?q={query}&limit=5', smoke_query: 'http', records_path: 'items',
+    field_map: { canonical_record_id: 'packagePath', title: 'packagePath', excerpt: { path: 'synopsis', default: '' }, version: { path: 'version', default: null }, fields: { module_path: { path: 'modulePath', default: '' }, version: { path: 'version', default: '' } } },
+    routing_terms: ['go', 'golang', 'go package', 'module', 'Go言語', 'Golang'], public_source: true
+  }),
+  jsonDefinition({
+    provider_id: 'nominatim-search', source_id: 'NOMINATIM', authority: 'OpenStreetMap / Nominatim', domains: ['G05', 'G17', 'G26', 'G28'], host: 'nominatim.openstreetmap.org',
+    url_template: 'https://nominatim.openstreetmap.org/search?q={query}&format=jsonv2&limit=5', smoke_query: 'Tokyo', records_path: '', headers: { 'User-Agent': 'ASTERA-EvidenceSearch/2.4' },
+    field_map: { canonical_record_id: 'place_id', title: 'display_name', excerpt: { path: 'type', default: '' }, fields: { lat: 'lat', lon: 'lon', category: 'category', type: 'type' } },
+    routing_terms: ['geography', 'map', 'place', 'address', 'city', 'transport', 'travel', 'tourism', '地理', '地図', '住所', '都市', '交通', '旅行'], public_source: true
+  }),
+  jsonDefinition({
+    provider_id: 'metacpan-search', source_id: 'METACPAN', authority: 'MetaCPAN', domains: ['G29'], host: 'fastapi.metacpan.org',
+    url_template: 'https://fastapi.metacpan.org/v1/release/_search?q={query}&size=5&fields=name,distribution,version,abstract,date,download_url', smoke_query: 'HTTP', records_path: 'hits.hits',
+    field_map: { canonical_record_id: '_id', canonical_url: { path: '_source.download_url', default: '' }, title: { path: '_source.name', default: '' }, excerpt: { path: '_source.abstract', default: '' }, published_at: { path: '_source.date', default: null }, version: { path: '_source.version', default: null }, fields: { distribution: { path: '_source.distribution', default: '' } } },
+    routing_terms: ['perl', 'cpan', 'metacpan', 'Perl', 'CPAN'], public_source: true
+  }),
+  jsonDefinition({
+    provider_id: 'who-gho-indicator-search', source_id: 'WHO_GHO', authority: 'World Health Organization', domains: ['G03', 'G06', 'G21', 'G23', 'G24', 'G37'], host: 'ghoapi.azureedge.net',
+    url_template: "https://ghoapi.azureedge.net/api/Indicator?$filter=contains(IndicatorName,'{query}')&$top=5", smoke_query: 'Household', records_path: 'value',
+    field_map: { canonical_record_id: 'IndicatorCode', title: 'IndicatorName', excerpt: { path: 'IndicatorName', default: '' }, fields: { language: { path: 'Language', default: '' } } },
+    routing_terms: ['who', 'global health observatory', 'health indicator', 'country health', 'public health', '世界保健機関', '保健指標', '公衆衛生']
+  }),
+  jsonDefinition({
+    provider_id: 'ror-organization-search', source_id: 'ROR', authority: 'Research Organization Registry', domains: ['G01', 'G03', 'G10', 'G13', 'G19', 'G20', 'G22', 'G23', 'G25', 'G29', 'G30', 'G37'], host: 'api.ror.org',
+    url_template: 'https://api.ror.org/v2/organizations?query={query}', smoke_query: 'Bath', records_path: 'items',
+    field_map: { canonical_record_id: 'id', canonical_url: 'id', title: { path: 'names.0.value', default: '' }, excerpt: { path: 'types', stringify: true }, fields: { locations: { path: 'locations', stringify: true }, names: { path: 'names', stringify: true }, status: { path: 'status', default: '' } } },
+    routing_terms: ['research organization', 'university', 'institute', 'laboratory', 'organization registry', '研究機関', '大学', '研究所'], public_source: true
   })
 ]);
 

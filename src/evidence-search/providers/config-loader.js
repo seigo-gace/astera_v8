@@ -15,7 +15,10 @@ const FREE_SOURCE_CLASSES = new Set(['FREE_PROJECTION', 'FREE_OFFICIAL_LIVE']);
 const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze(['example.com', 'example.net', 'example.org']);
 const RESERVED_PLACEHOLDER_TLDS = Object.freeze(['example', 'invalid', 'localhost', 'test']);
 const BLOCKED_PUBLIC_PROVIDER_IDS = new Set(['cpsc-recalls-search', 'swift-package-index-search']);
-const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id)));
+const REPLACED_SPECIALIST_PROVIDER_IDS = new Set(['nominatim-search', 'un-digital-library-search', 'go-packages-search', 'metacpan-search']);
+const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter(
+  (provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id) && !REPLACED_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)
+));
 const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION, ...ROUTING_OVERRIDES_WORLD_KB });
 
 function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') { const error = new Error(message); error.code = code; return error; }
@@ -64,4 +67,4 @@ function loadEvidenceProviders(options = {}) {
   const ids = new Set(); for (const provider of providers) { if (ids.has(provider.provider_id)) throw configError(`duplicate configured provider_id: ${provider.provider_id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(provider.provider_id); }
   return Object.freeze(providers);
 }
-module.exports = { FREE_SOURCE_CLASSES, BLOCKED_PUBLIC_PROVIDER_IDS, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };
+module.exports = { FREE_SOURCE_CLASSES, BLOCKED_PUBLIC_PROVIDER_IDS, REPLACED_SPECIALIST_PROVIDER_IDS, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };
