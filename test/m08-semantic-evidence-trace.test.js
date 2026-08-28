@@ -58,6 +58,63 @@ function semanticQueryExecution(queries = []) {
   };
 }
 
+function roleConflictQueryExecution(queries = [], sharedRecordId = 'ev-shared-record', reverseInitial = false) {
+  const numericLowerQuery = queries.find((query) => query.role === QUERY_ROLES.NUMERIC_LOWER);
+  const counterQuery = queries.find((query) => query.role === QUERY_ROLES.COUNTER);
+  const executions = [];
+  if (numericLowerQuery) {
+    executions.push({
+      query_id: numericLowerQuery.query_id,
+      claim_id: numericLowerQuery.claim_id,
+      role: numericLowerQuery.role,
+      status: 'FOUND',
+      provider_records: [
+        { provider_id: 'numeric-lower-provider', status: 'FOUND', candidate_record_ids: [sharedRecordId] }
+      ]
+    });
+  }
+  if (counterQuery) {
+    executions.push({
+      query_id: counterQuery.query_id,
+      claim_id: counterQuery.claim_id,
+      role: counterQuery.role,
+      status: 'FOUND',
+      provider_records: [
+        {
+          provider_id: 'counter-provider',
+          status: 'FOUND',
+          candidate_record_ids: [sharedRecordId, 'ev-counter-record']
+        }
+      ]
+    });
+  }
+  return {
+    initial: reverseInitial ? executions.slice().reverse() : executions,
+    reinforcement: []
+  };
+}
+
+function roleConflictEvidence(claim, queries = [], options = {}) {
+  const sharedRecordId = options.sharedRecordId || 'ev-shared-record';
+  const reverseInitial = options.reverseInitial === true;
+  const base = semanticValidEvidence(claim, queries);
+  return {
+    ...base,
+    evidence: [
+      evidenceCandidate({
+        id: 'ev-shared',
+        role: 'OFFICIAL',
+        family: 'shared-family',
+        authority: 'shared-authority',
+        claim,
+        url: 'https://shared.test/evidence'
+      }),
+      ...base.evidence.filter((candidate) => candidate.candidate_id !== 'ev-official')
+    ],
+    query_execution: roleConflictQueryExecution(queries, sharedRecordId, reverseInitial)
+  };
+}
+
 function semanticValidEvidence(claim, queries = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
@@ -147,8 +204,7 @@ function assertProductionRefShape(ref, label = 'ref') {
   assert.ok(Object.hasOwn(ref, 'query_role'), `${label} must have query_role key`);
 }
 
-test('M08 semantic evidence trace preserves relation and query_role via projectCanonicalTask', () => {
-  const claimText = 'APIは現行v2である。';
+function buildSemanticTask(claimText = 'APIは現行v2である。') {
   const task = {
     id: 'T01',
     source_span: { start: 0, end: claimText.length, text: claimText },
@@ -170,6 +226,12 @@ test('M08 semantic evidence trace preserves relation and query_role via projectC
   const canonicalPlan = buildCanonicalTaskPlan(task, domain);
   const claim = canonicalPlan.claims[0];
   const queries = canonicalPlan.search_plan.queries.filter((query) => query.claim_id === claim.claim_id);
+  return { task, domain, canonicalPlan, claim, queries };
+}
+
+test('M08 semantic evidence trace preserves relation and query_role via projectCanonicalTask', () => {
+  const claimText = 'APIは現行v2である。';
+  const { task, domain, canonicalPlan, claim, queries } = buildSemanticTask(claimText);
   assert.ok(queries.some((query) => query.role === QUERY_ROLES.COUNTER), 'expected COUNTER query in search plan');
 
   const projected = projectCanonicalTask({
@@ -209,6 +271,57 @@ test('M08 semantic evidence trace preserves relation and query_role via projectC
     assert.equal(counterInSupport.relation, 'SUPPORTS');
     assert.equal(counterCandidate.query_role, QUERY_ROLES.COUNTER);
   }
+});
+
+test('M08 query_role abstains on NUMERIC_LOWER and COUNTER role conflict for shared candidate_record_id', () => {
+  const claimText = 'APIは現行v2である。';
+  const { task, domain, canonicalPlan, claim, queries } = buildSemanticTask(claimText);
+  assert.ok(queries.some((query) => query.role === QUERY_ROLES.NUMERIC_LOWER), 'expected NUMERIC_LOWER query');
+  assert.ok(queries.some((query) => query.role === QUERY_ROLES.COUNTER), 'expected COUNTER query');
+
+  const projected = projectCanonicalTask({
+    task: { ...task, canonical_plan: canonicalPlan, domain },
+    evidenceRaw: roleConflictEvidence(claim.raw_text, queries)
+  });
+
+  const sharedBinding = projected.canonical.records
+    .flatMap((record) => record.confirmation?.bindings || [])
+    .find((binding) => binding.candidate_id === 'ev-shared');
+  assert.ok(sharedBinding, 'expected ev-shared binding');
+  assert.equal(sharedBinding.query_role, null);
+
+  const mainline = projected.perspective_expansion.perspectives.find((perspective) => perspective.id === 'mainline');
+  assert.ok(mainline, 'expected mainline perspective');
+  assert.ok(mainline.support_evidence_refs.every((ref) => ref.relation === 'SUPPORTS'), 'support_evidence_refs must be SUPPORTS only');
+
+  const counterCandidate = mainline.counter_evidence_refs.find((ref) => ref.candidate_id === 'ev-counter');
+  assert.ok(counterCandidate, 'expected ev-counter in counter_evidence_refs');
+  assert.equal(counterCandidate.query_role, QUERY_ROLES.COUNTER);
+
+  const unrelatedBinding = projected.canonical.records
+    .flatMap((record) => record.confirmation?.bindings || [])
+    .find((binding) => binding.candidate_id === 'ev-unrelated');
+  assert.ok(unrelatedBinding, 'expected ev-unrelated binding');
+  assert.ok(
+    unrelatedBinding.relation === 'NO_MATCH' || unrelatedBinding.relation === 'CONTRADICTS',
+    'ev-unrelated must be NO_MATCH or CONTRADICTS'
+  );
+});
+
+test('M08 query_role role conflict abstains regardless of initial execution order', () => {
+  const claimText = 'APIは現行v2である。';
+  const { task, domain, canonicalPlan, claim, queries } = buildSemanticTask(claimText);
+
+  const projected = projectCanonicalTask({
+    task: { ...task, canonical_plan: canonicalPlan, domain },
+    evidenceRaw: roleConflictEvidence(claim.raw_text, queries, { reverseInitial: true })
+  });
+
+  const sharedBinding = projected.canonical.records
+    .flatMap((record) => record.confirmation?.bindings || [])
+    .find((binding) => binding.candidate_id === 'ev-shared');
+  assert.ok(sharedBinding, 'expected ev-shared binding');
+  assert.equal(sharedBinding.query_role, null);
 });
 
 test('M10 no_normative_decision_generated invariant on Public engine.process compare path', async () => {

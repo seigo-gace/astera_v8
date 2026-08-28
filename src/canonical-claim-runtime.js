@@ -75,6 +75,7 @@ function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidat
   if (candidate?.candidate_id) matchIds.add(candidate.candidate_id);
   if (!matchIds.size) return null;
 
+  const roles = new Set();
   const executions = [
     ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
     ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
@@ -84,10 +85,13 @@ function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidat
       (providerRecord.candidate_record_ids || []).some((id) => matchIds.has(id))
     );
     if (!matched) continue;
-    if (execution.role) return execution.role;
-    const query = queries.find((item) => item.query_id === execution.query_id);
-    if (query?.role) return query.role;
+    const role = execution.role
+      ?? queries.find((item) => item.query_id === execution.query_id)?.role
+      ?? null;
+    if (role) roles.add(role);
   }
+  if (roles.size === 0) return null;
+  if (roles.size === 1) return [...roles][0];
   return null;
 }
 
