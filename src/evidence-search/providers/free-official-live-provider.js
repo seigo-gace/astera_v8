@@ -4,7 +4,6 @@ const { secureGet } = require('./secure-http-transport');
 
 const FORMATS = new Set(['JSON', 'JSONL', 'TEXT']);
 const LIVE_SOURCE_CLASSES = new Set(['FREE_OFFICIAL_LIVE', 'FREE_PROJECTION']);
-const TEXT_RECORD_MODES = new Set(['DISCOVERY_ONLY', 'DIRECT_RECORD']);
 const PLACEHOLDERS = Object.freeze({
   query: (plan) => (plan.query_set || []).map((item) => item.text).join(' '),
   domain: (plan) => plan.domain_lens?.id || '',
@@ -92,8 +91,7 @@ function mapRecord(item, endpoint, provider) {
       ...(mapped.retrieval_trace || {}),
       provider_id: provider.provider_id,
       endpoint_id: endpoint.endpoint_id,
-      current_pointer_verified: true,
-      evidence_record_mode: endpoint.response_format === 'TEXT' ? endpoint.text_record_mode : 'STRUCTURED_RECORD'
+      current_pointer_verified: true
     },
     rights: { access: 'public', ...(fixed.rights || {}), ...(mapped.rights || {}) }
   };
@@ -106,9 +104,6 @@ function parseResponse(response, endpoint, provider) {
   const format = endpoint.response_format;
   const text = response.body.toString(endpoint.encoding || 'utf8');
   if (format === 'TEXT') {
-    // A successful HTML/search page is discovery, not evidence.  Only an endpoint
-    // explicitly reviewed as a direct record may emit a candidate.
-    if (endpoint.text_record_mode !== 'DIRECT_RECORD') return [];
     return [mapRecord({ body: text, url: response.url, title: endpoint.title || endpoint.endpoint_id }, {
       ...endpoint,
       field_map: {
@@ -116,7 +111,7 @@ function parseResponse(response, endpoint, provider) {
         canonical_record_id: { value: `${endpoint.endpoint_id}:${response.url}` },
         title: 'title', excerpt: 'body', ...(endpoint.field_map || {})
       }
-    }, provider]);
+    }, provider)];
   }
   let parsed;
   if (format === 'JSON') parsed = JSON.parse(text);
@@ -143,8 +138,6 @@ function normalizeEndpoint(raw, index, allowedHosts) {
   if (!allowedHosts.has(probeUrl.hostname.toLowerCase())) throw new TypeError(`endpoints[${index}] host is not included in allowed_hosts`);
   const responseFormat = String(raw.response_format || 'JSON').toUpperCase();
   if (!FORMATS.has(responseFormat)) throw new TypeError(`endpoints[${index}].response_format is unsupported`);
-  const textRecordMode = String(raw.text_record_mode || 'DISCOVERY_ONLY').toUpperCase();
-  if (responseFormat === 'TEXT' && !TEXT_RECORD_MODES.has(textRecordMode)) throw new TypeError(`endpoints[${index}].text_record_mode is unsupported`);
   const requestHeaders = raw.request_headers && typeof raw.request_headers === 'object' && !Array.isArray(raw.request_headers)
     ? Object.freeze(Object.fromEntries(Object.entries(raw.request_headers).map(([key, value]) => [String(key), String(value)])))
     : Object.freeze({});
@@ -154,7 +147,6 @@ function normalizeEndpoint(raw, index, allowedHosts) {
     query_template: raw.query_template ? String(raw.query_template) : '',
     request_headers: requestHeaders,
     response_format: responseFormat,
-    text_record_mode: textRecordMode,
     records_path: String(raw.records_path || ''),
     records_mode: String(raw.records_mode || 'ARRAY_OR_SINGLE').toUpperCase(),
     field_map: Object.freeze({ ...(raw.field_map || {}) }),
