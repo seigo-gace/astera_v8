@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
+  createPinnedLookup,
   isPublicIp,
   secureGet
 } = require('../src/evidence-search/providers/secure-http-transport');
@@ -50,6 +51,26 @@ test('SSRF address policy rejects private, loopback, link-local, and documentati
   assert.equal(isPublicIp('8.8.8.8'), true);
   assert.equal(isPublicIp('1.1.1.1'), true);
   assert.equal(isPublicIp('2606:4700:4700::1111'), true);
+});
+
+test('pinned DNS lookup matches Node 22 all=true and legacy callback shapes without changing the verified IP', async () => {
+  const lookup = createPinnedLookup({ address: '8.8.8.8', family: 4 });
+
+  const allResult = await new Promise((resolve, reject) => {
+    lookup('ignored.example', { all: true }, (error, addresses) => {
+      if (error) reject(error);
+      else resolve(addresses);
+    });
+  });
+  assert.deepEqual(allResult, [{ address: '8.8.8.8', family: 4 }]);
+
+  const singleResult = await new Promise((resolve, reject) => {
+    lookup('ignored.example', {}, (error, address, family) => {
+      if (error) reject(error);
+      else resolve({ address, family });
+    });
+  });
+  assert.deepEqual(singleResult, { address: '8.8.8.8', family: 4 });
 });
 
 test('secure transport rejects unregistered hosts before a request is sent', async () => {
