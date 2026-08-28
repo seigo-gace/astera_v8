@@ -77,41 +77,53 @@ jobs:
           grep -q 'Compare separates candidate identity from explicit criteria' test/judgment-materials-no-shortcuts-regression.test.js
           grep -q 'Task execution failure is explicit fail-closed high risk' test/judgment-materials-no-shortcuts-regression.test.js
 
-      - name: Adversarial golden focused regressions
+      - name: Adversarial golden focused regressions with hang isolation
         shell: bash
         run: |
-          set -o pipefail
-          node --test \
-            test/judgment-materials-no-shortcuts-regression.test.js \
-            test/task-decomposition-canon-regression.test.js \
-            test/task-decomposition-v2-regression.test.js \
-            test/global-input-understanding.test.js \
-            test/lens-output-integration.test.js \
-            test/lens-plan-integration.test.js \
-            test/canonical-main8-trace.test.js \
-            test/canonical-v4-pipeline-regression.test.js \
-            test/engine.test.js \
-            test/canonical-runtime-flow-regression.test.js \
-            test/canonical-composition-boundary.test.js \
-            test/canonical-worker-boundaries.test.js \
-            test/canonical-parallel-execution.test.js \
-            test/false-confirmation-effect.test.js \
-            test/human-reader-effect-boundary.test.js | tee /tmp/judgment-focused.tap
-          grep -Eq '^# tests [1-9][0-9]*$' /tmp/judgment-focused.tap
-          grep -Eq '^# fail 0$' /tmp/judgment-focused.tap
+          set -euo pipefail
+          focused=(
+            test/judgment-materials-no-shortcuts-regression.test.js
+            test/task-decomposition-canon-regression.test.js
+            test/task-decomposition-v2-regression.test.js
+            test/global-input-understanding.test.js
+            test/lens-output-integration.test.js
+            test/lens-plan-integration.test.js
+            test/canonical-main8-trace.test.js
+            test/canonical-v4-pipeline-regression.test.js
+            test/engine.test.js
+            test/canonical-runtime-flow-regression.test.js
+            test/canonical-composition-boundary.test.js
+            test/canonical-worker-boundaries.test.js
+            test/canonical-parallel-execution.test.js
+            test/false-confirmation-effect.test.js
+            test/human-reader-effect-boundary.test.js
+          )
+          (( ${#focused[@]} > 0 ))
+          for f in "${focused[@]}"; do
+            [[ -f "$f" ]] || { echo "missing focused test: $f" >&2; exit 1; }
+            safe="$(basename "$f" .test.js | tr -c 'A-Za-z0-9_.-' '_')"
+            echo "=== isolated test: $f ==="
+            timeout 90s node --test "$f" | tee "/tmp/${safe}.tap"
+            grep -Eq '^# tests [1-9][0-9]*$' "/tmp/${safe}.tap"
+            grep -Eq '^# fail 0$' "/tmp/${safe}.tap"
+          done
+          echo '=== combined focused test ==='
+          timeout 180s node --test "${focused[@]}" | tee /tmp/judgment-focused-combined.tap
+          grep -Eq '^# tests [1-9][0-9]*$' /tmp/judgment-focused-combined.tap
+          grep -Eq '^# fail 0$' /tmp/judgment-focused-combined.tap
 
       - name: Public API contract and module switch
         shell: bash
         run: |
-          set -o pipefail
-          node --test test/api.test.js test/module-switch.test.js | tee /tmp/public-api.tap
+          set -euo pipefail
+          timeout 120s node --test test/api.test.js test/module-switch.test.js | tee /tmp/public-api.tap
           grep -Eq '^# tests [1-9][0-9]*$' /tmp/public-api.tap
           grep -Eq '^# fail 0$' /tmp/public-api.tap
 
       - name: Runtime regression excluding separately-owned Evidence Search internals
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           files=()
           for f in test/*.test.js; do
             case "$f" in
@@ -123,12 +135,12 @@ jobs:
             echo 'runtime regression file set is empty' >&2
             exit 1
           fi
-          node --test "${files[@]}" | tee /tmp/runtime-non-evidence.tap
+          timeout 300s node --test "${files[@]}" | tee /tmp/runtime-non-evidence.tap
           grep -Eq '^# tests [1-9][0-9]*$' /tmp/runtime-non-evidence.tap
           grep -Eq '^# fail 0$' /tmp/runtime-non-evidence.tap
 
       - name: Full repository source verify and smoke
-        run: npm run verify
+        run: timeout 600s npm run verify
 
       - name: Commit verified repair atomically
         shell: bash
