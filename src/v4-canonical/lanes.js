@@ -47,13 +47,13 @@ function bindingRefs(results = []) {
   for (const result of results) {
     for (const binding of bindingsFor(result)) {
       refs.push({
-        claim_id: result.claim_id,
-        binding_id: binding.binding_id || null,
+        claim_id: result.claim_id || binding.claim_id || null,
+        binding_id: binding.binding_id || binding.evidence_binding_id || null,
         candidate_id: binding.candidate_id || binding.evidence_id || null,
-        source_role: binding.source_role || null,
+        source_role: binding.source_role || binding.source_roles?.[0] || null,
         source_family_id: binding.source_family_id || null,
         authority_id: binding.authority_id || null,
-        url: binding.url || binding.canonical_locator?.url || null
+        url: binding.url || binding.canonical_locator?.url || binding.source_span || null
       });
     }
   }

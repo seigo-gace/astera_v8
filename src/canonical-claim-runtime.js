@@ -119,14 +119,14 @@ function recordBindingRefs(records = []) {
     const bindings = record.confirmation?.bindings || record.bindings || [];
     for (const binding of bindings) {
       refs.push({
-        claim_id: record.claim?.claim_id || null,
-        binding_id: binding.binding_id || null,
+        claim_id: record.claim?.claim_id || binding.claim_id || null,
+        binding_id: binding.binding_id || binding.evidence_binding_id || null,
         candidate_id: binding.candidate_id || binding.evidence_id || null,
-        source_role: binding.source_role || null,
+        source_role: binding.source_role || binding.source_roles?.[0] || null,
         source_family_id: binding.source_family_id || null,
         authority_id: binding.authority_id || null,
         query_role: binding.query_role || binding.role || null,
-        url: binding.url || binding.canonical_locator?.url || null
+        url: binding.url || binding.canonical_locator?.url || binding.source_span || null
       });
     }
   }

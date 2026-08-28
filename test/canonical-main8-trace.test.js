@@ -110,23 +110,43 @@ function dummyJudgmentSection(label) {
   };
 }
 
-function bindingRefsFromProjection(projected) {
-  return projected.canonical.records.flatMap((record) =>
-    (record.confirmation?.bindings || []).map((binding) => ({
-      ...binding,
-      claim_id: record.claim?.claim_id || binding.claim_id
-    }))
-  );
+const REQUIRED_EVIDENCE_REF_FIELDS = Object.freeze([
+  'claim_id',
+  'binding_id',
+  'candidate_id',
+  'source_role',
+  'source_family_id',
+  'authority_id',
+  'url'
+]);
+
+const M08_SUPPORT_EVIDENCE_REF_FIELDS = Object.freeze([
+  'binding_id',
+  'candidate_id',
+  'source_role',
+  'source_family_id',
+  'authority_id',
+  'url'
+]);
+
+function assertProductionEvidenceRef(ref, label = 'evidence_ref') {
+  for (const field of REQUIRED_EVIDENCE_REF_FIELDS) {
+    assert.notEqual(ref[field], null, `${field} must be non-null on ${label}`);
+    assert.notEqual(ref[field], undefined, `${field} must be non-null on ${label}`);
+  }
 }
 
-function assertInternalRefFields(ref) {
-  assert.ok(ref.claim_id, 'claim_id missing on internal ref');
-  assert.ok(ref.candidate_id || ref.evidence_id, 'candidate_id missing on internal ref');
-  assert.ok(ref.binding_id || ref.evidence_binding_id, 'binding id missing on internal ref');
-  assert.ok(ref.source_role || (Array.isArray(ref.source_roles) && ref.source_roles[0]), 'source_role missing on internal ref');
-  assert.ok(ref.source_family_id, 'source_family_id missing on internal ref');
-  assert.ok(ref.authority_id, 'authority_id missing on internal ref');
-  assert.ok(ref.url || ref.canonical_locator?.url || ref.source_span, 'url missing on internal ref');
+function assertM08SupportEvidenceRef(ref) {
+  for (const field of M08_SUPPORT_EVIDENCE_REF_FIELDS) {
+    assert.notEqual(ref[field], null, `${field} must be non-null on support_evidence_ref`);
+    assert.notEqual(ref[field], undefined, `${field} must be non-null on support_evidence_ref`);
+  }
+}
+
+function canonicalBindingForCandidate(projected, candidateId) {
+  return projected.canonical.records
+    .flatMap((record) => record.confirmation?.bindings || [])
+    .find((binding) => binding.candidate_id === candidateId);
 }
 
 test('hard instruction contradiction stops before Task/Claim/Evidence and never fabricates Main8', async () => {
@@ -336,25 +356,41 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
       language: 'ja'
     });
     const claimTask = claimRequest.analysis_task_packet.tasks[0];
-    const domain = routeDomainTemplates({ question: claimTask.source_span?.text || claimTask.target });
-    const claimPlan = buildCanonicalTaskPlan(claimTask, domain);
-    const claim = claimPlan.claims[0];
-    assert.ok(claim, 'expected claim-bearing task for internal evidence projection');
+    const domain = routeDomainTemplates({ question: compareTask.source_span?.text || compareTask.target });
+    const canonicalPlan = buildCanonicalTaskPlan(claimTask, domain);
+    const claim = canonicalPlan.claims.find((entry) => String(entry.raw_text || '').includes('A案'));
+    assert.ok(claim, 'expected claim with A案 in raw_text for compare candidate_materials');
     const projected = projectCanonicalTask({
-      task: { ...compareTask, canonical_plan: claimPlan, domain },
-      evidenceRaw: validEvidence(claim.raw_text, claimPlan.search_plan.queries)
+      task: { ...compareTask, canonical_plan: canonicalPlan, domain },
+      evidenceRaw: validEvidence(claim.raw_text, canonicalPlan.search_plan.queries)
     });
     const compare = projected.lanes.compare;
-    const internalRefs = bindingRefsFromProjection(projected);
-    assert.ok(internalRefs.length >= 1, 'expected internal confirmation bindings');
-    for (const ref of internalRefs) {
-      assertInternalRefFields(ref);
+    const aMaterial = compare.candidate_materials.find((entry) => entry.label === 'A案');
+    assert.ok(aMaterial, 'expected A案 candidate material');
+    assert.ok(aMaterial.evidence_refs.length >= 1, 'expected evidence_refs on A案 candidate material without overwrite');
+    for (const ref of aMaterial.evidence_refs) {
+      assertProductionEvidenceRef(ref, 'candidate_materials evidence_ref');
     }
-    const officialRef = internalRefs.find((ref) => ref.candidate_id === 'ev-official');
-    assert.ok(officialRef, 'expected ev-official binding ref');
-    const candidateMaterials = compare.candidate_materials.map((entry) =>
-      entry.label === 'A案' ? { ...entry, evidence_refs: internalRefs } : entry
+    const officialRef = aMaterial.evidence_refs.find((ref) => ref.candidate_id === 'ev-official');
+    assert.ok(officialRef, 'expected ev-official evidence_ref on A案 candidate material');
+    assert.equal(officialRef.source_role, 'OFFICIAL');
+    assert.equal(officialRef.source_family_id, 'official-family');
+    assert.equal(officialRef.authority_id, 'official-authority');
+    assert.equal(officialRef.url, 'https://official.test/evidence');
+    const canonicalOfficialBinding = canonicalBindingForCandidate(projected, 'ev-official');
+    assert.ok(canonicalOfficialBinding, 'expected ev-official binding in canonical.records confirmation.bindings');
+    assert.equal(officialRef.binding_id, canonicalOfficialBinding.evidence_binding_id);
+
+    const perspectivesWithEvidence = projected.perspective_expansion.perspectives.filter(
+      (perspective) => Array.isArray(perspective.support_evidence_refs) && perspective.support_evidence_refs.length > 0
     );
+    assert.ok(perspectivesWithEvidence.length >= 1, 'expected perspectives with support_evidence_refs');
+    for (const perspective of perspectivesWithEvidence) {
+      for (const ref of perspective.support_evidence_refs) {
+        assertM08SupportEvidenceRef(ref);
+      }
+    }
+
     const judgment = {
       format: 'astera_judgment_v4',
       output_language: 'ja',
@@ -367,12 +403,17 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
           ...dummyJudgmentSection(MAIN8_JA_LABELS[index]),
           comparison_candidates: compare.comparison_candidates,
           dimensions: compare.dimensions,
-          candidate_materials: candidateMaterials,
+          candidate_materials: compare.candidate_materials,
           trade_off_differences: compare.trade_off_differences,
           condition_differences: compare.condition_differences || {},
           contradiction_map: compare.contradiction_map || [],
           supported_scope: compare.supported_scope || [],
           unsupported_scope: compare.unsupported_scope || []
+        };
+      } else if (key === '05_opposition') {
+        judgment[key] = {
+          ...dummyJudgmentSection(MAIN8_JA_LABELS[index]),
+          expanded_perspectives: projected.perspective_expansion.perspectives
         };
       } else {
         judgment[key] = dummyJudgmentSection(MAIN8_JA_LABELS[index]);
@@ -380,20 +421,13 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     }
     const material = engine.material(judgment);
     const materialText = material.text;
-    const claimId = officialRef.claim_id;
-    const bindingId = officialRef.binding_id || officialRef.evidence_binding_id;
-    const candidateId = officialRef.candidate_id || officialRef.evidence_id;
-    const sourceRole = officialRef.source_role || officialRef.source_roles[0];
-    const sourceFamilyId = officialRef.source_family_id;
-    const authorityId = officialRef.authority_id;
-    const url = officialRef.url || officialRef.canonical_locator?.url || officialRef.source_span;
-    assert.match(materialText, new RegExp(`claim=${claimId}`));
-    assert.match(materialText, new RegExp(`binding=${bindingId}`));
-    assert.match(materialText, new RegExp(`candidate=${candidateId}`));
-    assert.match(materialText, new RegExp(`source_role=${sourceRole}`));
-    assert.match(materialText, new RegExp(`source_family_id=${sourceFamilyId}`));
-    assert.match(materialText, new RegExp(`authority_id=${authorityId}`));
-    assert.match(materialText, new RegExp(`url=${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(materialText, new RegExp(`claim=${officialRef.claim_id}`));
+    assert.match(materialText, new RegExp(`binding=${officialRef.binding_id}`));
+    assert.match(materialText, new RegExp(`candidate=${officialRef.candidate_id}`));
+    assert.match(materialText, new RegExp(`source_role=${officialRef.source_role}`));
+    assert.match(materialText, new RegExp(`source_family_id=${officialRef.source_family_id}`));
+    assert.match(materialText, new RegExp(`authority_id=${officialRef.authority_id}`));
+    assert.match(materialText, new RegExp(`url=${officialRef.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
     assert.match(materialText, /candidate_id=candidate:1:A案/);
     assert.match(materialText, /Per-candidate:\ncandidate_id=candidate:1:A案/);
     assert.doesNotMatch(materialText, /"claim_id"/);
