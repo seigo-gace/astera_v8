@@ -76,6 +76,112 @@ function taskSignalText(task = {}, claims = []) {
   ]).join('\n');
 }
 
+function comparisonTaskText(task = {}) {
+  return String(task.source_span?.text || task.raw_text || task.target || '')
+    .normalize('NFKC')
+    .replace(/[。！？!?]+$/g, '')
+    .trim();
+}
+
+function extractComparisonCandidates(task = {}) {
+  const text = comparisonTaskText(task);
+  if (!text) return [];
+  const xyMatch = text.match(/^(.+?)と(.+?)を/u);
+  if (xyMatch && /比較/u.test(text)) {
+    const left = xyMatch[1].trim();
+    const right = xyMatch[2].trim();
+    if (left && right && !/を/u.test(left)) {
+      return uniqueStrings([left, right]);
+    }
+  }
+  const anTokens = (text.match(/[^\s、,とを]+案/g) || []).filter((token) => token.length <= 12);
+  return uniqueStrings(anTokens);
+}
+
+function extractComparisonDimensionsFromText(task = {}, lensDimensions = []) {
+  const text = comparisonTaskText(task);
+  const fromText = [];
+  const dimMatch = text.match(/を(.+?)で比較/u);
+  if (dimMatch) {
+    for (const part of dimMatch[1].trim().split(/と/u)) {
+      const trimmed = part.trim();
+      if (trimmed) fromText.push(trimmed);
+    }
+  }
+  return uniqueStrings([...lensDimensions, ...fromText]);
+}
+
+function slugCandidateId(label, index) {
+  return `candidate:${index + 1}:${String(label).replace(/\s+/g, '_')}`;
+}
+
+function buildCandidateMaterialEntry({ candidateId, label, claims, results, byId }) {
+  const relatedClaims = claims.filter((claim) => String(claim.raw_text || '').includes(label));
+  const confirmedIds = [];
+  const undeterminedIds = [];
+  const supportedScopes = [];
+  const observations = [];
+  for (const claim of relatedClaims) {
+    const result = byId.get(claim.claim_id);
+    if (result?.status === ClaimStatus.CONFIRMED) {
+      confirmedIds.push(claim.claim_id);
+      if (result.supported_scope) {
+        supportedScopes.push({ claim_id: claim.claim_id, scope: result.supported_scope });
+      }
+      observations.push(`${claim.claim_id}:CONFIRMED:${claim.raw_text}`);
+    } else {
+      undeterminedIds.push(claim.claim_id);
+      observations.push(`${claim.claim_id}:UNDETERMINED:${claim.raw_text}`);
+    }
+  }
+  const evidenceRefs = bindingRefs(results.filter((result) => relatedClaims.some((claim) => claim.claim_id === result.claim_id)));
+  let materialState = 'INSUFFICIENT_CANDIDATE_MATERIAL';
+  if (confirmedIds.length > 0 && undeterminedIds.length === 0) {
+    materialState = 'AVAILABLE_CANDIDATE_MATERIAL';
+  } else if (confirmedIds.length > 0) {
+    materialState = 'PARTIAL_CANDIDATE_MATERIAL';
+  } else if (relatedClaims.length > 0) {
+    materialState = 'UNRESOLVED_CANDIDATE_MATERIAL';
+  }
+  return {
+    candidate_id: candidateId,
+    label,
+    material_state: materialState,
+    observations,
+    confirmed_claim_ids: confirmedIds.sort(),
+    undetermined_claim_ids: undeterminedIds.sort(),
+    supported_scopes: supportedScopes,
+    evidence_refs: evidenceRefs
+  };
+}
+
+function buildTradeOffDifference(dimension, candidateLabels, candidateMaterials, task = {}) {
+  const perCandidate = candidateLabels.map((label, index) => {
+    const material = candidateMaterials[index] || {};
+    return {
+      candidate_id: material.candidate_id || slugCandidateId(label, index),
+      label,
+      material_state: material.material_state || 'INSUFFICIENT_CANDIDATE_MATERIAL',
+      observations: material.observations || [],
+      confirmed_claim_ids: material.confirmed_claim_ids || [],
+      undetermined_claim_ids: material.undetermined_claim_ids || [],
+      supported_scopes: material.supported_scopes || [],
+      evidence_refs: material.evidence_refs || []
+    };
+  });
+  const allInsufficient = perCandidate.every((entry) =>
+    entry.material_state === 'INSUFFICIENT_CANDIDATE_MATERIAL'
+    || entry.material_state === 'UNRESOLVED_CANDIDATE_MATERIAL'
+  );
+  return {
+    dimension,
+    comparison_state: allInsufficient ? 'INSUFFICIENT_COMPARISON_MATERIAL' : 'MATERIAL_ONLY',
+    per_candidate: perCandidate,
+    conditions: uniqueStrings([...(task.conditions || []), ...(task.constraints || [])]),
+    status: 'MATERIAL_ONLY'
+  };
+}
+
 function factLane(claims, results, domain = {}) {
   const byId = resultMap(results);
   const confirmedClaims = claims.filter((claim) => byId.get(claim.claim_id)?.status === ClaimStatus.CONFIRMED);
@@ -411,7 +517,22 @@ function compareLane(claims, results, policyByClaimId, domain, task = {}) {
     }
   }
 
-  const dimensions = lensPlanEntries(domain, 'compare');
+  const dimensionSources = lensPlanEntries(domain, 'compare');
+  const lensDimensions = dimensionSources.map((entry) => entry.value);
+  const comparisonCandidates = extractComparisonCandidates(task);
+  const dimensions = extractComparisonDimensionsFromText(task, lensDimensions);
+  const candidateMaterials = comparisonCandidates.map((label, index) => buildCandidateMaterialEntry({
+    candidateId: slugCandidateId(label, index),
+    label,
+    claims,
+    results,
+    byId
+  }));
+  const tradeOffDifferences = dimensions.map((dimension) => {
+    const sourceEntry = dimensionSources.find((entry) => entry.value === dimension);
+    const base = buildTradeOffDifference(dimension, comparisonCandidates, candidateMaterials, task);
+    return sourceEntry ? { ...base, lens_sources: sourceEntry.sources } : base;
+  });
   const counts = {
     claims: claims.length,
     confirmed: results.filter((result) => result.status === ClaimStatus.CONFIRMED).length,
@@ -437,9 +558,11 @@ function compareLane(claims, results, policyByClaimId, domain, task = {}) {
       exceptions: uniqueStrings(task.exceptions || []),
       dependencies: uniqueStrings(task.depends_on || [])
     },
-    dimensions: dimensions.map((entry) => entry.value),
-    dimension_sources: dimensions,
-    trade_off_differences: dimensions.map((entry) => ({ dimension: entry.value, lens_sources: entry.sources, status: 'MATERIAL_ONLY' })),
+    comparison_candidates: comparisonCandidates,
+    candidate_materials: candidateMaterials,
+    dimensions,
+    dimension_sources: dimensionSources,
+    trade_off_differences: tradeOffDifferences,
     evidence_trace: bindingRefs(results),
     selected_candidate: null,
     candidate_ranking: [],
@@ -464,4 +587,18 @@ function buildFiveLanes({ claims, results, policyByClaimId, task = {}, domain = 
   });
 }
 
-module.exports = { factLane, riskLane, multiLane, inquiryLane, compareLane, buildFiveLanes, RISK_RULES, DOMAIN_QUESTIONS };
+module.exports = {
+  factLane,
+  riskLane,
+  multiLane,
+  inquiryLane,
+  compareLane,
+  buildFiveLanes,
+  RISK_RULES,
+  DOMAIN_QUESTIONS,
+  extractComparisonCandidates,
+  extractComparisonDimensionsFromText,
+  slugCandidateId,
+  buildCandidateMaterialEntry,
+  buildTradeOffDifference
+};

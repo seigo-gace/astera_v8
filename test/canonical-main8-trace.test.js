@@ -71,3 +71,43 @@ test('unresolved deictic short request returns clarification instead of guessed 
     await engine.destroy();
   }
 });
+
+test('Main8 05/06 preserve multi and comparison material for golden compare input', async () => {
+  const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
+  try {
+    const out = await engine.process({
+      question: 'A案とB案を費用と安全性で比較する。',
+      language: 'ja'
+    }, tenant);
+    assert.equal(out.result.type, 'cognitive_map');
+    assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
+
+    const s05 = out.result.judgment['05_opposition'];
+    const s06 = out.result.judgment['06_comparison'];
+
+    assert.ok(Array.isArray(s05.perspectives));
+    assert.ok(Array.isArray(s05.expanded_perspectives));
+    assert.ok(Array.isArray(s05.trade_off_map));
+    assert.ok(s05.perspectives.length > 0);
+    assert.ok(s05.perspectives.every((p) => String(p.id || p.class || '').toUpperCase() !== 'MAINLINE'));
+    assert.ok(s05.expanded_perspectives.some((p) => p.id === 'opposition' || p.class === 'OPPOSITION'));
+
+    assert.ok(s06.scope_booleans);
+    assert.ok(s06.supported_scope);
+    assert.ok(s06.unsupported_scope);
+    assert.ok(s06.contradiction_map);
+    assert.ok(s06.condition_differences && typeof s06.condition_differences === 'object');
+    assert.deepEqual(s06.comparison_candidates.map((c) => c.label || c), ['A案', 'B案']);
+    assert.ok(s06.dimensions.includes('費用') && s06.dimensions.includes('安全性'));
+    assert.equal(s06.candidate_materials.length, 2);
+    assert.ok(s06.trade_off_differences.length > 0);
+    assert.ok(s06.trade_off_differences.every((d) => d.status === 'MATERIAL_ONLY' && Array.isArray(d.per_candidate)));
+    assert.equal(s06.selected_candidate, null);
+    assert.deepEqual(s06.candidate_ranking, []);
+    assert.deepEqual(s06.rejected_candidates, []);
+    assert.equal(out.result.comparison.material_only, true);
+    assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
+  } finally {
+    await engine.destroy();
+  }
+});

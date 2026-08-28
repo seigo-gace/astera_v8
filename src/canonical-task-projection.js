@@ -6,6 +6,13 @@ const {
   projectFiveLanes,
   deterministicPerspectiveExpansion
 } = require('./canonical-claim-runtime');
+const {
+  extractComparisonCandidates,
+  extractComparisonDimensionsFromText,
+  slugCandidateId,
+  buildCandidateMaterialEntry,
+  buildTradeOffDifference
+} = require('./v4-canonical/lanes');
 
 function taskErrorCode(error) {
   return String(error?.code || 'TASK_EXECUTION_FAILURE').replace(/[^A-Z0-9_.:-]/gi, '_').toUpperCase();
@@ -158,27 +165,55 @@ function fallbackFailureLanes(task, canonical, error) {
       },
       evidence_trace: emptyTrace
     },
-    compare: {
-      lane: 'compare',
-      material_only: true,
-      counts: { claims: claimIds.length, confirmed: 0, undetermined: claimIds.length, insufficient_evidence: 0, conflicts: 0 },
-      coverage: null,
-      scope_booleans: [],
-      supported_scope: [],
-      unsupported_scope: claimIds.map((claimId) => ({ claim_id: claimId, missing_scope_fields: [], reasons: [reason] })),
-      contradiction_map: [],
-      condition_differences: {
-        constraints: task?.constraints || [], prohibitions: task?.prohibitions || [], preserve: task?.preserve || [], replace: task?.replace || [], conditions: task?.conditions || [], exceptions: task?.exceptions || [], dependencies: task?.depends_on || []
-      },
-      dimensions: [],
-      dimension_sources: [],
-      trade_off_differences: [],
-      evidence_trace: emptyTrace,
-      selected_candidate: null,
-      candidate_ranking: [],
-      rejected_candidates: [],
-      verdict: { decision: 'MATERIAL_ONLY', reason: 'Astera does not select, rank, recommend, adopt, reject, or hold candidates.' }
-    }
+    compare: (() => {
+      const byId = new Map();
+      const comparisonCandidates = extractComparisonCandidates(task || {});
+      const dimensions = extractComparisonDimensionsFromText(task || {}, []);
+      const candidateMaterials = comparisonCandidates.map((label, index) => buildCandidateMaterialEntry({
+        candidateId: slugCandidateId(label, index),
+        label,
+        claims: canonical.records?.map((record) => record.claim).filter(Boolean) || [],
+        results: [],
+        byId
+      }));
+      const tradeOffDifferences = dimensions.map((dimension) => buildTradeOffDifference(
+        dimension,
+        comparisonCandidates,
+        candidateMaterials,
+        task || {}
+      ));
+      if (dimensions.length === 0 && comparisonCandidates.length > 0) {
+        tradeOffDifferences.push(buildTradeOffDifference(
+          'INSUFFICIENT_COMPARISON_DIMENSION',
+          comparisonCandidates,
+          candidateMaterials,
+          task || {}
+        ));
+      }
+      return {
+        lane: 'compare',
+        material_only: true,
+        counts: { claims: claimIds.length, confirmed: 0, undetermined: claimIds.length, insufficient_evidence: 0, conflicts: 0 },
+        coverage: null,
+        scope_booleans: [],
+        supported_scope: [],
+        unsupported_scope: claimIds.map((claimId) => ({ claim_id: claimId, missing_scope_fields: [], reasons: [reason] })),
+        contradiction_map: [],
+        condition_differences: {
+          constraints: task?.constraints || [], prohibitions: task?.prohibitions || [], preserve: task?.preserve || [], replace: task?.replace || [], conditions: task?.conditions || [], exceptions: task?.exceptions || [], dependencies: task?.depends_on || []
+        },
+        comparison_candidates: comparisonCandidates,
+        candidate_materials: candidateMaterials,
+        dimensions,
+        dimension_sources: [],
+        trade_off_differences: tradeOffDifferences,
+        evidence_trace: emptyTrace,
+        selected_candidate: null,
+        candidate_ranking: [],
+        rejected_candidates: [],
+        verdict: { decision: 'MATERIAL_ONLY', reason: 'Astera does not select, rank, recommend, adopt, reject, or hold candidates.' }
+      };
+    })()
   };
 }
 

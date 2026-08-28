@@ -24,6 +24,60 @@ function taskText(task,claims=[]){return unique([...(claims||[]).map((claim)=>cl
 function claimStatus(canonical){const total=canonical?.records?.length||0,confirmed=canonical?.confirmed_count||0,undetermined=canonical?.undetermined_count||0;return{status:total&&undetermined===0?'CONFIRMED':'UNDETERMINED',total,confirmed,undetermined};}
 function evidenceBindingRefs(records=[]){const refs=[];for(const record of records)for(const binding of record.confirmation?.bindings||[])if(binding.evidence_source==='EXTERNAL_RETRIEVED_EVIDENCE')refs.push(binding);return[...new Map(refs.map((item)=>[item.candidate_id||item.url||JSON.stringify(item),item])).values()];}
 
+function mergeConditionDifferences(taskResults = []) {
+  const merged = { constraints: [], prohibitions: [], preserve: [], replace: [], conditions: [], exceptions: [], dependencies: [] };
+  for (const result of taskResults) {
+    const differences = result.lanes?.compare?.condition_differences || {};
+    for (const key of Object.keys(merged)) {
+      merged[key] = unique([...(merged[key] || []), ...(differences[key] || [])]);
+    }
+  }
+  return merged;
+}
+
+function uniqueComparisonCandidates(taskResults = []) {
+  const labels = [];
+  for (const result of taskResults) {
+    for (const candidate of result.lanes?.compare?.comparison_candidates || []) {
+      const label = typeof candidate === 'string' ? candidate : candidate?.label;
+      if (label && !labels.includes(label)) labels.push(label);
+    }
+  }
+  return labels;
+}
+
+function mapMultiPerspective(perspective = {}) {
+  return {
+    ...(perspective.task_id ? { task_id: perspective.task_id } : {}),
+    id: perspective.id,
+    class: perspective.class,
+    focus: perspective.focus,
+    conditions: perspective.conditions,
+    weaknesses: perspective.weaknesses,
+    failure_conditions: perspective.failure_conditions,
+    evidence_refs: perspective.evidence_refs,
+    trade_off_material: perspective.trade_off_material || perspective.trade_offs
+  };
+}
+
+function mapExpandedPerspective(perspective = {}) {
+  return {
+    ...(perspective.task_id ? { task_id: perspective.task_id } : {}),
+    id: perspective.id,
+    class: perspective.class,
+    focus: perspective.focus,
+    conditions: perspective.conditions,
+    weaknesses: perspective.weaknesses,
+    failure_conditions: perspective.failure_conditions,
+    evidence_refs: unique([
+      ...(perspective.support_evidence_refs || []),
+      ...(perspective.counter_evidence_refs || []),
+      ...(perspective.evidence_refs || [])
+    ]),
+    trade_off_material: perspective.trade_offs || perspective.trade_off_material
+  };
+}
+
 function aggregateTaskResults(taskResults){
   const allRecords=taskResults.flatMap((result)=>(result.canonical.records||[]).map((record)=>({task_id:result.task.id,...record})));
   const confirmed=taskResults.flatMap((result)=>(result.lanes.fact.confirmed||[]).map((item)=>({task_id:result.task.id,...item})));
@@ -40,7 +94,7 @@ function aggregateTaskResults(taskResults){
   const multi={pillar:'multi',material_only:true,perspectives:taskResults.flatMap((result)=>(result.lanes.multi.perspectives||[]).map((item)=>({task_id:result.task.id,...item}))),trade_off_map:taskResults.flatMap((result)=>(result.lanes.multi.trade_off_map||[]).map((item)=>({task_id:result.task.id,...item}))),per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.multi]))};
   const inquiry={pillar:'inquiry',problem_health:{healthy:taskResults.every((result)=>result.lanes.inquiry.problem_health?.healthy),reason:taskResults.filter((result)=>!result.lanes.inquiry.problem_health?.healthy).map((result)=>`${result.task.id}:${result.lanes.inquiry.problem_health?.reason}`).join(' / ')||'All canonical claims are traceable.'},missing_fields:unique(taskResults.flatMap((result)=>(result.lanes.inquiry.missing_fields||[]).map((item)=>`${result.task.id}:${item}`))),missing_questions:unique(taskResults.flatMap((result)=>result.lanes.inquiry.missing_questions||[])),open_items:taskResults.flatMap((result)=>(result.lanes.inquiry.open_items||[]).map((item)=>({task_id:result.task.id,...item}))),per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.inquiry]))};
   const claims=allRecords.length,confirmedCount=allRecords.filter((record)=>record.confirmation.status==='CONFIRMED').length,undeterminedCount=claims-confirmedCount,conflictCount=allRecords.filter((record)=>(record.confirmation.reasons||[]).includes('G6_UNRESOLVED_CONFLICT')).length;
-  const comparison={pillar:'compare',material_only:true,counts:{claims,confirmed:confirmedCount,undetermined:undeterminedCount,conflicts:conflictCount},coverage:claims?{numerator:confirmedCount,denominator:claims,ratio:confirmedCount/claims}:null,dimensions:unique(taskResults.flatMap((result)=>result.lanes.compare.dimensions||[])),scope_booleans:taskResults.flatMap((result)=>(result.lanes.compare.scope_booleans||[]).map((item)=>({task_id:result.task.id,...item}))),selected_candidate:null,candidate_ranking:[],rejected_candidates:[],per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.compare])),verdict:{decision:'MATERIAL_ONLY',reason:'Astera does not select, rank, recommend, adopt, or reject candidates.',objective:'Expose deterministic comparison material only.'}};
+  const comparison={pillar:'compare',material_only:true,counts:{claims,confirmed:confirmedCount,undetermined:undeterminedCount,conflicts:conflictCount},coverage:claims?{numerator:confirmedCount,denominator:claims,ratio:confirmedCount/claims}:null,dimensions:unique(taskResults.flatMap((result)=>result.lanes.compare.dimensions||[])),comparison_candidates:uniqueComparisonCandidates(taskResults),candidate_materials:taskResults.flatMap((result)=>(result.lanes.compare.candidate_materials||[]).map((item)=>({task_id:result.task.id,...item}))),trade_off_differences:taskResults.flatMap((result)=>(result.lanes.compare.trade_off_differences||[]).map((item)=>({task_id:result.task.id,...item}))),scope_booleans:taskResults.flatMap((result)=>(result.lanes.compare.scope_booleans||[]).map((item)=>({task_id:result.task.id,...item}))),supported_scope:taskResults.flatMap((result)=>(result.lanes.compare.supported_scope||[]).map((item)=>({task_id:result.task.id,...item}))),unsupported_scope:taskResults.flatMap((result)=>(result.lanes.compare.unsupported_scope||[]).map((item)=>({task_id:result.task.id,...item}))),contradiction_map:taskResults.flatMap((result)=>(result.lanes.compare.contradiction_map||[]).map((item)=>({task_id:result.task.id,...item}))),condition_differences:mergeConditionDifferences(taskResults),selected_candidate:null,candidate_ranking:[],rejected_candidates:[],per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.lanes.compare])),verdict:{decision:'MATERIAL_ONLY',reason:'Astera does not select, rank, recommend, adopt, or reject candidates.',objective:'Expose deterministic comparison material only.'}};
   const perspectiveExpansion={engine:'Astera Deterministic Perspective Expansion',mode:'MATERIAL_ONLY',per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.perspective_expansion])),perspectives:taskResults.flatMap((result)=>(result.perspective_expansion.perspectives||[]).map((item)=>({task_id:result.task.id,...item}))),candidates:[],selected:null,rejected:[]};
   const canonical={schema_version:'astera.canonical-claim-records.aggregate.v1',records:allRecords,claim_count:claims,confirmed_count:confirmedCount,undetermined_count:undeterminedCount,status:claims&&undeterminedCount===0?'CONFIRMED':'UNDETERMINED',per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,result.canonical]))};
   return{facts,risks,multi,inquiry,comparison,perspectiveExpansion,canonical};
@@ -117,13 +171,17 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       ...(packet.context_bindings || []).filter((item) => item.kind === 'prohibition').map((item) => item.value)
     ]);
     const purposeItems=taskResults.map((result)=>`${result.task.id}[${result.task.action}] ${result.task.objective}`),premiseItems=unique([...(packet.unresolved||[]).map((item)=>`unresolved=${item}`),...(packet.conflicts||[]).map((item)=>`conflict=${item.type}:${item.note}`),...aggregate.inquiry.missing_fields.map((item)=>`missing=${item}`),...constraints.map((item)=>`hard_constraint=${item}`),...contextPremises.map((item)=>`premise=${item}`),...contextProhibitions.map((item)=>`prohibition=${item}`)]),factItems=unique([...(aggregate.facts.confirmed||[]).map((item)=>`${item.task_id}:${item.claim_id}:CONFIRMED:${item.text}`),...(aggregate.facts.unconfirmed||[]).map((item)=>`${item.task_id}:${item.claim_id}:UNDETERMINED:${item.text}`)]),riskItems=(aggregate.risks.risks||[]).map((item)=>`${item.task_id}:${item.key}[${item.weight}] ${item.impact}`),oppositionItems=taskResults.map((result)=>`${result.task.id}: counter query role=${result.canonical.search_plan.planned_query_roles.includes('COUNTER')?'PLANNED':'NOT_REQUIRED'} / unresolved=${result.canonical.undetermined_count}`),comparisonItems=taskResults.map((result)=>`${result.task.id}: claims=${result.lanes.compare.counts.claims}, confirmed=${result.lanes.compare.counts.confirmed}, undetermined=${result.lanes.compare.counts.undetermined}, coverage=${result.lanes.compare.coverage?.ratio??'-'}`),evidenceItems=taskResults.map((result)=>`${result.task.id}: SearchExecution=${result.evidence.search_state}; EvidenceQuality=${result.evidence.source_status||result.evidence.state}; quality=${result.evidence.quality_score_bp??'-'}bp; ClaimConfirmation=${claimStatus(result.canonical).status} (${result.canonical.confirmed_count}/${result.canonical.records.length})`),reinstructionItems=unique([`Task Wave順を保持: ${packet.execution_waves.map((wave,index)=>`W${index+1}[${wave.join(',')}]`).join(' -> ')}`,...packet.prohibitions.map((item)=>`禁止条件を破らない: ${item}`),...packet.preserve.map((item)=>`維持条件を保持: ${item}`),...taskResults.map((result)=>`${result.task.id}: Lens=${result.task.domain.primary?.id||'UNRESOLVED'} / Claim=${claimStatus(result.canonical).status} / SearchExecution=${result.evidence.search_state} / EvidenceQuality=${result.evidence.state}`),...(aggregate.canonical.undetermined_count?['UNDETERMINED ClaimをCONFIRMEDへ推測昇格しない。']:[]),...(blockers.length?[`Blocking条件を解消せず最終判断へ進めない: ${blockers.join(' / ')}`]:[]),'Astera自身は採用・棄却・Ranking・Recommendation・最終Decisionを行わない。']);
+    const oppositionPerspectives=(aggregate.multi.perspectives||[]).filter((perspective)=>String(perspective.class||perspective.id||'').toUpperCase()!=='MAINLINE').map(mapMultiPerspective);
+    const expandedPerspectives=(aggregate.perspectiveExpansion.perspectives||[]).map(mapExpandedPerspective);
+    const tradeOffMap=(aggregate.multi.trade_off_map||[]).map((item)=>({...(item.task_id?{task_id:item.task_id}:{}),id:item.id,class:item.class,focus:item.focus,conditions:item.conditions,weaknesses:item.weaknesses,status:item.status,source:item.source}));
+    const oppositionSummary=oppositionPerspectives.length?join(oppositionPerspectives.map((perspective)=>`${perspective.id||perspective.class}:${line(Array.isArray(perspective.focus)?perspective.focus.join(' / '):perspective.focus)}`)):join(oppositionItems);
     const sections={
       '01_purpose':{summary:join(purposeItems),items:purposeItems,decision_basis:trace(['MAIN8-01-TASK-GRAPH-OBJECTIVE'],{derivation:'Analysis Task Graphの目的を順序・依存と分離して保持する。'})},
       '02_premise':{summary:premiseItems.length?join(premiseItems):(lang==='en'?'No unresolved premise or hard-constraint gap.':'未解決の前提不足・Hard Constraint競合は検出されていない。'),items:premiseItems,decision_basis:trace(['MAIN8-02-UNRESOLVED-CONSTRAINT'],{derivation:'Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない。'})},
       '03_facts':{summary:lang==='en'?`confirmed=${aggregate.canonical.confirmed_count}, undetermined=${aggregate.canonical.undetermined_count}`:`CONFIRMED ${aggregate.canonical.confirmed_count}件 / UNDETERMINED ${aggregate.canonical.undetermined_count}件`,items:factItems,confirmed:aggregate.facts.confirmed,unconfirmed:aggregate.facts.unconfirmed,decision_basis:trace(['MAIN8-03-G1-G7-CANONICAL-CLAIMS'],{derivation:'Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする。'})},
       '04_crisis':{summary:aggregate.risks.highest?`${aggregate.risks.level}: ${aggregate.risks.highest.task_id}:${aggregate.risks.highest.impact}`:(lang==='en'?'No material rule-derived risk detected.':'重大なRule由来Riskは検出されていない。'),items:riskItems,highest:aggregate.risks.highest,risks:aggregate.risks.risks,decision_basis:trace(['MAIN8-04-INDEPENDENT-RISK-PROJECTION'],{derivation:'Risk Laneは他Lane出力ではなくTask/Canonical Claim/Domain Ruleから独立投影する。'})},
-      '05_opposition':{summary:join(oppositionItems),items:oppositionItems,decision_basis:trace(['MAIN8-05-COUNTER-ROLE-MATERIAL'],{derivation:'各外部確認Claimにcounter Search Roleを必須化し、反証探索材料を保持する。'})},
-      '06_comparison':{summary:`claims=${aggregate.comparison.counts.claims}, confirmed=${aggregate.comparison.counts.confirmed}, undetermined=${aggregate.comparison.counts.undetermined}, conflicts=${aggregate.comparison.counts.conflicts}`,items:comparisonItems,counts:aggregate.comparison.counts,coverage:aggregate.comparison.coverage,dimensions:aggregate.comparison.dimensions,selected_candidate:null,candidate_ranking:[],rejected_candidates:[],decision_basis:trace(['MAIN8-06-MATERIAL-ONLY-COMPARE'],{derivation:'Count/Coverage/Scope/Conflict/Dimensionのみ。加重Score・Ranking・Selected/Rejectedを生成しない。'})},
+      '05_opposition':{summary:oppositionSummary,items:oppositionPerspectives.length?oppositionPerspectives.map((perspective)=>`${perspective.id||perspective.class}:${line(Array.isArray(perspective.focus)?perspective.focus.join(' / '):perspective.focus)}`):oppositionItems,perspectives:oppositionPerspectives,expanded_perspectives:expandedPerspectives,trade_off_map:tradeOffMap,decision_basis:trace(['MAIN8-05-COUNTER-ROLE-MATERIAL'],{derivation:'Multi/Perspective Expansionの実体を保持し、MAINLINE以外の視点とTrade-off材料を失わない。'})},
+      '06_comparison':{summary:`claims=${aggregate.comparison.counts.claims}, confirmed=${aggregate.comparison.counts.confirmed}, undetermined=${aggregate.comparison.counts.undetermined}, conflicts=${aggregate.comparison.counts.conflicts}`,items:comparisonItems,counts:aggregate.comparison.counts,coverage:aggregate.comparison.coverage,dimensions:aggregate.comparison.dimensions,scope_booleans:aggregate.comparison.scope_booleans,supported_scope:aggregate.comparison.supported_scope,unsupported_scope:aggregate.comparison.unsupported_scope,contradiction_map:aggregate.comparison.contradiction_map,condition_differences:aggregate.comparison.condition_differences,comparison_candidates:aggregate.comparison.comparison_candidates,candidate_materials:aggregate.comparison.candidate_materials,trade_off_differences:aggregate.comparison.trade_off_differences,selected_candidate:null,candidate_ranking:[],rejected_candidates:[],decision_basis:trace(['MAIN8-06-MATERIAL-ONLY-COMPARE'],{derivation:'Count/Coverage/Scope/Conflict/Dimension/Candidate/Trade-off材料のみ。加重Score・Ranking・Selected/Rejectedを生成しない。'})},
       '07_evidence_status':{summary:`Claim=${aggregate.canonical.status}: confirmed=${aggregate.canonical.confirmed_count}/${aggregate.canonical.claim_count}; Evidence Search quality is tracked separately.`,items:evidenceItems,claim_status:aggregate.canonical.status,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,evidence_search:Object.fromEntries(taskResults.map((result)=>[result.task.id,{search_state:result.evidence.search_state,state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}])),decision_basis:trace(['MAIN8-07-EVIDENCE-STATUS-SEPARATION'],{derivation:'Evidence Searchは根拠候補品質、Claim ConfirmationはG1-G7成立状態として分離表示する。'})},
       '08_reinstruction':{summary:join(reinstructionItems),items:reinstructionItems,decision_basis:trace(['MAIN8-08-LOSSLESS-EXTERNAL-REINSTRUCTION'],{derivation:'Task順序・禁止・維持・Evidence/Claim状態・未確定を失わずExternal Consumerへ渡す。'})}
     };
