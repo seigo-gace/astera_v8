@@ -14,6 +14,7 @@ on:
       - 'scripts/evidence-live-smoke.js'
       - 'test/evidence-search-provider-adapter.test.js'
       - 'test/evidence-search-live-query-template.test.js'
+      - 'test/evidence-search-bsdd-live-provider.test.js'
       - 'package.json'
       - '.github/workflows/evidence-search.yml'
 
