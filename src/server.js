@@ -16,6 +16,36 @@ const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
 
+const ALLOWED_MOOD_KEYS = new Set([
+  'good', 'confident', 'calm', 'deepThink', 'urgent', 'angry', 'tired', 'bad', 'confused', 'anxious'
+]);
+const MAX_MOOD_ANSWER_KEYS = 8;
+
+function sanitizeMoodAnswers(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(raw)) {
+    if (!ALLOWED_MOOD_KEYS.has(key)) continue;
+    if (typeof value !== 'boolean') continue;
+    if (count >= MAX_MOOD_ANSWER_KEYS) break;
+    out[key] = value;
+    count += 1;
+  }
+  return out;
+}
+
+function buildProcessAllowlist(body) {
+  const allowlist = { question: body.question };
+  if (body.context !== undefined) allowlist.context = body.context;
+  if (body.language !== undefined) allowlist.language = body.language;
+  if (body.locale !== undefined) allowlist.locale = body.locale;
+  if (body.output_language !== undefined) allowlist.output_language = body.output_language;
+  const moodAnswers = sanitizeMoodAnswers(body.moodAnswers);
+  if (Object.keys(moodAnswers).length) allowlist.moodAnswers = moodAnswers;
+  return allowlist;
+}
+
 function parseAllowedOrigins() {
   const raw = process.env.ASTERA_CORS_ORIGINS || process.env.ASTERA_CORS_ORIGIN || process.env.KAGURA_CORS_ORIGINS || process.env.KAGURA_CORS_ORIGIN || '';
   const list = String(raw || '')
@@ -241,8 +271,9 @@ class KaguraServer {
       error.status = 413;
       throw error;
     }
-    body.llm = this.vault.resolveRequestLLM(body);
-    const out = await this.engine.process(body, tenant);
+    const allowlist = buildProcessAllowlist(body);
+    allowlist.llm = this.vault.resolveRequestLLM(allowlist);
+    const out = await this.engine.process(allowlist, tenant);
     if (!unlimited) this.meter.record({ tenant, route, units: 1, status: 'ok', meta: { answerProvider: out.answer?.provider || null } });
     return this._text(req, res, 200, out.material?.text || '');
   }

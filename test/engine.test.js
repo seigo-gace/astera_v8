@@ -2,161 +2,43 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const KaguraEngine = require('../src/kagura-engine');
-const { analyzeRequest, normalizeEvidencePacket } = require('../src/judgment-materials-analyzer');
-const { needsJapaneseParser } = require('../src/japanese-parser-mcp-client');
+const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
+const { analyzeRequest, deriveEvidenceNeed, normalizeEvidencePacket } = require('../src/judgment-materials-analyzer');
+const { routeDomainTemplates } = require('../src/domain-template-router');
+const { QUERY_ROLES, buildCanonicalTaskPlan, evaluateCanonicalTaskPlan } = require('../src/canonical-claim-runtime');
+const { projectCanonicalTask } = require('../src/canonical-task-projection');
 
-const silentLogger = { write() {} };
-const tenant = { id: 'test', is_global: true, plan: 'admin' };
+const silentLogger={write(){}};
+const tenant={id:'test',is_global:true,plan:'admin'};
 
-function validEvidence(claim) {
-  return {
-    schema_version: 'astera.evidence-search.result.v1', request_id: 'ev-test', tenant_id: 'test', status: 'FINAL_VALID',
-    effective_as_of: '2026-08-20T00:00:00.000Z', result_hash: 'test-result-hash',
-    evidence: [{
-      candidate_id: 'E1', canonical_record_id: 'R1', content_hash: 'H1', source_role: 'OFFICIAL', source_family_id: 'official-family',
-      source_id: 'official-source', provider_id: 'official-provider', authority_id: 'official-authority',
-      canonical_locator: { url: 'https://example.test/evidence', replayable: true }, updated_at: '2026-08-20T00:00:00.000Z', fields: { claim }, excerpt: claim
-    }, {
-      candidate_id: 'E2', canonical_record_id: 'R2', content_hash: 'H2', source_role: 'SECONDARY', source_family_id: 'secondary-family',
-      source_id: 'secondary-source', provider_id: 'secondary-provider', authority_id: 'secondary-authority',
-      canonical_locator: { url: 'https://secondary.test/evidence', replayable: true }, updated_at: '2026-08-20T00:00:00.000Z', fields: { claim }, excerpt: claim
-    }],
-    coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE', registry_coverage_state: 'COMPLETE' },
-    quality: {
-      initial: { status: 'REINFORCEMENT_REQUIRED', phase: 'INITIAL', score_bp: 8500, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] },
-      reinforcement_attempt_count: 1, new_corroboration_count: 1,
-      final: { status: 'FINAL_VALID', phase: 'FINAL', score_bp: 9700, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] }
-    },
-    provider_execution: { initial: [{ provider_id: 'official-provider', status: 'FULFILLED' }], reinforcement: [{ provider_id: 'secondary-provider', status: 'FULFILLED' }] },
-    ai_used: false, payment_executed: false
-  };
-}
+function evidenceCandidate({id,role,family,authority,claim,url}){return{candidate_id:id,canonical_record_id:`${id}-record`,content_hash:`${id}-hash`,source_role:role,source_family_id:family,source_id:`${id}-source`,provider_id:`${id}-provider`,authority_id:authority,canonical_locator:{url,replayable:true},updated_at:'2026-08-20T00:00:00.000Z',fields:{claim},excerpt:claim};}
+function queryExecution(queries=[]){return{initial:queries.map((query)=>({query_id:query.query_id,claim_id:query.claim_id,role:query.role,status:'FOUND',provider_records:[{provider_id:'ev-official-provider',status:'FOUND',candidate_record_ids:['ev-official-record']},{provider_id:'ev-corroboration-provider',status:'FOUND',candidate_record_ids:['ev-corroboration-record']}]})),reinforcement:[]};}
+function validEvidence(claim,queries=[]){return{schema_version:'astera.evidence-search.result.v1',request_id:'ev-test',tenant_id:'test',status:'FINAL_VALID',effective_as_of:'2026-08-20T00:00:00.000Z',result_hash:'test-result-hash',planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:Object.values(QUERY_ROLES),evidence:[evidenceCandidate({id:'ev-official',role:'OFFICIAL',family:'official-family',authority:'official-authority',claim,url:'https://official.test/evidence'}),evidenceCandidate({id:'ev-corroboration',role:'SECONDARY',family:'corroboration-family',authority:'corroboration-authority',claim,url:'https://corroboration.test/evidence'})],coverage:{discovery_scope_state:'COMPLETE_FOR_QUERY_SCOPE',registry_coverage_state:'COMPLETE_FOR_ACTIVE_REGISTRY'},quality:{initial:{status:'REINFORCEMENT_REQUIRED',phase:'INITIAL',score_bp:8500,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]},reinforcement_attempt_count:1,new_corroboration_count:1,final:{status:'FINAL_VALID',phase:'FINAL',score_bp:9700,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]}},query_execution:queryExecution(queries),provider_execution:{initial:[{provider_id:'ev-official-provider',status:'FULFILLED'}],reinforcement:[{provider_id:'ev-corroboration-provider',status:'FULFILLED'}]},ai_used:false,payment_executed:false};}
+async function withEngine(fn){const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger});try{await fn(engine);}finally{await engine.destroy();}}
+function planForPrepared(engine,claim){const prepared=engine.prepareRequest({question:claim}),task=prepared.analysis_task_packet.tasks[0],plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});return{prepared,plan};}
 
-function parserResponse(originalText, { executionAllowed = true } = {}) {
-  const claim = originalText.includes('Node.js 22') ? 'Node.js 22は本番で対応している' : null;
-  return {
-    overall_status: executionAllowed ? 'COMPLETE' : 'PARTIAL', execution_allowed: executionAllowed,
-    blocked_reasons: executionAllowed ? [] : ['UNRESOLVED_REFERENCE'], original_text: originalText, normalized_text: originalText, analysis_path: 'DEEP',
-    meaning_graph: { graph_version: '2.2.0', semantic_hash: 'semantic-test-hash', unresolved: [] },
-    task_graph: {
-      graph_version: '2.0.0',
-      tasks: [{
-        task_id: 'P001', action: claim ? '公式根拠で検証する' : 'APIを改善する', target: claim ? 'Node.js 22 production support' : 'API',
-        intent_type: claim ? 'verification_criteria' : 'modify', execution_order: 1, constraints: [],
-        structured_constraints: claim ? [{ constraint_type: 'premise', value: claim, status: 'RESOLVED' }] : [], dependencies: [],
-        completion_criteria: ['要求を判断材料へ変換する'], verification_criteria: claim ? ['公式Sourceを使用する'] : ['Testで確認する'],
-        external_action: !claim, status: 'RESOLVED', original_span: { start: 0, end: originalText.length, source_text: originalText }, proposition_id: 'prop-1'
-      }], edges: [], constraints: [], status: executionAllowed ? 'RESOLVED' : 'AMBIGUOUS'
-    },
-    ambiguities: [], missing_information: [], contradictions: [], unsupported_elements: [], timeouts: [],
-    versions: { parser: 'test-parser', grammar: 'test-grammar' }, metrics: { elapsed_ms: 2.1 },
-    astera_mcp_transport: { protocol_version: '2025-11-25', elapsed_ms: 2.2, tool: 'analyze_japanese' }
-  };
-}
+test('Japanese legacy parser still decomposes internally without an MCP-required placeholder',()=>{const request=analyzeRequest({question:'READMEは残す。APIを改善する。mainは変更するな。成功条件はRollback可能であること。'}),packet=request.analysis_task_packet;assert.equal(request.language,'ja');assert.equal(request.instruction_understanding.mode,'INTERNAL_DETERMINISTIC');assert.equal(packet.tasks.some((task)=>task.id==='JP-MCP-REQUIRED'),false);assert.equal(packet.unresolved.some((item)=>/MCP/i.test(item)),false);assert.ok(packet.tasks.length>=2);assert.ok(packet.preserve.some((item)=>/README/.test(item)));assert.ok(packet.prohibitions.some((item)=>/main/.test(item)));});
 
-function parserClient(factory = parserResponse) {
-  return { async analyze({ originalText }) { return factory(originalText); }, async destroy() {} };
-}
+test('compound instruction keeps prohibition, preserve, dependencies, completion criteria and execution waves',()=>{const request=analyzeRequest({question:'READMEは残す。APIの現状を公式根拠で検証する。その後、互換性を維持したままAPIを改善する。最後にテストで確認する。勝手にmainは変更するな。成功条件はRollback可能であること。'}),packet=request.analysis_task_packet;assert.ok(packet.tasks.length>=4);assert.ok(packet.preserve.some((item)=>/README|互換性/.test(item)));assert.ok(packet.prohibitions.some((item)=>/main/.test(item)));assert.ok(packet.dependencies.some((item)=>item.to==='T03'));assert.ok(packet.dependencies.some((item)=>item.to==='T04'));assert.ok(packet.execution_waves.length>=3);assert.ok(packet.source_spans.every((item)=>Number.isInteger(item.start)&&Number.isInteger(item.end)));assert.equal(packet.tasks[1].target,'APIの現状');assert.equal(packet.tasks[2].action,'improve');assert.ok(packet.completion_criteria.some((item)=>/Rollback/.test(item)));});
 
-async function withEngine(fn, options = {}) {
-  const engine = new KaguraEngine({ poolSize: 4, logger: silentLogger, japaneseParserClient: options.japaneseParserClient ?? null, evidenceSearch: options.evidenceSearch || null });
-  try { await fn(engine); } finally { await engine.destroy(); }
-}
+test('internal test verification does not force external Evidence Search while external verification does',()=>{const request=analyzeRequest({question:'現在のAPI仕様を公式根拠で検証する。その後テストで動作確認する。'}),external=request.analysis_task_packet.tasks[0],internal=request.analysis_task_packet.tasks[1];assert.equal(request.analysis_task_packet.tasks.length,2);assert.equal(deriveEvidenceNeed(external,routeDomainTemplates({question:external.source_span.text})).required,true);assert.equal(deriveEvidenceNeed(internal,routeDomainTemplates({question:internal.source_span.text})).required,false);});
 
-test('canonical runtime exposes independent five-lane order and Main8 with 07 Evidence state', async () => {
-  await withEngine(async (engine) => {
-    const out = await engine.process({ question: 'Improve the API runtime. Keep compatibility. Verify rollback before completion.', language: 'en' }, tenant);
-    assert.equal(out.result.non_ai, true);
-    assert.equal(out.runtime.ai_used, false);
-    assert.equal(out.runtime.llm_called, false);
-    assert.equal(out.runtime.engine, 'v8_canonical_v4_rules');
-    assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
-    assert.equal(out.result.five_stage.execution_mode, 'INDEPENDENT_PARALLEL_FROM_CANONICAL_CLAIM_RECORDS');
-    assert.deepEqual(out.result.judgment.order, ['01_purpose', '02_premise', '03_facts', '04_crisis', '05_opposition', '06_comparison', '07_evidence', '08_reinstruction']);
-    assert.equal(out.result.judgment.authority_boundary.astera_decides_user_action, false);
-    assert.equal(out.result.judgment.authority_boundary.compare_auto_ranking, false);
-    assert.equal(Object.hasOwn(out.result.comparison, 'verdict'), false);
-    assert.equal(Object.hasOwn(out.result.comparison, 'selected_candidate'), false);
-    assert.match(out.material.text, /07 Evidence State/);
-  });
-});
+test('Evidence FINAL_VALID compact packet still requires 80/95, reinforcement, corroboration, hash and non-AI contracts',()=>{const valid=normalizeEvidencePacket(validEvidence('API compatibility is preserved'));assert.equal(valid.state,'VALID');assert.equal(valid.initial_quality_score_bp,8500);assert.equal(valid.quality_score_bp,9700);assert.equal(valid.reinforcement_attempt_count,1);assert.equal(valid.new_corroboration_count,1);assert.equal(valid.distinct_authority_count,2);assert.equal(valid.distinct_source_family_count,2);const broken=validEvidence('API compatibility is preserved');broken.quality.reinforcement_attempt_count=0;broken.provider_execution.reinforcement=[];const rejected=normalizeEvidencePacket(broken);assert.equal(rejected.state,'REJECTED');assert.ok(rejected.eligibility_reasons.includes('REINFORCEMENT_COUNT_INVALID'));assert.ok(rejected.eligibility_reasons.includes('REINFORCEMENT_EXECUTION_MISSING'));});
 
-test('Japanese requests still route through Deterministic Japanese Parser MCP', async () => {
-  const question = 'APIを改善する。';
-  assert.equal(needsJapaneseParser(question, analyzeRequest({ question })), true);
-  let calls = 0;
-  await withEngine(async (engine) => {
-    const prepared = await engine.prepareRequest({ question });
-    assert.equal(calls, 1);
-    assert.equal(prepared.instruction_understanding.mode, 'DEEP_PATH');
-    assert.equal(prepared.analysis_task_packet.tasks[0].target, 'API');
-  }, { japaneseParserClient: { async analyze({ originalText }) { calls += 1; return parserResponse(originalText); }, async destroy() {} } });
-});
+test('canonical non-AI runtime builds Task Graph before Claim/Domain and all Main8 sections carry traces',async()=>{await withEngine(async(engine)=>{const out=await engine.process({question:'READMEは残す。APIを改善する。成功条件は互換性維持とRollback可能であること。mainは変更するな。'},tenant);assert.equal(out.result.non_ai,true);assert.equal(out.runtime.ai_used,false);assert.equal(out.runtime.llm_called,false);assert.equal(out.runtime.engine,'v8_canonical_global_rules');assert.equal(Object.hasOwn(out,'answer'),false);assert.ok(out.result.analysis_task_packet.tasks.length>=2);assert.deepEqual(out.result.five_stage.order,['fact','risk','multi','inquiry','compare']);assert.equal(out.result.judgment.order.length,8);assert.equal(out.result.judgment.order[6],'07_evidence_status');for(const key of out.result.judgment.order){const section=out.result.judgment[key];assert.ok(section.decision_basis);assert.ok(section.decision_basis.rule_ids.length>=1);assert.equal(section.decision_basis.task_ids.length,out.result.analysis_task_packet.tasks.length);assert.ok(Array.isArray(section.decision_basis.source_spans));}assert.match(out.material.text,/導出根拠|Derivation Basis/);});});
 
-test('Parser external-action guard is retained as an explicit hard blocker, not converted to a recommendation decision', async () => {
-  const client = parserClient((originalText) => parserResponse(originalText, { executionAllowed: false }));
-  await withEngine(async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。' }, tenant);
-    assert.ok(out.result.analysis_task_packet.tasks[0].hard_blockers.includes('PARSER_ACTION_GUARD_BLOCKED'));
-    assert.equal(Object.hasOwn(out.result.comparison, 'decision'), false);
-    assert.equal(Object.hasOwn(out.result.comparison, 'verdict'), false);
-    assert.ok(out.result.judgment['02_premise'].summary.includes('PARSER_ACTION_GUARD_BLOCKED') || out.result.judgment['08_reinstruction'].summary.includes('PARSER_ACTION_GUARD_BLOCKED'));
-  }, { japaneseParserClient: client });
-});
+test('input claims are never promoted merely by wording, numbers, or product names',async()=>{await withEngine(async(engine)=>{const out=await engine.process({question:'Node.js 22は本番で完全対応している。'},tenant);assert.equal(out.result.facts.confirmed.length,0);assert.ok(out.result.facts.unconfirmed.length>=1);assert.equal(out.result.canonical_claims.status,'UNDETERMINED');});});
 
-test('direct parser premise remains UNDETERMINED without Evidence Search result', async () => {
-  const claim = 'Node.js 22は本番で対応している';
-  await withEngine(async (engine) => {
-    const out = await engine.process({ question: `${claim}。公式根拠で対応状況を検証する。` }, tenant);
-    assert.equal(out.result.canonical_claim_records.length, 1);
-    assert.equal(out.result.canonical_claim_records[0].status, 'UNDETERMINED');
-    assert.deepEqual(out.result.canonical_claim_records[0].search_plan.query_roles.map((item) => item.role), ['support', 'counter']);
-    assert.equal(out.result.facts.confirmed.length, 0);
-  }, { japaneseParserClient: parserClient() });
-});
+test('evaluateCanonicalTaskPlan with strict G1-G7 evidence CONFIRMS matching claim internally',async()=>{await withEngine(async(engine)=>{const claim='Node.js 22は本番で対応している。',{prepared,plan}=planForPrepared(engine,claim),task={...prepared.analysis_task_packet.tasks[0],canonical_plan:plan},projected=projectCanonicalTask({task,evidenceRaw:validEvidence(claim,plan.search_plan.queries)});assert.ok(projected.canonical.confirmed_count>=1);assert.equal(projected.canonical.undetermined_count,0);const evaluated=evaluateCanonicalTaskPlan(plan,validEvidence(claim,plan.search_plan.queries));assert.equal(evaluated.confirmed_count,projected.canonical.confirmed_count);});});
 
-test('VALID evidence reaches G1-G7 and CONFIRMED; no ranking/selection is generated', async () => {
-  const claim = 'Node.js 22は本番で対応している';
-  const normalized = normalizeEvidencePacket(validEvidence(claim));
-  assert.equal(normalized.state, 'VALID');
-  await withEngine(async (engine) => {
-    const out = await engine.process({ question: `${claim}。公式根拠で対応状況を検証する。`, evidencePacket: validEvidence(claim) }, tenant);
-    const record = out.result.canonical_claim_records[0];
-    assert.equal(record.status, 'CONFIRMED');
-    assert.deepEqual(record.confirmation_gates, { G1: true, G2: true, G3: true, G4: true, G5: true, G6: true, G7: true });
-    assert.equal(out.result.facts.confirmed.length, 1);
-    assert.equal(out.result.comparison.counts.CONFIRMED, 1);
-    assert.equal(Object.hasOwn(out.result.comparison, 'candidate_ranking'), false);
-  }, { japaneseParserClient: parserClient() });
-});
+test('public process ignores client evidencePacket and keeps claims UNDETERMINED',async()=>{await withEngine(async(engine)=>{const claim='Node.js 22は本番で対応している。',{prepared,plan}=planForPrepared(engine,claim),out=await engine.process({question:claim,evidencePacket:validEvidence(claim,plan.search_plan.queries),preparedRequest:prepared},tenant);assert.equal(out.result.facts.confirmed.length,0);assert.equal(out.result.canonical_claims.status,'UNDETERMINED');});});
 
-test('Evidence Search executor receives prebuilt support/counter plans before confirmation', async () => {
-  const claim = 'Node.js 22は本番で対応している';
-  const calls = [];
-  const evidenceSearch = {
-    async execute(input) {
-      calls.push(input);
-      return validEvidence(claim);
-    }
-  };
-  await withEngine(async (engine) => {
-    const out = await engine.process({ question: `${claim}。公式根拠で対応状況を検証する。` }, tenant);
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].search_plans[0].query_roles.map((item) => item.role), ['support', 'counter']);
-    assert.equal(out.result.canonical_claim_records[0].status, 'CONFIRMED');
-    assert.equal(out.result.evidence_search.executor_attached, true);
-  }, { japaneseParserClient: parserClient(), evidenceSearch });
-});
+test('rejected evidence never becomes CONFIRMED and no recommendation is produced',async()=>{await withEngine(async(engine)=>{const claim='Node.js 22は本番で対応している。',{prepared,plan}=planForPrepared(engine,claim),packet=validEvidence(claim,plan.search_plan.queries);packet.status='REJECTED_BLOCKING';packet.quality.final={status:'REJECTED_BLOCKING',phase:'FINAL',score_bp:4200,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:['SOURCE_CONFLICT']};const task={...prepared.analysis_task_packet.tasks[0],canonical_plan:plan},projected=projectCanonicalTask({task,evidenceRaw:packet});assert.equal(projected.canonical.confirmed_count,0);assert.ok(projected.canonical.undetermined_count>=1);const out=await engine.process({question:claim,evidencePacket:packet,preparedRequest:prepared},tenant);assert.equal(out.result.facts.confirmed.length,0);assert.equal(out.result.canonical_claims.status,'UNDETERMINED');assert.equal(out.result.comparison.verdict.decision,'MATERIAL_ONLY');assert.equal(out.result.comparison.selected_candidate,null);assert.deepEqual(out.result.comparison.candidate_ranking,[]);});});
 
-test('same English input remains deterministic', async () => {
-  await withEngine(async (engine) => {
-    const input = { question: 'Verify the current API specification from an official source. Then compare migration constraints.', language: 'en' };
-    const first = await engine.process(input, tenant);
-    const baseline = JSON.stringify({ task_graph: first.result.analysis_task_packet, claims: first.result.canonical_claim_records, comparison: first.result.comparison, judgment: first.result.judgment, material: first.material });
-    for (let i = 0; i < 3; i += 1) {
-      const next = await engine.process(input, tenant);
-      assert.equal(JSON.stringify({ task_graph: next.result.analysis_task_packet, claims: next.result.canonical_claim_records, comparison: next.result.comparison, judgment: next.result.judgment, material: next.material }), baseline);
-    }
-  });
-});
+test('Perspective Expansion never owns candidates, final scores, selection or rejection',async()=>{await withEngine(async(engine)=>{const out=await engine.process({question:'旧Codeを分析し、根拠検索と責務分離を維持したままAstera本体を改善する。成功条件は非AIを維持し、未確認を事実化しないこと。'},tenant);assert.equal(out.result.perspective_expansion.mode,'MATERIAL_ONLY');assert.deepEqual(out.result.perspective_expansion.candidates,[]);assert.equal(out.result.perspective_expansion.selected,null);assert.deepEqual(out.result.perspective_expansion.rejected,[]);assert.equal(out.result.comparison.material_only,true);assert.equal(Object.hasOwn(out.result.comparison,'score'),false);});});
+
+test('Task-specific Lens routing is retained per Analysis Task without forcing low-signal classification',async()=>{await withEngine(async(engine)=>{const out=await engine.process({question:'APIサーバーのシステム開発を改善する。契約条件を確認する。'},tenant);const routes=out.result.judgment.lens_routing.per_task,tasks=out.result.analysis_task_packet.tasks;assert.equal(Object.keys(routes).length,tasks.length);assert.equal(routes[tasks[0].id].primary?.id,'G29');assert.equal(routes[tasks[1].id].primary,null);assert.equal(routes[tasks[1].id].classification_basis,'ABSTAIN_LOW_SIGNAL');});});
+
+test('same compound input remains deterministic across repeated executions',async()=>{await withEngine(async(engine)=>{const input={question:'API仕様を公式根拠で検証する。その後、互換性を維持して段階移行する。最後にテストする。成功条件はRollback可能であること。'},first=await engine.process(input,tenant),expected=JSON.stringify({task_graph:first.result.analysis_task_packet,five:first.result.five_stage,comparison:first.result.comparison,judgment:first.result.judgment,material:first.material});assert.equal((first.result.five_stage.execution.timings||[]).some((timing)=>Object.hasOwn(timing,'duration_ms')),false);assert.equal((first.runtime.parallel_execution.timings||[]).some((timing)=>Object.hasOwn(timing,'duration_ms')),true);for(let index=0;index<5;index+=1){const next=await engine.process(input,tenant);assert.equal(JSON.stringify({task_graph:next.result.analysis_task_packet,five:next.result.five_stage,comparison:next.result.comparison,judgment:next.result.judgment,material:next.material}),expected);}});});
+
+test('visible English output keeps fixed Main8 with Evidence Status and explicit derivation basis',async()=>{await withEngine(async(engine)=>{const out=await engine.process({question:'Compare two API migration options. Success means compatibility and rollback.',language:'en'},tenant);assert.equal(out.result.judgment.output_language,'en');assert.equal(out.result.judgment['01_purpose'].label,'01 True Objective');assert.equal(out.result.judgment['07_evidence_status'].label,'07 Evidence Status');assert.match(out.material.text,/Derivation Basis/);assert.equal(out.result.comparison.selected_candidate,null);assert.deepEqual(out.result.comparison.candidate_ranking,[]);assert.match(out.material.text,/(?:Astera自身は.*(?:Recommendation|recommend).*行わない|Astera.*does not.*recommend)/i);});});
