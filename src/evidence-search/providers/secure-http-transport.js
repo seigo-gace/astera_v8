@@ -99,6 +99,17 @@ async function resolvePublicAddress(hostname, lookup = dns.lookup) {
   return addresses[0];
 }
 
+function createPinnedLookup(address) {
+  const pinned = Object.freeze({ address: String(address.address), family: Number(address.family) });
+  return (_hostname, lookupOptions, callback) => {
+    if (lookupOptions && lookupOptions.all === true) {
+      callback(null, [{ address: pinned.address, family: pinned.family }]);
+      return;
+    }
+    callback(null, pinned.address, pinned.family);
+  };
+}
+
 function requestOnce(url, address, options) {
   return new Promise((resolve, reject) => {
     const request = https.request({
@@ -109,9 +120,7 @@ function requestOnce(url, address, options) {
       path: `${url.pathname}${url.search}`,
       servername: url.hostname,
       headers: options.headers,
-      lookup: (_hostname, _lookupOptions, callback) => {
-        callback(null, address.address, address.family);
-      }
+      lookup: createPinnedLookup(address)
     }, (response) => {
       const chunks = [];
       let size = 0;
@@ -205,6 +214,7 @@ async function secureGet(rawUrl, options = {}) {
 }
 
 module.exports = {
+  createPinnedLookup,
   isPublicIp,
   resolvePublicAddress,
   secureGet,
