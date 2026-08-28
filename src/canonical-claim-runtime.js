@@ -64,14 +64,54 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
   });
 }
 
+function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidateById = new Map()) {
+  if (binding.query_role) return binding.query_role;
+  if (binding.role) return binding.role;
+
+  const matchIds = new Set();
+  if (binding.candidate_id) matchIds.add(binding.candidate_id);
+  const candidate = candidateById.get(binding.candidate_id);
+  if (candidate?.canonical_record_id) matchIds.add(candidate.canonical_record_id);
+  if (candidate?.candidate_id) matchIds.add(candidate.candidate_id);
+  if (!matchIds.size) return null;
+
+  const executions = [
+    ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
+    ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
+  ];
+  for (const execution of executions) {
+    const matched = (execution.provider_records || []).some((providerRecord) =>
+      (providerRecord.candidate_record_ids || []).some((id) => matchIds.has(id))
+    );
+    if (!matched) continue;
+    if (execution.role) return execution.role;
+    const query = queries.find((item) => item.query_id === execution.query_id);
+    if (query?.role) return query.role;
+  }
+  return null;
+}
+
+function bindingsWithQueryRole(bindings, rawEvidence, queries, candidateById) {
+  return bindings.map((binding) => {
+    const query_role = resolveQueryRoleForBinding(binding, rawEvidence, queries, candidateById);
+    return deepFreeze({ ...binding, query_role });
+  });
+}
+
 function evaluateCanonicalTaskPlan(plan, rawEvidence) {
   const records = plan.claims.map((claim) => {
     const policy = plan.policy_by_claim_id[claim.claim_id];
     const bindingResult = bindClaimEvidence(claim, policy, rawEvidence);
     const queries = plan.search_plan.queries.filter((query) => query.claim_id === claim.claim_id);
-    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings: bindingResult.bindings, queries, rawEvidence });
-    const confirmationWithBindings = deepFreeze({ ...confirmation, bindings: bindingResult.bindings });
-    return deepFreeze({ claim, policy, bindings: bindingResult.bindings, confirmation: confirmationWithBindings });
+    const bindings = bindingsWithQueryRole(
+      bindingResult.bindings,
+      rawEvidence,
+      queries,
+      bindingResult.candidate_by_id
+    );
+    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings, queries, rawEvidence });
+    const confirmationWithBindings = deepFreeze({ ...confirmation, bindings });
+    return deepFreeze({ claim, policy, bindings, confirmation: confirmationWithBindings });
   });
   return deepFreeze({
     schema_version: 'astera.canonical-claim-records.v2',
@@ -125,6 +165,7 @@ function recordBindingRefs(records = []) {
         source_role: binding.source_role || binding.source_roles?.[0] || null,
         source_family_id: binding.source_family_id || null,
         authority_id: binding.authority_id || null,
+        relation: binding.relation || null,
         query_role: binding.query_role || binding.role || null,
         url: binding.url || binding.canonical_locator?.url || binding.source_span || null
       });
@@ -230,9 +271,11 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
     ...(domain.primary?.id ? [domain.primary.id] : []),
     ...((domain.secondary || []).map((lens) => lens.id).filter(Boolean))
   ];
-  const supportEvidence = recordBindingRefs(confirmedRecords);
   const allBindings = recordBindingRefs(records);
-  const counterEvidence = allBindings.filter((ref) => ref.query_role === QUERY_ROLES.COUNTER);
+  const supportEvidence = allBindings.filter((ref) => ref.relation === 'SUPPORTS');
+  const counterEvidence = allBindings.filter((ref) =>
+    ref.query_role === QUERY_ROLES.COUNTER || ref.relation === 'CONTRADICTS'
+  );
   const missingEvidence = unresolvedRefs(records);
   const queries = canonical?.search_plan?.queries || [];
   const queryRoles = canonical?.search_plan?.planned_query_roles || unique(queries.map((query) => query.role)).sort();

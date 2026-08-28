@@ -89,6 +89,8 @@ function formatEvidenceRefList(refs = []) {
     const sourceRole = ref.source_role || (Array.isArray(ref.source_roles) ? ref.source_roles[0] : null);
     const sourceFamilyId = ref.source_family_id;
     const authorityId = ref.authority_id;
+    const relation = ref.relation ?? null;
+    const queryRole = ref.query_role ?? ref.role ?? null;
     const role = ref.query_role || ref.role;
     const url = ref.url || ref.canonical_locator?.url || ref.source_span;
     if (claim) parts.push(`claim=${claim}`);
@@ -97,6 +99,8 @@ function formatEvidenceRefList(refs = []) {
     if (sourceRole) parts.push(`source_role=${sourceRole}`);
     if (sourceFamilyId) parts.push(`source_family_id=${sourceFamilyId}`);
     if (authorityId) parts.push(`authority_id=${authorityId}`);
+    if (relation) parts.push(`relation=${relation}`);
+    if (queryRole) parts.push(`query_role=${queryRole}`);
     if (role) parts.push(`role=${role}`);
     if (url) parts.push(`url=${url}`);
     return parts.join('; ') || '-';
@@ -276,9 +280,9 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
     const request=this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
-    if(!question)return{result:{type:'clarification_needed',non_ai:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:this.clarify([],renderLang),prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     const packet=request.analysis_task_packet;
-    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:this.clarify([],renderLang),prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
 
     const tasks=packet.tasks.map((baseTask)=>{
       const preliminary=buildCanonicalTaskPlan(baseTask,{});
@@ -321,9 +325,9 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     judgment.requested_output_language=requestedOutput;
     judgment.localization={requested_language:requestedOutput,rendered_language:renderLang,status:['ja','en'].includes(requestedOutput.split('-')[0])?'NATIVE_CANONICAL_RENDER':'EXTERNAL_LOCALIZATION_REQUIRED'};
     const material=this.material(judgment),fiveStage={schema_version:'astera.five-stage.v2',order:[...FIVE_STAGE],execution_waves:packet.execution_waves,execution:materialExecutionSummary,tasks:taskResults.map((result)=>({task_id:result.task.id,lens_id:result.task.domain.primary?.id||null,claim_status:claimStatus(result.canonical),evidence_state:result.evidence.state,evidence_search_state:result.evidence.search_state,fact:result.lanes.fact,risk:result.lanes.risk,multi:result.lanes.multi,inquiry:result.lanes.inquiry,compare:result.lanes.compare}))};
-    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,perspective_expansion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,parallel_execution:materialExecutionSummary,judgment};
+    const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,no_normative_decision_generated:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,perspective_expansion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,parallel_execution:materialExecutionSummary,judgment};
     this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:execution.waves.length,task_failure_count:execution.failures.size,task_skipped_count:execution.skipped.size,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
-    return{result,material,prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:execution.waves.length,parallel_execution:executionSummary,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
+    return{result,material:{...material,no_normative_decision_generated:true},prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:execution.waves.length,parallel_execution:executionSummary,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
   }
 
   frame({request,context,taskResults,aggregate,lang}){
@@ -353,7 +357,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       '08_reinstruction':{summary:join(reinstructionItems),items:reinstructionItems,decision_basis:trace(['MAIN8-08-LOSSLESS-EXTERNAL-REINSTRUCTION'],{derivation:'Task順序・禁止・維持・Evidence/Claim状態・未確定を失わずExternal Consumerへ渡す。'})}
     };
     ORDER.forEach((key,index)=>{sections[key]={canonical_label:CANON[index],label:LABELS[lang][index],...sections[key]};});
-    return{format:'astera_judgment_v4',canonical_language:'en',output_language:lang,order:[...ORDER],non_ai:true,decision_authority:'EXTERNAL_ONLY',task_graph:{task_count:taskResults.length,dependencies:packet.dependencies,execution_waves:packet.execution_waves},lens_routing:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{primary:result.task.domain.primary||null,secondary:result.task.domain.secondary||[],overlays:result.task.domain.overlays||[],classification_basis:result.task.domain.classification_basis,confidence:result.task.domain.confidence}]))},claim_state:{status:aggregate.canonical.status,claim_count:aggregate.canonical.claim_count,confirmed_count:aggregate.canonical.confirmed_count,undetermined_count:aggregate.canonical.undetermined_count},evidence_state:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{required:result.canonical.search_plan.queries.length>0,search_state:result.evidence.search_state,state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}]))},...sections};
+    return{format:'astera_judgment_v4',canonical_language:'en',output_language:lang,order:[...ORDER],non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',task_graph:{task_count:taskResults.length,dependencies:packet.dependencies,execution_waves:packet.execution_waves},lens_routing:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{primary:result.task.domain.primary||null,secondary:result.task.domain.secondary||[],overlays:result.task.domain.overlays||[],classification_basis:result.task.domain.classification_basis,confidence:result.task.domain.confidence}]))},claim_state:{status:aggregate.canonical.status,claim_count:aggregate.canonical.claim_count,confirmed_count:aggregate.canonical.confirmed_count,undetermined_count:aggregate.canonical.undetermined_count},evidence_state:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{required:result.canonical.search_plan.queries.length>0,search_state:result.evidence.search_state,state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}]))},...sections};
   }
 
   material(judgment){

@@ -49,16 +49,22 @@ function evidenceCandidate({ id, role, family, authority, claim, url }) {
 
 function queryExecution(queries = []) {
   return {
-    initial: queries.map((query) => ({
-      query_id: query.query_id,
-      claim_id: query.claim_id,
-      role: query.role,
-      status: 'FOUND',
-      provider_records: [
-        { provider_id: 'ev-official-provider', status: 'FOUND', candidate_record_ids: ['ev-official-record'] },
-        { provider_id: 'ev-corroboration-provider', status: 'FOUND', candidate_record_ids: ['ev-corroboration-record'] }
-      ]
-    })),
+    initial: queries.map((query) => {
+      let candidateRecordIds = ['ev-official-record'];
+      if (query.role === QUERY_ROLES.COUNTER) {
+        candidateRecordIds = ['ev-counter-record'];
+      }
+      return {
+        query_id: query.query_id,
+        claim_id: query.claim_id,
+        role: query.role,
+        status: 'FOUND',
+        provider_records: [
+          { provider_id: `${query.role}-provider`, status: 'FOUND', candidate_record_ids: candidateRecordIds },
+          { provider_id: 'ev-corroboration-provider', status: 'FOUND', candidate_record_ids: ['ev-corroboration-record'] }
+        ]
+      };
+    }),
     reinforcement: []
   };
 }
@@ -75,7 +81,9 @@ function validEvidence(claim, queries = []) {
     planned_query_roles: Object.values(QUERY_ROLES),
     evidence: [
       evidenceCandidate({ id: 'ev-official', role: 'OFFICIAL', family: 'official-family', authority: 'official-authority', claim, url: 'https://official.test/evidence' }),
-      evidenceCandidate({ id: 'ev-corroboration', role: 'SECONDARY', family: 'corrob-family', authority: 'corrob-authority', claim, url: 'https://corroboration.test/evidence' })
+      evidenceCandidate({ id: 'ev-corroboration', role: 'SECONDARY', family: 'corrob-family', authority: 'corrob-authority', claim, url: 'https://corroboration.test/evidence' }),
+      evidenceCandidate({ id: 'ev-counter', role: 'SECONDARY', family: 'counter-family', authority: 'counter-authority', claim, url: 'https://counter.test/evidence' }),
+      evidenceCandidate({ id: 'ev-unrelated', role: 'SECONDARY', family: 'unrelated-family', authority: 'unrelated-authority', claim: '完全に無関係な天気予報である。', url: 'https://unrelated.test/evidence' })
     ],
     coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE', registry_coverage_state: 'COMPLETE_FOR_ACTIVE_REGISTRY' },
     quality: {
@@ -293,6 +301,9 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
     assert.deepEqual(s06.rejected_candidates, []);
     assert.equal(out.result.comparison.material_only, true);
     assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
+    assert.equal(out.result.no_normative_decision_generated, true);
+    assert.equal(out.result.judgment.no_normative_decision_generated, true);
+    assert.equal(out.material.no_normative_decision_generated, true);
 
     if (s06.unsupported_scope.length) {
       const unsupported = s06.unsupported_scope[0];
@@ -388,7 +399,17 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     for (const perspective of perspectivesWithEvidence) {
       for (const ref of perspective.support_evidence_refs) {
         assertM08SupportEvidenceRef(ref);
+        assert.ok(Object.hasOwn(ref, 'relation'), 'support_evidence_ref must have relation key');
+        assert.ok(Object.hasOwn(ref, 'query_role'), 'support_evidence_ref must have query_role key');
+        assert.equal(ref.relation, 'SUPPORTS');
       }
+    }
+
+    const counterRefs = projected.perspective_expansion.perspectives
+      .flatMap((perspective) => perspective.counter_evidence_refs || []);
+    const counterCandidate = counterRefs.find((ref) => ref.candidate_id === 'ev-counter');
+    if (counterCandidate) {
+      assert.equal(counterCandidate.query_role, QUERY_ROLES.COUNTER);
     }
 
     const judgment = {
@@ -428,6 +449,10 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     assert.match(materialText, new RegExp(`source_family_id=${officialRef.source_family_id}`));
     assert.match(materialText, new RegExp(`authority_id=${officialRef.authority_id}`));
     assert.match(materialText, new RegExp(`url=${officialRef.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(materialText, /relation=SUPPORTS/);
+    if (counterCandidate) {
+      assert.match(materialText, /query_role=COUNTER/);
+    }
     assert.match(materialText, /candidate_id=candidate:1:A案/);
     assert.match(materialText, /Per-candidate:\ncandidate_id=candidate:1:A案/);
     assert.doesNotMatch(materialText, /"claim_id"/);

@@ -144,6 +144,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
           result: {
             type: 'task_graph_blocked',
             non_ai: true,
+            no_normative_decision_generated: true,
             decision_authority: 'EXTERNAL_ONLY',
             request_model: request,
             instruction_understanding: request.instruction_understanding || null,
@@ -154,7 +155,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
             task_processing_started: false,
             evidence_processing_started: false
           },
-          material: blockedMaterial({ request, hardBlockers, lang: renderLang }),
+          material: { ...blockedMaterial({ request, hardBlockers, lang: renderLang }), no_normative_decision_generated: true },
           prompt: '',
           runtime: {
             ai_used: false,
@@ -183,6 +184,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
           result: {
             type: 'clarification_needed',
             non_ai: true,
+            no_normative_decision_generated: true,
             decision_authority: 'EXTERNAL_ONLY',
             request_model: request,
             instruction_understanding: request.instruction_understanding || null,
@@ -190,7 +192,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
             human_reader: request.human_reader,
             questions: clarification
           },
-          material: this.clarify(clarification, renderLang),
+          material: { ...this.clarify(clarification, renderLang), no_normative_decision_generated: true },
           prompt: '',
           runtime: {
             ai_used: false,

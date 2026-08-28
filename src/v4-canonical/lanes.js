@@ -53,6 +53,8 @@ function bindingRefs(results = []) {
         source_role: binding.source_role || binding.source_roles?.[0] || null,
         source_family_id: binding.source_family_id || null,
         authority_id: binding.authority_id || null,
+        relation: binding.relation || null,
+        query_role: binding.query_role || binding.role || null,
         url: binding.url || binding.canonical_locator?.url || binding.source_span || null
       });
     }
