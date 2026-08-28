@@ -12,7 +12,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN = Object.freeze([
     domains: ['G22', 'G23', 'G24'],
     capabilities: [],
     allowed_hosts: ['id.nlm.nih.gov'],
-    smoke_query: 'Infection',
+    smoke_query: 'Ofloxacin',
     endpoints: [{
       endpoint_id: 'mesh-descriptor-lookup',
       url_template: 'https://id.nlm.nih.gov/mesh/lookup/descriptor?label={query}&limit=5',
@@ -334,7 +334,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN = Object.freeze([
     domains: ['G18', 'G37'],
     capabilities: [],
     allowed_hosts: ['oeis.org'],
-    smoke_query: 'fibonacci',
+    smoke_query: 'id:A000045',
     endpoints: [{
       endpoint_id: 'oeis-json-search',
       url_template: 'https://oeis.org/search?q={query}&fmt=json',
