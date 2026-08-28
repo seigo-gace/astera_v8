@@ -4,6 +4,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  push:
+    branches: [feature/evidence-search-v2-4]
+    paths:
+      - 'src/evidence-search/providers/**'
+      - 'config/evidence-providers.public.json'
+      - 'docker-compose.evidence.yml'
+      - 'scripts/evidence-live-smoke.js'
+      - 'test/evidence-search-provider-adapter.test.js'
+      - '.github/workflows/evidence-search.yml'
 
 permissions:
   contents: read
@@ -26,12 +35,19 @@ jobs:
         continue-on-error: true
         run: npm run verify:evidence > evidence-verification.log 2>&1
 
-      - name: Upload verification log
+      - name: Verify real public specialist retrieval
+        id: live
+        continue-on-error: true
+        run: node scripts/evidence-live-smoke.js > evidence-live-search.log 2>&1
+
+      - name: Upload verification logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evidence-verification-log
-          path: evidence-verification.log
+          path: |
+            evidence-verification.log
+            evidence-live-search.log
           if-no-files-found: error
           retention-days: 7
 
@@ -39,6 +55,14 @@ jobs:
         if: steps.verify.outcome == 'failure'
         run: cat evidence-verification.log
 
+      - name: Print live search result
+        if: always()
+        run: cat evidence-live-search.log
+
       - name: Stop after verification failure
         if: steps.verify.outcome == 'failure'
+        run: exit 1
+
+      - name: Stop after live search failure
+        if: steps.live.outcome == 'failure'
         run: exit 1
