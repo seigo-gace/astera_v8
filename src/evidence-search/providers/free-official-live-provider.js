@@ -3,6 +3,7 @@
 const { secureGet } = require('./secure-http-transport');
 
 const FORMATS = new Set(['JSON', 'JSONL', 'TEXT']);
+const LIVE_SOURCE_CLASSES = new Set(['FREE_OFFICIAL_LIVE', 'FREE_PROJECTION']);
 const PLACEHOLDERS = Object.freeze({
   query: (plan) => (plan.query_set || []).map((item) => item.text).join(' '),
   domain: (plan) => plan.domain_lens?.id || '',
@@ -120,14 +121,16 @@ function createFreeOfficialLiveProvider(options = {}) {
   const allowedHosts = new Set((options.allowed_hosts || []).map((host) => String(host).toLowerCase()));
   if (!allowedHosts.size) throw new TypeError('allowed_hosts must not be empty');
   const sourceFamilyId = String(options.source_family_id || providerId);
-  const provider = { provider_id: providerId, source_class: 'FREE_OFFICIAL_LIVE', source_family_id: sourceFamilyId };
+  const sourceClass = String(options.source_class || 'FREE_OFFICIAL_LIVE').toUpperCase();
+  if (!LIVE_SOURCE_CLASSES.has(sourceClass)) throw new TypeError(`unsupported live source_class: ${sourceClass}`);
+  const provider = { provider_id: providerId, source_class: sourceClass, source_family_id: sourceFamilyId };
   const endpoints = (options.endpoints || []).map((endpoint, index) => normalizeEndpoint(endpoint, index, allowedHosts));
   if (!endpoints.length) throw new TypeError('endpoints must not be empty');
   const transport = options.transport || secureGet;
 
   return Object.freeze({
     provider_id: providerId,
-    source_class: 'FREE_OFFICIAL_LIVE',
+    source_class: sourceClass,
     source_family_id: sourceFamilyId,
     priority: Number.isInteger(options.priority) ? options.priority : 100,
     domains: Object.freeze([...(options.domains || [])].map((value) => String(value).toUpperCase())),
