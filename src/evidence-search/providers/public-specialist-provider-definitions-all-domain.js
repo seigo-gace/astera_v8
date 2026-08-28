@@ -339,7 +339,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN = Object.freeze([
       endpoint_id: 'oeis-json-search',
       url_template: 'https://oeis.org/search?q={query}&fmt=json',
       response_format: 'JSON',
-      records_path: 'results',
+      records_path: '',
       authority_id: 'oeis',
       publisher_name: 'OEIS Foundation Inc.',
       capability_id: 'integer_sequence_search',
