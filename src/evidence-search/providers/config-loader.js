@@ -4,6 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createJsonProjectionProvider } = require('./json-projection-provider');
 const { createFreeOfficialLiveProvider } = require('./free-official-live-provider');
+const {
+  loadEvidenceSourceCatalog,
+  validateCatalogProviderCoverage
+} = require('./source-catalog');
 
 const FREE_SOURCE_CLASSES = new Set([
   'FREE_PROJECTION',
@@ -174,6 +178,9 @@ function loadEvidenceProviders(options = {}) {
   const filePath = options.configFile || process.env.ASTERA_EVIDENCE_PROVIDER_CONFIG;
   if (!filePath) return Object.freeze([]);
   const { absolute, parsed } = readConfig(filePath);
+  const catalog = loadEvidenceSourceCatalog(absolute, parsed.source_catalog);
+  if (catalog) validateCatalogProviderCoverage(catalog, parsed.providers);
+
   const providers = parsed.providers
     .filter((provider) => provider.enabled !== false)
     .map((provider, index) => buildProvider(absolute, provider, index));
@@ -193,5 +200,6 @@ function loadEvidenceProviders(options = {}) {
 module.exports = {
   FREE_SOURCE_CLASSES,
   isReservedPlaceholderHost,
-  loadEvidenceProviders
+  loadEvidenceProviders,
+  readConfig
 };
