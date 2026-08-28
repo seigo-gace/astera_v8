@@ -1,6 +1,6 @@
 'use strict';
 
-function textDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, routing_terms = [], public_source = false }) {
+function textDefinition({ provider_id, source_id, authority, domains, host, url_template, smoke_query, routing_terms = [], headers = {}, public_source = false }) {
   return Object.freeze({
     provider_id,
     catalog_source_ids: [source_id],
@@ -22,7 +22,7 @@ function textDefinition({ provider_id, source_id, authority, domains, host, url_
       capability_id: 'specialist_search',
       maximum_records: 1,
       timeout_ms: 12000,
-      request_headers: { Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5' },
+      request_headers: { Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5', ...headers },
       fixed_fields: {
         source_role: public_source ? 'SECONDARY' : 'OFFICIAL',
         language: 'und',
@@ -125,10 +125,9 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
     routing_terms: ['nasa', 'space', 'aerospace', 'engineering', 'energy', 'robotics', '宇宙', '航空宇宙', '工学', 'ロボット']
   }),
   textDefinition({ provider_id: 'nist-webbook-search', source_id: 'NIST_WEBBOOK', authority: 'National Institute of Standards and Technology', domains: ['G20', 'G25'], host: 'webbook.nist.gov', url_template: 'https://webbook.nist.gov/cgi/cbook.cgi?Name={query}&Units=SI', smoke_query: 'water', routing_terms: ['chemistry', 'compound', 'thermochemistry', 'spectra', '化学', '化合物', 'スペクトル'] }),
-  jsonDefinition({
-    provider_id: 'cpsc-recalls-search', source_id: 'CPSC_RECALLS', authority: 'U.S. Consumer Product Safety Commission', domains: ['G33', 'G34', 'G38'], host: 'www.saferproducts.gov',
-    url_template: 'https://www.saferproducts.gov/RestWebServices/Recall?RecallTitle={query}&format=json', smoke_query: 'Child', records_path: '',
-    field_map: { canonical_record_id: 'RecallID', canonical_url: { path: 'RecallURL', default: '' }, title: { path: 'RecallTitle', default: '' }, excerpt: { path: 'Description', default: '' }, published_at: { path: 'RecallDate', default: null } },
+  textDefinition({
+    provider_id: 'cpsc-recalls-search', source_id: 'CPSC_RECALLS', authority: 'U.S. Consumer Product Safety Commission', domains: ['G33', 'G34', 'G38'], host: 'www.cpsc.gov',
+    url_template: 'https://www.cpsc.gov/search?search_api_fulltext={query}', smoke_query: 'child recall',
     routing_terms: ['recall', 'consumer product', 'product safety', 'リコール', '消費者製品', '製品安全']
   }),
   jsonDefinition({
@@ -146,7 +145,12 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
   textDefinition({ provider_id: 'pypi-search', source_id: 'PYPI', authority: 'Python Software Foundation / PyPI', domains: ['G29'], host: 'pypi.org', url_template: 'https://pypi.org/search/?q={query}', smoke_query: 'requests', routing_terms: ['python', 'pypi', 'pip', 'python package', 'Python', 'パッケージ'], public_source: true }),
   textDefinition({ provider_id: 'go-packages-search', source_id: 'GO_PACKAGES', authority: 'Go project', domains: ['G29'], host: 'pkg.go.dev', url_template: 'https://pkg.go.dev/search?q={query}', smoke_query: 'http', routing_terms: ['go', 'golang', 'go package', 'Go言語', 'Golang'], public_source: true }),
   textDefinition({ provider_id: 'dart-pub-search', source_id: 'DART_PUB', authority: 'Dart / Flutter', domains: ['G29'], host: 'pub.dev', url_template: 'https://pub.dev/packages?q={query}', smoke_query: 'http', routing_terms: ['dart', 'flutter', 'pub.dev', 'Dart', 'Flutter'], public_source: true }),
-  textDefinition({ provider_id: 'swift-package-index-search', source_id: 'SWIFT_PACKAGE_INDEX', authority: 'Swift Package Index', domains: ['G29'], host: 'swiftpackageindex.com', url_template: 'https://swiftpackageindex.com/search?query={query}', smoke_query: 'swift', routing_terms: ['swift', 'swift package', 'ios development', 'Swift', 'iOS'], public_source: true }),
+  textDefinition({
+    provider_id: 'swift-package-index-search', source_id: 'SWIFT_PACKAGE_INDEX', authority: 'Swift Package Index', domains: ['G29'], host: 'swiftpackageindex.com',
+    url_template: 'https://swiftpackageindex.com/keywords/{query}', smoke_query: 'swift',
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ASTERA-EvidenceSearch/2.4; +https://github.com/seigo-gace/astera_v8)', 'Accept-Language': 'en-US,en;q=0.9' },
+    routing_terms: ['swift', 'swift package', 'ios development', 'Swift', 'iOS'], public_source: true
+  }),
   textDefinition({ provider_id: 'conan-center-search', source_id: 'CONAN_CENTER', authority: 'JFrog ConanCenter', domains: ['G29'], host: 'conan.io', url_template: 'https://conan.io/center/recipes?value={query}', smoke_query: 'zlib', routing_terms: ['c++', 'cpp', 'c package', 'conan', 'C++', 'C言語'], public_source: true }),
   textDefinition({ provider_id: 'hex-packages-search', source_id: 'HEX_PACKAGES', authority: 'Hex', domains: ['G29'], host: 'hex.pm', url_template: 'https://hex.pm/packages?search={query}', smoke_query: 'phoenix', routing_terms: ['elixir', 'erlang', 'hex package', 'Elixir', 'Erlang'], public_source: true }),
   textDefinition({ provider_id: 'metacpan-search', source_id: 'METACPAN', authority: 'MetaCPAN', domains: ['G29'], host: ['metacpan.org', 'www.metacpan.org'], url_template: 'https://metacpan.org/search?q={query}', smoke_query: 'HTTP', routing_terms: ['perl', 'cpan', 'metacpan', 'Perl', 'CPAN'], public_source: true }),
