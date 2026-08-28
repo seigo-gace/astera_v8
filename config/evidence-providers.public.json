@@ -1,1 +1,101 @@
-dummy
+{
+  "schema_version": "astera.evidence-providers.v1",
+  "providers": [
+    {
+      "provider_id": "github-public-repositories",
+      "type": "FREE_PUBLIC_HTTP",
+      "enabled": true,
+      "certified": true,
+      "source_family_id": "github-public",
+      "priority": 20,
+      "domains": ["G29", "G30", "G31", "G36", "G37"],
+      "capabilities": [],
+      "allowed_hosts": ["api.github.com"],
+      "endpoints": [
+        {
+          "endpoint_id": "github-repository-search",
+          "url_template": "https://api.github.com/search/repositories?q={query}&per_page=20",
+          "response_format": "JSON",
+          "records_path": "items",
+          "authority_id": "github-public-index",
+          "publisher_name": "GitHub",
+          "capability_id": "public_specialist_search",
+          "maximum_records": 20,
+          "timeout_ms": 5000,
+          "field_map": {
+            "canonical_record_id": "node_id",
+            "canonical_url": "html_url",
+            "title": "full_name",
+            "excerpt": "description",
+            "updated_at": "updated_at",
+            "fields": {
+              "full_name": {"path": "full_name"},
+              "language": {"path": "language"},
+              "default_branch": {"path": "default_branch"},
+              "stargazers_count": {"path": "stargazers_count"}
+            },
+            "lineage_fingerprint": {
+              "authority_id": {"value": "github-public-index"},
+              "publisher_id": {"value": "github"},
+              "origin_record_id": {"path": "node_id"},
+              "publication_event_id": {"path": "updated_at"}
+            }
+          },
+          "fixed_fields": {
+            "source_role": "SECONDARY",
+            "language": "und",
+            "rights": {"access": "public", "reuse": "unknown"}
+          }
+        }
+      ]
+    },
+    {
+      "provider_id": "gitlab-public-projects",
+      "type": "FREE_PUBLIC_HTTP",
+      "enabled": true,
+      "certified": true,
+      "source_family_id": "gitlab-public",
+      "priority": 30,
+      "domains": ["G29", "G30", "G31", "G36", "G37"],
+      "capabilities": [],
+      "allowed_hosts": ["gitlab.com"],
+      "endpoints": [
+        {
+          "endpoint_id": "gitlab-project-search",
+          "url_template": "https://gitlab.com/api/v4/projects?search={query}&simple=true&per_page=20&visibility=public",
+          "response_format": "JSON",
+          "records_path": "",
+          "authority_id": "gitlab-public-index",
+          "publisher_name": "GitLab",
+          "capability_id": "public_specialist_search",
+          "maximum_records": 20,
+          "timeout_ms": 5000,
+          "field_map": {
+            "canonical_record_id": "path_with_namespace",
+            "canonical_url": "web_url",
+            "title": "name_with_namespace",
+            "excerpt": "description",
+            "updated_at": "last_activity_at",
+            "fields": {
+              "path_with_namespace": {"path": "path_with_namespace"},
+              "default_branch": {"path": "default_branch"},
+              "topics": {"path": "topics"},
+              "star_count": {"path": "star_count"}
+            },
+            "lineage_fingerprint": {
+              "authority_id": {"value": "gitlab-public-index"},
+              "publisher_id": {"value": "gitlab"},
+              "origin_record_id": {"path": "path_with_namespace"},
+              "publication_event_id": {"path": "last_activity_at"}
+            }
+          },
+          "fixed_fields": {
+            "source_role": "SECONDARY",
+            "language": "und",
+            "rights": {"access": "public", "reuse": "unknown"}
+          }
+        }
+      ]
+    }
+  ]
+}
