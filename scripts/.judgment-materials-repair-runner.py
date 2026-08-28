@@ -190,7 +190,7 @@ test('Compare separates candidate identity from explicit criteria and carries bo
     assert.equal(main06.selected_candidate, null);
     assert.deepEqual(main06.candidate_ranking, []);
     assert.deepEqual(main06.rejected_candidates, []);
-  } finally { await engine.shutdown(); }
+  } finally { await engine.destroy(); }
 });
 
 test('Task execution failure is explicit fail-closed high risk and cannot be rendered as ordinary success material', () => {
