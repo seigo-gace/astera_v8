@@ -86,10 +86,9 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
     field_map: { canonical_record_id: 'place_id', title: 'display_name', excerpt: { path: 'type', default: '' }, fields: { lat: 'lat', lon: 'lon', category: 'category', type: 'type' } },
     routing_terms: ['geography', 'map', 'place', 'address', 'city', 'transport', '地理', '地図', '住所', '都市', '交通'], public_source: true
   }),
-  jsonDefinition({
-    provider_id: 'reliefweb-search', source_id: 'RELIEFWEB', authority: 'United Nations OCHA ReliefWeb', domains: ['G06', 'G07', 'G21', 'G34', 'G35'], host: 'api.reliefweb.int',
-    url_template: 'https://api.reliefweb.int/v1/reports?appname=astera&query%5Bvalue%5D={query}&limit=5', smoke_query: 'earthquake', records_path: 'data',
-    field_map: { canonical_record_id: 'id', canonical_url: { path: 'fields.url_alias', default: '' }, title: { path: 'fields.title', default: '' }, excerpt: { path: 'fields.body', default: '' } },
+  textDefinition({
+    provider_id: 'reliefweb-search', source_id: 'RELIEFWEB', authority: 'United Nations OCHA ReliefWeb', domains: ['G06', 'G07', 'G21', 'G34', 'G35'], host: 'reliefweb.int',
+    url_template: 'https://reliefweb.int/updates?search={query}', smoke_query: 'earthquake',
     routing_terms: ['humanitarian', 'disaster', 'crisis', 'conflict', 'emergency', '災害', '人道', '危機', '紛争']
   }),
   jsonDefinition({
@@ -118,7 +117,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
     field_map: { canonical_record_id: 'id', title: 'name', excerpt: { path: 'tiny_image', default: '' }, fields: { price: { path: 'price', stringify: true } } },
     routing_terms: ['game', 'video game', 'steam', 'ゲーム'], public_source: true
   }),
-  textDefinition({ provider_id: 'zbmath-search', source_id: 'ZBMATH', authority: 'zbMATH Open', domains: ['G18', 'G37'], host: 'api.zbmath.org', url_template: 'https://api.zbmath.org/v1/document/_search?q={query}&size=5', smoke_query: 'prime', routing_terms: ['mathematics', 'math', 'theorem', 'algebra', 'geometry', '数学', '定理', '代数', '幾何'] }),
+  textDefinition({ provider_id: 'zbmath-search', source_id: 'ZBMATH', authority: 'zbMATH Open', domains: ['G18', 'G37'], host: 'api.zbmath.org', url_template: 'https://api.zbmath.org/v1/document/_search?search_string={query}', smoke_query: 'prime', routing_terms: ['mathematics', 'math', 'theorem', 'algebra', 'geometry', '数学', '定理', '代数', '幾何'] }),
   jsonDefinition({
     provider_id: 'nasa-ntrs-search', source_id: 'NASA_NTRS', authority: 'NASA', domains: ['G19', 'G25', 'G27', 'G30', 'G35', 'G37'], host: 'ntrs.nasa.gov',
     url_template: 'https://ntrs.nasa.gov/api/citations/search?q={query}&page.size=5', smoke_query: 'Apollo', records_path: 'results',
@@ -126,7 +125,12 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
     routing_terms: ['nasa', 'space', 'aerospace', 'engineering', 'energy', 'robotics', '宇宙', '航空宇宙', '工学', 'ロボット']
   }),
   textDefinition({ provider_id: 'nist-webbook-search', source_id: 'NIST_WEBBOOK', authority: 'National Institute of Standards and Technology', domains: ['G20', 'G25'], host: 'webbook.nist.gov', url_template: 'https://webbook.nist.gov/cgi/cbook.cgi?Name={query}&Units=SI', smoke_query: 'water', routing_terms: ['chemistry', 'compound', 'thermochemistry', 'spectra', '化学', '化合物', 'スペクトル'] }),
-  textDefinition({ provider_id: 'cpsc-recalls-search', source_id: 'CPSC_RECALLS', authority: 'U.S. Consumer Product Safety Commission', domains: ['G33', 'G34', 'G38'], host: 'www.saferproducts.gov', url_template: 'https://www.saferproducts.gov/RestWebServices/Recall?Title={query}&format=json', smoke_query: 'Child', routing_terms: ['recall', 'consumer product', 'product safety', 'リコール', '消費者製品', '製品安全'] }),
+  jsonDefinition({
+    provider_id: 'cpsc-recalls-search', source_id: 'CPSC_RECALLS', authority: 'U.S. Consumer Product Safety Commission', domains: ['G33', 'G34', 'G38'], host: 'www.saferproducts.gov',
+    url_template: 'https://www.saferproducts.gov/RestWebServices/Recall?RecallTitle={query}&format=json', smoke_query: 'Child', records_path: '',
+    field_map: { canonical_record_id: 'RecallID', canonical_url: { path: 'RecallURL', default: '' }, title: { path: 'RecallTitle', default: '' }, excerpt: { path: 'Description', default: '' }, published_at: { path: 'RecallDate', default: null } },
+    routing_terms: ['recall', 'consumer product', 'product safety', 'リコール', '消費者製品', '製品安全']
+  }),
   jsonDefinition({
     provider_id: 'openfda-device-search', source_id: 'OPENFDA_DEVICE', authority: 'U.S. Food and Drug Administration', domains: ['G23', 'G33', 'G34'], host: 'api.fda.gov',
     url_template: 'https://api.fda.gov/device/enforcement.json?search=product_description:{query}&limit=5', smoke_query: 'pacemaker', records_path: 'results',
@@ -136,13 +140,13 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION = Object.freez
   textDefinition({ provider_id: 'iana-search', source_id: 'IANA_SEARCH', authority: 'Internet Assigned Numbers Authority', domains: ['G29', 'G31', 'G32', 'G36'], host: 'www.iana.org', url_template: 'https://www.iana.org/search?q={query}', smoke_query: 'IPv6', routing_terms: ['iana', 'protocol', 'port', 'domain', 'internet registry', 'プロトコル', 'ポート', 'ドメイン', 'インターネット'] }),
   textDefinition({ provider_id: 'un-digital-library-search', source_id: 'UN_DIGITAL_LIBRARY', authority: 'United Nations', domains: ['G07', 'G08', 'G35', 'G37'], host: 'digitallibrary.un.org', url_template: 'https://digitallibrary.un.org/search?ln=en&p={query}', smoke_query: 'peacekeeping', routing_terms: ['united nations', 'international relations', 'security', 'peacekeeping', '国連', '国際関係', '安全保障', '平和維持'] }),
   textDefinition({ provider_id: 'sba-search', source_id: 'SBA_SEARCH', authority: 'U.S. Small Business Administration', domains: ['G10'], host: 'www.sba.gov', url_template: 'https://www.sba.gov/search?page=0&query={query}', smoke_query: 'business', routing_terms: ['small business', 'entrepreneurship', 'business', 'startup', '中小企業', '起業', '経営'] }),
-  textDefinition({ provider_id: 'irs-search', source_id: 'IRS_SEARCH', authority: 'Internal Revenue Service', domains: ['G11'], host: 'www.irs.gov', url_template: 'https://www.irs.gov/site-index-search?search={query}&field_pup_historical_1=1&field_pup_historical=1', smoke_query: 'tax credit', routing_terms: ['tax', 'irs', 'deduction', 'tax credit', '税務', '税金', '控除'] }),
+  textDefinition({ provider_id: 'irs-search', source_id: 'IRS_SEARCH', authority: 'Internal Revenue Service', domains: ['G11'], host: 'www.irs.gov', url_template: 'https://www.irs.gov/instructions-and-publications-xml-source-files?find={query}&items_per_page=25', smoke_query: 'tax credit', routing_terms: ['tax', 'irs', 'deduction', 'tax credit', '税務', '税金', '控除'] }),
   textDefinition({ provider_id: 'naic-search', source_id: 'NAIC_SEARCH', authority: 'National Association of Insurance Commissioners', domains: ['G11'], host: 'content.naic.org', url_template: 'https://content.naic.org/search?search_api_fulltext={query}', smoke_query: 'insurance', routing_terms: ['insurance', 'insurer', 'policy', '保険', '保険会社'] }),
   textDefinition({ provider_id: 'google-patents-search', source_id: 'GOOGLE_PATENTS', authority: 'Google Patents', domains: ['G32'], host: 'patents.google.com', url_template: 'https://patents.google.com/?q={query}', smoke_query: 'battery', routing_terms: ['patent', 'invention', 'intellectual property', '特許', '発明', '知的財産'], public_source: true }),
   textDefinition({ provider_id: 'pypi-search', source_id: 'PYPI', authority: 'Python Software Foundation / PyPI', domains: ['G29'], host: 'pypi.org', url_template: 'https://pypi.org/search/?q={query}', smoke_query: 'requests', routing_terms: ['python', 'pypi', 'pip', 'python package', 'Python', 'パッケージ'], public_source: true }),
   textDefinition({ provider_id: 'go-packages-search', source_id: 'GO_PACKAGES', authority: 'Go project', domains: ['G29'], host: 'pkg.go.dev', url_template: 'https://pkg.go.dev/search?q={query}', smoke_query: 'http', routing_terms: ['go', 'golang', 'go package', 'Go言語', 'Golang'], public_source: true }),
   textDefinition({ provider_id: 'dart-pub-search', source_id: 'DART_PUB', authority: 'Dart / Flutter', domains: ['G29'], host: 'pub.dev', url_template: 'https://pub.dev/packages?q={query}', smoke_query: 'http', routing_terms: ['dart', 'flutter', 'pub.dev', 'Dart', 'Flutter'], public_source: true }),
-  textDefinition({ provider_id: 'swift-package-index-search', source_id: 'SWIFT_PACKAGE_INDEX', authority: 'Swift Package Index', domains: ['G29'], host: 'swiftpackageindex.com', url_template: 'https://swiftpackageindex.com/keywords/{query}', smoke_query: 'search', routing_terms: ['swift', 'swift package', 'ios development', 'Swift', 'iOS'], public_source: true }),
+  textDefinition({ provider_id: 'swift-package-index-search', source_id: 'SWIFT_PACKAGE_INDEX', authority: 'Swift Package Index', domains: ['G29'], host: 'swiftpackageindex.com', url_template: 'https://swiftpackageindex.com/search?query={query}', smoke_query: 'swift', routing_terms: ['swift', 'swift package', 'ios development', 'Swift', 'iOS'], public_source: true }),
   textDefinition({ provider_id: 'conan-center-search', source_id: 'CONAN_CENTER', authority: 'JFrog ConanCenter', domains: ['G29'], host: 'conan.io', url_template: 'https://conan.io/center/recipes?value={query}', smoke_query: 'zlib', routing_terms: ['c++', 'cpp', 'c package', 'conan', 'C++', 'C言語'], public_source: true }),
   textDefinition({ provider_id: 'hex-packages-search', source_id: 'HEX_PACKAGES', authority: 'Hex', domains: ['G29'], host: 'hex.pm', url_template: 'https://hex.pm/packages?search={query}', smoke_query: 'phoenix', routing_terms: ['elixir', 'erlang', 'hex package', 'Elixir', 'Erlang'], public_source: true }),
   textDefinition({ provider_id: 'metacpan-search', source_id: 'METACPAN', authority: 'MetaCPAN', domains: ['G29'], host: ['metacpan.org', 'www.metacpan.org'], url_template: 'https://metacpan.org/search?q={query}', smoke_query: 'HTTP', routing_terms: ['perl', 'cpan', 'metacpan', 'Perl', 'CPAN'], public_source: true }),
