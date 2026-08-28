@@ -153,6 +153,7 @@ function normalizeEndpoint(raw, index, allowedHosts) {
     maximum_excerpt_chars: Math.max(256, Math.min(131_072, Number(raw.maximum_excerpt_chars || 32_768))),
     max_response_bytes: Math.max(1024, Math.min(32 * 1024 * 1024, Number(raw.max_response_bytes || 4 * 1024 * 1024))),
     timeout_ms: Math.max(100, Math.min(15_000, Number(raw.timeout_ms || 2500))),
+    maximum_attempts: Math.max(1, Math.min(3, Number(raw.maximum_attempts || 1))),
     encoding: String(raw.encoding || 'utf8')
   });
 }
@@ -196,31 +197,47 @@ function createFreeOfficialLiveProvider(options = {}) {
         let completedEndpoints = 0;
         const singleQueryPlan = Object.freeze({ ...plan, query_set: Object.freeze([query]) });
         for (const endpoint of endpoints) {
-          try {
-            const url = applyTemplate(endpoint.url_template, singleQueryPlan, endpoint);
-            const remaining = Number(context.deadline_at || 0) - Date.now();
-            const response = await transport(url, {
-              allowedHosts: [...allowedHosts],
-              maxBytes: endpoint.max_response_bytes,
-              timeoutMs: Math.min(endpoint.timeout_ms, remaining > 0 ? Math.max(100, remaining) : endpoint.timeout_ms),
-              headers: endpoint.request_headers,
-              signal: context.signal
-            });
-            requests += 1;
-            bytes += response.body.length;
-            if (response.status < 200 || response.status >= 300) {
-              const error = new Error(`official source returned HTTP ${response.status}`);
-              error.code = `SOURCE_HTTP_${response.status}`;
-              throw error;
+          let endpointError = null;
+          for (let attempt = 1; attempt <= endpoint.maximum_attempts; attempt += 1) {
+            try {
+              const url = applyTemplate(endpoint.url_template, singleQueryPlan, endpoint);
+              const remaining = Number(context.deadline_at || 0) - Date.now();
+              if (Number(context.deadline_at || 0) > 0 && remaining <= 0) {
+                const error = new Error('official source deadline exhausted before request');
+                error.code = 'SOURCE_DEADLINE_EXCEEDED';
+                throw error;
+              }
+              requests += 1;
+              const response = await transport(url, {
+                allowedHosts: [...allowedHosts],
+                maxBytes: endpoint.max_response_bytes,
+                timeoutMs: Math.min(endpoint.timeout_ms, remaining > 0 ? Math.max(100, remaining) : endpoint.timeout_ms),
+                headers: endpoint.request_headers,
+                signal: context.signal
+              });
+              bytes += response.body.length;
+              if (response.status < 200 || response.status >= 300) {
+                const error = new Error(`official source returned HTTP ${response.status}`);
+                error.code = `SOURCE_HTTP_${response.status}`;
+                throw error;
+              }
+              completedEndpoints += 1;
+              const records = parseResponse(response, endpoint, provider).map((record) => ({
+                ...record,
+                retrieval_trace: { ...(record.retrieval_trace || {}), query_id: query.query_id, query_role: query.role || query.class || null }
+              }));
+              queryCandidates.push(...records);
+              endpointError = null;
+              break;
+            } catch (error) {
+              endpointError = error;
+              const code = String(error.code || '');
+              const retryable = code === 'SOURCE_TIMEOUT' || /^SOURCE_HTTP_(429|500|502|503|504)$/.test(code);
+              if (!retryable || attempt >= endpoint.maximum_attempts) break;
             }
-            completedEndpoints += 1;
-            const records = parseResponse(response, endpoint, provider).map((record) => ({
-              ...record,
-              retrieval_trace: { ...(record.retrieval_trace || {}), query_id: query.query_id, query_role: query.role || query.class || null }
-            }));
-            queryCandidates.push(...records);
-          } catch (error) {
-            const failure = { query_id: query.query_id, endpoint_id: endpoint.endpoint_id, code: error.code || 'SOURCE_REQUEST_FAILED', message: error.message };
+          }
+          if (endpointError) {
+            const failure = { query_id: query.query_id, endpoint_id: endpoint.endpoint_id, code: endpointError.code || 'SOURCE_REQUEST_FAILED', message: endpointError.message };
             queryFailures.push(failure);
             failures.push(failure);
           }
