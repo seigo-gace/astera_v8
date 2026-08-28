@@ -1,5 +1,5 @@
 'use strict';
 
-// Compatibility entry point. The canonical implementation is kept separate so
-// server/start call sites do not own or duplicate cognition-runtime policy.
-module.exports = require('./canonical-v4-engine');
+// Server compatibility entry point for the isolated Canonical Judgment Materials runtime.
+// The HTTP server remains unchanged; only the cognition engine behind this legacy name is replaced.
+module.exports = require('./astera-engine');

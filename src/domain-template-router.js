@@ -58,10 +58,6 @@ const DOMAIN_SAFETY_GATES = Object.freeze({
   G35: ['法・民間保護・Escalation Riskを必ず確認する']
 });
 
-const OVERLAY_PRIMARY_FALLBACKS = Object.freeze({
-  medical_safety: 'G23'
-});
-
 const MIN_CONTROLLED_PRIMARY_SCORE = 6;
 const MIN_TEXT_PRIMARY_SCORE = 8;
 const MIN_SECONDARY_SCORE = 6;
@@ -134,7 +130,10 @@ function scoreGenre(genre, text) {
     const term = normalize(rawTerm);
     if (!term) continue;
     const shortAsciiToken = /^[a-z0-9.+#-]{1,3}$/.test(term);
-    const exactMatch = shortAsciiToken ? queryTokens.has(term) : normalizedText.includes(term);
+    const shortAsciiBoundaryMatch = shortAsciiToken
+      ? new RegExp(`(^|[^a-z0-9.+#-])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^a-z0-9.+#-])`, 'i').test(normalizedText)
+      : false;
+    const exactMatch = shortAsciiToken ? shortAsciiBoundaryMatch : normalizedText.includes(term);
     if (exactMatch) {
       const compactLength = term.replace(/\s/g, '').length;
       score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
@@ -237,6 +236,18 @@ function applyOverlayScores(text) {
     }));
 }
 
+function medicalSafetyFallback(scored = [], overlays = []) {
+  if (!overlays.some((item) => item.id === 'medical_safety')) return null;
+  const candidate = scored.find((item) => item.genre?.id === 'G23');
+  if (!candidate) return null;
+  return publicGenre({
+    ...candidate,
+    classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
+    confidence: 0.5,
+    taxonomy_review_required: true
+  });
+}
+
 function buildLensText(primary, overlays, classificationBasis = null, confidence = 0, taxonomyReviewRequired = true) {
   const lines = [
     '[all_domain_lens]',
@@ -278,23 +289,6 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
   return lines.join('\n');
 }
 
-function overlayPrimaryFallback(scored, overlays) {
-  for (const overlay of overlays) {
-    const genreId = OVERLAY_PRIMARY_FALLBACKS[overlay.id];
-    if (!genreId) continue;
-    const scoredGenre = scored.find((item) => item.genre.id === genreId);
-    if (!scoredGenre) continue;
-    return {
-      ...scoredGenre,
-      classification_basis: 'SAFETY_OVERLAY_FALLBACK',
-      confidence: 0.9,
-      taxonomy_review_required: false,
-      matched_signals: [...new Set([...(scoredGenre.matched_signals || []), ...(overlay.matched_signals || [])])]
-    };
-  }
-  return null;
-}
-
 function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
   const routeText = normalized.core_request.trim();
@@ -324,23 +318,22 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   const best = scored[0];
 
   if (!qualifiedScore(best)) {
-    const fallback = overlayPrimaryFallback(scored, overlays);
-    if (fallback) {
-      const primary = publicGenre(fallback);
+    const safetyPrimary = medicalSafetyFallback(scored, overlays);
+    if (safetyPrimary) {
       return {
         router: 'all_domain_lens_router_v2',
         taxonomy_version: TAXONOMY_VERSION,
         user_selection_required: false,
         input_valid: true,
         input_error: null,
-        classification_basis: primary.classification_basis,
-        confidence: primary.confidence,
-        taxonomy_review_required: primary.taxonomy_review_required,
-        primary,
+        classification_basis: safetyPrimary.classification_basis,
+        confidence: safetyPrimary.confidence,
+        taxonomy_review_required: true,
+        primary: safetyPrimary,
         secondary: [],
         overlays,
         normalized,
-        lens_text: buildLensText(primary, overlays),
+        lens_text: buildLensText(safetyPrimary, overlays),
         analysis_text: normalized.analysis_text
       };
     }
@@ -397,5 +390,6 @@ module.exports = {
   GENRE_LENSES,
   OVERLAYS,
   normalizeInput,
-  scoreGenre
+  scoreGenre,
+  medicalSafetyFallback
 };
