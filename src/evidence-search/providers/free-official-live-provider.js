@@ -181,6 +181,7 @@ function createFreeOfficialLiveProvider(options = {}) {
     priority: Number.isInteger(options.priority) ? options.priority : 100,
     domains: Object.freeze([...(options.domains || [])].map((value) => String(value).toUpperCase())),
     capabilities: Object.freeze([...(options.capabilities || [])].map(String)),
+    routing_terms: Object.freeze([...(options.routing_terms || [])].map(String)),
     latency_p50_ms: Math.max(1, Number(options.latency_p50_ms || 500)),
     latency_p95_ms: Math.max(1, Number(options.latency_p95_ms || 1500)),
     maximum_cost_minor: 0,

@@ -122,6 +122,10 @@ services:
         target: /config/evidence-providers.json
         read_only: true
       - type: bind
+        source: ${ASTERA_EVIDENCE_SOURCE_CATALOG_HOST:-./config/evidence-source-catalog.public.json}
+        target: /config/evidence-source-catalog.public.json
+        read_only: true
+      - type: bind
         source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
         target: /run/secrets/internal_service_secret
         read_only: true

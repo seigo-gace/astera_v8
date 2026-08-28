@@ -30,6 +30,27 @@ function nonNegativeSafeInteger(value, field, fallback = 0) {
   return number;
 }
 
+function normalizeRoutingTerm(value) {
+  return String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function routingText(plan) {
+  return [
+    plan?.question,
+    ...(plan?.primary_query_set || []).map((query) => query?.text),
+    ...(plan?.reinforcement_query_set || []).map((query) => query?.text)
+  ].map(normalizeRoutingTerm).filter(Boolean).join(' ');
+}
+
+function routingTermMatches(text, term) {
+  if (!term) return false;
+  if (/^[a-z0-9.+#-]{1,3}$/i.test(term)) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
+  }
+  return text.includes(term);
+}
+
 function normalizeProvider(provider, index) {
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
     throw new TypeError(`providers[${index}] must be an object`);
@@ -65,6 +86,7 @@ function normalizeProvider(provider, index) {
     priority: Number.isInteger(provider.priority) ? provider.priority : 100,
     domains: Object.freeze([...(provider.domains || [])].map((value) => String(value).toUpperCase()).sort()),
     capabilities: Object.freeze([...(provider.capabilities || [])].map(String).sort()),
+    routing_terms: Object.freeze([...new Set((provider.routing_terms || []).map(normalizeRoutingTerm).filter(Boolean))].sort()),
     source_family_id: String(provider.source_family_id || providerId),
     latency_p50_ms: Math.max(1, nonNegativeSafeInteger(provider.latency_p50_ms, `${providerId}.latency_p50_ms`, 250)),
     latency_p95_ms: Math.max(1, nonNegativeSafeInteger(provider.latency_p95_ms, `${providerId}.latency_p95_ms`, 500)),
@@ -105,6 +127,7 @@ class ProviderRegistry {
   select(plan, phase = 'INITIAL') {
     const allow = new Set(plan.source_policy.provider_allowlist);
     const deny = new Set(plan.source_policy.provider_denylist);
+    const queryText = routingText(plan);
     const selected = this.providers.filter((provider) => {
       if (!provider.certified) return false;
       if (provider.source_class === 'PAID_PROVIDER') return false;
@@ -118,6 +141,10 @@ class ProviderRegistry {
         provider.capabilities.includes('NO_REINFORCEMENT')
         || provider.capabilities.includes('INITIAL_ONLY')
       )) return false;
+      if (!allow.size && provider.routing_terms.length) {
+        if (!queryText) return false;
+        if (!provider.routing_terms.some((term) => routingTermMatches(queryText, term))) return false;
+      }
       return true;
     });
     if (phase === 'INITIAL' && selected.length === 0) {
@@ -135,9 +162,10 @@ class ProviderRegistry {
       source_class: provider.source_class,
       active_search_eligible: provider.certified && provider.source_class !== 'PAID_PROVIDER',
       certified: provider.certified,
-      capabilities: provider.capabilities
+      capabilities: provider.capabilities,
+      routing_terms: provider.routing_terms
     }));
   }
 }
 
-module.exports = { ProviderRegistry };
+module.exports = { ProviderRegistry, normalizeRoutingTerm, routingTermMatches };
