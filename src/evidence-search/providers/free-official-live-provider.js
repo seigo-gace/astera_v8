@@ -117,7 +117,13 @@ function parseResponse(response, endpoint, provider) {
   if (format === 'JSON') parsed = JSON.parse(text);
   else if (format === 'JSONL') parsed = text.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
   const records = getPath(parsed, endpoint.records_path || '');
-  const items = Array.isArray(records) ? records : records == null ? [] : [records];
+  const normalizedRecords = endpoint.records_mode === 'OBJECT_VALUES'
+    && records
+    && typeof records === 'object'
+    && !Array.isArray(records)
+    ? Object.values(records)
+    : records;
+  const items = Array.isArray(normalizedRecords) ? normalizedRecords : normalizedRecords == null ? [] : [normalizedRecords];
   return items.slice(0, endpoint.maximum_records || 128).map((item) => mapRecord(item, endpoint, provider));
 }
 
@@ -142,6 +148,7 @@ function normalizeEndpoint(raw, index, allowedHosts) {
     request_headers: requestHeaders,
     response_format: responseFormat,
     records_path: String(raw.records_path || ''),
+    records_mode: String(raw.records_mode || 'ARRAY_OR_SINGLE').toUpperCase(),
     field_map: Object.freeze({ ...(raw.field_map || {}) }),
     fixed_fields: Object.freeze({ ...(raw.fixed_fields || {}) }),
     authority_id: raw.authority_id ? String(raw.authority_id) : '',
