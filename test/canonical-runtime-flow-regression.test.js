@@ -39,20 +39,19 @@ test('Main8 section 01 uses Task purpose rather than silently falling back to th
   });
 });
 
-test('Human Reader is connected as presentation control but cannot mutate facts, evidence, or constraints', async () => {
+test('Human Reader remains presentation metadata and never gains decision or mutation authority', async () => {
   await withEngine(async (engine) => {
     const out = await engine.process({ question: '正確にAPIを検証してCodeを実装する。' }, tenant);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.human_reader);
     assert.ok(out.result.judgment.human_reader);
-    assert.equal(out.result.judgment.human_reader.fact_mutation_allowed, false);
-    assert.equal(out.result.judgment.human_reader.evidence_mutation_allowed, false);
-    assert.equal(out.result.judgment.human_reader.constraint_mutation_allowed, false);
-    for (const key of out.result.judgment.order) {
-      assert.equal(out.result.judgment[key].decision_basis.presentation_control.fact_mutation_allowed, false);
-    }
+    assert.equal(out.result.judgment.human_reader.mode, out.result.human_reader.mode);
+    assert.deepEqual(out.result.judgment.human_reader.response_policy, out.result.human_reader.response_policy);
+    assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
+    assert.equal(out.result.no_normative_decision_generated, true);
     assert.equal(out.result.comparison.material_only, true);
     assert.equal(out.result.comparison.selected_candidate, null);
+    assert.deepEqual(out.result.comparison.candidate_ranking, []);
   });
 });
 
