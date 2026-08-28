@@ -11,7 +11,7 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,11 +23,12 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Apply canonical repair
+      - name: Apply Notion-canonical repair
         run: python scripts/.judgment-materials-repair-runner.py
 
       - name: Syntax and static checks
         run: |
+          node --check src/judgment-materials-analyzer.js
           node --check src/deterministic-task-decomposer.js
           node --check src/v4-canonical/lanes.js
           node --check src/canonical-claim-runtime.js
@@ -39,8 +40,47 @@ jobs:
           npm run check:json
           npm run check:shell
 
-      - name: Adversarial and focused regressions
+      - name: No-shortcut and false-coverage audit
+        shell: bash
         run: |
+          runtime_files=(
+            src/judgment-materials-analyzer.js
+            src/deterministic-task-decomposer.js
+            src/v4-canonical/lanes.js
+            src/canonical-claim-runtime.js
+            src/canonical-task-projection.js
+            src/canonical-astera-engine-base.js
+            src/server-with-evidence.js
+          )
+          if grep -Eni '\b(TODO|FIXME|DUMMY|PLACEHOLDER|MOCK|STUB)\b' "${runtime_files[@]}"; then
+            echo 'forbidden shortcut marker found in active judgment-material runtime' >&2
+            exit 1
+          fi
+          grep -q 'PRECOMPUTED_CANONICAL_FORBIDDEN' src/canonical-task-projection.js
+          if grep -q 'providedCanonical || evaluateCanonicalTaskPlan' src/canonical-task-projection.js; then
+            echo 'precomputed canonical bypass still active' >&2
+            exit 1
+          fi
+          if grep -q 'resolveEvidenceForTask(){return null;}' src/canonical-astera-engine-base.js; then
+            echo 'silent null evidence resolver still active' >&2
+            exit 1
+          fi
+          if grep -q 'context_length=' src/canonical-astera-engine-base.js; then
+            echo 'context length leaked into judgment material' >&2
+            exit 1
+          fi
+          if grep -q -- '--test-name-pattern' .github/workflows/decision-materials-focused.yml; then
+            echo 'obsolete zero-match test-name-pattern still active' >&2
+            exit 1
+          fi
+          grep -q 'English articles and acronyms preserve exact target semantics' test/judgment-materials-no-shortcuts-regression.test.js
+          grep -q 'Compare separates candidate identity from explicit criteria' test/judgment-materials-no-shortcuts-regression.test.js
+          grep -q 'Task execution failure is explicit fail-closed high risk' test/judgment-materials-no-shortcuts-regression.test.js
+
+      - name: Adversarial golden focused regressions
+        shell: bash
+        run: |
+          set -o pipefail
           node --test \
             test/judgment-materials-no-shortcuts-regression.test.js \
             test/task-decomposition-canon-regression.test.js \
@@ -56,14 +96,22 @@ jobs:
             test/canonical-worker-boundaries.test.js \
             test/canonical-parallel-execution.test.js \
             test/false-confirmation-effect.test.js \
-            test/human-reader-effect-boundary.test.js
+            test/human-reader-effect-boundary.test.js | tee /tmp/judgment-focused.tap
+          grep -Eq '^# tests [1-9][0-9]*$' /tmp/judgment-focused.tap
+          grep -Eq '^# fail 0$' /tmp/judgment-focused.tap
 
-      - name: Real public API and module switch
-        run: node --test test/api.test.js test/module-switch.test.js
+      - name: Public API contract and module switch
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test test/api.test.js test/module-switch.test.js | tee /tmp/public-api.tap
+          grep -Eq '^# tests [1-9][0-9]*$' /tmp/public-api.tap
+          grep -Eq '^# fail 0$' /tmp/public-api.tap
 
       - name: Runtime regression excluding separately-owned Evidence Search internals
         shell: bash
         run: |
+          set -o pipefail
           files=()
           for f in test/*.test.js; do
             case "$f" in
@@ -71,19 +119,67 @@ jobs:
               *) files+=("$f") ;;
             esac
           done
-          node --test "${files[@]}"
+          if (( ${#files[@]} == 0 )); then
+            echo 'runtime regression file set is empty' >&2
+            exit 1
+          fi
+          node --test "${files[@]}" | tee /tmp/runtime-non-evidence.tap
+          grep -Eq '^# tests [1-9][0-9]*$' /tmp/runtime-non-evidence.tap
+          grep -Eq '^# fail 0$' /tmp/runtime-non-evidence.tap
+
+      - name: Full repository source verify and smoke
+        run: npm run verify
 
       - name: Commit verified repair atomically
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set -euo pipefail
+          git fetch origin feature/evidence-search-v2-4
+          local_head="$(git rev-parse HEAD)"
+          remote_head="$(git rev-parse origin/feature/evidence-search-v2-4)"
+          if [[ "$local_head" != "$remote_head" ]]; then
+            echo "branch moved during validation: local=$local_head remote=$remote_head" >&2
+            exit 2
+          fi
+
           rm -f \
             .github/workflows/judgment-materials-no-shortcuts-repair.yml \
             .github/workflows/judgment-materials-repair-v2.yml \
             scripts/.judgment-materials-repair.py \
             scripts/.judgment-materials-repair-runner.py
+
+          for removed in \
+            .github/workflows/judgment-materials-no-shortcuts-repair.yml \
+            .github/workflows/judgment-materials-repair-v2.yml \
+            scripts/.judgment-materials-repair.py \
+            scripts/.judgment-materials-repair-runner.py; do
+            [[ ! -e "$removed" ]] || { echo "temporary carrier remains: $removed" >&2; exit 1; }
+          done
+
           git add -A
+
+          allowed='^(\.github/workflows/decision-materials-focused\.yml|\.github/workflows/judgment-materials-no-shortcuts-repair\.yml|\.github/workflows/judgment-materials-repair-v2\.yml|scripts/\.judgment-materials-repair\.py|scripts/\.judgment-materials-repair-runner\.py|src/judgment-materials-analyzer\.js|src/deterministic-task-decomposer\.js|src/v4-canonical/lanes\.js|src/canonical-claim-runtime\.js|src/canonical-task-projection\.js|src/canonical-astera-engine-base\.js|src/server-with-evidence\.js|test/judgment-materials-no-shortcuts-regression\.test\.js|test/lens-output-integration\.test\.js)$'
+          unexpected="$(git diff --cached --name-only | grep -Ev "$allowed" || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo 'out-of-scope changed files detected:' >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+
+          required=(
+            src/judgment-materials-analyzer.js
+            src/deterministic-task-decomposer.js
+            src/v4-canonical/lanes.js
+            src/canonical-task-projection.js
+            test/judgment-materials-no-shortcuts-regression.test.js
+          )
+          changed="$(git diff --cached --name-only)"
+          for required_path in "${required[@]}"; do
+            grep -Fxq "$required_path" <<<"$changed" || { echo "required product change missing: $required_path" >&2; exit 1; }
+          done
+
           git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix: remove judgment materials shortcuts and false coverage"
           git push origin HEAD:feature/evidence-search-v2-4
