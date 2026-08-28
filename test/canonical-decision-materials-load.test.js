@@ -98,6 +98,20 @@ class DecisionMaterialsLoadEngine extends CanonicalAsteraEngine {
     this.maximumEvidenceActive = 0;
     this.evidenceStarts = 0;
     this.evidenceDelayMs = options.evidenceDelayMs || 4;
+    this._fixturePrepared = null;
+    this._fixtureByQuestion = new Map();
+  }
+
+  setFixturePrepared(prepared, question) {
+    if (question) this._fixtureByQuestion.set(String(question), prepared);
+    else this._fixturePrepared = prepared;
+  }
+
+  prepareRequest(input = {}) {
+    const keyed = this._fixtureByQuestion.get(String(input.question || ''));
+    if (keyed) return keyed;
+    if (this._fixturePrepared) return this._fixturePrepared;
+    return super.prepareRequest(input);
   }
 
   async resolveEvidenceForTask({ task }) {
@@ -118,8 +132,10 @@ for (const count of [8, 9, 20, 50, 100]) {
     await destroyGlobalCanonicalTaskAdmission();
     const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger });
     try {
+      const question = `${count} Task load fixture`;
       const preparedRequest = buildPrepared(engine, count, `N${count}-`);
-      const out = await engine.process({ question: `${count} Task load fixture`, preparedRequest }, tenant);
+      engine.setFixturePrepared(preparedRequest, question);
+      const out = await engine.process({ question }, tenant);
       assert.equal(out.result.type, 'cognitive_map');
       assert.equal(out.result.task_results.length, count);
       assert.equal(out.result.parallel_execution.pool_size, 4);
@@ -144,10 +160,11 @@ test('simultaneous decision-material requests share the same server-wide maximum
       buildPrepared(engine, 20, 'B-'),
       buildPrepared(engine, 20, 'C-')
     ];
-    const outputs = await Promise.all(requests.map((preparedRequest, index) => engine.process({
-      question: `simultaneous request ${index + 1}`,
-      preparedRequest
-    }, tenant)));
+    const outputs = await Promise.all(requests.map((preparedRequest, index) => {
+      const question = `simultaneous request ${index + 1}`;
+      engine.setFixturePrepared(preparedRequest, question);
+      return engine.process({ question }, tenant);
+    }));
 
     assert.equal(outputs.reduce((sum, out) => sum + out.result.task_results.length, 0), 60);
     assert.equal(engine.evidenceStarts, 60);

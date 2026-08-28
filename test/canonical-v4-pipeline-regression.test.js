@@ -189,13 +189,22 @@ test('same Task input produces deterministic graph, Claim IDs and Search Plan ID
 });
 
 test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/recommends',async()=>{
-  await withEngine(async(engine)=>{
+  class EvidenceBackedEngine extends CanonicalAsteraEngine {
+    constructor(options){super(options);this._fixtureEvidence=null;}
+    setFixtureEvidence(packet){this._fixtureEvidence=packet;}
+    async resolveEvidenceForTask(){return this._fixtureEvidence;}
+  }
+  const engine=new EvidenceBackedEngine({poolSize:2,logger:silentLogger});
+  try{
     const claim='Node.js 22は本番対応している。';
     const prepared=engine.prepareRequest({question:claim});
     const task=prepared.analysis_task_packet.tasks[0];
     const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
     const evidence=validEvidence(claim,plan.search_plan.queries);
-    const out=await engine.process({question:claim,evidencePacket:evidence,preparedRequest:prepared},tenant);
+    engine.setFixtureEvidence(evidence);
+    const evaluated=evaluateCanonicalTaskPlan(plan,evidence);
+    assert.ok(evaluated.confirmed_count>=1);
+    const out=await engine.process({question:claim},tenant);
     assert.equal(out.result.non_ai,true);
     assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
     assert.equal(out.runtime.engine,'v8_canonical_global_rules');
@@ -208,7 +217,7 @@ test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/rec
     assert.deepEqual(out.result.perspective_expansion.candidates,[]);
     assert.equal(out.result.perspective_expansion.selected,null);
     assert.match(out.material.text,/根拠成立状態|Evidence Status/);
-  });
+  }finally{await engine.destroy();}
 });
 
 test('without G1-G7 evidence, direct assertion remains UNDETERMINED',async()=>{

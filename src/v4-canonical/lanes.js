@@ -83,6 +83,14 @@ function comparisonTaskText(task = {}) {
     .trim();
 }
 
+function splitEnglishDimensionList(value = '') {
+  return String(value || '')
+    .replace(/[.!?]+$/g, '')
+    .split(/\s*,\s*|\s+and\s+/i)
+    .map((part) => part.trim().replace(/^and\s+/i, ''))
+    .filter(Boolean);
+}
+
 function extractComparisonCandidates(task = {}) {
   const text = comparisonTaskText(task);
   if (!text) return [];
@@ -95,6 +103,15 @@ function extractComparisonCandidates(task = {}) {
     }
   }
   const anTokens = (text.match(/[^\s、,とを]+案/g) || []).filter((token) => token.length <= 12);
+  if (anTokens.length >= 2) return uniqueStrings(anTokens);
+
+  let enMatch = text.match(/^Compare\s+(.+?)\s+and\s+(.+?)\s+(?:on|for)\s+/i);
+  if (enMatch) return uniqueStrings([enMatch[1].trim(), enMatch[2].trim()]);
+  enMatch = text.match(/^Compare\s+(.+?)\s+vs\.?\s+(.+?)\s+for\s+/i);
+  if (enMatch) return uniqueStrings([enMatch[1].trim(), enMatch[2].trim()]);
+  enMatch = text.match(/^Compare\s+(.+?)\s+with\s+(.+?)\s+in terms of\s+/i);
+  if (enMatch) return uniqueStrings([enMatch[1].trim(), enMatch[2].trim()]);
+
   return uniqueStrings(anTokens);
 }
 
@@ -106,6 +123,20 @@ function extractComparisonDimensionsFromText(task = {}, lensDimensions = []) {
     for (const part of dimMatch[1].trim().split(/と/u)) {
       const trimmed = part.trim();
       if (trimmed) fromText.push(trimmed);
+    }
+  }
+  if (/^Compare/i.test(text)) {
+    let enMatch = text.match(/\bon\s+(.+?)$/i);
+    if (enMatch && /\band\s+.+\s+on\s+/i.test(text)) {
+      fromText.push(...splitEnglishDimensionList(enMatch[1]));
+    }
+    enMatch = text.match(/\bfor\s+(.+?)$/i);
+    if (enMatch && /\bvs\.?\s+/i.test(text)) {
+      fromText.push(...splitEnglishDimensionList(enMatch[1]));
+    }
+    enMatch = text.match(/\bin terms of\s+(.+?)$/i);
+    if (enMatch) {
+      fromText.push(...splitEnglishDimensionList(enMatch[1]));
     }
   }
   return uniqueStrings([...lensDimensions, ...fromText]);

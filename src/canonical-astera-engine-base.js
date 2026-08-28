@@ -74,8 +74,97 @@ function mapExpandedPerspective(perspective = {}) {
       ...(perspective.counter_evidence_refs || []),
       ...(perspective.evidence_refs || [])
     ]),
-    trade_off_material: perspective.trade_offs || perspective.trade_off_material
+    trade_off_material: perspective.trade_off_material || null,
+    trade_offs: perspective.trade_offs || []
   };
+}
+
+function formatEvidenceRefList(refs = []) {
+  if (!refs.length) return '-';
+  return refs.map((ref) => {
+    const parts = [];
+    if (ref.claim_id) parts.push(`claim=${ref.claim_id}`);
+    if (ref.candidate_id) parts.push(`candidate=${ref.candidate_id}`);
+    if (ref.binding_id) parts.push(`binding=${ref.binding_id}`);
+    if (ref.query_role) parts.push(`role=${ref.query_role}`);
+    if (ref.url) parts.push(`url=${ref.url}`);
+    return parts.join('; ') || '-';
+  }).join(' / ');
+}
+
+function formatTradeOffMaterialText(material) {
+  if (!material || typeof material !== 'object' || Array.isArray(material)) return line('-');
+  const lines = [`status=${line(material.status)}`];
+  if (material.dimensions?.length) lines.push(`dimensions=${join(material.dimensions)}`);
+  if (material.conditions?.length) lines.push(`conditions=${join(material.conditions)}`);
+  if (material.failure_conditions?.length) lines.push(`failure_conditions=${join(material.failure_conditions)}`);
+  if (material.confirmed_claim_ids?.length) lines.push(`confirmed_claim_ids=${join(material.confirmed_claim_ids)}`);
+  if (material.undetermined_claim_ids?.length) lines.push(`undetermined_claim_ids=${join(material.undetermined_claim_ids)}`);
+  if (material.support_evidence_refs?.length) lines.push(`support_evidence_refs=${formatEvidenceRefList(material.support_evidence_refs)}`);
+  if (material.counter_evidence_refs?.length) lines.push(`counter_evidence_refs=${formatEvidenceRefList(material.counter_evidence_refs)}`);
+  if (material.missing_evidence_refs?.length) {
+    const missing = material.missing_evidence_refs.map((item) =>
+      typeof item === 'string' ? item : `${item.claim_id || '-'}:${join(item.reasons || [])}`
+    );
+    lines.push(`missing_evidence_refs=${join(missing)}`);
+  }
+  if (material.material_by_dimension && typeof material.material_by_dimension === 'object') {
+    for (const [dimension, entry] of Object.entries(material.material_by_dimension)) {
+      const value = typeof entry === 'string'
+        ? entry
+        : join(entry.observations || entry.conditions || []);
+      lines.push(`${dimension}=${line(value)}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatSection05Pass(section) {
+  const perspectives = section.expanded_perspectives?.length
+    ? section.expanded_perspectives
+    : (section.perspectives || []);
+  if (!perspectives.length) return `- ${line(section.summary)}`;
+  return perspectives.map((perspective) => {
+    const focusText = Array.isArray(perspective.focus) ? join(perspective.focus) : line(perspective.focus);
+    return [
+      `Perspective: ${line(perspective.id || perspective.class)}`,
+      `Focus: ${focusText}`,
+      `Conditions: ${join(perspective.conditions)}`,
+      `Failure Conditions: ${join(perspective.failure_conditions)}`,
+      `Trade-off Material:\n${formatTradeOffMaterialText(perspective.trade_off_material)}`,
+      `Evidence refs: ${formatEvidenceRefList(perspective.evidence_refs)}`
+    ].join('\n');
+  }).join('\n\n');
+}
+
+function formatSection06Pass(section) {
+  const candidates = (section.comparison_candidates || []).map((candidate) =>
+    typeof candidate === 'string' ? candidate : (candidate.label || candidate.candidate_id || '-')
+  );
+  const candidateMaterials = (section.candidate_materials || []).map((entry) =>
+    `${entry.label || entry.candidate_id || '-'}[${entry.material_state || '-'}]`
+  );
+  const tradeOffDiffs = (section.trade_off_differences || []).map((entry) =>
+    `${entry.dimension || '-'}[${entry.comparison_state || entry.status || '-'}]`
+  );
+  const conditionDiff = section.condition_differences || {};
+  const contradictions = (section.contradiction_map || []).map((entry) =>
+    `${entry.type || '-'}:${join(entry.reasons)}`
+  );
+  const supported = (section.supported_scope || []).map((entry) => entry.claim_id || '-');
+  const unsupported = (section.unsupported_scope || []).map((entry) =>
+    `${entry.claim_id || '-'}:${join(entry.reasons)}`
+  );
+  return [
+    `Candidates: ${join(candidates)}`,
+    `Dimensions: ${join(section.dimensions)}`,
+    `Candidate Materials: ${candidateMaterials.length ? join(candidateMaterials) : '-'}`,
+    `Trade-off Differences: ${tradeOffDiffs.length ? join(tradeOffDiffs) : '-'}`,
+    `Condition Differences: constraints=${join(conditionDiff.constraints)}; prohibitions=${join(conditionDiff.prohibitions)}; preserve=${join(conditionDiff.preserve)}; replace=${join(conditionDiff.replace)}; conditions=${join(conditionDiff.conditions)}; exceptions=${join(conditionDiff.exceptions)}; dependencies=${join(conditionDiff.dependencies)}`,
+    `Contradictions: ${contradictions.length ? join(contradictions) : '-'}`,
+    `Supported Scope: ${supported.length ? join(supported) : '-'}`,
+    `Unsupported Scope: ${unsupported.length ? join(unsupported) : '-'}`
+  ].join('\n');
 }
 
 function aggregateTaskResults(taskResults){
@@ -106,7 +195,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
 
   async process(input={},tenant={id:'unknown'},executionContext={}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
-    const request=input.preparedRequest?.analysis_task_packet?input.preparedRequest:this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
+    const request=this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
     if(!question)return{result:{type:'clarification_needed',non_ai:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:this.clarify([],renderLang),prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     const packet=request.analysis_task_packet;
@@ -122,7 +211,6 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     });
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
 
-    const taskEvidence=input.taskEvidencePackets||input.task_evidence_packets||{},globalEvidence=input.evidencePacket||input.evidence_packet||null,providedCanonical=input.canonicalClaimRecordsByTask||input.canonical_claim_records_by_task||{};
     const signal=executionContext?.signal||null,evidenceRawByTask=new Map(),executor=this.getCanonicalTaskExecutor();
     const execution=await executeTaskWaves({
       tasks,
@@ -130,11 +218,11 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       signal,
       runTask:async(task)=>{
         const searchRequired=task.canonical_plan.search_plan.queries.length>0;
-        let evidenceRaw=searchRequired?(taskEvidence[task.id]||(tasks.length===1?globalEvidence:null)):notRequiredEvidence(task.id);
-        if(!evidenceRaw&&searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request,signal});
+        let evidenceRaw=searchRequired?null:notRequiredEvidence(task.id);
+        if(searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request,signal});
         if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
         evidenceRawByTask.set(String(task.id),evidenceRaw);
-        const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw,providedCanonical:providedCanonical[task.id]||null},{signal});
+        const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw},{signal});
         const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
         return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
       }
@@ -189,7 +277,22 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     return{format:'astera_judgment_v4',canonical_language:'en',output_language:lang,order:[...ORDER],non_ai:true,decision_authority:'EXTERNAL_ONLY',task_graph:{task_count:taskResults.length,dependencies:packet.dependencies,execution_waves:packet.execution_waves},lens_routing:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{primary:result.task.domain.primary||null,secondary:result.task.domain.secondary||[],overlays:result.task.domain.overlays||[],classification_basis:result.task.domain.classification_basis,confidence:result.task.domain.confidence}]))},claim_state:{status:aggregate.canonical.status,claim_count:aggregate.canonical.claim_count,confirmed_count:aggregate.canonical.confirmed_count,undetermined_count:aggregate.canonical.undetermined_count},evidence_state:{per_task:Object.fromEntries(taskResults.map((result)=>[result.task.id,{required:result.canonical.search_plan.queries.length>0,search_state:result.evidence.search_state,state:result.evidence.state,source_status:result.evidence.source_status,quality_score_bp:result.evidence.quality_score_bp,coverage_state:result.evidence.coverage_state,conflict_detected:result.evidence.conflict_detected}]))},...sections};
   }
 
-  material(judgment){const sections=ORDER.map((key)=>judgment[key]),compact_text=sections.map((section)=>`${section.label}: ${line(section.summary)}`).join('\n'),heads=judgment.output_language==='en'?{one:'Judgment Material',basis:'Derivation Basis',pass:'Material for External Consumer'}:{one:'判断材料',basis:'導出根拠',pass:'External Consumerへ渡す内容'},text=sections.map((section)=>{const basis=section.decision_basis||{},basisLines=[`rules=${join(basis.rule_ids)}`,`tasks=${join(basis.task_ids)}`,`lenses=${join(basis.lens_ids)}`,`evidence_refs=${(basis.evidence_refs||[]).length}`,`blockers=${join(basis.blocking_conditions,'none')}`,`derivation=${line(basis.derivation)}`];return`${section.label}\n${heads.one}\n${line(section.summary)}\n${heads.basis}\n${basisLines.map((item)=>`- ${item}`).join('\n')}\n${heads.pass}\n${section.items?.length?section.items.map((item)=>`- ${line(item)}`).join('\n'):`- ${line(section.summary)}`}`;}).join('\n---\n');return{mode:'judgment_material',target:'user_ai',raw_policy:'do_not_pass_raw_by_default',non_ai:true,decision_authority:'EXTERNAL_ONLY',format:judgment.format,text,compact_text,sections};}
+  material(judgment){
+    const heads=judgment.output_language==='en'?{one:'Judgment Material',basis:'Derivation Basis',pass:'Material for External Consumer'}:{one:'判断材料',basis:'導出根拠',pass:'External Consumerへ渡す内容'};
+    const sections=ORDER.map((key)=>judgment[key]);
+    const compact_text=sections.map((section)=>`${section.label}: ${line(section.summary)}`).join('\n');
+    const text=ORDER.map((key)=>{
+      const section=judgment[key];
+      const basis=section.decision_basis||{};
+      const basisLines=[`rules=${join(basis.rule_ids)}`,`tasks=${join(basis.task_ids)}`,`lenses=${join(basis.lens_ids)}`,`evidence_refs=${(basis.evidence_refs||[]).length}`,`blockers=${join(basis.blocking_conditions,'none')}`,`derivation=${line(basis.derivation)}`];
+      let passContent;
+      if(key==='05_opposition')passContent=formatSection05Pass(section);
+      else if(key==='06_comparison')passContent=formatSection06Pass(section);
+      else passContent=section.items?.length?section.items.map((item)=>`- ${line(item)}`).join('\n'):`- ${line(section.summary)}`;
+      return`${section.label}\n${heads.one}\n${line(section.summary)}\n${heads.basis}\n${basisLines.map((item)=>`- ${item}`).join('\n')}\n${heads.pass}\n${passContent}`;
+    }).join('\n---\n');
+    return{mode:'judgment_material',target:'user_ai',raw_policy:'do_not_pass_raw_by_default',non_ai:true,decision_authority:'EXTERNAL_ONLY',format:judgment.format,text,compact_text,sections};
+  }
   externalBrief(judgment){return['# Astera v8 Deterministic Judgment Materials',`TaskGraph: ${judgment.task_graph.task_count} tasks / waves=${judgment.task_graph.execution_waves.length}`,...ORDER.flatMap((key)=>{const section=judgment[key];return[`${section.canonical_label}: ${line(section.summary)}`,`  basis=${join(section.decision_basis?.rule_ids)}; blockers=${join(section.decision_basis?.blocking_conditions,'none')}`];}),'Consumer rule: preserve task order, hard constraints, evidence status, and UNDETERMINED claims. Astera does not make the final decision or recommendation.'].join('\n');}
 }
 

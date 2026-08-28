@@ -59,19 +59,13 @@ test('Human Reader is connected as presentation control but cannot mutate facts,
 
 test('hard Task Graph blocker stops canonical Task/Claim/Evidence processing before downstream runtime starts', async () => {
   await withEngine(async (engine) => {
-    const prepared = engine.prepareRequest({ question: 'APIを改善する。' });
-    prepared.analysis_task_packet.hard_blockers = ['TASK_GRAPH_CYCLE:T01,T02'];
-    prepared.analysis_task_packet.task_graph_validation = { valid: false, cycle: ['T01', 'T02'] };
-    prepared.instruction_understanding = {
-      ...(prepared.instruction_understanding || {}),
-      execution_allowed: false,
-      blocked_reasons: ['TASK_GRAPH_CYCLE:T01,T02']
-    };
-    const out = await engine.process({ question: 'APIを改善する。', preparedRequest: prepared }, tenant);
+    const out = await engine.process({
+      question: 'APIを変更する。APIを変更するな。成功条件は互換性を維持することである。'
+    }, tenant);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.task_processing_started, false);
     assert.equal(out.result.evidence_processing_started, false);
-    assert.ok(out.result.hard_blockers.includes('TASK_GRAPH_CYCLE:T01,T02'));
+    assert.ok(out.result.hard_blockers.includes('PROHIBITION_REPLACE_OVERLAP'));
     assert.equal(out.runtime.blocked, true);
   });
 });

@@ -91,7 +91,16 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
     assert.ok(s05.perspectives.length > 0);
     assert.ok(s05.perspectives.every((p) => String(p.id || p.class || '').toUpperCase() !== 'MAINLINE'));
     assert.ok(s05.expanded_perspectives.some((p) => p.id === 'opposition' || p.class === 'OPPOSITION'));
+    assert.ok(s05.expanded_perspectives.every((p) => p.trade_off_material && typeof p.trade_off_material === 'object'));
+    assert.ok(s05.expanded_perspectives.every((p) => typeof p.trade_off_material.status === 'string'));
+    assert.ok(s05.expanded_perspectives.every((p) => Array.isArray(p.trade_off_material.dimensions)));
+    assert.equal(Object.hasOwn(s05.expanded_perspectives[0].trade_off_material, 'score'), false);
+    assert.equal(Object.hasOwn(s05.expanded_perspectives[0].trade_off_material, 'ranking'), false);
+    assert.equal(Object.hasOwn(s05.expanded_perspectives[0].trade_off_material, 'winner'), false);
 
+    assert.match(out.material.text, /Trade-off Material/);
+    assert.match(out.material.text, /Candidates:/);
+    assert.match(out.material.text, /Dimensions:/);
     assert.ok(s06.scope_booleans);
     assert.ok(s06.supported_scope);
     assert.ok(s06.unsupported_scope);

@@ -31,14 +31,9 @@ function assertProjectionInput(task) {
   }
 }
 
-function projectCanonicalTask({ task, evidenceRaw, providedCanonical = null }) {
+function projectCanonicalTask({ task, evidenceRaw }) {
   assertProjectionInput(task);
-  if (providedCanonical?.task_id && String(providedCanonical.task_id) !== String(task.id)) {
-    const error = new Error(`Provided canonical task_id ${providedCanonical.task_id} does not match ${task.id}`);
-    error.code = 'CANONICAL_TASK_ID_MISMATCH';
-    throw error;
-  }
-  const canonical = providedCanonical || evaluateCanonicalTaskPlan(task.canonical_plan, evidenceRaw);
+  const canonical = evaluateCanonicalTaskPlan(task.canonical_plan, evidenceRaw);
   const lanes = projectFiveLanes({ task, canonical, domain: task.domain || {} });
   const perspectiveExpansion = deterministicPerspectiveExpansion({ task, canonical, domain: task.domain || {} });
   return {

@@ -119,7 +119,55 @@ function unresolvedRefs(records = []) {
     }));
 }
 
-function perspective({ id, focus, conditions = [], failureConditions = [], supportEvidence = [], counterEvidence = [], missingEvidence = [], tradeOffs = [], queryRoles = [], basis = {} }) {
+function buildTradeOffMaterial({
+  dimensions = [],
+  conditions = [],
+  failureConditions = [],
+  confirmedClaimIds = [],
+  undeterminedClaimIds = [],
+  supportEvidence = [],
+  counterEvidence = [],
+  missingEvidence = [],
+  materialByDimension = null
+}) {
+  const normalizedDimensions = uniqueStrings(dimensions);
+  const hasMaterial = normalizedDimensions.length > 0
+    || conditions.length > 0
+    || failureConditions.length > 0
+    || confirmedClaimIds.length > 0
+    || supportEvidence.length > 0
+    || counterEvidence.length > 0;
+  const status = hasMaterial ? 'MATERIAL_ONLY' : 'INSUFFICIENT_TRADE_OFF_MATERIAL';
+  const material = {
+    status,
+    dimensions: normalizedDimensions,
+    conditions: uniqueStrings(conditions),
+    failure_conditions: uniqueStrings(failureConditions),
+    confirmed_claim_ids: [...confirmedClaimIds].sort(),
+    undetermined_claim_ids: [...undeterminedClaimIds].sort(),
+    support_evidence_refs: supportEvidence,
+    counter_evidence_refs: counterEvidence,
+    missing_evidence_refs: missingEvidence
+  };
+  if (materialByDimension && typeof materialByDimension === 'object' && Object.keys(materialByDimension).length) {
+    material.material_by_dimension = materialByDimension;
+  }
+  return deepFreeze(material);
+}
+
+function perspective({ id, focus, conditions = [], failureConditions = [], supportEvidence = [], counterEvidence = [], missingEvidence = [], tradeOffs = [], tradeOffMaterial = null, queryRoles = [], basis = {} }) {
+  const confirmedClaimIds = basis.confirmed_claim_ids || [];
+  const undeterminedClaimIds = basis.undetermined_claim_ids || [];
+  const trade_off_material = tradeOffMaterial || buildTradeOffMaterial({
+    dimensions: tradeOffs,
+    conditions,
+    failureConditions,
+    confirmedClaimIds,
+    undeterminedClaimIds,
+    supportEvidence,
+    counterEvidence,
+    missingEvidence
+  });
   return deepFreeze({
     id,
     class: id.toUpperCase(),
@@ -130,6 +178,7 @@ function perspective({ id, focus, conditions = [], failureConditions = [], suppo
     counter_evidence_refs: counterEvidence,
     missing_evidence_refs: missingEvidence,
     trade_offs: uniqueStrings(tradeOffs),
+    trade_off_material,
     query_roles: uniqueStrings(queryRoles),
     basis
   });

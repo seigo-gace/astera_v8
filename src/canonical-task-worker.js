@@ -21,7 +21,11 @@ parentPort.on('message', (message) => {
       error.code = 'UNSUPPORTED_WORKER_OPERATION';
       throw error;
     }
-    const result = projectCanonicalTask(message.payload || {});
+    const payload = message.payload || {};
+    const result = projectCanonicalTask({
+      task: payload.task,
+      evidenceRaw: payload.evidenceRaw
+    });
     parentPort.postMessage({ job_id: jobId, ok: true, result });
   } catch (error) {
     parentPort.postMessage({ job_id: jobId, ok: false, error: serializeError(error) });

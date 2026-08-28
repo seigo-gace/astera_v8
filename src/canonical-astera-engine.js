@@ -125,12 +125,13 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
-    const prepared = input.preparedRequest?.analysis_task_packet ? input.preparedRequest : null;
-    const request = prepared
-      ? (prepared.schema_version === 'astera.request-model.v3'
-          ? prepared
-          : enrichRequest(prepared, { question, context }))
-      : this.prepareRequest({ question, context, language: input.language, locale: input.locale, output_language: input.output_language });
+    const request = this.prepareRequest({
+      question,
+      context,
+      language: input.language,
+      locale: input.locale,
+      output_language: input.output_language
+    });
 
     request.human_reader = readHumanState(question, input.moodAnswers || {});
 
@@ -209,7 +210,14 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       }
     }
 
-    const out = await super.process({ ...input, preparedRequest: request }, tenant, executionContext);
+    const out = await super.process({
+      question,
+      context,
+      language: input.language,
+      locale: input.locale,
+      output_language: input.output_language,
+      moodAnswers: input.moodAnswers
+    }, tenant, executionContext);
     if (out?.result?.type === 'cognitive_map') {
       out.result.human_reader = request.human_reader;
       if (out.result.facts && Array.isArray(out.result.task_results)) {
