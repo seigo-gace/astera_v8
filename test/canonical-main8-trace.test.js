@@ -3,10 +3,131 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { POLICY_TRADE_OFF_NOTES } = require('../src/canonical-claim-runtime');
+const { POLICY_TRADE_OFF_NOTES, QUERY_ROLES, buildCanonicalTaskPlan } = require('../src/canonical-claim-runtime');
+const { routeDomainTemplates } = require('../src/domain-template-router');
+const { projectCanonicalTask } = require('../src/canonical-task-projection');
 
 const tenant = { id: 'trace-test', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
+const MAIN8_ORDER = Object.freeze([
+  '01_purpose',
+  '02_premise',
+  '03_facts',
+  '04_crisis',
+  '05_opposition',
+  '06_comparison',
+  '07_evidence_status',
+  '08_reinstruction'
+]);
+const MAIN8_JA_LABELS = Object.freeze([
+  '01 本当の目的',
+  '02 前提不足',
+  '03 事実確認',
+  '04 危機察知',
+  '05 反対視点',
+  '06 比較案',
+  '07 根拠成立状態',
+  '08 主役AI／利用者への再指示'
+]);
+
+function evidenceCandidate({ id, role, family, authority, claim, url }) {
+  return {
+    candidate_id: id,
+    canonical_record_id: `${id}-record`,
+    content_hash: `${id}-hash`,
+    source_role: role,
+    source_family_id: family,
+    source_id: `${id}-source`,
+    provider_id: `${id}-provider`,
+    authority_id: authority,
+    canonical_locator: { url, replayable: true },
+    updated_at: '2026-08-20T00:00:00.000Z',
+    fields: { claim },
+    excerpt: claim
+  };
+}
+
+function queryExecution(queries = []) {
+  return {
+    initial: queries.map((query) => ({
+      query_id: query.query_id,
+      claim_id: query.claim_id,
+      role: query.role,
+      status: 'FOUND',
+      provider_records: [
+        { provider_id: 'ev-official-provider', status: 'FOUND', candidate_record_ids: ['ev-official-record'] },
+        { provider_id: 'ev-corroboration-provider', status: 'FOUND', candidate_record_ids: ['ev-corroboration-record'] }
+      ]
+    })),
+    reinforcement: []
+  };
+}
+
+function validEvidence(claim, queries = []) {
+  return {
+    schema_version: 'astera.evidence-search.result.v1',
+    request_id: 'ev-test',
+    tenant_id: 'test',
+    status: 'FINAL_VALID',
+    effective_as_of: '2026-08-20T00:00:00.000Z',
+    result_hash: 'test-result-hash',
+    planning_authority: 'UPSTREAM_CANONICAL',
+    planned_query_roles: Object.values(QUERY_ROLES),
+    evidence: [
+      evidenceCandidate({ id: 'ev-official', role: 'OFFICIAL', family: 'official-family', authority: 'official-authority', claim, url: 'https://official.test/evidence' }),
+      evidenceCandidate({ id: 'ev-corroboration', role: 'SECONDARY', family: 'corrob-family', authority: 'corrob-authority', claim, url: 'https://corroboration.test/evidence' })
+    ],
+    coverage: { discovery_scope_state: 'COMPLETE_FOR_QUERY_SCOPE', registry_coverage_state: 'COMPLETE_FOR_ACTIVE_REGISTRY' },
+    quality: {
+      initial: { status: 'REINFORCEMENT_REQUIRED', phase: 'INITIAL', score_bp: 8500, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] },
+      reinforcement_attempt_count: 1,
+      new_corroboration_count: 1,
+      final: { status: 'FINAL_VALID', phase: 'FINAL', score_bp: 9700, gates: { initial_minimum_bp: 8000, final_minimum_bp: 9500 }, blocking_reasons: [] }
+    },
+    query_execution: queryExecution(queries),
+    provider_execution: {
+      initial: [{ provider_id: 'ev-official-provider', status: 'FULFILLED' }],
+      reinforcement: [{ provider_id: 'ev-corroboration-provider', status: 'FULFILLED' }]
+    },
+    ai_used: false,
+    payment_executed: false
+  };
+}
+
+function dummyJudgmentSection(label) {
+  return {
+    label,
+    summary: 'formatter-test',
+    items: ['formatter-test-item'],
+    decision_basis: {
+      rule_ids: ['TEST-FORMATTER'],
+      task_ids: ['T01'],
+      lens_ids: [],
+      evidence_refs: [],
+      blocking_conditions: [],
+      derivation: 'formatter internal test'
+    }
+  };
+}
+
+function bindingRefsFromProjection(projected) {
+  return projected.canonical.records.flatMap((record) =>
+    (record.confirmation?.bindings || []).map((binding) => ({
+      ...binding,
+      claim_id: record.claim?.claim_id || binding.claim_id
+    }))
+  );
+}
+
+function assertInternalRefFields(ref) {
+  assert.ok(ref.claim_id, 'claim_id missing on internal ref');
+  assert.ok(ref.candidate_id || ref.evidence_id, 'candidate_id missing on internal ref');
+  assert.ok(ref.binding_id || ref.evidence_binding_id, 'binding id missing on internal ref');
+  assert.ok(ref.source_role || (Array.isArray(ref.source_roles) && ref.source_roles[0]), 'source_role missing on internal ref');
+  assert.ok(ref.source_family_id, 'source_family_id missing on internal ref');
+  assert.ok(ref.authority_id, 'authority_id missing on internal ref');
+  assert.ok(ref.url || ref.canonical_locator?.url || ref.source_span, 'url missing on internal ref');
+}
 
 test('hard instruction contradiction stops before Task/Claim/Evidence and never fabricates Main8', async () => {
   const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
@@ -197,6 +318,85 @@ test('Main8 05/06 HTTP lossless text preserves EN compare material', async () =>
     assert.match(materialText, /Unsupported Scope:/);
     assert.doesNotMatch(materialText, /A\[AVAILABLE/);
     assert.doesNotMatch(materialText, /cost\[MATERIAL/);
+  } finally {
+    await engine.destroy();
+  }
+});
+
+test('Main8 06 HTTP text preserves evidence source identity from internal compare refs', async () => {
+  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  try {
+    const compareRequest = engine.prepareRequest({
+      question: 'A案とB案を費用と安全性で比較する。',
+      language: 'ja'
+    });
+    const compareTask = compareRequest.analysis_task_packet.tasks[0];
+    const claimRequest = engine.prepareRequest({
+      question: 'A案の費用は公式根拠で検証する。',
+      language: 'ja'
+    });
+    const claimTask = claimRequest.analysis_task_packet.tasks[0];
+    const domain = routeDomainTemplates({ question: claimTask.source_span?.text || claimTask.target });
+    const claimPlan = buildCanonicalTaskPlan(claimTask, domain);
+    const claim = claimPlan.claims[0];
+    assert.ok(claim, 'expected claim-bearing task for internal evidence projection');
+    const projected = projectCanonicalTask({
+      task: { ...compareTask, canonical_plan: claimPlan, domain },
+      evidenceRaw: validEvidence(claim.raw_text, claimPlan.search_plan.queries)
+    });
+    const compare = projected.lanes.compare;
+    const internalRefs = bindingRefsFromProjection(projected);
+    assert.ok(internalRefs.length >= 1, 'expected internal confirmation bindings');
+    for (const ref of internalRefs) {
+      assertInternalRefFields(ref);
+    }
+    const officialRef = internalRefs.find((ref) => ref.candidate_id === 'ev-official');
+    assert.ok(officialRef, 'expected ev-official binding ref');
+    const candidateMaterials = compare.candidate_materials.map((entry) =>
+      entry.label === 'A案' ? { ...entry, evidence_refs: internalRefs } : entry
+    );
+    const judgment = {
+      format: 'astera_judgment_v4',
+      output_language: 'ja',
+      order: [...MAIN8_ORDER]
+    };
+    for (let index = 0; index < MAIN8_ORDER.length; index += 1) {
+      const key = MAIN8_ORDER[index];
+      if (key === '06_comparison') {
+        judgment[key] = {
+          ...dummyJudgmentSection(MAIN8_JA_LABELS[index]),
+          comparison_candidates: compare.comparison_candidates,
+          dimensions: compare.dimensions,
+          candidate_materials: candidateMaterials,
+          trade_off_differences: compare.trade_off_differences,
+          condition_differences: compare.condition_differences || {},
+          contradiction_map: compare.contradiction_map || [],
+          supported_scope: compare.supported_scope || [],
+          unsupported_scope: compare.unsupported_scope || []
+        };
+      } else {
+        judgment[key] = dummyJudgmentSection(MAIN8_JA_LABELS[index]);
+      }
+    }
+    const material = engine.material(judgment);
+    const materialText = material.text;
+    const claimId = officialRef.claim_id;
+    const bindingId = officialRef.binding_id || officialRef.evidence_binding_id;
+    const candidateId = officialRef.candidate_id || officialRef.evidence_id;
+    const sourceRole = officialRef.source_role || officialRef.source_roles[0];
+    const sourceFamilyId = officialRef.source_family_id;
+    const authorityId = officialRef.authority_id;
+    const url = officialRef.url || officialRef.canonical_locator?.url || officialRef.source_span;
+    assert.match(materialText, new RegExp(`claim=${claimId}`));
+    assert.match(materialText, new RegExp(`binding=${bindingId}`));
+    assert.match(materialText, new RegExp(`candidate=${candidateId}`));
+    assert.match(materialText, new RegExp(`source_role=${sourceRole}`));
+    assert.match(materialText, new RegExp(`source_family_id=${sourceFamilyId}`));
+    assert.match(materialText, new RegExp(`authority_id=${authorityId}`));
+    assert.match(materialText, new RegExp(`url=${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(materialText, /candidate_id=candidate:1:A案/);
+    assert.match(materialText, /Per-candidate:\ncandidate_id=candidate:1:A案/);
+    assert.doesNotMatch(materialText, /"claim_id"/);
   } finally {
     await engine.destroy();
   }

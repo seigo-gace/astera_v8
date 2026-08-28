@@ -83,11 +83,22 @@ function formatEvidenceRefList(refs = []) {
   if (!refs.length) return '-';
   return refs.map((ref) => {
     const parts = [];
-    if (ref.claim_id) parts.push(`claim=${ref.claim_id}`);
-    if (ref.candidate_id) parts.push(`candidate=${ref.candidate_id}`);
-    if (ref.binding_id) parts.push(`binding=${ref.binding_id}`);
-    if (ref.query_role) parts.push(`role=${ref.query_role}`);
-    if (ref.url) parts.push(`url=${ref.url}`);
+    const claim = ref.claim_id || ref.claim;
+    const candidate = ref.candidate_id || ref.evidence_id;
+    const binding = ref.binding_id || ref.evidence_binding_id;
+    const sourceRole = ref.source_role || (Array.isArray(ref.source_roles) ? ref.source_roles[0] : null);
+    const sourceFamilyId = ref.source_family_id;
+    const authorityId = ref.authority_id;
+    const role = ref.query_role || ref.role;
+    const url = ref.url || ref.canonical_locator?.url || ref.source_span;
+    if (claim) parts.push(`claim=${claim}`);
+    if (candidate) parts.push(`candidate=${candidate}`);
+    if (binding) parts.push(`binding=${binding}`);
+    if (sourceRole) parts.push(`source_role=${sourceRole}`);
+    if (sourceFamilyId) parts.push(`source_family_id=${sourceFamilyId}`);
+    if (authorityId) parts.push(`authority_id=${authorityId}`);
+    if (role) parts.push(`role=${role}`);
+    if (url) parts.push(`url=${url}`);
     return parts.join('; ') || '-';
   }).join(' / ');
 }
@@ -152,6 +163,7 @@ function formatTradeOffMaterialText(material) {
 function formatPerCandidateBlock(entry = {}) {
   return [
     'Per-candidate:',
+    `candidate_id=${line(entry.candidate_id)}`,
     `label=${line(entry.label || entry.candidate_id)}`,
     `material_state=${line(entry.material_state)}`,
     `observations=${entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'}`,
