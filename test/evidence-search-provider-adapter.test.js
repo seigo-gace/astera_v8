@@ -155,6 +155,32 @@ test('runtime provider config accepts a non-placeholder public HTTPS host withou
   });
 });
 
+test('FREE_PUBLIC_HTTP is loaded as the public specialist FREE_PROJECTION branch', () => {
+  withProviderConfig({
+    schema_version: 'astera.evidence-providers.v1',
+    providers: [{
+      provider_id: 'public-specialist-config-test',
+      type: 'FREE_PUBLIC_HTTP',
+      enabled: true,
+      certified: true,
+      source_family_id: 'public-specialist-family',
+      allowed_hosts: ['gitlab.com'],
+      domains: ['G29'],
+      endpoints: [{
+        endpoint_id: 'public-specialist-search',
+        url_template: 'https://gitlab.com/api/v4/projects?search={query}&simple=true&per_page=5&visibility=public',
+        response_format: 'JSON',
+        records_path: ''
+      }]
+    }]
+  }, (configFile) => {
+    const providers = loadEvidenceProviders({ configFile });
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0].source_class, 'FREE_PROJECTION');
+    assert.equal(providers[0].provider_id, 'public-specialist-config-test');
+  });
+});
+
 test('free official adapter provider queries only its fixed endpoint and maps current records', async () => {
   const requests = [];
   const provider = createFreeOfficialLiveProvider({
