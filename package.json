@@ -6,9 +6,7 @@
   "type": "commonjs",
   "private": true,
   "license": "UNLICENSED",
-  "engines": {
-    "node": ">=22.0.0"
-  },
+  "engines": { "node": ">=22.0.0" },
   "scripts": {
     "start": "node start.js",
     "start:evaluator-api": "node src/quality-completion-evaluator/api/start.js",
@@ -36,21 +34,9 @@
     "smoke": "bash scripts/smoke.sh",
     "verify:source": "npm run check:syntax && npm run check:json && npm run check:shell && npm test && npm run validate:evidence-architecture",
     "verify": "npm run verify:source && bash scripts/smoke.sh",
-    "test:evidence-provider-adapter": "node --test test/evidence-search-provider-adapter.test.js"
+    "test:evidence-provider-adapter": "node --test test/evidence-search-provider-adapter.test.js test/evidence-search-live-query-template.test.js"
   },
   "dependencies": {},
   "devDependencies": {},
-  "keywords": [
-    "astera",
-    "astera-v8",
-    "deterministic-cognition-runtime",
-    "38-genre-lens",
-    "runtime",
-    "v8",
-    "worker-threads",
-    "cognitive-preprocessing",
-    "five-independent-lanes",
-    "evidence-binding",
-    "claim-confirmation"
-  ]
+  "keywords": ["astera","astera-v8","deterministic-cognition-runtime","38-genre-lens","runtime","v8","worker-threads","cognitive-preprocessing","five-independent-lanes","evidence-binding","claim-confirmation"]
 }

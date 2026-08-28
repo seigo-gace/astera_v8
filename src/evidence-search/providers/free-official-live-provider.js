@@ -19,8 +19,38 @@ function getPath(value, dottedPath) {
   );
 }
 
-function applyTemplate(template, plan) {
+function queryText(plan) {
+  return (plan.query_set || []).map((item) => item.text).join(' ');
+}
+
+function escapeSparqlLiteral(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t');
+}
+
+function compileQueryTemplate(template, plan) {
+  if (!template) return queryText(plan);
   return String(template).replace(/\{([a-z_]+)\}/g, (match, name) => {
+    if (name === 'search_term') return escapeSparqlLiteral(queryText(plan));
+    const resolver = PLACEHOLDERS[name];
+    if (!resolver) {
+      const error = new Error(`unsupported query-template placeholder: ${name}`);
+      error.code = 'SOURCE_QUERY_TEMPLATE_INVALID';
+      throw error;
+    }
+    return String(resolver(plan));
+  });
+}
+
+function applyTemplate(template, plan, endpoint = {}) {
+  return String(template).replace(/\{([a-z_]+)\}/g, (match, name) => {
+    if (name === 'query_payload') {
+      return encodeURIComponent(compileQueryTemplate(endpoint.query_template, plan));
+    }
     const resolver = PLACEHOLDERS[name];
     if (!resolver) {
       const error = new Error(`unsupported official source URL placeholder: ${name}`);
@@ -37,7 +67,8 @@ function mapField(item, specification) {
   if (Object.hasOwn(specification, 'value')) return specification.value;
   if (specification.path) {
     const value = getPath(item, specification.path);
-    return value === undefined ? specification.default : value;
+    if (value === undefined) return specification.default;
+    return specification.stringify ? JSON.stringify(value) : value;
   }
   return Object.fromEntries(Object.entries(specification).map(([key, value]) => [key, mapField(item, value)]));
 }
@@ -101,13 +132,28 @@ function normalizeEndpoint(raw, index, allowedHosts) {
   if (!allowedHosts.has(probeUrl.hostname.toLowerCase())) throw new TypeError(`endpoints[${index}] host is not included in allowed_hosts`);
   const responseFormat = String(raw.response_format || 'JSON').toUpperCase();
   if (!FORMATS.has(responseFormat)) throw new TypeError(`endpoints[${index}].response_format is unsupported`);
+  const requestHeaders = raw.request_headers && typeof raw.request_headers === 'object' && !Array.isArray(raw.request_headers)
+    ? Object.freeze(Object.fromEntries(Object.entries(raw.request_headers).map(([key, value]) => [String(key), String(value)])))
+    : Object.freeze({});
   return Object.freeze({
-    endpoint_id: endpointId, url_template: urlTemplate, response_format: responseFormat,
-    records_path: String(raw.records_path || ''), field_map: Object.freeze({ ...(raw.field_map || {}) }), fixed_fields: Object.freeze({ ...(raw.fixed_fields || {}) }),
-    authority_id: raw.authority_id ? String(raw.authority_id) : '', publisher_id: raw.publisher_id ? String(raw.publisher_id) : '', publisher_name: raw.publisher_name ? String(raw.publisher_name) : '',
-    capability_id: raw.capability_id ? String(raw.capability_id) : 'current_official', title: raw.title ? String(raw.title) : endpointId,
-    maximum_records: Math.max(1, Math.min(512, Number(raw.maximum_records || 128))), maximum_excerpt_chars: Math.max(256, Math.min(131_072, Number(raw.maximum_excerpt_chars || 32_768))),
-    max_response_bytes: Math.max(1024, Math.min(32 * 1024 * 1024, Number(raw.max_response_bytes || 4 * 1024 * 1024))), timeout_ms: Math.max(100, Math.min(10_000, Number(raw.timeout_ms || 2500))), encoding: String(raw.encoding || 'utf8')
+    endpoint_id: endpointId,
+    url_template: urlTemplate,
+    query_template: raw.query_template ? String(raw.query_template) : '',
+    request_headers: requestHeaders,
+    response_format: responseFormat,
+    records_path: String(raw.records_path || ''),
+    field_map: Object.freeze({ ...(raw.field_map || {}) }),
+    fixed_fields: Object.freeze({ ...(raw.fixed_fields || {}) }),
+    authority_id: raw.authority_id ? String(raw.authority_id) : '',
+    publisher_id: raw.publisher_id ? String(raw.publisher_id) : '',
+    publisher_name: raw.publisher_name ? String(raw.publisher_name) : '',
+    capability_id: raw.capability_id ? String(raw.capability_id) : 'current_official',
+    title: raw.title ? String(raw.title) : endpointId,
+    maximum_records: Math.max(1, Math.min(512, Number(raw.maximum_records || 128))),
+    maximum_excerpt_chars: Math.max(256, Math.min(131_072, Number(raw.maximum_excerpt_chars || 32_768))),
+    max_response_bytes: Math.max(1024, Math.min(32 * 1024 * 1024, Number(raw.max_response_bytes || 4 * 1024 * 1024))),
+    timeout_ms: Math.max(100, Math.min(15_000, Number(raw.timeout_ms || 2500))),
+    encoding: String(raw.encoding || 'utf8')
   });
 }
 
@@ -150,14 +196,21 @@ function createFreeOfficialLiveProvider(options = {}) {
         const singleQueryPlan = Object.freeze({ ...plan, query_set: Object.freeze([query]) });
         for (const endpoint of endpoints) {
           try {
-            const url = applyTemplate(endpoint.url_template, singleQueryPlan);
+            const url = applyTemplate(endpoint.url_template, singleQueryPlan, endpoint);
+            const remaining = Number(context.deadline_at || 0) - Date.now();
             const response = await transport(url, {
-              allowedHosts: [...allowedHosts], maxBytes: endpoint.max_response_bytes,
-              timeoutMs: Math.min(endpoint.timeout_ms, Math.max(100, Number(context.deadline_at || 0) - Date.now() || endpoint.timeout_ms)), signal: context.signal
+              allowedHosts: [...allowedHosts],
+              maxBytes: endpoint.max_response_bytes,
+              timeoutMs: Math.min(endpoint.timeout_ms, remaining > 0 ? Math.max(100, remaining) : endpoint.timeout_ms),
+              headers: endpoint.request_headers,
+              signal: context.signal
             });
-            requests += 1; bytes += response.body.length;
+            requests += 1;
+            bytes += response.body.length;
             if (response.status < 200 || response.status >= 300) {
-              const error = new Error(`official source returned HTTP ${response.status}`); error.code = `SOURCE_HTTP_${response.status}`; throw error;
+              const error = new Error(`official source returned HTTP ${response.status}`);
+              error.code = `SOURCE_HTTP_${response.status}`;
+              throw error;
             }
             completedEndpoints += 1;
             const records = parseResponse(response, endpoint, provider).map((record) => ({
@@ -167,16 +220,19 @@ function createFreeOfficialLiveProvider(options = {}) {
             queryCandidates.push(...records);
           } catch (error) {
             const failure = { query_id: query.query_id, endpoint_id: endpoint.endpoint_id, code: error.code || 'SOURCE_REQUEST_FAILED', message: error.message };
-            queryFailures.push(failure); failures.push(failure);
+            queryFailures.push(failure);
+            failures.push(failure);
           }
         }
         candidates.push(...queryCandidates);
         const status = completedEndpoints === 0 ? 'RETRIEVAL_FAILED' : queryCandidates.length ? 'FOUND' : 'NOT_FOUND';
         queryResults.push(Object.freeze({
-          query_id: String(query.query_id), retrieval_status: status,
+          query_id: String(query.query_id),
+          retrieval_status: status,
           candidate_record_ids: Object.freeze([...new Set(queryCandidates.map(recordIdentity).filter(Boolean))].sort()),
           error_code: status === 'RETRIEVAL_FAILED' ? (queryFailures[0]?.code || 'OFFICIAL_SOURCE_ALL_FAILED') : null,
-          endpoint_count: endpoints.length, completed_endpoint_count: completedEndpoints
+          endpoint_count: endpoints.length,
+          completed_endpoint_count: completedEndpoints
         }));
       }
 
@@ -193,4 +249,12 @@ function createFreeOfficialLiveProvider(options = {}) {
   });
 }
 
-module.exports = { applyTemplate, createFreeOfficialLiveProvider, getPath, mapRecord, parseResponse };
+module.exports = {
+  applyTemplate,
+  compileQueryTemplate,
+  createFreeOfficialLiveProvider,
+  escapeSparqlLiteral,
+  getPath,
+  mapRecord,
+  parseResponse
+};

@@ -13,6 +13,8 @@ on:
       - 'docker-compose.evidence.yml'
       - 'scripts/evidence-live-smoke.js'
       - 'test/evidence-search-provider-adapter.test.js'
+      - 'test/evidence-search-live-query-template.test.js'
+      - 'package.json'
       - '.github/workflows/evidence-search.yml'
 
 permissions:
