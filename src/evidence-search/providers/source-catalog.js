@@ -87,26 +87,50 @@ function validateCatalogProviderCoverage(catalog, providerDefinitions = []) {
       .filter((provider) => provider && provider.enabled !== false)
       .map((provider) => [String(provider.provider_id || ''), provider])
   );
-  const catalogIds = new Set(catalog.sources.map((source) => source.source_id));
+  const catalogById = new Map(catalog.sources.map((source) => [source.source_id, source]));
 
   for (const provider of enabledProviders.values()) {
+    const providerId = String(provider.provider_id || '');
     const sourceIds = Array.isArray(provider.catalog_source_ids) ? provider.catalog_source_ids.map(String) : [];
     if (!sourceIds.length) {
-      throw catalogError(`enabled provider ${provider.provider_id} must reference catalog_source_ids`, 'EVIDENCE_PROVIDER_CATALOG_BINDING_REQUIRED');
+      throw catalogError(`enabled provider ${providerId} must reference catalog_source_ids`, 'EVIDENCE_PROVIDER_CATALOG_BINDING_REQUIRED');
     }
     for (const sourceId of sourceIds) {
-      if (!catalogIds.has(sourceId)) {
-        throw catalogError(`provider ${provider.provider_id} references unknown catalog source ${sourceId}`, 'EVIDENCE_PROVIDER_CATALOG_SOURCE_UNKNOWN');
+      const source = catalogById.get(sourceId);
+      if (!source) {
+        throw catalogError(`provider ${providerId} references unknown catalog source ${sourceId}`, 'EVIDENCE_PROVIDER_CATALOG_SOURCE_UNKNOWN');
+      }
+      if (source.runtime_state !== 'SEARCHABLE') {
+        throw catalogError(
+          `enabled provider ${providerId} is bound to non-searchable catalog source ${sourceId} (${source.runtime_state})`,
+          'EVIDENCE_PROVIDER_CATALOG_STATE_MISMATCH'
+        );
+      }
+      if (source.provider_id !== providerId) {
+        throw catalogError(
+          `catalog source ${sourceId} provider_id ${source.provider_id || 'null'} does not match enabled provider ${providerId}`,
+          'EVIDENCE_PROVIDER_CATALOG_BINDING_MISMATCH'
+        );
       }
     }
   }
 
   const searchableCoverage = new Map(REQUIRED_DOMAINS.map((domain) => [domain, new Set()]));
   for (const source of catalog.sources) {
-    if (source.runtime_state !== 'SEARCHABLE' || !source.provider_id) continue;
+    if (source.runtime_state !== 'SEARCHABLE') continue;
+    if (!source.provider_id) {
+      throw catalogError(`searchable source ${source.source_id} has no provider_id`, 'EVIDENCE_SEARCHABLE_SOURCE_PROVIDER_REQUIRED');
+    }
     const provider = enabledProviders.get(source.provider_id);
     if (!provider) {
       throw catalogError(`searchable source ${source.source_id} has no enabled provider ${source.provider_id}`, 'EVIDENCE_SEARCHABLE_SOURCE_PROVIDER_MISSING');
+    }
+    const providerSourceIds = Array.isArray(provider.catalog_source_ids) ? provider.catalog_source_ids.map(String) : [];
+    if (!providerSourceIds.includes(source.source_id)) {
+      throw catalogError(
+        `searchable source ${source.source_id} is not reverse-bound by provider ${source.provider_id}`,
+        'EVIDENCE_SEARCHABLE_SOURCE_REVERSE_BINDING_MISSING'
+      );
     }
     const providerDomains = new Set((provider.domains || []).map((value) => String(value).toUpperCase()));
     for (const domain of source.domains) {

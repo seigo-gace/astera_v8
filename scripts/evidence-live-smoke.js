@@ -21,7 +21,7 @@ async function runProvider(provider, definition) {
       schema_version: 'astera.evidence-search.provider-plan.v1',
       phase: 'INITIAL',
       request_id: `live-${provider.provider_id}`,
-      query_plan_hash: 'live-public-specialist-smoke-v3',
+      query_plan_hash: 'live-public-specialist-smoke-v4',
       effective_as_of: new Date().toISOString(),
       domain_lens: { id: domain },
       conditions: [],
@@ -50,6 +50,51 @@ async function runProvider(provider, definition) {
   }
 }
 
+function assertCatalogProviderTruth(catalog, parsed) {
+  const catalogById = new Map(catalog.sources.map((source) => [source.source_id, source]));
+  const enabledDefinitions = (parsed.providers || []).filter((provider) => provider && provider.enabled !== false);
+  const definitionsById = new Map(enabledDefinitions.map((provider) => [String(provider.provider_id || ''), provider]));
+
+  for (const definition of enabledDefinitions) {
+    const providerId = String(definition.provider_id || '');
+    const sourceIds = Array.isArray(definition.catalog_source_ids)
+      ? definition.catalog_source_ids.map(String)
+      : [];
+    if (!sourceIds.length) throw new Error(`enabled provider ${providerId} has no catalog_source_ids`);
+    for (const sourceId of sourceIds) {
+      const source = catalogById.get(sourceId);
+      if (!source) throw new Error(`enabled provider ${providerId} references missing catalog source ${sourceId}`);
+      if (source.runtime_state !== 'SEARCHABLE') {
+        throw new Error(`catalog source ${sourceId} is bound to enabled provider ${providerId} but runtime_state=${source.runtime_state}`);
+      }
+      if (source.provider_id !== providerId) {
+        throw new Error(`catalog source ${sourceId} provider_id=${source.provider_id || 'null'} does not match enabled provider ${providerId}`);
+      }
+    }
+  }
+
+  for (const source of catalog.sources) {
+    if (source.runtime_state !== 'SEARCHABLE') continue;
+    if (!source.provider_id) throw new Error(`SEARCHABLE catalog source ${source.source_id} has no provider_id`);
+    const definition = definitionsById.get(source.provider_id);
+    if (!definition) throw new Error(`SEARCHABLE catalog source ${source.source_id} points to disabled or missing provider ${source.provider_id}`);
+    const sourceIds = Array.isArray(definition.catalog_source_ids)
+      ? definition.catalog_source_ids.map(String)
+      : [];
+    if (!sourceIds.includes(source.source_id)) {
+      throw new Error(`SEARCHABLE catalog source ${source.source_id} is not reverse-bound by provider ${source.provider_id}`);
+    }
+  }
+
+  return {
+    enabled_provider_count: enabledDefinitions.length,
+    searchable_source_count: catalog.sources.filter((source) => source.runtime_state === 'SEARCHABLE').length,
+    searchable_baseline_source_count: catalog.sources.filter(
+      (source) => source.baseline_registry === true && source.runtime_state === 'SEARCHABLE'
+    ).length
+  };
+}
+
 async function main() {
   const { absolute, parsed } = readConfig(configFile);
   const catalog = loadEvidenceSourceCatalog(absolute, parsed.source_catalog);
@@ -58,8 +103,12 @@ async function main() {
   if (baselineIds.length < 18) throw new Error(`expected at least 18 baseline public specialist sources, got ${baselineIds.length}`);
   if (catalog.policy?.source_count_limit !== null) throw new Error('public source catalog must not have a fixed count ceiling');
 
+  const truth = assertCatalogProviderTruth(catalog, parsed);
   const providers = loadEvidenceProviders({ configFile });
   if (providers.length < 10) throw new Error(`expected broad public specialist provider coverage, got ${providers.length}`);
+  if (providers.length !== truth.enabled_provider_count) {
+    throw new Error(`provider loader mismatch: definitions=${truth.enabled_provider_count}, loaded=${providers.length}`);
+  }
   if (providers.every((provider) => /^(github|gitlab)-/.test(provider.provider_id))) {
     throw new Error('public specialist evidence search must not be limited to GitHub/GitLab');
   }
@@ -91,8 +140,10 @@ async function main() {
     status: failed.length ? 'LIVE_SEARCH_FAILED' : 'LIVE_SEARCH_OK',
     baseline_source_count: baselineIds.length,
     catalog_source_count: catalog.sources.length,
-    searchable_source_count: catalog.sources.filter((source) => source.runtime_state === 'SEARCHABLE').length,
+    searchable_source_count: truth.searchable_source_count,
+    searchable_baseline_source_count: truth.searchable_baseline_source_count,
     enabled_provider_count: providers.length,
+    catalog_provider_truth: 'CONSISTENT',
     all_domain_coverage: coverage,
     providers: results,
     failed_provider_count: failed.length,
