@@ -48,3 +48,5 @@ jobs:
           timeout 240s node --test "${files[@]}" | tee /tmp/evidence-combined.tap
           grep -Eq '^# tests [1-9][0-9]*$' /tmp/evidence-combined.tap
           grep -Eq '^# fail 0$' /tmp/evidence-combined.tap
+
+# lifecycle-fix-rerun: 1
