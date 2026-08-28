@@ -107,47 +107,56 @@ test('decision-materials calls Evidence Search API at the canonical search bound
   });
   const engine = new AsteraEngine({ logger, evidenceSearchClient: client });
 
-  const out = await engine.process({
-    question: 'Verify the current API compatibility using official evidence. Migrate the API in stages. Verify regression tests before completion. Success requires rollback capability.',
-    language: 'en'
-  }, { id: 'tenant-auto-api' });
+  try {
+    const out = await engine.process({
+      question: 'Verify the current API compatibility using official evidence. Migrate the API in stages. Verify regression tests before completion. Success requires rollback capability.',
+      language: 'en'
+    }, { id: 'tenant-auto-api' });
 
-  assert.equal(out.result.type, 'cognitive_map');
-  assert.equal(out.result.non_ai, true);
-  assert.equal(out.runtime.ai_used, false);
-  assert.equal(out.runtime.llm_called, false);
-  assert.ok(apiCalls.length >= 1);
-  for (const call of apiCalls) {
-    assert.equal(call.url, 'http://evidence.test/internal/v1/evidence/search');
-    assert.equal(call.context.tenantId, 'tenant-auto-api');
-    assert.equal(call.payload.search.free_projection, true);
-    assert.equal(call.payload.search.free_current, true);
-    assert.equal(call.payload.paid_search.enabled, false);
-    assert.ok(Array.isArray(call.payload.upstream_search_plan?.queries));
-    assert.ok(call.payload.upstream_search_plan.queries.length > 0);
-    assert.deepEqual(call.payload.preplanned_queries, call.payload.upstream_search_plan.queries);
+    assert.equal(out.result.type, 'cognitive_map');
+    assert.equal(out.result.non_ai, true);
+    assert.equal(out.runtime.ai_used, false);
+    assert.equal(out.runtime.llm_called, false);
+    assert.ok(apiCalls.length >= 1);
+    for (const call of apiCalls) {
+      assert.equal(call.url, 'http://evidence.test/internal/v1/evidence/search');
+      assert.equal(call.context.tenantId, 'tenant-auto-api');
+      assert.equal(call.payload.search.free_projection, true);
+      assert.equal(call.payload.search.free_current, true);
+      assert.equal(call.payload.paid_search.enabled, false);
+      assert.ok(Array.isArray(call.payload.upstream_search_plan?.queries));
+      assert.ok(call.payload.upstream_search_plan.queries.length > 0);
+      assert.deepEqual(call.payload.preplanned_queries, call.payload.upstream_search_plan.queries);
+    }
+    assert.ok(apiCalls.some((call) => call.payload.upstream_search_plan.planned_query_roles.includes('COUNTER')));
+    assert.equal(events.filter((event) => event.type === 'process_completed').length, 1);
+    assert.ok(out.result.task_results.some((result) => result.evidence?.source_status === 'FINAL_VALID'));
+  } finally {
+    await engine.destroy();
   }
-  assert.ok(apiCalls.some((call) => call.payload.upstream_search_plan.planned_query_roles.includes('COUNTER')));
-  assert.equal(events.filter((event) => event.type === 'process_completed').length, 1);
-  assert.ok(out.result.task_results.some((result) => result.evidence?.source_status === 'FINAL_VALID'));
 });
 
 test('missing Evidence Search API client fails closed instead of silently continuing with NOT_PROVIDED', async () => {
   const events = [];
   const logger = { write(event) { events.push(event); } };
   const engine = new AsteraEngine({ logger });
-  const out = await engine.process({
-    question: 'Verify the current API compatibility using official evidence.',
-    language: 'en'
-  }, { id: 'tenant-no-evidence-api' });
 
-  const searched = out.result.task_results.filter((result) =>
-    Array.isArray(result.task?.canonical_plan?.search_plan?.queries)
-      && result.task.canonical_plan.search_plan.queries.length > 0
-  );
-  assert.ok(searched.length >= 1);
-  assert.ok(searched.every((result) => result.evidence?.source_status === 'REJECTED_SEARCH_NOT_EXECUTED'));
-  assert.ok(searched.every((result) => result.evidence?.search_state === 'NOT_EXECUTED'));
-  assert.ok(searched.every((result) => result.canonical?.records?.every((record) => record.confirmation?.status === 'UNDETERMINED')));
-  assert.equal(events.filter((event) => event.type === 'process_completed').length, 1);
+  try {
+    const out = await engine.process({
+      question: 'Verify the current API compatibility using official evidence.',
+      language: 'en'
+    }, { id: 'tenant-no-evidence-api' });
+
+    const searched = out.result.task_results.filter((result) =>
+      Array.isArray(result.task?.canonical_plan?.search_plan?.queries)
+        && result.task.canonical_plan.search_plan.queries.length > 0
+    );
+    assert.ok(searched.length >= 1);
+    assert.ok(searched.every((result) => result.evidence?.source_status === 'REJECTED_SEARCH_NOT_EXECUTED'));
+    assert.ok(searched.every((result) => result.evidence?.search_state === 'NOT_EXECUTED'));
+    assert.ok(searched.every((result) => result.canonical?.records?.every((record) => record.confirmation?.status === 'UNDETERMINED')));
+    assert.equal(events.filter((event) => event.type === 'process_completed').length, 1);
+  } finally {
+    await engine.destroy();
+  }
 });
