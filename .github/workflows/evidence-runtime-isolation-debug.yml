@@ -1,0 +1,50 @@
+name: Evidence Runtime Isolation Debug
+
+on:
+  push:
+    branches:
+      - feature/evidence-search-v2-4
+    paths:
+      - .github/workflows/evidence-runtime-isolation-debug.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Isolate every Evidence runtime test
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(test/evidence*.test.js)
+          if (( ${#files[@]} == 0 )); then
+            echo 'Evidence runtime test set is empty' >&2
+            exit 1
+          fi
+          echo "Evidence test files: ${#files[@]}"
+          for f in "${files[@]}"; do
+            [[ -f "$f" ]] || { echo "missing Evidence test: $f" >&2; exit 1; }
+            safe="$(basename "$f" .test.js | tr -c 'A-Za-z0-9_.-' '_')"
+            echo "=== isolated Evidence test: $f ==="
+            timeout 60s node --test "$f" | tee "/tmp/${safe}.tap"
+            grep -Eq '^# tests [1-9][0-9]*$' "/tmp/${safe}.tap"
+            grep -Eq '^# fail 0$' "/tmp/${safe}.tap"
+          done
+      - name: Combined Evidence runtime tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(test/evidence*.test.js)
+          (( ${#files[@]} > 0 ))
+          timeout 240s node --test "${files[@]}" | tee /tmp/evidence-combined.tap
+          grep -Eq '^# tests [1-9][0-9]*$' /tmp/evidence-combined.tap
+          grep -Eq '^# fail 0$' /tmp/evidence-combined.tap
