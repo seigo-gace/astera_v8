@@ -7,18 +7,13 @@ const { createFreeOfficialLiveProvider } = require('./free-official-live-provide
 const { createBsddLiveProvider } = require('./bsdd-live-provider');
 const { loadEvidenceSourceCatalog, validateCatalogProviderCoverage } = require('./source-catalog');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ROUTING_OVERRIDES } = require('./public-specialist-provider-definitions');
-const {
-  PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN,
-  ROUTING_OVERRIDES_ALL_DOMAIN
-} = require('./public-specialist-provider-definitions-all-domain');
+const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ROUTING_OVERRIDES_ALL_DOMAIN } = require('./public-specialist-provider-definitions-all-domain');
+const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION, ROUTING_OVERRIDES_SPECIALIST_EXPANSION } = require('./public-specialist-provider-definitions-specialist-expansion');
 
 const FREE_SOURCE_CLASSES = new Set(['FREE_PROJECTION', 'FREE_OFFICIAL_LIVE']);
 const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze(['example.com', 'example.net', 'example.org']);
 const RESERVED_PLACEHOLDER_TLDS = Object.freeze(['example', 'invalid', 'localhost', 'test']);
-const PUBLIC_ROUTING_OVERRIDES = Object.freeze({
-  ...ROUTING_OVERRIDES,
-  ...ROUTING_OVERRIDES_ALL_DOMAIN
-});
+const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION });
 
 function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') { const error = new Error(message); error.code = code; return error; }
 function normalizeConfiguredHost(value) { return String(value || '').trim().toLowerCase().replace(/\.$/, ''); }
@@ -44,13 +39,7 @@ function readConfig(filePath) {
   if (base.schema_version !== 'astera.evidence-providers.v1') throw configError('unsupported evidence provider configuration schema', 'EVIDENCE_PROVIDER_CONFIG_SCHEMA_UNSUPPORTED');
   if (!Array.isArray(base.providers)) throw configError('evidence provider configuration providers must be an array');
   const publicCatalog = String(base.source_catalog || '') === './evidence-source-catalog.public.json';
-  const providers = publicCatalog
-    ? [
-        ...base.providers,
-        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS,
-        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN
-      ]
-    : [...base.providers];
+  const providers = publicCatalog ? [...base.providers, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION] : [...base.providers];
   const ids = new Set();
   for (const provider of providers) {
     const id = String(provider?.provider_id || '');
@@ -58,8 +47,7 @@ function readConfig(filePath) {
     if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE');
     ids.add(id);
   }
-  const parsed = { ...base, providers };
-  return { absolute, parsed };
+  return { absolute, parsed: { ...base, providers } };
 }
 function safeProviderId(value, index) { const id = String(value || '').trim(); if (!/^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$/i.test(id)) throw configError(`providers[${index}].provider_id is invalid`); return id; }
 function resolveDataFile(configFile, value, index) { if (typeof value !== 'string' || !value.trim()) throw configError(`providers[${index}].file_path is required`); const filePath = path.resolve(path.dirname(configFile), value); const stat = fs.statSync(filePath); if (!stat.isFile()) throw configError(`providers[${index}].file_path must reference a file`); return filePath; }
