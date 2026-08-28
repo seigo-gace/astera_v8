@@ -334,7 +334,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN = Object.freeze([
     domains: ['G18', 'G37'],
     capabilities: [],
     allowed_hosts: ['oeis.org'],
-    smoke_query: 'id:A000045',
+    smoke_query: 'A001011',
     endpoints: [{
       endpoint_id: 'oeis-json-search',
       url_template: 'https://oeis.org/search?q={query}&fmt=json',
