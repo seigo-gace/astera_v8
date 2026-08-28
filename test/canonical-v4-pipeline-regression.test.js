@@ -13,7 +13,8 @@ const {
   deterministicPerspectiveExpansion,
   fragmentText
 } = require('../src/canonical-claim-runtime');
-const { compileQueryPlan } = require('../src/evidence-search/core/query-plan-compiler');
+const { searchRequestFor } = require('../src/canonical-evidence-resolver');
+const { planQueriesForClaim } = require('../src/v4-canonical/query-planner');
 
 const silentLogger={write(){}};
 const tenant={id:'test',is_global:true,plan:'admin'};
@@ -69,18 +70,35 @@ test('Task and Claim are distinct stages and every external Claim has a COUNTER 
   for(const claim of plan.claims){const policy=plan.policy_by_claim_id[claim.claim_id];if(policy.external_search_required)assert.ok(policy.planned_query_roles.includes('COUNTER'));}
 });
 
-test('upstream Search Plan is authoritative and Evidence Search does not invent semantic query roles',()=>{
-  const task=taskForClaim('APIã¯ç¾è¡Œv2ã§ã‚ã‚‹ã€‚');
-  const upstream=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}).search_plan;
-  const plan=compileQueryPlan({question:'APIã¯ç¾è¡Œv2ã§ã‚ã‚‹ã€‚',domain_lens:{id:'G01'},upstream_search_plan:upstream,paid_search:{enabled:false}},{execution_time:'2026-08-20T00:00:00.000Z'});
-  assert.equal(plan.planning_authority,'UPSTREAM_CANONICAL');
-  assert.ok(plan.planned_query_roles.includes('COUNTER'));
-  assert.deepEqual(plan.primary_query_set.map((query)=>query.text),upstream.queries.map((query)=>query.text));
-  assert.equal(plan.primary_query_set.every((query)=>query.claim_id),true);
+test('upstream Search Plan is authoritative and the production Evidence boundary forwards it without inventing semantic query roles',()=>{
+  const baseTask=taskForClaim('APIã¯ç¾è¡Œv2ã§ã‚ã‚‹ã€‚');
+  const canonicalPlan=buildCanonicalTaskPlan(baseTask,{primary:{id:'G01'}});
+  const upstream=canonicalPlan.search_plan;
+  const task={...baseTask,canonical_plan:canonicalPlan,domain:{primary:{id:'G01'}}};
+  const request=searchRequestFor(task,{context:''},tenant,'ev-request');
+  assert.equal(upstream.planning_authority,'ASTERA_DECISION_MATERIALS_V4');
+  assert.ok(upstream.planned_query_roles.includes('COUNTER'));
+  assert.deepEqual(request.upstream_search_plan,upstream);
+  assert.deepEqual(request.preplanned_queries,upstream.queries);
+  assert.deepEqual(
+    request.preplanned_queries.map((query)=>({query_id:query.query_id,claim_id:query.claim_id,role:query.role,text:query.text})),
+    upstream.queries.map((query)=>({query_id:query.query_id,claim_id:query.claim_id,role:query.role,text:query.text}))
+  );
 });
 
-test('upstream Search Plan without COUNTER is rejected before retrieval',()=>{
-  assert.throws(()=>compileQueryPlan({question:'x',domain_lens:{id:'G01'},upstream_search_plan:{queries:[{query_id:'q1',claim_id:'c1',role:'OFFICIAL',text:'x å…¬å¼'}]},paid_search:{enabled:false}}),/counter query is mandatory/i);
+test('upstream Canonical query planning rejects an external-search policy without COUNTER before retrieval',()=>{
+  const task=taskForClaim('APIã¯ç¾è¡Œv2ã§ã‚ã‚‹ã€‚');
+  const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
+  const claim=plan.claims[0];
+  const policy={
+    ...plan.policy_by_claim_id[claim.claim_id],
+    external_search_required:true,
+    planned_query_roles:[QUERY_ROLES.OFFICIAL]
+  };
+  assert.throws(
+    ()=>planQueriesForClaim(claim,policy,{primary:{id:'G01'}}),
+    /counter query role is mandatory/i
+  );
 });
 
 test('G1-G7 are the only confirmation boundary; high Evidence quality alone is not truth',()=>{
@@ -99,127 +117,39 @@ test('REJECTED Evidence Search result cannot pass G5 even when planned roles, qu
   const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),claim=plan.claims[0],rejected=validEvidence(claim.raw_text,plan.search_plan.queries);
   rejected.status='REJECTED_BLOCKING';
   rejected.quality.final={status:'REJECTED_BLOCKING',phase:'FINAL',score_bp:9700,gates:{initial_minimum_bp:8000,final_minimum_bp:9500},blocking_reasons:[]};
-  const result=evaluateCanonicalTaskPlan(plan,rejected);
-  assert.equal(result.records[0].confirmation.status,'UNDETERMINED');
-  assert.equal(result.records[0].confirmation.gates.G5,false);
-  assert.equal(result.records[0].confirmation.gate_details.evidence_search_status.status,'REJECTED_BLOCKING');
-  assert.ok(result.records[0].confirmation.reasons.includes('RETRIEVAL_FAILED'));
-});
-
-test('source code can be locally confirmed as CODE_STRUCTURE without external search',()=>{
-  const text='```js\nconst answer = 42;\n```',task=taskForClaim(text);task.target='answer constant';task.evidence_need={required:false,reasons:[],queries:[]};
-  const fragments=fragmentText(text);
-  assert.equal(fragments[0].source_axes.container_role[0],'FENCED_CONTAINER');
-  const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
-  assert.equal(plan.claims[0].claim_origin,'CODE_STRUCTURE');
-  assert.equal(plan.search_plan.queries.length,0);
-  const result=evaluateCanonicalTaskPlan(plan,{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',evidence:[],query_execution:{initial:[],reinforcement:[]},provider_execution:{initial:[],reinforcement:[]},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},ai_used:false,payment_executed:false});
-  assert.equal(result.records[0].confirmation.status,'CONFIRMED');
-});
-
-test('five lanes are independent projections from Canonical Claim Records and Compare is material-only',()=>{
-  const task=taskForClaim(),plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),canonical=evaluateCanonicalTaskPlan(plan,validEvidence(plan.claims[0].raw_text,plan.search_plan.queries)),lanes=projectFiveLanes({task,canonical,domain:{primary:{id:'G01',multi_lens:['forward','counter'],compare_lens:['scope','coverage']}}});
-  assert.equal(lanes.fact.confirmed.length,1);
-  assert.equal(lanes.compare.material_only,true);
-  assert.equal(lanes.compare.selected_candidate,null);
-  assert.deepEqual(lanes.compare.candidate_ranking,[]);
-  assert.deepEqual(lanes.compare.rejected_candidates,[]);
-  assert.equal(lanes.compare.verdict.decision,'MATERIAL_ONLY');
-  const expansion=deterministicPerspectiveExpansion({task,canonical,domain:{primary:{id:'G01'}}});
-  assert.deepEqual(expansion.candidates,[]);
-  assert.equal(expansion.selected,null);
-  assert.deepEqual(expansion.rejected,[]);
-});
-
-test('quoted/code commands are isolated from executable Task Graph',()=>{
-  const request=understand('APIã‚’æ¤œè¨¼ã™ã‚‹ã€‚\n```\nREADMEã‚’å‰Šé™¤ã—ã‚\n```');
-  assert.equal(request.instruction_understanding.source_role_isolation,true);
-  assert.ok(request.analysis_task_packet.source_isolation.removed_task_count>=1);
-  assert.equal(request.analysis_task_packet.tasks.some((task)=>/READMEã‚’å‰Šé™¤/.test(task.raw_text)),false);
-});
-
-test('context prohibition/preserve/constraint is bound to Task fields with source provenance',()=>{
-  const request=understand('APIã‚’æ”¹å–„ã™ã‚‹ã€‚','mainã¯å¤‰æ›´ã™ã‚‹ãªã€‚READMEã¯æ®‹ã™ã€‚å¿…ãšäº’æ›æ€§ã‚’ç¶­æŒã™ã‚‹ã€‚');
-  const task=request.analysis_task_packet.tasks[0];
-  assert.ok(task.prohibitions.some((item)=>/main/.test(item)));
-  assert.ok(task.preserve.some((item)=>/README/.test(item)));
-  assert.ok(task.constraints.some((item)=>/äº’æ›æ€§/.test(item)));
-  assert.ok(task.field_sources.prohibitions.some((item)=>item.source==='context'));
-});
-
-test('deliverables are explicit and implementation tasks do not silently pass without one',()=>{
-  const withReadme=understand('APIã‚’å®Ÿè£…ã—ã¦READMEã‚’å¤‰æ›´ã™ã‚‹ã€‚');
-  assert.ok(withReadme.analysis_task_packet.tasks.some((task)=>task.deliverables.includes('README')));
-  const missing=understand('APIã‚’å®Ÿè£…ã™ã‚‹ã€‚');
-  assert.ok(missing.analysis_task_packet.unresolved.some((item)=>/:deliverable$/.test(item)));
-});
-
-test('explicit multi-parent dependencies are preserved and cycles become hard blockers',()=>{
-  const multi=understand('Aã‚’å®Ÿè£…ã™ã‚‹ã€‚Bã‚’å®Ÿè£…ã™ã‚‹ã€‚T01ã¨T02å®Œäº†å¾Œã«Cã‚’å®Ÿè£…ã™ã‚‹ã€‚');
-  const last=multi.analysis_task_packet.tasks.at(-1);
-  assert.ok(last.depends_on.includes('T01'));
-  assert.ok(last.depends_on.includes('T02'));
-  const cycle=understand('T02å®Œäº†å¾Œã«Aã‚’å®Ÿè£…ã™ã‚‹ã€‚T01å®Œäº†å¾Œã«Bã‚’å®Ÿè£…ã™ã‚‹ã€‚');
-  assert.equal(cycle.analysis_task_packet.task_graph_validation.valid,false);
-  assert.ok(cycle.analysis_task_packet.hard_blockers.some((item)=>/^TASK_GRAPH_CYCLE:/.test(item)));
-  assert.equal(cycle.instruction_understanding.execution_allowed,false);
-});
-
-test('conditions/exceptions become graph branches rather than disappearing into prose',()=>{
-  const request=understand('æ¤œè¨¼ãŒæˆåŠŸã—ãŸå ´åˆã«APIã‚’å®Ÿè£…ã™ã‚‹ã€‚ãŸã ã—äº’æ›æ€§ãŒãªã„å ´åˆã¯åœæ­¢ã™ã‚‹ã€‚');
-  assert.ok(request.analysis_task_packet.branches.some((branch)=>branch.type==='IF'));
-  assert.ok(request.analysis_task_packet.branches.some((branch)=>branch.type==='EXCEPTION'));
-});
-
-test('corrections preserve supersession history instead of deleting the old Task',()=>{
-  const request=understand('Aã‚’å®Ÿè£…ã™ã‚‹ã€‚è¨‚æ­£ã€Aã§ã¯ãªãBã‚’å®Ÿè£…ã™ã‚‹ã€‚');
-  assert.ok(request.analysis_task_packet.supersession_relations.length>=1);
-  const relation=request.analysis_task_packet.supersession_relations[0];
-  assert.equal(relation.supersedes,'T01');
-  assert.equal(relation.superseded_by,'T02');
-  assert.ok(request.analysis_task_packet.tasks[0].superseded_by.includes('T02'));
-  assert.ok(request.analysis_task_packet.tasks[1].supersedes.includes('T01'));
-});
-
-test('same Task input produces deterministic graph, Claim IDs and Search Plan IDs',()=>{
-  const question='ç¾åœ¨ã®APIä»•æ§˜ã‚’å…¬å¼æ ¹æ‹ ã§æ¤œè¨¼ã™ã‚‹ã€‚ãã®å¾ŒREADMEã‚’å¤‰æ›´ã™ã‚‹ã€‚mainã¯å¤‰æ›´ã™ã‚‹ãªã€‚',a=understand(question),b=understand(question);
-  assert.equal(JSON.stringify(a.analysis_task_packet),JSON.stringify(b.analysis_task_packet));
-  const task=taskForClaim('ç¾åœ¨ã®APIã¯v2ã§ã‚ã‚‹ã€‚'),p1=buildCanonicalTaskPlan(task,{primary:{id:'G01'}}),p2=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
-  assert.equal(JSON.stringify(p1),JSON.stringify(p2));
-});
-
-test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/recommends',async()=>{
-  class EvidenceBackedEngine extends CanonicalAsteraEngine {
-    constructor(options){super(options);this._fixtureEvidence=null;}
-    setFixtureEvidence(packet){this._fixtureEvidence=packet;}
-    async resolveEvidenceForTask(){return this._fixtureEvidence;}
-  }
-  const engine=new EvidenceBackedEngine({poolSize:2,logger:silentLogger});
-  try{
-    const claim='Node.js 22ã¯æœ¬ç•ªå¯¾å¿œã—ã¦ã„ã‚‹ã€‚';
-    const prepared=engine.prepareRequest({question:claim});
-    const task=prepared.analysis_task_packet.tasks[0];
-    const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
-    const evidence=validEvidence(claim,plan.search_plan.queries);
-    engine.setFixtureEvidence(evidence);
-    const evaluated=evaluateCanonicalTaskPlan(plan,evidence);
-    assert.ok(evaluated.confirmed_count>=1);
-    const out=await engine.process({question:claim},tenant);
-    assert.equal(out.result.non_ai,true);
-    assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
-    assert.equal(out.runtime.engine,'v8_canonical_global_rules');
-    assert.equal(out.result.judgment.order[6],'07_evidence_status');
-    assert.equal(Object.hasOwn(out.result.judgment,'07_recommendation'),false);
-    assert.equal(out.result.comparison.material_only,true);
-    assert.equal(out.result.comparison.selected_candidate,null);
-    assert.deepEqual(out.result.comparison.candidate_ranking,[]);
-    assert.equal(Object.hasOwn(out.result.comparison,'score'),false);
-    assert.deepEqual(out.result.perspective_expansion.candidates,[]);
-    assert.equal(out.result.perspective_expansion.selected,null);
-    assert.match(out.material.text,/æ ¹æ‹ æˆç«‹çŠ¶æ…‹|Evidence Status/);
-  }finally{await engine.destroy();}
-});
-
-test('without G1-G7 evidence, direct assertion remains UNDETERMINED',async()=>{
-  await withEngine(async(engine)=>{const out=await engine.process({question:'Node.js 22ã¯æœ¬ç•ªå¯¾å¿œã—ã¦ã„ã‚‹ã€‚'},tenant);assert.equal(out.result.canonical_claims.confirmed_count,0);assert.ok(out.result.canonical_claims.undetermined_count>=1);assert.equal(out.result.facts.confirmed.length,0);});
-});
+  c²È="25•áÐÁÉ½¡¥‰¥Ñ¥½¸½ÁÉ•Í•ÉÙ”½½¹ÍÑÉ…¥¹Ð¥Ì‰½Õ¹Ñ¼Q…Í¬™¥•±‘ÌÝ¥Ñ Í½ÕÉ”ÁÉ½Ù•¹…¹”œ° ¤ôùì(€½¹ÍÐÉ•ÅÕ•ÍÐõÕ¹‘•ÉÍÑ…¹ A'Ž
+KšRç–ZŽgŽ
+/Žœ°µ…¥»Ž¿–’'šnÓŽgŽ
+/Ž«Ž	I5Ž¿šº/ŽgŽ–þŽk’êKš>ošŸŽ
+KžÚ·š2ŽgŽ
+/Žœ¤ì(€½¹ÍÐÑ…Í¬õÉ•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­ÍlÁtì(€…ÍÍ•ÉÐ¹½¬¡Ñ…Í¬¹ÁÉ½¡¥‰¥Ñ¥½¹Ì¹Í½µ” ¡¥Ñ•´¤ôø½µ…¥¸¼¹Ñ•ÍÐ¡¥Ñ•´¤¤¤ì(€…ÍÍ•ÉÐ¹½¬¡Ñ…Í¬¹ÁÉ•Í•ÉÙ”¹Í½µ” ¡¥Ñ•´¤ôø½I5¼¹Ñ•ÍÐ¡¥Ñ•´¤¤¤ì(€…ÍÍ•ÉÐ¹½¬¡Ñ…Í¬¹½¹ÍÑÉ…¥¹ÑÌ¹Í½µ” ¡¥Ñ•´¤ôø¿’êKš>ošœ¼¹Ñ•ÍÐ¡¥Ñ•´¤¤¤ì(€…ÍÍ•ÉÐ¹½¬¡Ñ…Í¬¹™¥•±‘}Í½ÕÉ•Ì¹ÁÉ½¡¥‰¥Ñ¥½¹Ì¹Í½µ” ¡¥Ñ•´¤ôù¥Ñ•´¹Í½ÕÉ”ôôô½¹Ñ•áÐœ¤¤ì)ô¤ì()Ñ•ÍÐ ‘•±¥Ù•É…‰±•Ì…É”•áÁ±¥¥Ð…¹¥µÁ±•µ•¹Ñ…Ñ¥½¸Ñ…Í­Ì‘¼¹½ÐÍ¥±•¹Ñ±äÁ…ÍÌÝ¥Ñ¡½ÕÐ½¹”œ° ¤ôùì(€½¹ÍÐÝ¥Ñ¡I•…‘µ”õÕ¹‘•ÉÍÑ…¹ A'Ž
+K–º¢ŽŽ_Ž™I5Ž
+K–’'šnÓŽgŽ
+/Žœ¤ì(€…ÍÍ•ÉÐ¹½¬¡Ý¥Ñ¡I•…‘µ”¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­Ì¹Í½µ” ¡Ñ…Í¬¤ôùÑ…Í¬¹‘•±¥Ù•É…‰±•Ì¹¥¹±Õ‘•Ì I5œ¤¤¤ì(€½¹ÍÐµ¥ÍÍ¥¹œõÕ¹‘•ÉÍÑ…¹ A'Ž
+K–º¢ŽŽgŽ
+/Žœ¤ì(€…ÍÍ•ÉÐ¹½¬¡µ¥ÍÍ¥¹œ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Õ¹É•Í½±Ù•¹Í½µ” ¡¥Ñ•´¤ôø¼é‘•±¥Ù•É…‰±”¼¹Ñ•ÍÐ¡¥Ñ•´¤¤¤ì)ô¤ì()Ñ•ÍÐ •áÁ±¥¥ÐµÕ±Ñ¤µÁ…É•¹Ð‘•Á•¹‘•¹¥•Ì…É”ÁÉ•Í•ÉÙ•…¹å±•Ì‰•½µ”¡…É‰±½­•ÉÌœ° ¤ôùì(€½¹ÍÐµÕ±Ñ¤õÕ¹‘•ÉÍÑ…¹ Ž
+K–º¢ŽŽgŽ
+/Ž	Ž
+K–º¢ŽŽgŽ
+/Ž	PÀÇŽ¡PÀË–º3’ê–ú3Ž­Ž
+K–º¢ŽŽgŽ
+/Žœ¤ì(€½¹ÍÐ±…ÍÐõµÕ±Ñ¤¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­Ì¹…Ð ´Ä¤ì(€…ÍÍ•ÉÐ¹½¬¡±…ÍÐ¹‘•Á•¹‘Í}½¸¹¥¹±Õ‘•Ì PÀÄœ¤¤ì(€…ÍÍ•ÉÐ¹½¬¡±…ÍÐ¹‘•Á•¹‘Í}½¸¹¥¹±Õ‘•Ì PÀÈœ¤¤ì(€½¹ÍÐå±”õÕ¹‘•ÉÍÑ…¹ PÀË–º3’ê–ú3Ž­Ž
+K–º¢ŽŽgŽ
+/Ž	PÀÇ–º3’ê–ú3Ž­Ž
+K–º¢ŽŽgŽ
+/Žœ¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡å±”¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­}É…Á¡}Ù…±¥‘…Ñ¥½¸¹Ù…±¥±™…±Í”¤ì(€…ÍÍ•ÉÐ¹½¬¡å±”¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹¡…É‘}‰±½­•ÉÌ¹Í½µ” ¡¥Ñ•´¤ôø½yQM-}IA!}e1è¼¹Ñ•ÍÐ¡¥Ñ•´¤¤¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡å±”¹¥¹ÍÑÉÕÑ¥½¹}Õ¹‘•ÉÍÑ…¹‘¥¹œ¹•á•ÕÑ¥½¹}…±±½Ý•±™…±Í”¤ì)ô¤ì()Ñ•ÍÐ ½¹‘¥Ñ¥½¹Ì½•á•ÁÑ¥½¹Ì‰•½µ”É…Á ‰É…¹¡•ÌÉ…Ñ¡•ÈÑ¡…¸‘¥Í…ÁÁ•…É¥¹œ¥¹Ñ¼ÁÉ½Í”œ° ¤ôùì(€½¹ÍÐÉ•ÅÕ•ÍÐõÕ¹‘•ÉÍÑ…¹ Ÿš’s¢¢óŽ3š"C–*Ž_Ž–‚Ó–B#Ž­A'Ž
+K–º¢ŽŽgŽ
+/ŽŽŽƒŽ_’êKš>ošŸŽ3Ž«Ž–‚Ó–B#Ž¿–sš¶‹ŽgŽ
+/Žœ¤ì(€…ÍÍ•ÉÐ¹½¬¡É•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹‰É…¹¡•Ì¹Í½µ” ¡‰É…¹ ¤ôù‰É…¹ ¹ÑåÁ”ôôô%œ¤¤ì(€…ÍÍ•ÉÐ¹½¬¡É•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹‰É…¹¡•Ì¹Í½µ” ¡‰É…¹ ¤ôù‰É…¹ ¹ÑåÁ”ôôôaAQ%=8œ¤¤ì)ô¤ì()Ñ•ÍÐ ½ÉÉ•Ñ¥½¹ÌÁÉ•Í•ÉÙ”ÍÕÁ•ÉÍ•ÍÍ¥½¸¡¥ÍÑ½Éä¥¹ÍÑ•…½˜‘•±•Ñ¥¹œÑ¡”½±Q…Í¬œ° ¤ôùì(€½¹ÍÐÉ•ÅÕ•ÍÐõÕ¹‘•ÉÍÑ…¹ Ž
+K–º¢ŽŽgŽ
+/Ž¢¢š¶ŽŽŸŽ¿Ž«Ž=Ž
+K–º¢ŽŽgŽ
+/Žœ¤ì(€…ÍÍ•ÉÐ¹½¬¡É•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹ÍÕÁ•ÉÍ•ÍÍ¥½¹}É•±…Ñ¥½¹Ì¹±•¹Ñ øôÄ¤ì(€½¹ÍÐÉ•±…Ñ¥½¸õÉ•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹ÍÕÁ•ÉÍ•ÍÍ¥½¹}É•±…Ñ¥½¹ÍlÁtì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•±…Ñ¥½¸¹ÍÕÁ•ÉÍ•‘•Ì°PÀÄœ¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡É•±…Ñ¥½¸¹ÍÕÁ•ÉÍ•‘•‘}‰ä°PÀÈœ¤ì(€…ÍÍ•ÉÐ¹½¬¡É•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­ÍlÁt¹ÍÕÁ•ÉÍ•‘•‘}‰ä¹¥¹±Õ‘•Ì PÀÈœ¤¤ì(€…ÍÍ•ÉÐ¹½¬¡É•ÅÕ•ÍÐ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­ÍlÅt¹ÍÕÁ•ÉÍ•‘•Ì¹¥¹±Õ‘•Ì PÀÄœ¤¤ì)ô¤ì()Ñ•ÍÐ Í…µ”Q…Í¬¥¹ÁÕÐÁÉ½‘Õ•Ì‘•Ñ•Éµ¥¹¥ÍÑ¥ŒÉ…Á °±…¥´%Ì…¹M•…É A±…¸%Ìœ° ¤ôùì(€½¹ÍÐÅÕ•ÍÑ¥½¸ôŸž>û–r£Ž¹A'’îWšžcŽ
+K–³–ò?š‚çš.ƒŽŸš’s¢¢óŽgŽ
+/ŽŽwŽ»–ú1I5Ž
+K–’'šnÓŽgŽ
+/Ž	µ…¥»Ž¿–’'šnÓŽgŽ
+/Ž«Žœ±„õÕ¹‘•ÉÍÑ…¹¡ÅÕ•ÍÑ¥½¸¤±ˆõÕ¹‘•ÉÍÑ…¹¡ÅÕ•ÍÑ¥½¸¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡)M=8¹ÍÑÉ¥¹¥™ä¡„¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¤±)M=8¹ÍÑÉ¥¹¥™ä¡ˆ¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¤¤ì(€½¹ÍÐÑ…Í¬õÑ…Í­½É±…¥´ Ÿž>û–r£Ž¹A'Ž½ØËŽŸŽŽ
+/Žœ¤±ÀÄõ‰Õ¥±‘…¹½¹¥…±Q…Í­A±…¸¡Ñ…Í¬±íÁÉ¥µ…Éäéí¥èÀÄõô¤±ÀÈõ‰Õ¥±‘…¹½¹¥…±Q…Í­A±…¸¡Ñ…Í¬±íÁÉ¥µ…Éäéí¥èÀÄõô¤ì(€…ÍÍ•ÉÐ¹•ÅÕ…°¡)M=8¹ÍÑÉ¥¹¥™ä¡ÀÄ¤±)M=8¹ÍÑÉ¥¹¥™ä¡ÀÈ¤¤ì)ô¤ì()Ñ•ÍÐ …¹½¹¥…°¹¥¹”•áÁ½Í•ÌÙ¥‘•¹”MÑ…ÑÕÌ…Ì5…¥¸à€ŒÜ…¹¹•Ù•ÈÍ•±•ÑÌ½É•½µµ•¹‘Ìœ±…Íå¹Œ ¤ôùì(€±…ÍÌÙ¥‘•¹•	…­•‘¹¥¹”•áÑ•¹‘Ì…¹½¹¥…±ÍÑ•É…¹¥¹”ì(€€€½¹ÍÑÉÕÑ½È¡½ÁÑ¥½¹Ì¥íÍÕÁ•È¡½ÁÑ¥½¹Ì¤íÑ¡¥Ì¹}™¥áÑÕÉ•Ù¥‘•¹”õ¹Õ±°íô(€€€Í•Ñ¥áÑÕÉ•Ù¥‘•¹”¡Á…­•Ð¥íÑ¡¥Ì¹}™¥áÑÕÉ•Ù¥‘•¹”õÁ…­•Ðíô(€€€…Íå¹ŒÉ•Í½±Ù•Ù¥‘•¹•½ÉQ…Í¬ ¥íÉ•ÑÕÉ¸Ñ¡¥Ì¹}™¥áÑÕÉ•Ù¥‘•¹”íô(€ô(€½¹ÍÐ•¹¥¹”õ¹•ÜÙ¥‘•¹•	…­•‘¹¥¹”¡íÁ½½±M¥é”èÈ±±½•ÈéÍ¥±•¹Ñ1½•Éô¤ì(€ÑÉåì(€€€½¹ÍÐ±…¥´ô9½‘”¹©Ì€ÈËŽ¿šr³žV«–¾û–þsŽ_Ž›ŽŽ
+/Žœì(€€€½¹ÍÐÁÉ•Á…É•õ•¹¥¹”¹ÁÉ•Á…É•I•ÅÕ•ÍÐ¡íÅÕ•ÍÑ¥½¸é±…¥µô¤ì(€€€½¹ÍÐÑ…Í¬õÁÉ•Á…É•¹…¹…±åÍ¥Í}Ñ…Í­}Á…­•Ð¹Ñ…Í­ÍlÁtì(€€€½¹ÍÐÁ±…¸õ‰Õ¥±‘…¹½¹¥…±Q…Í­A±…¸¡Ñ…Í¬±íÁÉ¥µ…Éäéí¥èÀÄõô¤ì(€€€½¹ÍÐ•Ù¥‘•¹”õÙ…±¥‘Ù¥‘•¹”¡±…¥´±Á±…¸¹Í•…É¡}Á±…¸¹ÅÕ•É¥•Ì¤ì(€€€•¹¥¹”¹Í•Ñ¥áÑÕÉ•Ù¥‘•¹”¡•Ù¥‘•¹”¤ì(€€€½¹ÍÐ•Ù…±Õ…Ñ•õ•Ù…±Õ…Ñ•…¹½¹¥…±Q…Í­A±…¸¡Á±…¸±•Ù¥‘•¹”¤ì(€€€…ÍÍ•ÉÐ¹½¬¡•Ù…±Õ…Ñ•¹½¹™¥Éµ•‘}½Õ¹ÐøôÄ¤ì(€€€½¹ÍÐ½ÕÐõ…Ý…¥Ð•¹¥¹”¹ÁÉ½•ÍÌ¡íÅÕ•ÍÑ¥½¸é±…¥µô±Ñ•¹…¹Ð¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹¹½¹}…¤±ÑÉÕ”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹‘•¥Í¥½¹}…ÕÑ¡½É¥Ñä°aQI91}=91dœ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹ÉÕ¹Ñ¥µ”¹•¹¥¹”°Øá}…¹½¹¥…±}±½‰…±}ÉÕ±•Ìœ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹©Õ‘µ•¹Ð¹½É‘•ÉlÙt°œÀÝ}•Ù¥‘•¹•}ÍÑ…ÑÕÌœ¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡=‰©•Ð¹¡…Í=Ý¸¡½ÕÐ¹É•ÍÕ±Ð¹©Õ‘µ•¹Ð°œÀÝ}É•½µµ•¹‘…Ñ¥½¸œ¤±™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹½µÁ…É¥Í½¸¹µ…Ñ•É¥…±}½¹±ä±ÑÉÕ”¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹½µÁ…É¥Í½¸¹Í•±•Ñ•‘}…¹‘¥‘…Ñ”±¹Õ±°¤ì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹½µÁ…É¥Í½¸¹…¹‘¥‘…Ñ•}É…¹­¥¹œ±mt¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡=‰©•Ð¹¡…Í=Ý¸¡½ÕÐ¹É•ÍÕ±Ð¹½µÁ…É¥Í½¸°Í½É”œ¤±™…±Í”¤ì(€€€…ÍÍ•ÉÐ¹‘••ÁÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹Á•ÉÍÁ•Ñ¥Ù•}•áÁ…¹Í¥½¸¹…¹‘¥‘…Ñ•Ì±mt¤ì(€€€…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹Á•ÉÍÁ•Ñ¥Ù•}•áÁ…¹Í¥½¸¹Í•±•Ñ•±¹Õ±°¤ì(€€€…ÍÍ•ÉÐ¹µ…Ñ ¡½ÕÐ¹µ…Ñ•É¥…°¹Ñ•áÐ°¿š‚çš.ƒš"Cž®/ž*Ûš-ñÙ¥‘•¹”MÑ…ÑÕÌ¼¤ì(€õ™¥¹…±±åí…Ý…¥Ð•¹¥¹”¹‘•ÍÑÉ½ä ¤íô)ô¤ì()Ñ•ÍÐ Ý¥Ñ¡½ÕÐÄµÜ•Ù¥‘•¹”°‘¥É•Ð…ÍÍ•ÉÑ¥½¸É•µ…¥¹ÌU9QI5%9œ±…Íå¹Œ ¤ôùì(€…Ý…¥ÐÝ¥Ñ¡¹¥¹”¡…Íå¹Œ¡•¹¥¹”¤ôùí½¹ÍÐ½ÕÐõ…Ý…¥Ð•¹¥¹”¹ÁÉ½•ÍÌ¡íÅÕ•ÍÑ¥½¸è9½‘”¹©Ì€ÈËŽ¿šr³žV«–¾û–þsŽ_Ž›ŽŽ
+/Žô±Ñ•¹…¹Ð¤í…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹…¹½¹¥…±}±…¥µÌ¹½¹™¥Éµ•‘}½Õ¹Ð°À¤í…ÍÍ•ÉÐ¹½¬¡½ÕÐ¹É•ÍÕ±Ð¹…¹½¹¥…±}±…¥µÌ¹Õ¹‘•Ñ•Éµ¥¹•‘}½Õ¹ÐøôÄ¤í…ÍÍ•ÉÐ¹•ÅÕ…°¡½ÕÐ¹É•ÍÕ±Ð¹™…ÑÌ¹½¹™¥Éµ•¹±•¹Ñ °À¤íô¤ì)ô¤ì

@@ -3,7 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { taskGraphView } = require('../src/server-with-evidence');
 
 const silentLogger = { write() {}, async flush() {} };
 const tenant = { id: 'test', is_global: true, plan: 'admin' };
@@ -70,27 +69,23 @@ test('hard Task Graph blocker stops canonical Task/Claim/Evidence processing bef
   });
 });
 
-test('Task Graph view preserves Canonical V3 branch/reference/context/blocker metadata', () => {
-  const request = {
-    instruction_understanding: { execution_allowed: false, blocked_reasons: ['TASK_GRAPH_CYCLE:T01,T02'] },
-    analysis_task_packet: {
-      tasks: [{ id: 'T01' }, { id: 'T02' }],
-      dependencies: [{ from: 'T01', to: 'T02' }],
-      execution_waves: [],
-      branches: [{ branch_id: 'BR-T01-T02' }],
-      branch_groups: [{ branch_group_id: 'BR-T01' }],
-      reference_resolutions: [{ task_id: 'T02', from_task_ids: ['T01'] }],
-      context_bindings: [{ kind: 'constraint', scope: 'TASK', task_ids: ['T01'] }],
-      unresolved: ['T02:reference'],
-      hard_blockers: ['TASK_GRAPH_CYCLE:T01,T02'],
-      task_graph_validation: { valid: false, cycle: ['T01', 'T02'] }
-    }
-  };
-  const view = taskGraphView(request);
-  assert.equal(view.branches.length, 1);
-  assert.equal(view.branch_groups.length, 1);
-  assert.equal(view.reference_resolutions.length, 1);
-  assert.equal(view.context_bindings.length, 1);
-  assert.ok(view.hard_blockers.includes('TASK_GRAPH_CYCLE:T01,T02'));
-  assert.equal(view.validation.valid, false);
+test('Main8 Task Graph view preserves Canonical V3 branch/reference/context metadata on the production path', async () => {
+  await withEngine(async (engine) => {
+    const out = await engine.process({
+      question: 'APIサーバーを検証する。それを改善する。検証が成功した場合に互換性を確認する。',
+      context: 'APIサーバーはmainを変更するな。'
+    }, tenant);
+    assert.equal(out.result.type, 'cognitive_map');
+    const packet = out.result.analysis_task_packet;
+    const view = out.result.judgment.task_graph;
+    assert.ok(packet.branches.length >= 1);
+    assert.ok(packet.reference_resolutions.length >= 1);
+    assert.ok(packet.context_bindings.length >= 1);
+    assert.deepEqual(view.branches, packet.branches);
+    assert.deepEqual(view.branch_groups, packet.branch_groups);
+    assert.deepEqual(view.reference_resolutions, packet.reference_resolutions);
+    assert.deepEqual(view.context_bindings, packet.context_bindings);
+    assert.deepEqual(view.hard_blockers, packet.hard_blockers);
+    assert.deepEqual(view.validation, packet.task_graph_validation);
+  });
 });
