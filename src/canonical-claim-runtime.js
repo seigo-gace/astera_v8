@@ -14,6 +14,12 @@ const { buildFiveLanes } = require('./v4-canonical/lanes');
 const CONFIRMED = ClaimStatus.CONFIRMED;
 const UNDETERMINED = ClaimStatus.UNDETERMINED;
 const PERSPECTIVE_CLASSES = Object.freeze(['mainline', 'opposition', 'failure_reference', 'third_way', 'human_fit']);
+const POLICY_TRADE_OFF_NOTES = Object.freeze([
+  '前進条件と反証・Failure Conditionを同時に保持する。',
+  '失敗回避材料であり採用候補ではない。',
+  '成立条件ごとに材料を分離し、一括の勝者決定を行わない。',
+  '利用者明示条件への適合材料だけを扱い、Human Readerの状態推定で事実を書き換えない。'
+]);
 
 function fragmentText(text, baseOffset = 0) {
   const result = fragmentInput({ inputDocumentId: `adhoc:${baseOffset}`, text, sourceAxes: {}, maxFragments: 256 });
@@ -88,6 +94,25 @@ function uniqueStrings(values = []) {
   return unique(values.map((value) => String(value ?? '').trim()).filter(Boolean));
 }
 
+function isPolicyTradeOffNote(value) {
+  return POLICY_TRADE_OFF_NOTES.includes(String(value ?? '').trim());
+}
+
+function splitTradeOffs(tradeOffs = []) {
+  const policyNotes = [];
+  const dimensions = [];
+  for (const item of tradeOffs) {
+    const normalized = String(item ?? '').trim();
+    if (!normalized) continue;
+    if (isPolicyTradeOffNote(normalized)) policyNotes.push(normalized);
+    else dimensions.push(normalized);
+  }
+  return {
+    policyNotes: uniqueStrings(policyNotes),
+    dimensions: uniqueStrings(dimensions)
+  };
+}
+
 function recordBindingRefs(records = []) {
   const refs = [];
   for (const record of records) {
@@ -121,6 +146,7 @@ function unresolvedRefs(records = []) {
 
 function buildTradeOffMaterial({
   dimensions = [],
+  policyNotes = [],
   conditions = [],
   failureConditions = [],
   confirmedClaimIds = [],
@@ -131,16 +157,24 @@ function buildTradeOffMaterial({
   materialByDimension = null
 }) {
   const normalizedDimensions = uniqueStrings(dimensions);
-  const hasMaterial = normalizedDimensions.length > 0
-    || conditions.length > 0
-    || failureConditions.length > 0
+  const normalizedPolicyNotes = uniqueStrings(policyNotes);
+  const hasRealMaterial = normalizedDimensions.length > 0
     || confirmedClaimIds.length > 0
     || supportEvidence.length > 0
-    || counterEvidence.length > 0;
-  const status = hasMaterial ? 'MATERIAL_ONLY' : 'INSUFFICIENT_TRADE_OFF_MATERIAL';
+    || counterEvidence.length > 0
+    || (materialByDimension && typeof materialByDimension === 'object' && Object.keys(materialByDimension).length > 0);
+  let status;
+  if (undeterminedClaimIds.length > 0 || missingEvidence.length > 0) {
+    status = 'UNDETERMINED';
+  } else if (!hasRealMaterial) {
+    status = 'INSUFFICIENT_TRADE_OFF_MATERIAL';
+  } else {
+    status = 'MATERIAL_ONLY';
+  }
   const material = {
     status,
     dimensions: normalizedDimensions,
+    policy_notes: normalizedPolicyNotes,
     conditions: uniqueStrings(conditions),
     failure_conditions: uniqueStrings(failureConditions),
     confirmed_claim_ids: [...confirmedClaimIds].sort(),
@@ -158,8 +192,10 @@ function buildTradeOffMaterial({
 function perspective({ id, focus, conditions = [], failureConditions = [], supportEvidence = [], counterEvidence = [], missingEvidence = [], tradeOffs = [], tradeOffMaterial = null, queryRoles = [], basis = {} }) {
   const confirmedClaimIds = basis.confirmed_claim_ids || [];
   const undeterminedClaimIds = basis.undetermined_claim_ids || [];
+  const { policyNotes, dimensions: realDimensions } = splitTradeOffs(tradeOffs);
   const trade_off_material = tradeOffMaterial || buildTradeOffMaterial({
-    dimensions: tradeOffs,
+    dimensions: realDimensions,
+    policyNotes,
     conditions,
     failureConditions,
     confirmedClaimIds,
@@ -207,6 +243,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
   const compareDimensions = lensPlanValues(domain, 'compare');
   const hardBlockers = uniqueStrings(task.hard_blockers || []);
   const unresolvedReasons = uniqueStrings(undeterminedRecords.flatMap((record) => record.confirmation?.reasons || []));
+  const confirmedClaimIds = confirmedRecords.map((record) => record.claim.claim_id).sort();
+  const undeterminedClaimIds = undeterminedRecords.map((record) => record.claim.claim_id).sort();
 
   const perspectives = [
     perspective({
@@ -221,8 +259,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
       queryRoles,
       basis: {
         rule_ids: ['PERSPECTIVE-MAINLINE-CANONICAL'],
-        confirmed_claim_ids: confirmedRecords.map((record) => record.claim.claim_id).sort(),
-        undetermined_claim_ids: undeterminedRecords.map((record) => record.claim.claim_id).sort(),
+        confirmed_claim_ids: confirmedClaimIds,
+        undetermined_claim_ids: undeterminedClaimIds,
         lens_ids: lensIds
       }
     }),
@@ -239,6 +277,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
       basis: {
         rule_ids: ['PERSPECTIVE-OPPOSITION-COUNTER'],
         counter_query_ids: counterQueries.map((query) => query.query_id).filter(Boolean),
+        confirmed_claim_ids: confirmedClaimIds,
+        undetermined_claim_ids: undeterminedClaimIds,
         lens_ids: lensIds
       }
     }),
@@ -256,6 +296,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
         rule_ids: ['PERSPECTIVE-FAILURE-REFERENCE'],
         undetermined_count: undetermined,
         hard_blocker_count: hardBlockers.length,
+        confirmed_claim_ids: confirmedClaimIds,
+        undetermined_claim_ids: undeterminedClaimIds,
         lens_ids: lensIds
       }
     }),
@@ -274,6 +316,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
         dependency_count: (task.depends_on || []).length,
         condition_count: (task.conditions || []).length,
         exception_count: (task.exceptions || []).length,
+        confirmed_claim_ids: confirmedClaimIds,
+        undetermined_claim_ids: undeterminedClaimIds,
         lens_ids: lensIds
       }
     }),
@@ -290,6 +334,8 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
       basis: {
         rule_ids: ['PERSPECTIVE-HUMAN-FIT-EXPLICIT-CONDITIONS'],
         explicit_condition_count: success.length + constraints.length,
+        confirmed_claim_ids: confirmedClaimIds,
+        undetermined_claim_ids: undeterminedClaimIds,
         lens_ids: lensIds
       }
     })
@@ -319,6 +365,7 @@ module.exports = {
   CONFIRMED,
   UNDETERMINED,
   PERSPECTIVE_CLASSES,
+  POLICY_TRADE_OFF_NOTES,
   fragmentText,
   claimsForTask,
   policyFor,
@@ -326,5 +373,6 @@ module.exports = {
   buildCanonicalTaskPlan,
   evaluateCanonicalTaskPlan,
   projectFiveLanes,
+  buildTradeOffMaterial,
   deterministicPerspectiveExpansion
 };

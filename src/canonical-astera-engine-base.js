@@ -92,29 +92,99 @@ function formatEvidenceRefList(refs = []) {
   }).join(' / ');
 }
 
+function formatMissingEvidenceRefList(refs = []) {
+  if (!refs.length) return '-';
+  return refs.map((item) => {
+    if (typeof item === 'string') return item;
+    const parts = [];
+    if (item.claim_id) parts.push(`claim=${item.claim_id}`);
+    if (item.text) parts.push(`text=${line(item.text)}`);
+    if (item.reasons?.length) parts.push(`reasons=${join(item.reasons)}`);
+    if (item.missing_scope_fields?.length) parts.push(`missing_scope_fields=${join(item.missing_scope_fields)}`);
+    return parts.join('; ') || '-';
+  }).join(' / ');
+}
+
+function formatScopeObject(scope) {
+  if (!scope || typeof scope !== 'object') return line(scope);
+  return Object.entries(scope).map(([key, value]) => `${key}=${line(value)}`).join('; ');
+}
+
+function formatSupportedScopeEntry(entry = {}) {
+  const parts = [`claim_id=${line(entry.claim_id)}`];
+  if (entry.scope && typeof entry.scope === 'object') parts.push(`scope=${formatScopeObject(entry.scope)}`);
+  else if (entry.scope) parts.push(`scope=${line(entry.scope)}`);
+  return parts.join('; ');
+}
+
+function formatUnsupportedScopeEntry(entry = {}) {
+  const parts = [`claim_id=${line(entry.claim_id)}`];
+  if (entry.missing_scope_fields?.length) parts.push(`missing_scope_fields=${join(entry.missing_scope_fields)}`);
+  if (entry.reasons?.length) parts.push(`reasons=${join(entry.reasons)}`);
+  return parts.join('; ');
+}
+
 function formatTradeOffMaterialText(material) {
-  if (!material || typeof material !== 'object' || Array.isArray(material)) return line('-');
-  const lines = [`status=${line(material.status)}`];
-  if (material.dimensions?.length) lines.push(`dimensions=${join(material.dimensions)}`);
-  if (material.conditions?.length) lines.push(`conditions=${join(material.conditions)}`);
-  if (material.failure_conditions?.length) lines.push(`failure_conditions=${join(material.failure_conditions)}`);
-  if (material.confirmed_claim_ids?.length) lines.push(`confirmed_claim_ids=${join(material.confirmed_claim_ids)}`);
-  if (material.undetermined_claim_ids?.length) lines.push(`undetermined_claim_ids=${join(material.undetermined_claim_ids)}`);
-  if (material.support_evidence_refs?.length) lines.push(`support_evidence_refs=${formatEvidenceRefList(material.support_evidence_refs)}`);
-  if (material.counter_evidence_refs?.length) lines.push(`counter_evidence_refs=${formatEvidenceRefList(material.counter_evidence_refs)}`);
-  if (material.missing_evidence_refs?.length) {
-    const missing = material.missing_evidence_refs.map((item) =>
-      typeof item === 'string' ? item : `${item.claim_id || '-'}:${join(item.reasons || [])}`
-    );
-    lines.push(`missing_evidence_refs=${join(missing)}`);
+  const empty = !material || typeof material !== 'object' || Array.isArray(material);
+  const lines = [
+    `status=${line(empty ? '-' : material.status)}`,
+    `dimensions=${!empty && material.dimensions?.length ? join(material.dimensions) : '-'}`,
+    `confirmed_claim_ids=${!empty && material.confirmed_claim_ids?.length ? join(material.confirmed_claim_ids) : '-'}`,
+    `undetermined_claim_ids=${!empty && material.undetermined_claim_ids?.length ? join(material.undetermined_claim_ids) : '-'}`,
+    `support_evidence_refs=${!empty && material.support_evidence_refs?.length ? formatEvidenceRefList(material.support_evidence_refs) : '-'}`,
+    `counter_evidence_refs=${!empty && material.counter_evidence_refs?.length ? formatEvidenceRefList(material.counter_evidence_refs) : '-'}`,
+    `missing_evidence_refs=${!empty && material.missing_evidence_refs?.length ? formatMissingEvidenceRefList(material.missing_evidence_refs) : '-'}`
+  ];
+  if (!empty && material.policy_notes?.length) {
+    lines.push(`Trade-off Policy: ${join(material.policy_notes)}`);
   }
-  if (material.material_by_dimension && typeof material.material_by_dimension === 'object') {
+  if (!empty && material.material_by_dimension && typeof material.material_by_dimension === 'object') {
     for (const [dimension, entry] of Object.entries(material.material_by_dimension)) {
       const value = typeof entry === 'string'
         ? entry
         : join(entry.observations || entry.conditions || []);
       lines.push(`${dimension}=${line(value)}`);
     }
+  }
+  return lines.join('\n');
+}
+
+function formatPerCandidateBlock(entry = {}) {
+  return [
+    'Per-candidate:',
+    `label=${line(entry.label || entry.candidate_id)}`,
+    `material_state=${line(entry.material_state)}`,
+    `observations=${entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'}`,
+    `confirmed_claim_ids=${entry.confirmed_claim_ids?.length ? join(entry.confirmed_claim_ids) : '-'}`,
+    `undetermined_claim_ids=${entry.undetermined_claim_ids?.length ? join(entry.undetermined_claim_ids) : '-'}`,
+    `supported_scopes=${entry.supported_scopes?.length ? entry.supported_scopes.map(formatSupportedScopeEntry).join(' / ') : '-'}`,
+    `evidence_refs=${entry.evidence_refs?.length ? formatEvidenceRefList(entry.evidence_refs) : '-'}`
+  ].join('\n');
+}
+
+function formatCandidateMaterialBlock(entry = {}) {
+  return [
+    'Candidate Material:',
+    `candidate_id=${line(entry.candidate_id)}`,
+    `label=${line(entry.label)}`,
+    `material_state=${line(entry.material_state)}`,
+    `observations=${entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'}`,
+    `confirmed_claim_ids=${entry.confirmed_claim_ids?.length ? join(entry.confirmed_claim_ids) : '-'}`,
+    `undetermined_claim_ids=${entry.undetermined_claim_ids?.length ? join(entry.undetermined_claim_ids) : '-'}`,
+    `supported_scopes=${entry.supported_scopes?.length ? entry.supported_scopes.map(formatSupportedScopeEntry).join(' / ') : '-'}`,
+    `evidence_refs=${entry.evidence_refs?.length ? formatEvidenceRefList(entry.evidence_refs) : '-'}`
+  ].join('\n');
+}
+
+function formatTradeOffDifferenceBlock(entry = {}) {
+  const lines = [
+    'Trade-off Difference:',
+    `dimension=${line(entry.dimension)}`,
+    `comparison_state=${line(entry.comparison_state || entry.status)}`,
+    `conditions=${entry.conditions?.length ? join(entry.conditions) : '-'}`
+  ];
+  for (const candidate of entry.per_candidate || []) {
+    lines.push(formatPerCandidateBlock(candidate));
   }
   return lines.join('\n');
 }
@@ -131,8 +201,8 @@ function formatSection05Pass(section) {
       `Focus: ${focusText}`,
       `Conditions: ${join(perspective.conditions)}`,
       `Failure Conditions: ${join(perspective.failure_conditions)}`,
-      `Trade-off Material:\n${formatTradeOffMaterialText(perspective.trade_off_material)}`,
-      `Evidence refs: ${formatEvidenceRefList(perspective.evidence_refs)}`
+      'Trade-off Material:',
+      formatTradeOffMaterialText(perspective.trade_off_material)
     ].join('\n');
   }).join('\n\n');
 }
@@ -141,29 +211,26 @@ function formatSection06Pass(section) {
   const candidates = (section.comparison_candidates || []).map((candidate) =>
     typeof candidate === 'string' ? candidate : (candidate.label || candidate.candidate_id || '-')
   );
-  const candidateMaterials = (section.candidate_materials || []).map((entry) =>
-    `${entry.label || entry.candidate_id || '-'}[${entry.material_state || '-'}]`
-  );
-  const tradeOffDiffs = (section.trade_off_differences || []).map((entry) =>
-    `${entry.dimension || '-'}[${entry.comparison_state || entry.status || '-'}]`
-  );
+  const candidateMaterialBlocks = (section.candidate_materials || []).map((entry) => formatCandidateMaterialBlock(entry));
+  const tradeOffDiffBlocks = (section.trade_off_differences || []).map((entry) => formatTradeOffDifferenceBlock(entry));
   const conditionDiff = section.condition_differences || {};
-  const contradictions = (section.contradiction_map || []).map((entry) =>
-    `${entry.type || '-'}:${join(entry.reasons)}`
-  );
-  const supported = (section.supported_scope || []).map((entry) => entry.claim_id || '-');
-  const unsupported = (section.unsupported_scope || []).map((entry) =>
-    `${entry.claim_id || '-'}:${join(entry.reasons)}`
-  );
+  const contradictionBlocks = (section.contradiction_map || []).map((entry) => [
+    'Contradiction:',
+    `type=${line(entry.type)}`,
+    `claim_id=${line(entry.claim_id)}`,
+    `reasons=${join(entry.reasons)}`
+  ].join('\n'));
+  const supportedBlocks = (section.supported_scope || []).map((entry) => `Supported Scope: ${formatSupportedScopeEntry(entry)}`);
+  const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => `Unsupported Scope: ${formatUnsupportedScopeEntry(entry)}`);
   return [
     `Candidates: ${join(candidates)}`,
     `Dimensions: ${join(section.dimensions)}`,
-    `Candidate Materials: ${candidateMaterials.length ? join(candidateMaterials) : '-'}`,
-    `Trade-off Differences: ${tradeOffDiffs.length ? join(tradeOffDiffs) : '-'}`,
+    ...(candidateMaterialBlocks.length ? candidateMaterialBlocks : ['Candidate Material:', 'candidate_id=-', 'label=-', 'material_state=-', 'observations=-', 'confirmed_claim_ids=-', 'undetermined_claim_ids=-', 'supported_scopes=-', 'evidence_refs=-']),
+    ...(tradeOffDiffBlocks.length ? tradeOffDiffBlocks : ['Trade-off Difference:', 'dimension=-', 'comparison_state=-', 'conditions=-']),
     `Condition Differences: constraints=${join(conditionDiff.constraints)}; prohibitions=${join(conditionDiff.prohibitions)}; preserve=${join(conditionDiff.preserve)}; replace=${join(conditionDiff.replace)}; conditions=${join(conditionDiff.conditions)}; exceptions=${join(conditionDiff.exceptions)}; dependencies=${join(conditionDiff.dependencies)}`,
-    `Contradictions: ${contradictions.length ? join(contradictions) : '-'}`,
-    `Supported Scope: ${supported.length ? join(supported) : '-'}`,
-    `Unsupported Scope: ${unsupported.length ? join(unsupported) : '-'}`
+    ...(contradictionBlocks.length ? contradictionBlocks : ['Contradiction:', 'type=-', 'claim_id=-', 'reasons=-']),
+    ...(supportedBlocks.length ? supportedBlocks : ['Supported Scope: claim_id=-']),
+    ...(unsupportedBlocks.length ? unsupportedBlocks : ['Unsupported Scope: claim_id=-'])
   ].join('\n');
 }
 

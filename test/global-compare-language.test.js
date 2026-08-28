@@ -47,7 +47,7 @@ test('Japanese golden compare extracts candidates, dimensions and MATERIAL_ONLY 
     assert.match(out.material.text, /B案/);
     assert.match(out.material.text, /費用/);
     assert.match(out.material.text, /安全性/);
-    assert.match(out.material.text, /MATERIAL_ONLY|Candidate Materials/);
+    assert.match(out.material.text, /MATERIAL_ONLY|Candidate Material:/);
   });
 });
 
