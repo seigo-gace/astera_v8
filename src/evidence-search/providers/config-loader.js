@@ -152,10 +152,11 @@ function buildProvider(configFile, raw, index) {
     });
   }
 
-  if (type === 'FREE_OFFICIAL_HTTP') {
+  if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') {
     assertNoPlaceholderOfficialHosts(raw, index);
     return createFreeOfficialLiveProvider({
       ...common,
+      source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE',
       allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [],
       endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [],
       latency_p50_ms: common.latency_p50_ms || 500,
