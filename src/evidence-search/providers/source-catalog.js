@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const REQUIRED_DOMAINS = Object.freeze(Array.from({ length: 38 }, (_, index) => `G${String(index + 1).padStart(2, '0')}`));
 const RUNTIME_STATES = new Set(['SEARCHABLE', 'VERIFIED_EXTRACTED', 'ADAPTER_REQUIRED', 'REQUIRES_AUTH', 'BLOCKED_ROUTE']);
+const RUNTIME_QUARANTINED_SOURCE_IDS = new Set(['CPSC_RECALLS_API_VERIFIED']);
 const PUBLIC_CATALOG_BASENAME = 'evidence-source-catalog.public.json';
 const SPECIALIST_EXTENSION_BASENAME = 'evidence-source-catalog.specialist-expansion.json';
 const WORLD_EXTENSION_BASENAME = 'evidence-source-catalog.world-kb.json';
@@ -47,7 +48,10 @@ function loadEvidenceSourceCatalog(configFile, relativePath) {
     if (!/^[A-Z0-9][A-Z0-9._-]{1,126}[A-Z0-9]$/.test(sourceId)) throw catalogError(`sources[${index}].source_id is invalid`);
     if (ids.has(sourceId)) throw catalogError(`duplicate source_id: ${sourceId}`, 'EVIDENCE_SOURCE_CATALOG_DUPLICATE');
     ids.add(sourceId);
-    const effectiveRaw = { ...raw, ...(extensions.source_overrides[sourceId] || {}) };
+    const configuredRaw = { ...raw, ...(extensions.source_overrides[sourceId] || {}) };
+    const effectiveRaw = RUNTIME_QUARANTINED_SOURCE_IDS.has(sourceId)
+      ? { ...configuredRaw, runtime_state: 'BLOCKED_ROUTE', provider_id: null, retrieval_strategy: 'RUNTIME_ACCESS_QUARANTINED' }
+      : configuredRaw;
     const state = String(effectiveRaw.runtime_state || '').toUpperCase();
     if (!RUNTIME_STATES.has(state)) throw catalogError(`source ${sourceId} runtime_state is invalid`);
     const domains = [...new Set((effectiveRaw.domains || []).map((value) => String(value).toUpperCase()))].sort();
@@ -146,4 +150,4 @@ function validateCatalogProviderCoverage(catalog, providerDefinitions = []) {
   return Object.freeze(Object.fromEntries(REQUIRED_DOMAINS.map((domain) => [domain, Object.freeze([...searchableCoverage.get(domain)].sort())])));
 }
 
-module.exports = { REQUIRED_DOMAINS, RUNTIME_STATES, loadEvidenceSourceCatalog, validateCatalogProviderCoverage, validateSpecialistCoverage };
+module.exports = { REQUIRED_DOMAINS, RUNTIME_STATES, RUNTIME_QUARANTINED_SOURCE_IDS, loadEvidenceSourceCatalog, validateCatalogProviderCoverage, validateSpecialistCoverage };

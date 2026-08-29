@@ -7,13 +7,13 @@ const { createFreeOfficialLiveProvider } = require('../src/evidence-search/provi
 const { createSearchDetailJsonProvider } = require('../src/evidence-search/providers/search-detail-json-provider');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_PREVERIFIED_WAVE3 } = require('../src/evidence-search/providers/public-specialist-provider-definitions-preverified-wave3');
 const { loadEvidenceProviders, readConfig } = require('../src/evidence-search/providers/config-loader');
+const { loadEvidenceSourceCatalog } = require('../src/evidence-search/providers/source-catalog');
 
 const configFile = path.join(__dirname, '..', 'config', 'evidence-providers.public.json');
-const VERIFIED_IDS = Object.freeze([
+const VERIFIED_ACTIVE_IDS = Object.freeze([
   'jpl-sbdb-verified',
   'gwosc-v2-verified',
   'clinvar-esummary-verified',
-  'cpsc-recalls-api-verified',
   'eric-api-verified',
   'egov-laws-v2-verified',
   'itis-anymatch-verified'
@@ -38,7 +38,20 @@ test('verified provider wave is reverse-bound through the public source catalog'
   const rawIds = parsed.providers.map((provider) => provider.provider_id);
   assert.equal(rawIds.length, new Set(rawIds).size);
   const loadedIds = new Set(loadEvidenceProviders({ configFile }).map((provider) => provider.provider_id));
-  for (const providerId of VERIFIED_IDS) assert.ok(loadedIds.has(providerId), providerId);
+  for (const providerId of VERIFIED_ACTIVE_IDS) assert.ok(loadedIds.has(providerId), providerId);
+  assert.equal(loadedIds.has('cpsc-recalls-api-verified'), false);
+});
+
+test('CPSC verified route remains recorded but is runtime-quarantined after repeated Actions 404', () => {
+  const { absolute, parsed } = readConfig(configFile);
+  const catalog = loadEvidenceSourceCatalog(absolute, parsed.source_catalog);
+  const source = catalog.sources.find((item) => item.source_id === 'CPSC_RECALLS_API_VERIFIED');
+  assert.ok(source);
+  assert.equal(source.runtime_state, 'BLOCKED_ROUTE');
+  assert.equal(source.provider_id, null);
+  assert.equal(source.retrieval_strategy, 'RUNTIME_ACCESS_QUARANTINED');
+  const cpsc = definition('cpsc-recalls-api-verified');
+  assert.match(cpsc.endpoints[0].url_template, /RestWebServices\/Recall\?ProductName=/);
 });
 
 test('JPL SBDB verified provider maps a unique small-body record', async () => {
@@ -108,11 +121,9 @@ test('e-Gov keyword provider emits law records from items', async () => {
   assert.equal(result.candidates[0].title, '労働基準法');
 });
 
-test('CPSC, ERIC and ITIS verified provider contracts remain direct JSON routes', () => {
-  const cpsc = definition('cpsc-recalls-api-verified');
+test('ERIC and ITIS verified provider contracts remain direct JSON routes', () => {
   const eric = definition('eric-api-verified');
   const itis = definition('itis-anymatch-verified');
-  assert.match(cpsc.endpoints[0].url_template, /RestWebServices\/Recall\?ProductName=/);
   assert.equal(eric.endpoints[0].records_path, 'response.docs');
   assert.match(eric.endpoints[0].url_template, /api\.ies\.ed\.gov\/eric/);
   assert.equal(itis.endpoints[0].records_path, 'anyMatchList');
