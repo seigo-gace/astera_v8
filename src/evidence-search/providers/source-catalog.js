@@ -7,7 +7,8 @@ const REQUIRED_DOMAINS = Object.freeze(Array.from({ length: 38 }, (_, index) => 
 const RUNTIME_STATES = new Set(['SEARCHABLE', 'VERIFIED_EXTRACTED', 'ADAPTER_REQUIRED', 'REQUIRES_AUTH', 'BLOCKED_ROUTE']);
 const RUNTIME_QUARANTINED_SOURCE_IDS = new Set(['CPSC_RECALLS_API_VERIFIED']);
 const RUNTIME_ENABLED_SOURCE_OVERRIDES = Object.freeze({
-  CISA_KEV_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'cisa-kev-search', retrieval_strategy: 'LIVE_JSON_LOCAL_FILTER' })
+  CISA_KEV_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'cisa-kev-search', retrieval_strategy: 'LIVE_JSON_LOCAL_FILTER' }),
+  NIH_REPORTER_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nih-reporter-project-search', retrieval_strategy: 'LIVE_POST_JSON' })
 });
 const PUBLIC_CATALOG_BASENAME = 'evidence-source-catalog.public.json';
 const SPECIALIST_EXTENSION_BASENAME = 'evidence-source-catalog.specialist-expansion.json';
