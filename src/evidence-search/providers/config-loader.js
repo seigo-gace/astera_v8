@@ -6,6 +6,7 @@ const { createJsonProjectionProvider } = require('./json-projection-provider');
 const { createFreeOfficialLiveProvider } = require('./free-official-live-provider');
 const { createSearchDetailHtmlProvider } = require('./search-detail-html-provider');
 const { createSearchDetailJsonProvider } = require('./search-detail-json-provider');
+const { createStaticJsonFilterProvider } = require('./static-json-filter-provider');
 const { createBsddLiveProvider } = require('./bsdd-live-provider');
 const { loadEvidenceSourceCatalog, validateCatalogProviderCoverage } = require('./source-catalog');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS, ROUTING_OVERRIDES } = require('./public-specialist-provider-definitions');
@@ -14,6 +15,7 @@ const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION, ROUTING_OVE
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB, ROUTING_OVERRIDES_WORLD_KB } = require('./public-specialist-provider-definitions-world-kb');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2, ROUTING_OVERRIDES_JURISDICTION_WAVE2 } = require('./public-specialist-provider-definitions-jurisdiction-wave2');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_PREVERIFIED_WAVE3, ROUTING_OVERRIDES_PREVERIFIED_WAVE3 } = require('./public-specialist-provider-definitions-preverified-wave3');
+const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4, ROUTING_OVERRIDES_RUNTIME_WAVE4 } = require('./public-specialist-provider-definitions-runtime-wave4');
 
 const FREE_SOURCE_CLASSES = new Set(['FREE_PROJECTION', 'FREE_OFFICIAL_LIVE']);
 const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze(['example.com', 'example.net', 'example.org']);
@@ -28,7 +30,7 @@ const ACTIVE_PUBLIC_SPECIALIST = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINI
 const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id) && !REPLACED_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_WORLD_KB = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB.filter((provider) => !REPLACED_WORLD_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_PREVERIFIED_WAVE3 = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_PREVERIFIED_WAVE3.filter((provider) => !RUNTIME_QUARANTINED_PROVIDER_IDS.has(provider.provider_id)));
-const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION, ...ROUTING_OVERRIDES_WORLD_KB, ...ROUTING_OVERRIDES_JURISDICTION_WAVE2, ...ROUTING_OVERRIDES_PREVERIFIED_WAVE3 });
+const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION, ...ROUTING_OVERRIDES_WORLD_KB, ...ROUTING_OVERRIDES_JURISDICTION_WAVE2, ...ROUTING_OVERRIDES_PREVERIFIED_WAVE3, ...ROUTING_OVERRIDES_RUNTIME_WAVE4 });
 
 function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') { const error = new Error(message); error.code = code; return error; }
 function normalizeConfiguredHost(value) { return String(value || '').trim().toLowerCase().replace(/\.$/, ''); }
@@ -40,7 +42,7 @@ function isReservedPlaceholderHost(value) {
 function assertNoPlaceholderOfficialHosts(raw, index) {
   const allowedHosts = Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [];
   for (const host of allowedHosts) if (isReservedPlaceholderHost(host)) throw configError(`providers[${index}] placeholder host is forbidden for an enabled runtime provider: ${host}`, 'EVIDENCE_PROVIDER_PLACEHOLDER_HOST_FORBIDDEN');
-  const templates = [raw.dictionary_url, raw.class_search_url, raw.search?.url_template, raw.detail?.url_template, ...(Array.isArray(raw.endpoints) ? raw.endpoints.map((endpoint) => endpoint?.url_template) : [])];
+  const templates = [raw.dictionary_url, raw.class_search_url, raw.endpoint?.url, raw.endpoint?.url_template, raw.search?.url_template, raw.detail?.url_template, ...(Array.isArray(raw.endpoints) ? raw.endpoints.map((endpoint) => endpoint?.url_template) : [])];
   for (const templateRaw of templates) {
     const template = String(templateRaw || '').trim(); if (!template) continue;
     let hostname; try { hostname = new URL(template.replace(/\{[a-z_]+\}/g, 'probe')).hostname; } catch { continue; }
@@ -54,7 +56,7 @@ function readConfig(filePath) {
   if (!Array.isArray(base.providers)) throw configError('evidence provider configuration providers must be an array');
   const publicCatalog = String(base.source_catalog || '') === './evidence-source-catalog.public.json';
   const activeBaseProviders = base.providers.filter((provider) => !REPLACED_BASE_PROVIDER_IDS.has(provider?.provider_id));
-  const providers = publicCatalog ? [...activeBaseProviders, ...ACTIVE_PUBLIC_SPECIALIST, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...ACTIVE_SPECIALIST_EXPANSION, ...ACTIVE_WORLD_KB, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2, ...ACTIVE_PREVERIFIED_WAVE3] : [...base.providers];
+  const providers = publicCatalog ? [...activeBaseProviders, ...ACTIVE_PUBLIC_SPECIALIST, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...ACTIVE_SPECIALIST_EXPANSION, ...ACTIVE_WORLD_KB, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2, ...ACTIVE_PREVERIFIED_WAVE3, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4] : [...base.providers];
   const ids = new Set();
   for (const provider of providers) { const id = String(provider?.provider_id || ''); if (!id) continue; if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(id); }
   return { absolute, parsed: { ...base, providers } };
@@ -69,6 +71,7 @@ function buildProvider(configFile, raw, index) {
   if (Array.isArray(raw.catalog_source_ids) && raw.catalog_source_ids.includes('BSDD')) { assertNoPlaceholderOfficialHosts(raw, index); if (type !== 'FREE_OFFICIAL_HTTP' && type !== 'FREE_PUBLIC_HTTP' && type !== 'BSDD_PUBLIC_HTTP') throw configError(`providers[${index}] bSDD adapter requires a free HTTP provider type`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED'); return createBsddLiveProvider({ ...common, allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : ['api.bsdd.buildingsmart.org'], preferred_dictionary_codes: ['IFC', 'ETIM'], max_dictionary_scan: 80, dictionary_batch_size: 10, result_limit: 20, timeout_ms: 12000 }); }
   if (type === 'SEARCH_DETAIL_HTML') { assertNoPlaceholderOfficialHosts(raw, index); return createSearchDetailHtmlProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], search: raw.search || {}, authority_id: raw.authority_id || raw.provider_id, publisher_name: raw.publisher_name || raw.authority_id || raw.provider_id }); }
   if (type === 'SEARCH_DETAIL_JSON') { assertNoPlaceholderOfficialHosts(raw, index); return createSearchDetailJsonProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], search: raw.search || {}, detail: raw.detail || {}, authority_id: raw.authority_id || raw.provider_id, publisher_name: raw.publisher_name || raw.authority_id || raw.provider_id, source_role: raw.source_role || 'OFFICIAL', timeout_ms: raw.timeout_ms, maximum_attempts: raw.maximum_attempts, request_headers: raw.request_headers || {} }); }
+  if (type === 'STATIC_JSON_FILTER') { assertNoPlaceholderOfficialHosts(raw, index); return createStaticJsonFilterProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoint: raw.endpoint || {}, latency_p50_ms: common.latency_p50_ms || 80, latency_p95_ms: common.latency_p95_ms || 500 }); }
   if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') { assertNoPlaceholderOfficialHosts(raw, index); return createFreeOfficialLiveProvider({ ...common, source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE', allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [], latency_p50_ms: common.latency_p50_ms || 500, latency_p95_ms: common.latency_p95_ms || 1500 }); }
   throw configError(`providers[${index}].type is unsupported: ${type}`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED');
 }
