@@ -14,6 +14,8 @@ COPY STRUCTURE.md README.md ./
 COPY src ./src
 COPY docs ./docs
 COPY scripts ./scripts
+COPY config ./config
+COPY test ./test
 COPY .env.example ./
 
 RUN apt-get update && apt-get install -y --no-install-recommends git \
@@ -26,7 +28,7 @@ ENV SUDACHI_BIN=sudachipy
 ENV SUDACHI_DICT_VERSION=sudachidict_core-latest
 
 RUN chmod +x scripts/*.sh \
-    && mkdir -p /data /cache/outbox \
+    && mkdir -p /data /data/evidence-jobs /cache/outbox \
     && chown -R node:node /app /data /cache
 
 USER node
