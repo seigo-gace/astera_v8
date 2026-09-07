@@ -213,7 +213,9 @@ test('integrated process is a JSON facade over the same single AsteraEngine pipe
       assert.equal(call.payload.search.free_projection, true);
       assert.equal(call.payload.search.free_current, true);
       assert.equal(call.payload.paid_search.enabled, false);
-      assert.match(call.payload.domain_lens.id, /^G\d{2}$/);
+      if (call.payload.domain_lens) {
+        assert.match(call.payload.domain_lens.id, /^G(?:0[1-9]|[12][0-9]|3[0-8])$/);
+      }
       assert.ok(Array.isArray(call.payload.upstream_search_plan?.queries));
       assert.ok(call.payload.upstream_search_plan.planned_query_roles.includes('COUNTER'));
       assert.deepEqual(call.payload.preplanned_queries, call.payload.upstream_search_plan.queries);

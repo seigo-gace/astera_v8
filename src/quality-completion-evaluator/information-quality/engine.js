@@ -27,9 +27,15 @@ function loadProfiles() {
 }
 
 function resolveProfile(request, profiles) {
-  const domainId = String(request.domain_lens?.id || '').toUpperCase();
-  const groupId = profiles.domain_profile_map[domainId];
-  if (!groupId || !profiles.profile_groups[groupId]) throw Object.assign(new Error(`unsupported domain profile: ${domainId}`), { code: 'INFORMATION_PROFILE_INVALID' });
+  const rawDomainId = request.domain_lens?.id;
+  const domainId = rawDomainId ? String(rawDomainId).toUpperCase() : null;
+  let groupId;
+  if (domainId) {
+    groupId = profiles.domain_profile_map[domainId];
+    if (!groupId || !profiles.profile_groups[groupId]) throw Object.assign(new Error(`unsupported domain profile: ${domainId}`), { code: 'INFORMATION_PROFILE_INVALID' });
+  } else {
+    groupId = 'STANDARD';
+  }
   let resolved = { ...profiles.profile_groups[groupId], group_id: groupId };
   for (const overlayId of request.overlays || []) {
     const overlay = profiles.overlay_profiles?.[overlayId];
@@ -94,7 +100,10 @@ function scoreSuitability(request, candidates, profile, blocking) {
     ? (requiredRoles.every((role) => candidates.some((candidate) => candidate.source_role === role)) ? 400 : 0)
     : (roleMatches ? 400 : 300);
   if (requiredRoles.length && sourceRole === 0) blocking.push('REQUIRED_SOURCE_ROLE_MISSING');
-  const domain = candidates.every((candidate) => !candidate.fields?.domain_id || String(candidate.fields.domain_id).toUpperCase() === request.domain_lens.id) ? 300 : 0;
+  const resolvedDomainId = request.domain_lens?.id ? String(request.domain_lens.id).toUpperCase() : null;
+  const domain = resolvedDomainId
+    ? (candidates.every((candidate) => !candidate.fields?.domain_id || String(candidate.fields.domain_id).toUpperCase() === resolvedDomainId) ? 300 : 0)
+    : 0;
   const requestedJurisdictions = request.jurisdictions || [];
   const jurisdiction = !requestedJurisdictions.length ? 200 : candidates.some((candidate) => requestedJurisdictions.includes(candidate.jurisdiction)) ? 200 : 0;
   const temporal = request.measurements?.freshness?.overall_state === 'STALE' ? 0 : 150;

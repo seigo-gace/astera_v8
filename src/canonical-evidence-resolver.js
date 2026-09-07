@@ -117,25 +117,31 @@ function evidenceContext(task, bodyContext) {
   return [...new Set(values)].join('\\n');
 }
 
+function isResolvedDomainId(domainId) {
+  return /^G(?:0[1-9]|[12][0-9]|3[0-8])$/.test(String(domainId || ''));
+}
+
+function isUnresolvedDomainId(domainId) {
+  if (domainId === undefined || domainId === null) return true;
+  const normalized = String(domainId).trim().toLowerCase();
+  return normalized === '' || normalized === 'none';
+}
+
 function searchRequestFor(task, input, tenant, requestId) {
   const upstreamPlan = task.canonical_plan?.search_plan;
   if (!upstreamPlan || !Array.isArray(upstreamPlan.queries) || !upstreamPlan.queries.length) return null;
 
   const domain = task.domain || {};
   const domainId = domain.primary?.id;
-  if (!/^G(?:0[1-9]|[12][0-9]|3[0-8])$/.test(String(domainId || ''))) {
-    const error = new Error('canonical task requires Evidence Search but domain lens is unresolved');
-    error.code = 'DOMAIN_LENS_UNRESOLVED';
+  if (!isUnresolvedDomainId(domainId) && !isResolvedDomainId(domainId)) {
+    const error = new Error('domain_lens.id must be G01-G38');
+    error.code = 'INVALID_DOMAIN_LENS';
     throw error;
   }
 
-  return {
+  const request = {
     question: evidenceQuestion(task),
     context: evidenceContext(task, input.context || ''),
-    domain_lens: {
-      id: domainId,
-      ...(domain.primary?.taxonomy_version ? { taxonomy_version: domain.primary.taxonomy_version } : {})
-    },
     overlays: (domain.overlays || []).map((overlay) => overlay.id).filter(Boolean).slice(0, 16),
     upstream_search_plan: upstreamPlan,
     preplanned_queries: upstreamPlan.queries,
@@ -148,6 +154,15 @@ function searchRequestFor(task, input, tenant, requestId) {
     request_id: requestId,
     tenant_id: tenant.id
   };
+
+  if (isResolvedDomainId(domainId)) {
+    request.domain_lens = {
+      id: domainId,
+      ...(domain.primary?.taxonomy_version ? { taxonomy_version: domain.primary.taxonomy_version } : {})
+    };
+  }
+
+  return request;
 }
 
 function cancellationError() {

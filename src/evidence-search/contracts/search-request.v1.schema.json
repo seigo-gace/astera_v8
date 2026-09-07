@@ -4,7 +4,7 @@
   "title": "ASTERA Evidence Search Request v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["question", "domain_lens"],
+  "required": ["question"],
   "$defs": {
     "plannedQuery": {
       "type": "object",

@@ -27,6 +27,20 @@ function normalizeText(value) {
   return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
 
+function providerSearchText(text) {
+  const normalized = normalizeText(text);
+  const cves = [...new Set((normalized.match(/CVE-\d{4}-\d+/gi) || []))];
+  if (cves.length) return cves.join(' ');
+  const ascii = normalized
+    .replace(/VERIFICATION_TARGET/gi, ' ')
+    .replace(/\b(VER|OFFICIAL|PRIMARY|COUNTER|\d{3})\b/gi, ' ')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (ascii.length >= 3) return ascii;
+  return normalized;
+}
+
 function integerInRange(value, field, minimum, maximum, fallback) {
   const parsed = value === undefined || value === null ? fallback : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
@@ -69,6 +83,36 @@ function normalizeCondition(raw, index) {
   });
 }
 
+const VALID_DOMAIN_LENS_PATTERN = /^G(?:0[1-9]|[12][0-9]|3[0-8])$/;
+
+function resolveDomainLens(payload) {
+  const rawLens = payload.domain_lens;
+  if (rawLens === undefined || rawLens === null) {
+    return { domainId: null, domainLens: null };
+  }
+  if (typeof rawLens !== 'object' || Array.isArray(rawLens)) {
+    const error = new Error('domain_lens must be an object when provided');
+    error.code = 'INVALID_DOMAIN_LENS';
+    throw error;
+  }
+  const domainId = String(rawLens.id || '').toUpperCase();
+  if (!VALID_DOMAIN_LENS_PATTERN.test(domainId)) {
+    const error = new Error('domain_lens.id must be G01-G38');
+    error.code = 'INVALID_DOMAIN_LENS';
+    throw error;
+  }
+  const domainLens = {
+    id: domainId,
+    taxonomy_version: String(rawLens.taxonomy_version || '1.0.0')
+  };
+  for (const [key, value] of Object.entries(rawLens)) {
+    if (key !== 'id' && key !== 'taxonomy_version' && value !== undefined) {
+      domainLens[key] = value;
+    }
+  }
+  return { domainId, domainLens };
+}
+
 function normalizeUpstreamQueries(payload, domainId) {
   const raw = payload.upstream_search_plan?.queries || payload.preplanned_queries;
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -91,7 +135,7 @@ function normalizeUpstreamQueries(payload, domainId) {
       class: role,
       role,
       claim_id: claimId,
-      text,
+      text: providerSearchText(text) || text,
       domain_id: domainId,
       identifiers: Object.freeze([]),
       aliases: Object.freeze([]),
@@ -131,12 +175,7 @@ function compileQueryPlan(payload, context = {}) {
     error.code = 'INVALID_SEARCH_REQUEST';
     throw error;
   }
-  const domainId = String(payload.domain_lens?.id || 'G01').toUpperCase();
-  if (!/^G(?:0[1-9]|[12][0-9]|3[0-8])$/.test(domainId)) {
-    const error = new Error('domain_lens.id must be G01-G38');
-    error.code = 'INVALID_DOMAIN_LENS';
-    throw error;
-  }
+  const { domainId, domainLens } = resolveDomainLens(payload);
 
   const conditions = Array.isArray(payload.conditions) && payload.conditions.length
     ? payload.conditions.map(normalizeCondition)
@@ -166,7 +205,7 @@ function compileQueryPlan(payload, context = {}) {
     planningAuthority = 'UPSTREAM_CANONICAL';
     plannedQueryRoles = [...new Set(upstream.map((query) => query.role))].sort();
   } else {
-    const baseQuery = Object.freeze({ query_id:'primary_1', class:'PRIMARY', text:question, domain_id:domainId, identifiers, aliases, jurisdictions });
+    const baseQuery = Object.freeze({ query_id:'primary_1', class:'PRIMARY', text:providerSearchText(question) || question, domain_id:domainId, identifiers, aliases, jurisdictions });
     const reinforcement = [];
     for (const alias of aliases) reinforcement.push({ class:'ALIAS_VARIANT', text:alias });
     for (const identifier of identifiers) reinforcement.push({ class:'IDENTIFIER_LOOKUP', text:identifier });
@@ -189,7 +228,7 @@ function compileQueryPlan(payload, context = {}) {
   const plan = {
     schema_version:'astera.evidence-search.query-plan.v2',
     question,
-    domain_lens:{ id:domainId, taxonomy_version:String(payload.domain_lens?.taxonomy_version || '1.0.0') },
+    domain_lens: domainLens,
     effective_as_of:String(effectiveAsOf),
     conditions,
     primary_query_set:Object.freeze(primaryQuerySet),

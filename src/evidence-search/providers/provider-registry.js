@@ -42,6 +42,13 @@ function routingText(plan) {
   ].map(normalizeRoutingTerm).filter(Boolean).join(' ');
 }
 
+const VALID_DOMAIN_LENS_PATTERN = /^G(?:0[1-9]|[12][0-9]|3[0-8])$/;
+
+function isResolvedDomainLens(domainLens) {
+  const domainId = domainLens?.id;
+  return VALID_DOMAIN_LENS_PATTERN.test(String(domainId || ''));
+}
+
 function routingTermMatches(text, term) {
   if (!term) return false;
   if (/^[a-z0-9.+#-]{1,3}$/i.test(term)) {
@@ -128,12 +135,13 @@ class ProviderRegistry {
     const allow = new Set(plan.source_policy.provider_allowlist);
     const deny = new Set(plan.source_policy.provider_denylist);
     const queryText = routingText(plan);
+    const resolvedDomain = isResolvedDomainLens(plan.domain_lens);
+    const domainId = resolvedDomain ? String(plan.domain_lens.id).toUpperCase() : null;
     const selected = this.providers.filter((provider) => {
       if (!provider.certified) return false;
       if (provider.source_class === 'PAID_PROVIDER') return false;
       if (allow.size && !allow.has(provider.provider_id)) return false;
       if (deny.has(provider.provider_id)) return false;
-      if (provider.domains.length && !provider.domains.includes(plan.domain_lens.id)) return false;
       if (provider.source_class === 'FREE_PROJECTION' && !plan.source_policy.free_projection) return false;
       if (provider.source_class === 'FREE_OFFICIAL_LIVE' && !plan.source_policy.free_current) return false;
       if (phase === 'INITIAL' && provider.capabilities.includes('REINFORCEMENT_ONLY')) return false;
@@ -141,11 +149,20 @@ class ProviderRegistry {
         provider.capabilities.includes('NO_REINFORCEMENT')
         || provider.capabilities.includes('INITIAL_ONLY')
       )) return false;
-      if (!allow.size && provider.routing_terms.length) {
-        if (!queryText) return false;
-        if (!provider.routing_terms.some((term) => routingTermMatches(queryText, term))) return false;
+
+      if (resolvedDomain) {
+        if (provider.domains.length && !provider.domains.includes(domainId)) return false;
+        if (!allow.size && provider.routing_terms.length) {
+          if (!queryText) return false;
+          if (!provider.routing_terms.some((term) => routingTermMatches(queryText, term))) return false;
+        }
+        return true;
       }
-      return true;
+
+      if (allow.size) return true;
+      if (!provider.routing_terms.length) return false;
+      if (!queryText) return false;
+      return provider.routing_terms.some((term) => routingTermMatches(queryText, term));
     });
     if (phase === 'INITIAL' && selected.length === 0) {
       const error = new Error('Evidence Search has no active provider for the canonical search plan');
