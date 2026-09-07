@@ -110,12 +110,126 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4 = Object.freeze([
       }
     },
     routing_terms: ['nih', 'reporter', 'grant', 'research project', 'funded research', 'federal research', 'research funding', '研究助成', '研究費', '研究プロジェクト']
+  }),
+  Object.freeze({
+    provider_id: 'onet-occupation-search',
+    catalog_source_ids: ['ONET_VERIFIED'],
+    type: 'SEARCH_DETAIL_HTML',
+    enabled: true,
+    certified: true,
+    source_family_id: 'onet-online',
+    priority: 8,
+    domains: ['G12'],
+    capabilities: [],
+    allowed_hosts: ['www.onetonline.org'],
+    smoke_query: 'software developer',
+    authority_id: 'us-dol-onet',
+    publisher_name: 'U.S. Department of Labor / O*NET',
+    search: {
+      url_template: 'https://www.onetonline.org/find/quick?s={query}',
+      href_regex: "href=[\"'](/link/summary/[0-9]{2}-[0-9]{4}\\.[0-9]{2})[\"']",
+      maximum_records: 5,
+      maximum_excerpt_chars: 16000,
+      timeout_ms: 12000
+    },
+    routing_terms: ['onet', 'occupation', 'job', 'career', 'skills', 'employment', '職業', '仕事', '職種', '技能', 'キャリア']
+  }),
+  Object.freeze({
+    provider_id: 'clojars-project-search',
+    catalog_source_ids: ['CLOJARS_VERIFIED'],
+    type: 'SEARCH_DETAIL_HTML',
+    enabled: true,
+    certified: true,
+    source_family_id: 'clojars',
+    priority: 8,
+    domains: ['G29'],
+    capabilities: [],
+    allowed_hosts: ['clojars.org', 'www.clojars.org'],
+    smoke_query: 'encore',
+    authority_id: 'clojars',
+    publisher_name: 'Clojars',
+    search: {
+      url_template: 'https://clojars.org/search?q={query}',
+      href_regex: "href=[\"'](/(?:[A-Za-z0-9_.-]+/)[A-Za-z0-9_.-]+)[\"']",
+      maximum_records: 5,
+      maximum_excerpt_chars: 12000,
+      timeout_ms: 12000
+    },
+    routing_terms: ['clojars', 'clojure', 'clojurescript', 'leiningen', 'clojure package', 'Clojure', 'ClojureScript', 'パッケージ']
+  }),
+  Object.freeze({
+    provider_id: 'simbad-object-search',
+    catalog_source_ids: ['SIMBAD_VERIFIED'],
+    type: 'FREE_OFFICIAL_HTTP',
+    enabled: true,
+    certified: true,
+    source_family_id: 'cds-simbad',
+    priority: 8,
+    domains: ['G19'],
+    capabilities: [],
+    allowed_hosts: ['simbad.cds.unistra.fr'],
+    smoke_query: 'Sirius',
+    endpoints: [{
+      endpoint_id: 'simbad-identifier-record',
+      url_template: 'https://simbad.cds.unistra.fr/simbad/sim-id?Ident={query}',
+      request_headers: { Accept: 'text/html,application/xhtml+xml' },
+      response_format: 'TEXT',
+      title: 'SIMBAD astronomical object record',
+      authority_id: 'cds-simbad',
+      publisher_name: 'CDS / Université de Strasbourg',
+      capability_id: 'astronomical_object_identifier_search',
+      maximum_records: 1,
+      maximum_excerpt_chars: 32768,
+      timeout_ms: 12000,
+      fixed_fields: {
+        source_role: 'OFFICIAL',
+        language: 'und',
+        rights: { access: 'public', reuse: 'source_specific' }
+      }
+    }],
+    routing_terms: ['simbad', 'star', 'astronomy', 'astronomical object', 'identifier', '天文', '恒星', '天体', '星']
+  }),
+  Object.freeze({
+    provider_id: 'nist-osac-registry-search',
+    catalog_source_ids: ['NIST_OSAC_VERIFIED'],
+    type: 'FREE_OFFICIAL_HTTP',
+    enabled: true,
+    certified: true,
+    source_family_id: 'nist-osac',
+    priority: 8,
+    domains: ['G34'],
+    capabilities: [],
+    allowed_hosts: ['www.nist.gov'],
+    smoke_query: 'E2916',
+    endpoints: [{
+      endpoint_id: 'nist-osac-registry-filter',
+      url_template: 'https://www.nist.gov/osac/registry?k={query}',
+      request_headers: { Accept: 'text/html,application/xhtml+xml' },
+      response_format: 'TEXT',
+      title: 'NIST OSAC Registry filtered records',
+      authority_id: 'nist-osac',
+      publisher_name: 'National Institute of Standards and Technology',
+      capability_id: 'forensic_standard_registry_search',
+      maximum_records: 1,
+      maximum_excerpt_chars: 65536,
+      timeout_ms: 12000,
+      fixed_fields: {
+        source_role: 'OFFICIAL',
+        language: 'en',
+        rights: { access: 'public', reuse: 'source_specific' }
+      }
+    }],
+    routing_terms: ['nist osac', 'osac', 'forensic standard', 'forensic science', 'digital evidence', 'forensics', '法科学', 'デジタルフォレンジック', '鑑識']
   })
 ]);
 
 const ROUTING_OVERRIDES_RUNTIME_WAVE4 = Object.freeze({
   'cisa-kev-search': ['cisa', 'kev', 'known exploited vulnerability', 'actively exploited', 'cve', 'exploit', 'vulnerability', '脆弱性', '悪用', '既知の悪用'],
-  'nih-reporter-project-search': ['nih', 'reporter', 'grant', 'research project', 'funded research', 'federal research', 'research funding', '研究助成', '研究費', '研究プロジェクト']
+  'nih-reporter-project-search': ['nih', 'reporter', 'grant', 'research project', 'funded research', 'federal research', 'research funding', '研究助成', '研究費', '研究プロジェクト'],
+  'onet-occupation-search': ['onet', 'occupation', 'job', 'career', 'skills', 'employment', '職業', '仕事', '職種', '技能', 'キャリア'],
+  'clojars-project-search': ['clojars', 'clojure', 'clojurescript', 'leiningen', 'clojure package', 'Clojure', 'ClojureScript', 'パッケージ'],
+  'simbad-object-search': ['simbad', 'star', 'astronomy', 'astronomical object', 'identifier', '天文', '恒星', '天体', '星'],
+  'nist-osac-registry-search': ['nist osac', 'osac', 'forensic standard', 'forensic science', 'digital evidence', 'forensics', '法科学', 'デジタルフォレンジック', '鑑識']
 });
 
 module.exports = { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4, ROUTING_OVERRIDES_RUNTIME_WAVE4 };

@@ -8,7 +8,11 @@ const RUNTIME_STATES = new Set(['SEARCHABLE', 'VERIFIED_EXTRACTED', 'ADAPTER_REQ
 const RUNTIME_QUARANTINED_SOURCE_IDS = new Set(['CPSC_RECALLS_API_VERIFIED']);
 const RUNTIME_ENABLED_SOURCE_OVERRIDES = Object.freeze({
   CISA_KEV_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'cisa-kev-search', retrieval_strategy: 'LIVE_JSON_LOCAL_FILTER' }),
-  NIH_REPORTER_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nih-reporter-project-search', retrieval_strategy: 'LIVE_POST_JSON' })
+  NIH_REPORTER_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nih-reporter-project-search', retrieval_strategy: 'LIVE_POST_JSON' }),
+  ONET_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'onet-occupation-search', retrieval_strategy: 'LIVE_SEARCH_DETAIL_HTML' }),
+  CLOJARS_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'clojars-project-search', retrieval_strategy: 'LIVE_SEARCH_DETAIL_HTML' }),
+  SIMBAD_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'simbad-object-search', retrieval_strategy: 'LIVE_TEXT_RECORD' }),
+  NIST_OSAC_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nist-osac-registry-search', retrieval_strategy: 'LIVE_TEXT_FILTERED_REGISTRY' })
 });
 const PUBLIC_CATALOG_BASENAME = 'evidence-source-catalog.public.json';
 const SPECIALIST_EXTENSION_BASENAME = 'evidence-source-catalog.specialist-expansion.json';
