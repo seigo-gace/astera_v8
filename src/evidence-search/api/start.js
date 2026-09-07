@@ -7,6 +7,8 @@ const Logger = require('../../logger');
 const EvidenceSearchApiServer = require('./server');
 const { evaluateInformationQuality } = require('../../quality-completion-evaluator');
 const { loadEvidenceProviders } = require('../providers/config-loader');
+const { KbTargetRegistry } = require('../core/kb-target-registry');
+const { attachKbTargetsToProviders } = require('../providers/kb-target-aware-provider');
 const { EvidenceJobStore } = require('../recovery/job-store');
 const { DurableEvidenceSpool } = require('../recovery/durable-spool');
 const { EvidenceJobManager } = require('../recovery/job-manager');
@@ -43,7 +45,9 @@ function assertUsableProviderConfiguration(providers) {
 }
 
 const logger = new Logger();
-const providers = loadEvidenceProviders();
+const kbTargetRegistry = KbTargetRegistry.load();
+const baseProviders = loadEvidenceProviders();
+const providers = attachKbTargetsToProviders(baseProviders, kbTargetRegistry);
 const activeProviderCount = assertUsableProviderConfiguration(providers);
 const jobStore = new EvidenceJobStore();
 const durableSpool = new DurableEvidenceSpool();
@@ -75,6 +79,9 @@ logger.write({
   payload: {
     provider_count: providers.length,
     active_provider_count: activeProviderCount,
+    kb_target_source_record_count: kbTargetRegistry.source_record_count,
+    kb_target_count: kbTargetRegistry.target_count,
+    automatic_kb_target_count: kbTargetRegistry.automatic_target_count,
     active_search_mode: 'FREE_ONLY',
     evaluator_mode: 'EVALUATOR_API_7374',
     durable_recovery: true,

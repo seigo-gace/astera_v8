@@ -1,0 +1,664 @@
+kb	official_url	genres_csv	accesses_csv	statuses_csv
+Australian Business Register ABN Lookup	https://abr.business.gov.au/Search/Index	G10/G11	FREE_NO_AUTH	PARTIAL
+Red Hat CVE Database	https://access.redhat.com/security/cve/	G29/G31	FREE_NO_AUTH	PASS
+USDA APHIS Agricultural Commodity Import Requirements (ACIR)	https://acir.aphis.usda.gov/	G24/G21/G33	FREE_NO_AUTH	PARTIAL
+NRC ADAMS Public Search	https://adams-search.nrc.gov/	G27/G25/G37	FREE_NO_AUTH	PARTIAL
+SEC Investment Adviser Public Disclosure (IAPD)	https://adviserinfo.sec.gov/	G11	FREE_NO_AUTH	PARTIAL
+FAO AGRIS	https://agris.fao.org/	G24/G37	FREE_NO_AUTH	PARTIAL
+FAO AGROVOC	https://agrovoc.fao.org/	G14/G22/G24	FREE_NO_AUTH	PARTIAL
+MLCommons AILuminate	https://ailuminate.mlcommons.org/	G30/G31	FREE_NO_AUTH	PASS
+FAA Airmen Inquiry	https://aircraft.faa.gov/airmeninquiry/	G28/G12	FREE_NO_AUTH	PARTIAL
+MIT AI Risk Repository	https://airisk.mit.edu/risks	G30/G31/G34	FREE_NO_AUTH	PARTIAL
+Angular API Reference Search	https://angular.dev/reference	G29	FREE_NO_AUTH	PARTIAL
+Animal Drugs @ FDA	https://animaldrugsatfda.fda.gov/	G24/G38	FREE_NO_AUTH	PARTIAL
+France L’Annuaire des Entreprises / RNE	https://annuaire-entreprises.data.gouv.fr/	G10/G11	FREE_NO_AUTH	PARTIAL
+Congress.gov API	https://api.congress.gov/	G07/G08	FREE_AUTH	PARTIAL
+DataCite REST API	https://api.datacite.org/	G01/G37	FREE_NO_AUTH	PARTIAL
+FIRST EPSS API	https://api.first.org/epss/	G31	FREE_NO_AUTH	PARTIAL
+Flutter API Reference Search	https://api.flutter.dev/flutter/search.html	G29	FREE_NO_AUTH	PARTIAL
+IUCN Red List API v4	https://api.iucnredlist.org/	G22/G21	CONSTRAINED	PARTIAL
+Laravel API Documentation Search	https://api.laravel.com/	G29	FREE_NO_AUTH	PARTIAL
+OBIS API v3	https://api.obis.org/	G21/G22	FREE_NO_AUTH	PARTIAL
+FEC OpenFEC API / Campaign Finance Search	https://api.open.fec.gov/developers/	G07/G11	FREE_AUTH	PARTIAL
+Protected Planet API v4	https://api.protectedplanet.net/documentation	G17/G21/G22	FREE_AUTH	PARTIAL
+USGS Water Data APIs	https://api.waterdata.usgs.gov/docs/	G21	FREE_NO_AUTH	PARTIAL
+National Weather Service API	https://api.weather.gov/	G21	FREE_NO_AUTH	PARTIAL
+World Archery API	https://api.worldarchery.org/v3/API/AthleteResults	G17	FREE_NO_AUTH	PARTIAL
+FCC OET Knowledge Database (KDB)	https://apps.fcc.gov/oetcf/kdb/index.cfm	G32/G36	FREE_NO_AUTH	PARTIAL
+IRS Tax Exempt Organization Search (TEOS)	https://apps.irs.gov/app/eos/	G08/G10/G11	FREE_NO_AUTH	PARTIAL
+OpenEI Utility Rate Database API	https://apps.openei.org/services/	G27	FREE_AUTH	PARTIAL
+Arch Linux Package Search	https://archlinux.org/packages/	G29	FREE_NO_AUTH	PARTIAL
+arXiv Search	https://arxiv.org/search/	G37/G18/G19/G29/G30	FREE_NO_AUTH	PARTIAL
+MITRE ATLAS	https://atlas.mitre.org/	G30/G31	FREE_NO_AUTH	PARTIAL
+MITRE ATT&CK TAXII/STIX	https://attack.mitre.org/resources/attack-data-and-tools/	G31	FREE_NO_AUTH	PASS
+Library of Congress Authorities	https://authorities.loc.gov/	G01/G14/G15	FREE_NO_AUTH	PARTIAL
+BacDive｜Bacterial Diversity Metadatabase	https://bacdive.dsmz.de/	G22	FREE_NO_AUTH	PASS
+FDIC BankFind Suite	https://banks.data.fdic.gov/bankfind-suite	G11	FREE_NO_AUTH	PARTIAL
+BELIT｜Bioethics Literature Database	https://belit.drze.de/	G02	FREE_NO_AUTH	PARTIAL
+Bioconductor Package / Code Search	https://bioconductor.org/	G29/G30	FREE_NO_AUTH	PARTIAL
+NCBO BioPortal	https://bioportal.bioontology.org/	G03/G14/G23	FREE_NO_AUTH	PARTIAL
+Sweden Bolagsverket Find Company Information	https://bolagsverket.se/en/sokforetagsinformation/omsokforetagsinformation.3045.html	G10	FREE_NO_AUTH	PARTIAL
+DOE Building Performance Database (BPD)	https://bpd.lbl.gov/	G26/G27/G37	FREE_NO_AUTH	PARTIAL
+FINRA BrokerCheck	https://brokercheck.finra.org/	G11/G12	FREE_NO_AUTH	PARTIAL
+SNOMED International SNOMED CT Browser	https://browser.ihtsdotools.org/	G03/G14/G23	FREE_NO_AUTH	PARTIAL
+CanadaBuys Tender Opportunities	https://canadabuys.canada.ca/en/tender-opportunities	G07/G10	FREE_NO_AUTH	PARTIAL
+UK Find Case Law	https://caselaw.nationalarchives.gov.uk/	G08	FREE_NO_AUTH	PARTIAL
+NVIDIA NGC Catalog	https://catalog.ngc.nvidia.com/search	G29/G30	FREE_NO_AUTH	PARTIAL
+NASA SPDF CDAWeb / CDAS API	https://cdaweb.gsfc.nasa.gov/	G19/G21	FREE_NO_AUTH	PARTIAL
+NIST Materials Resource Registry	https://cdcs.registry.nist.gov/explore/keyword/	G20/G25/G26/G37	FREE_NO_AUTH	PARTIAL
+FBI Crime Data Explorer	https://cde.ucr.cjis.gov/	G34	FREE_NO_AUTH	PARTIAL
+SeaDataNet CDI Data Discovery and Access Service	https://cdi.seadatanet.org/search	G21	CONSTRAINED	PARTIAL
+Maven Central Search REST API	https://central.sonatype.org/search/rest-api-guide/	G29	FREE_NO_AUTH	BLOCKED
+EPA Lead-Safe Certified Firm Search / RRP	https://cfpub.epa.gov/flpp/pub/index.cfm?do=main.firmSearch	G20/G33/G38	FREE_NO_AUTH	PARTIAL
+USCG Port State Information Exchange (PSIX)	https://cgmix.uscg.mil/psix/	G28/G35	FREE_NO_AUTH	PARTIAL
+OWASP Cheat Sheet Series	https://cheatsheetseries.owasp.org/	G31/G29	FREE_NO_AUTH	PARTIAL
+ChEMBL Data Web Services	https://chembl.gitbook.io/chembl-interface-documentation/web-services/chembl-data-web-services	G20/G23	FREE_NO_AUTH	PARTIAL
+Clang Documentation Search	https://clang.llvm.org/docs/	G29	FREE_NO_AUTH	PASS
+Clojure Reference / REPL Documentation Search	https://clojure.org/guides/repl/basic_usage	G29	FREE_NO_AUTH	PASS
+NASA Earthdata CMR Search	https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html	G05/G21/G37	FREE_NO_AUTH	PASS
+CocoaPods.org Search	https://cocoapods.org/	G29	FREE_NO_AUTH	PARTIAL
+Museums Victoria Collections API	https://collections.museumsvictoria.com.au/developers	G16/G22	FREE_NO_AUTH	PARTIAL
+College Scorecard API	https://collegescorecard.ed.gov/data/documentation/	G13	FREE_AUTH	PARTIAL
+New Zealand Companies Register	https://companies-register.companiesoffice.govt.nz/search/	G10	FREE_NO_AUTH	PARTIAL
+ConanCenter	https://conan.io/center	G29	FREE_NO_AUTH	PARTIAL
+CORDIS Search / Linked Open Data	https://cordis.europa.eu/search	G37	FREE_NO_AUTH	PASS
+Ireland CRO CORE Entity Search	https://core.cro.ie/	G10	FREE_NO_AUTH	PARTIAL
+tDAR｜the Digital Archaeological Record	https://core.tdar.org/	G04	CONSTRAINED	PARTIAL
+crates.io Rust Package Registry	https://crates.io/	G29	FREE_NO_AUTH	PARTIAL
+Stanford HELM Leaderboards	https://crfm.stanford.edu/helm/index.html	G30	FREE_NO_AUTH	PARTIAL
+Australia CRICOS	https://cricos.education.gov.au/	G13	FREE_NO_AUTH	PARTIAL
+Clinical Research Information Service (CRiS)	https://cris.nih.go.kr/cris/search/listDetail.do	G23	FREE_NO_AUTH	PARTIAL
+NIST Cybersecurity and Privacy Reference Tool (CPRT)	https://csrc.nist.gov/projects/cprt/catalog	G31/G32	FREE_NO_AUTH	PARTIAL
+NIST CAVP Validation Search	https://csrc.nist.gov/Projects/cryptographic-algorithm-validation-program/validation-search	G31/G32	FREE_NO_AUTH	PASS
+NIST CMVP Certificate Search	https://csrc.nist.gov/projects/cryptographic-module-validation-program/validated-modules/search	G31/G32	FREE_NO_AUTH	BLOCKED,PARTIAL
+CTAN Search / JSON API	https://ctan.org/search/	G29	FREE_NO_AUTH	PARTIAL
+Chinese Text Project	https://ctext.org/	G02/G14/G15	FREE_NO_AUTH	PARTIAL
+Clinical Trials Registry - India (CTRI)	https://ctri.nic.in/Clinicaltrials/pubview.php	G23	FREE_NO_AUTH	PARTIAL
+MITRE D3FEND Knowledge Graph	https://d3fend.mitre.org/	G31	FREE_NO_AUTH	PARTIAL
+Dart Official Documentation Search	https://dart.dev/search	G29	FREE_NO_AUTH	PARTIAL
+OECD Data Explorer SDMX API	https://data-explorer.oecd.org/	G06/G09/G10/G11/G12/G13/G37	FREE_NO_AUTH	PARTIAL
+BIS Data Portal / SDMX API	https://data.bis.org/	G09/G11	FREE_NO_AUTH	PARTIAL
+EQAR DEQAR	https://data.deqar.eu/	G13	FREE_NO_AUTH	PARTIAL
+ECB Data Portal API	https://data.ecb.europa.eu/help/api/data	G09/G11	FREE_NO_AUTH	PASS
+FAOSTAT Forestry Production and Trade / FAO Data Catalog	https://data.fao.org/catalog/iso/0f95f45b-029f-46dc-b3cd-49bed7690ca9	G24	FREE_NO_AUTH	PASS
+IMF Data API	https://data.imf.org/en/Resource-Pages/IMF-API	G09/G11	FREE_AUTH	PARTIAL
+LINZ Data Service	https://data.linz.govt.nz/data/	G05/G26	FREE_NO_AUTH	PARTIAL
+NIST PDR｜AM Bench / Additive Manufacturing Process Data	https://data.nist.gov/pdr/lps/64025BCB4178C48EE0531A5706814E1C1889	G25	FREE_NO_AUTH	PASS
+NIST Science Data Portal / Public Data Repository	https://data.nist.gov/sdp/	G20/G25/G26/G37	FREE_NO_AUTH	PARTIAL
+NLR Data Catalog	https://data.nrel.gov/search-page	G27/G30/G37	FREE_NO_AUTH	PARTIAL
+Rijksmuseum Collection Search API	https://data.rijksmuseum.nl/docs/search	G16	FREE_NO_AUTH	PARTIAL
+UNdata	https://data.un.org/	G01/G06/G09	FREE_NO_AUTH	PARTIAL
+UNICEF Data Warehouse / SDMX API	https://data.unicef.org/resources/data_explorer/unicef_f/	G06/G13/G23/G24/G37	FREE_NO_AUTH	PARTIAL
+UNODC Data Portal	https://data.unodc.org/	G06/G34/G35	FREE_NO_AUTH	PARTIAL
+UN Women Data Hub / Women Count	https://data.unwomen.org/data-portal	G06/G07/G09/G12/G37	FREE_NO_AUTH	PARTIAL
+WTO Tariff and Trade Data	https://data.wto.org/en/dataset/wto_ttd	G09	FREE_NO_AUTH	PARTIAL
+Databrary	https://databrary.org/search	G03	CONSTRAINED	PARTIAL
+UNESCO UIS Data Browser / Data API	https://databrowser.uis.unesco.org/	G06/G13/G16/G37	FREE_NO_AUTH	PARTIAL
+Dryad Data Repository Search / API	https://datadryad.org/search	G37	FREE_NO_AUTH	PARTIAL
+FAOData Explorer	https://dataexplorer.fao.org/	G09/G24/G37	FREE_NO_AUTH	PARTIAL
+World Bank Indicators API	https://datahelpdesk.worldbank.org/knowledgebase/articles/889392	G06/G09/G10/G11	FREE_NO_AUTH	PASS
+ITU DataHub	https://datahub.itu.int/	G36/G09	FREE_NO_AUTH	PARTIAL
+UCI DataRide Rankings	https://dataride.uci.org/	G17	FREE_NO_AUTH	PARTIAL
+IETF Datatracker	https://datatracker.ietf.org/	G29/G31/G36	FREE_NO_AUTH	PASS
+Harvard Dataverse Repository	https://dataverse.harvard.edu/	G37	FREE_NO_AUTH	PARTIAL
+USITC DataWeb / DataWeb API	https://dataweb.usitc.gov/	G09	FREE_AUTH	PARTIAL
+deps.dev / Open Source Insights	https://deps.dev/	G29/G31	FREE_NO_AUTH	PARTIAL
+MySQL Reference Manual Search	https://dev.mysql.com/doc/search/	G29	FREE_NO_AUTH	PASS
+UK Companies House Public Data API	https://developer-specs.company-information.service.gov.uk/companies-house-public-data-api/reference/search	G10	FREE_AUTH	PARTIAL
+Alternative Fueling Station Locator API	https://developer.nlr.gov/docs/transportation/alt-fuel-stations-v1/	G28/G27	FREE_AUTH	PARTIAL
+Cloudflare API Reference Search	https://developers.cloudflare.com/api/	G29/G30/G31/G36	FREE_NO_AUTH	PARTIAL
+V&A Collections API	https://developers.vam.ac.uk/	G16	FREE_NO_AUTH	PARTIAL
+Zenodo REST API	https://developers.zenodo.org/	G37	FREE_NO_AUTH	PASS
+Portugal Diário da República	https://diariodarepublica.pt/	G08	FREE_NO_AUTH	PARTIAL
+United Nations Digital Library	https://digitallibrary.un.org/	G07/G15/G37	FREE_NO_AUTH	PARTIAL
+Discover Uni	https://discoveruni.gov.uk/	G13	FREE_NO_AUTH	PARTIAL
+NIST Digital Library of Mathematical Functions (DLMF)	https://dlmf.nist.gov/	G18	FREE_NO_AUTH	PASS
+DOAJ Search / API	https://doaj.org/	G15/G37	FREE_NO_AUTH	PARTIAL
+Rust Standard Library Documentation Search	https://doc.rust-lang.org/stable/std/	G29	FREE_NO_AUTH	PASS
+AirNow API	https://docs.airnowapi.org/webservices	G21	FREE_AUTH	PARTIAL
+Amazon EC2 API Reference	https://docs.aws.amazon.com/AWSEC2/latest/APIReference/	G29	FREE_NO_AUTH	PASS
+Google Compute Engine REST API Reference	https://docs.cloud.google.com/compute/docs/reference/rest/v1	G29	FREE_NO_AUTH	PASS
+RIPE Database RDAP	https://docs.db.ripe.net/How-to-Query-the-RIPE-Database/Registration-Data-Access-Protocol	G36	FREE_NO_AUTH	PARTIAL
+Django Documentation Search	https://docs.djangoproject.com/en/6.0/search/	G29	FREE_NO_AUTH	PASS
+GitLab Search API	https://docs.gitlab.com/api/search/	G29	FREE_AUTH	PARTIAL
+Groovy API Documentation Search	https://docs.groovy-lang.org/latest/html/api/	G29	FREE_NO_AUTH	PASS
+JAX Documentation Search	https://docs.jax.dev/en/latest/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+Julia Documentation Search	https://docs.julialang.org/en/v1/search/	G29/G30	FREE_NO_AUTH	PARTIAL
+Linux Kernel Documentation Search	https://docs.kernel.org/search.html	G29	FREE_NO_AUTH	PASS
+Materials Project API	https://docs.materialsproject.org/downloading-data/using-the-api	G20/G25	FREE_AUTH	PARTIAL
+NVIDIA TensorRT Documentation Search	https://docs.nvidia.com/deeplearning/tensorrt/latest/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+OpenCV Documentation / API Reference	https://docs.opencv.org/	G30/G29	FREE_NO_AUTH	PASS
+OpenVINO Documentation Search	https://docs.openvino.ai/2026/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+Java SE / JDK API Documentation Search	https://docs.oracle.com/en/java/javase/26/docs/api/search.html	G29	FREE_NO_AUTH	PARTIAL
+Python Official Documentation Search	https://docs.python.org/3/search.html	G29	FREE_NO_AUTH	PASS
+PyTorch API Documentation Search	https://docs.pytorch.org/docs/main/pytorch-api.html	G29/G30	FREE_NO_AUTH	PARTIAL
+Racket Documentation Search	https://docs.racket-lang.org/	G29	FREE_NO_AUTH	PASS
+NVIDIA RAPIDS Documentation Search	https://docs.rapids.ai/	G29/G30	FREE_NO_AUTH	PARTIAL
+Ruby Official Documentation Search	https://docs.ruby-lang.org/ja/search/	G29	FREE_NO_AUTH	PARTIAL
+Scala Documentation / Language Specification Search	https://docs.scala-lang.org/	G29	FREE_NO_AUTH	PASS
+SciPy Documentation Search	https://docs.scipy.org/doc/scipy/search.html	G30/G29	FREE_NO_AUTH	PASS
+Solidity Documentation / General Index	https://docs.soliditylang.org/en/latest/genindex.html	G29/G31	FREE_NO_AUTH	PASS
+Spring Documentation Search	https://docs.spring.io/spring-framework/reference/search.html	G29	FREE_NO_AUTH	PARTIAL
+TED Search API (Tenders Electronic Daily)	https://docs.ted.europa.eu/api/latest/search.html	G07/G10	FREE_NO_AUTH	PARTIAL
+Copernicus Data Space Catalogue APIs	https://documentation.dataspace.copernicus.eu/APIs.html	G05/G21	FREE_NO_AUTH	PARTIAL
+German Clinical Trials Register (DRKS)	https://drks.de/search/en	G23	FREE_NO_AUTH	PARTIAL
+FAA Dynamic Regulatory System (DRS)	https://drs.faa.gov/search	G28/G32	FREE_NO_AUTH	PARTIAL
+EU Business Registers Interconnection System (BRIS)	https://e-justice.europa.eu/topics/registers-business-insolvency-land/business-registers-search-company-eu_en	G10	FREE_NO_AUTH	PARTIAL
+Eurostat Statistics API	https://ec.europa.eu/eurostat/api/dissemination	G09	FREE_NO_AUTH	PASS
+EU Safety Gate	https://ec.europa.eu/safety-gate-alerts/screen/webReport	G33	FREE_NO_AUTH	PARTIAL
+ECHA CHEM / Search for Chemicals	https://echa.europa.eu/information-on-chemicals	G20/G21/G33	CONSTRAINED	PARTIAL
+EPA ECHO	https://echo.epa.gov/	G21/G33/G10	FREE_NO_AUTH	PARTIAL
+Overview of Medical Research in the Netherlands (OMON)	https://english.ccmo.nl/researchportal/ccmo-register	G23	FREE_NO_AUTH	PARTIAL
+CNIPA Patent / Trademark Query	https://english.cnipa.gov.cn/	G32	FREE_NO_AUTH	PARTIAL
+Brazilian Clinical Trials Registry (ReBEC)	https://ensaiosclinicos.gov.br/metis/search/query	G23	FREE_NO_AUTH	PARTIAL
+Peruvian Clinical Trials Registry (REPEC)	https://ensayosclinicos-repec.ins.gob.pe/en/about-repec/clinical-trial-search	G23	FREE_NO_AUTH	PARTIAL
+EU EPREL Product Registry	https://eprel.ec.europa.eu/	G27/G33/G38	FREE_NO_AUTH	PARTIAL
+EPSG Geodetic Parameter Dataset	https://epsg.org/home.html	G05	FREE_NO_AUTH	PASS
+ERA ERADIS	https://eradis.era.europa.eu/	G28/G32	FREE_NO_AUTH	PARTIAL
+ESCO Web Services API	https://esco.ec.europa.eu/en/use-esco/use-esco-services-api/esco-web-service-api	G12/G13	FREE_NO_AUTH	PARTIAL
+EU Clinical Trials Information System (CTIS) Public Search	https://euclinicaltrials.eu/ctis-public/search	G23	FREE_NO_AUTH	PARTIAL
+EuDML	https://eudml.org/search	G18/G37	FREE_NO_AUTH	PARTIAL
+EUR-Lex	https://eur-lex.europa.eu/advanced-search-form.html?locale=en	G08/G25/G30/G31/G32	FREE_NO_AUTH	PASS
+NASA Exoplanet Archive TAP / API	https://exoplanetarchive.ipac.caltech.edu/	G19/G37	FREE_NO_AUTH	PARTIAL
+Figshare Search / API	https://figshare.com/	G37	FREE_NO_AUTH	PARTIAL
+FindStat	https://findstat.org/	G18	FREE_NO_AUTH	PARTIAL
+China National Laws and Regulations Database	https://flk.npc.gov.cn/search	G08	FREE_NO_AUTH	PARTIAL
+Colombia SECOP Public Contract Search	https://formacion.secop.gov.co/Public/Tendering/ContractNoticeManagement/Index?Country=CO&Page=login&SkinName=CCE&currentLanguage=es-co	G07/G10	FREE_NO_AUTH	PARTIAL
+Homebrew Formulae	https://formulae.brew.sh/	G29	FREE_NO_AUTH	PARTIAL
+FRED API / Series Search	https://fred.stlouisfed.org/docs/api/fred/series_search.html	G09/G11	FREE_AUTH	PARTIAL
+Wolfram Functions Site	https://functions.wolfram.com/	G18	FREE_NO_AUTH	PARTIAL
+GCC Online Documentation	https://gcc.gnu.org/onlinedocs/	G29	FREE_NO_AUTH	PARTIAL
+NGA Geographic Names Server (GNS)	https://geonames.nga.mil/geonames/GNSHome/	G05	FREE_NO_AUTH	PARTIAL
+EPA GHGRP FLIGHT｜Facility Level GHG Emissions Data	https://ghgdata.epa.gov/flight/	G21	FREE_NO_AUTH	PASS
+FEMA IPAWS Archived Alerts API	https://gis.fema.gov/arcgis/rest/services/FEMA/IPAWS_Archive/FeatureServer/1	G34	FREE_NO_AUTH	PARTIAL
+IMO GISIS Public Area	https://gisis.imo.org/Public/Default.aspx	G28/G35	FREE_NO_AUTH	PARTIAL
+GitHub Advisory Database	https://github.com/advisories	G29/G31	FREE_NO_AUTH	PARTIAL
+IRENA Global Atlas for Renewable Energy	https://globalatlas.irena.org/	G27/G21	FREE_NO_AUTH	PARTIAL
+OECD GlobalRecalls Portal	https://globalrecalls.oecd.org/	G33	FREE_NO_AUTH	PARTIAL
+Glottolog	https://glottolog.org/	G14	FREE_NO_AUTH	PARTIAL
+Glottolog	https://glottolog.org/glottolog	G14/G15	FREE_NO_AUTH	PARTIAL
+Go Language Specification / go.dev	https://go.dev/ref/spec	G29	FREE_NO_AUTH	PASS
+Grambank	https://grambank.clld.org/	G14	FREE_NO_AUTH	PARTIAL
+Global Register of Publishers (GRP)	https://grp.isbn-international.org/	G15/G32,G15/G10	FREE_AUTH,FREE_NO_AUTH	PARTIAL
+RubyGems.org Search API	https://guides.rubygems.org/rubygems-org-api/	G29	FREE_NO_AUTH	PARTIAL
+Hackage	https://hackage.haskell.org/packages/search	G29	FREE_NO_AUTH	PARTIAL
+Health Canada Drug Product Database (DPD)	https://health-products.canada.ca/dpd-bdpp/?lang=eng	G23/G24	FREE_NO_AUTH	PARTIAL
+Health Canada Medical Devices Active Licence Listing (MDALL)	https://health-products.canada.ca/mdall-limh/prepareSearch?lang=eng&type=active	G23/G33	FREE_NO_AUTH	PARTIAL
+NASA HEASARC Data Archive / Xamin	https://heasarc.gsfc.nasa.gov/W3Browse/	G19/G37	FREE_NO_AUTH	PARTIAL
+Elixir Official Documentation Search	https://hexdocs.pm/elixir/search.html	G29	FREE_NO_AUTH	PASS
+National Heritage List for England	https://historicengland.org.uk/listing/the-list	G04/G16	FREE_NO_AUTH	PARTIAL
+DoD Key Officials Searchable Database	https://history.defense.gov/Publications/DoD-Key-Officials/	G35/G04	FREE_NO_AUTH	PARTIAL
+Hoogle｜Haskell API Search	https://hoogle.haskell.org/	G29	FREE_NO_AUTH	PARTIAL
+House of Graphs	https://houseofgraphs.org/search	G18	FREE_NO_AUTH	PARTIAL
+Docker Hub Search	https://hub.docker.com/search	G29	FREE_NO_AUTH	PASS
+Hugging Face Hub Search	https://huggingface.co/docs/hub/en/search	G30	FREE_NO_AUTH	PASS
+IATE Terminology Database	https://iate.europa.eu/	G14	FREE_NO_AUTH	PARTIAL
+ICC-ES Reports Directory	https://icc-es.org/reports-directory/	G26	FREE_NO_AUTH	PARTIAL
+WHO ICD API	https://icd.who.int/icdapi	G03/G23	FREE_AUTH	PARTIAL
+Internet Encyclopedia of Philosophy	https://iep.utm.edu/	G02	FREE_NO_AUTH	PARTIAL
+ILAC MRA Signatory Search	https://ilac.org/signatory-search/	G32	FREE_NO_AUTH	PARTIAL
+ILOSTAT Bulk / Programmatic Data	https://ilostat.ilo.org/data/bulk/	G12	FREE_NO_AUTH	PARTIAL
+ILO World Social Protection Data Dashboards / ILOSTAT	https://ilostat.ilo.org/topics/social-protection/	G06/G09/G12	FREE_NO_AUTH	PARTIAL
+AI Incident Database	https://incidentdatabase.ai/	G30/G34	FREE_NO_AUTH	PARTIAL
+EEA European Industrial Emissions Portal	https://industry.eea.europa.eu/industrial-emissions	G21/G25/G27/G33	FREE_NO_AUTH	PARTIAL
+ORCID Public Registry Search API	https://info.orcid.org/what-is-orcid/services/public-api/searching-the-registry/	G01/G37	FREE_AUTH	PARTIAL
+FHWA LTBP InfoBridge / National Bridge Inventory Search	https://infobridge.fhwa.dot.gov/data	G26/G28	FREE_NO_AUTH	PARTIAL
+FHWA InfoMaterials	https://infomaterials.fhwa.dot.gov/Data	G25/G26/G28	FREE_NO_AUTH	PARTIAL
+FHWA LTPP InfoPave	https://infopave.fhwa.dot.gov/Data/DataSelection	G26/G28/G37	FREE_NO_AUTH	PARTIAL
+FHWA InfoTechnology	https://infotechnology.fhwa.dot.gov/	G25/G26/G28	FREE_NO_AUTH	PARTIAL
+INSPIRE-HEP	https://inspirehep.net/	G19/G37	FREE_NO_AUTH	PARTIAL
+IP India InPASS / Patent Public Search	https://ipindia.gov.in/patents-before-you-apply-public-search	G32	FREE_NO_AUTH	PARTIAL
+Iranian Registry of Clinical Trials (IRCT)	https://irct.ir/search	G23	FREE_NO_AUTH	PARTIAL
+NPS IRMA DataStore / REST API	https://irmaservices.nps.gov/	G04/G17/G21/G22/G37	FREE_NO_AUTH	PARTIAL
+Archive of Formal Proofs (AFP)	https://isa-afp.org/search/	G18/G37	FREE_NO_AUTH	PARTIAL
+Poland ISAP	https://isap.sejm.gov.pl/isap.nsf/search.xsp	G08	FREE_NO_AUTH	PARTIAL
+Corporations Canada Federal Corporation Search	https://ised-isde.canada.ca/cc/lgcy/fdrlCrpSrch.html	G10	FREE_NO_AUTH	PARTIAL
+Canadian Trademarks Database	https://ised-isde.canada.ca/cipo/trademark-search/srch?lang=eng	G32	FREE_NO_AUTH	PARTIAL
+Canadian Patents Database	https://ised-isde.canada.ca/site/canadian-intellectual-property-office/en/patents	G32	FREE_NO_AUTH	PARTIAL
+Canadian Copyright Database Search	https://ised-isde.canada.ca/site/canadian-intellectual-property-office/en/search-intellectual-property-databases	G32	FREE_NO_AUTH	PARTIAL
+ISSF Results / Athletes Database	https://issf-sports.org/competitions/results	G17	FREE_NO_AUTH	PASS
+International Traditional Medicine Clinical Trial Registry (ITMCTR)	https://itmctr.ccebtcm.org.cn/	G23/G24	FREE_NO_AUTH	PARTIAL
+Indonesia JDIHN / Peraturan.go.id	https://jdih.peraturan.go.id/dokumen/index.html	G08	FREE_NO_AUTH	PARTIAL
+European Commission DGT Translation Memory (DGT-TM)	https://joint-research-centre.ec.europa.eu/language-technology-resources/dgt-translation-memory_en	G14/G29/G37	FREE_NO_AUTH	PARTIAL
+Japan Registry of Clinical Trials (jRCT)	https://jrct.mhlw.go.jp/	G23	FREE_NO_AUTH	PARTIAL
+IJF Judobase / Results	https://judobase.ijf.org/	G17	FREE_NO_AUTH	PARTIAL
+OHCHR JURIS Jurisprudence Database	https://juris.ohchr.org/AdvancedSearch	G06/G08	FREE_NO_AUTH	PARTIAL
+JVN iPedia	https://jvndb.jvn.jp/	G31	FREE_NO_AUTH	PARTIAL
+Belgium CBE Public Search	https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html	G10/G11	FREE_NO_AUTH	PARTIAL
+KerasHub Pretrained Models	https://keras.io/keras_hub/presets/	G29/G30	FREE_NO_AUTH	PARTIAL
+Keras Documentation Search	https://keras.io/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+Kotlin Official API Documentation Search	https://kotlinlang.org/docs/api-references.html	G29	FREE_NO_AUTH	PARTIAL
+Kubernetes Documentation / API Reference Search	https://kubernetes.io/docs/reference/	G29	FREE_NO_AUTH	PARTIAL
+Korean Law Information Center	https://law.go.kr/eng/engMain.do	G08	FREE_NO_AUTH	PARTIAL
+Canada Justice Laws Website	https://laws-lois.justice.gc.ca/	G08	FREE_NO_AUTH	PARTIAL
+Saudi Ministry of Justice Laws and Regulations	https://laws.moj.gov.sa/en/legislations-regulations/	G08	FREE_NO_AUTH	PARTIAL
+Lebanese Clinical Trials Registry (LBCTR)	https://lbctr.moph.gov.lb/LBCTR/Trials/View	G23	FREE_NO_AUTH	PARTIAL
+Mathlib Documentation Search	https://leanprover-community.github.io/mathlib4_docs/	G18/G29	FREE_NO_AUTH	PARTIAL
+.NET API Browser	https://learn.microsoft.com/en-us/dotnet/api/	G29	FREE_NO_AUTH	PARTIAL
+F# Language Reference / Microsoft Learn	https://learn.microsoft.com/en-us/dotnet/fsharp/	G29	FREE_NO_AUTH	PARTIAL
+NuGet SearchQueryService	https://learn.microsoft.com/en-us/nuget/api/search-query-service-resource	G29	FREE_NO_AUTH	PARTIAL
+PowerShell Documentation / Module Browser	https://learn.microsoft.com/en-us/powershell/	G29	FREE_NO_AUTH	PARTIAL
+Microsoft vcpkg Registry Search	https://learn.microsoft.com/en-us/vcpkg/commands/search	G29	FREE_NO_AUTH	PARTIAL
+Windows Package Manager (WinGet) Sources Search	https://learn.microsoft.com/en-us/windows/package-manager/winget/search	G29	FREE_NO_AUTH	PARTIAL
+Brazilian Federal Legislation Search (Planalto)	https://legislacao.planalto.gov.br/	G08	FREE_NO_AUTH	PARTIAL
+Romania Portal Legislativ	https://legislatie.just.ro/	G08	FREE_NO_AUTH	PARTIAL
+USACE National Levee Database	https://levees.sec.usace.army.mil/	G26/G34	FREE_NO_AUTH	PARTIAL
+LightGBM Documentation Search	https://lightgbm.readthedocs.io/en/latest/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+KnotInfo	https://linkinfo.knotinfo.org/	G18	FREE_NO_AUTH	PARTIAL
+LOINC	https://loinc.org/	G03/G14/G23	FREE_NO_AUTH	PARTIAL
+LOINC Search API / Terminology Service	https://loinc.org/kb/api/search-api	G23	FREE_AUTH	PARTIAL
+ICANN RDAP Lookup	https://lookup.icann.org/en/lookup	G36	FREE_NO_AUTH	PARTIAL
+LuaRocks Module Repository	https://luarocks.org/search	G29	FREE_NO_AUTH	PARTIAL
+UN Security Council Consolidated Sanctions List	https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list	G35	FREE_NO_AUTH	PARTIAL
+NIST Materials Data Repository	https://materialsdata.nist.gov/	G20/G25/G26/G37	FREE_NO_AUTH	PARTIAL
+NIST Matrix Market	https://math.nist.gov/MatrixMarket/searchtool.html	G18	FREE_NO_AUTH	PARTIAL
+Wolfram MathWorld	https://mathworld.wolfram.com/	G18	FREE_NO_AUTH	PARTIAL
+MetaCPAN	https://metacpan.org/	G29	FREE_NO_AUTH	PARTIAL
+Metropolitan Museum of Art Collection API	https://metmuseum.github.io/	G16	FREE_NO_AUTH	PARTIAL
+NIMS Materials Database (MatNavi)	https://mits.nims.go.jp/en/	G26	CONSTRAINED	PARTIAL
+MLCommons MLPerf Results	https://mlcommons.org/benchmarks/	G30	FREE_NO_AUTH	PARTIAL
+MLflow Documentation / Search	https://mlflow.org/docs/latest/api_reference/search.html	G29/G30	FREE_NO_AUTH	PASS
+Taiwan Laws & Regulations Database	https://mojlaw.moj.gov.tw/ENG/LawQueryE.aspx	G08	FREE_NO_AUTH	PARTIAL
+Mondo Disease Ontology	https://monarchinitiative.org/ontologies/mondo	G03/G14/G23	FREE_NO_AUTH	PARTIAL
+USGS Mineral Resources Online Spatial Data	https://mrdata.usgs.gov/	G21/G27/G25/G37	FREE_NO_AUTH	PARTIAL
+NGA Maritime Safety Information - Notice to Mariners Search	https://msi.nga.mil/NTM	G28/G35	FREE_NO_AUTH	PARTIAL
+Microsoft Security Update Guide	https://msrc.microsoft.com/update-guide/	G29/G31	FREE_NO_AUTH	PARTIAL
+MusicBrainz Web Service Search	https://musicbrainz.org/doc/MusicBrainz_API/Search	G16	FREE_NO_AUTH	PARTIAL
+NamUs	https://namus.nij.ojp.gov/	G34	FREE_NO_AUTH	PARTIAL
+Canadian Geographical Names Database	https://natural-resources.canada.ca/maps-tools-publications/tools-applications/canadian-geographical-names-database	G05	FREE_NO_AUTH	PARTIAL
+NCES College Navigator	https://nces.ed.gov/collegenavigator/	G13	FREE_NO_AUTH	PARTIAL
+NCES DataLab	https://nces.ed.gov/datalab	G13/G37	FREE_AUTH	PARTIAL
+NIST National Checklist Repository	https://ncp.nist.gov/repository	G31/G32	FREE_NO_AUTH	PARTIAL
+NIMH Data Archive (NDA)	https://nda.nih.gov/	G03	CONSTRAINED	PARTIAL
+IAEA EXFOR	https://nds.iaea.org/exfor/	G19	FREE_NO_AUTH	PARTIAL
+IAEA LiveChart of Nuclides	https://nds.iaea.org/relnsd/vcharthtml/VChartHTML.html	G19/G20	FREE_NO_AUTH	PARTIAL
+NEMSIS Public Dashboards	https://nemsis.org/view-reports/public-reports/version-3-public-dashboards/	G34	FREE_NO_AUTH	PARTIAL
+NEOS Guide / NEOS Solver Directory	https://neos-guide.org/guide/	G18/G29/G37	FREE_NO_AUTH	PASS
+NeuroMorpho.Org	https://neuromorpho.org/	G03	FREE_NO_AUTH	PARTIAL
+Neurosynth	https://neurosynth.org/	G03	FREE_NO_AUTH	PARTIAL
+USGS National Geologic Map Database	https://ngmdb.usgs.gov/	G21/G26/G37	FREE_NO_AUTH	PARTIAL
+USACE National Inventory of Dams	https://nid.sec.usace.army.mil/	G26/G34	FREE_NO_AUTH	PARTIAL
+USACE National Inventory of Dams (NID)	https://nid.sec.usace.army.mil/nid/	G26/G34	FREE_NO_AUTH	PARTIAL
+Nim Documentation Searchable Index	https://nim-lang.org/docs/theindex.html	G29	FREE_NO_AUTH	PARTIAL
+Node.js API Documentation Search	https://nodejs.org/api/	G29	FREE_NO_AUTH	PASS
+ILO NORMLEX	https://normlex.ilo.org/	G12/G08	FREE_NO_AUTH	PARTIAL
+NPS NPGallery National Register of Historic Places	https://npgallery.nps.gov/nrhp/AdvancedSearch	G04/G16	FREE_NO_AUTH	PARTIAL
+NASA Technical Reports Server (NTRS)	https://ntrs.nasa.gov/search	G19/G25/G37	FREE_NO_AUTH	PARTIAL
+NVD Official CPE Dictionary / CPE Search	https://nvd.nist.gov/products/cpe/search	G31	FREE_NO_AUTH	PARTIAL
+OCaml Documentation Search	https://ocaml.org/docs/search	G29	FREE_NO_AUTH	PARTIAL
+OECD.AI Policy Navigator	https://oecd.ai/	G30/G07/G08	FREE_NO_AUTH	PARTIAL
+OECD Catalogue of Tools & Metrics for Trustworthy AI	https://oecd.ai/en/catalogue/tools	G30/G31/G32	FREE_NO_AUTH	PARTIAL
+OECD AI Incidents Monitor	https://oecd.ai/en/incidents	G30/G34	FREE_NO_AUTH	PARTIAL
+OLAC Language Resources Catalog	https://olac.ldc.upenn.edu/	G14/G15	FREE_NO_AUTH	PARTIAL
+NASA SPDF OMNIWeb	https://omniweb.gsfc.nasa.gov/omniweb/	G19/G21	FREE_NO_AUTH	PARTIAL
+ONNX Documentation / Operators Search	https://onnx.ai/onnx/	G29/G30	FREE_NO_AUTH	PARTIAL
+EuroVoc / EU Vocabularies	https://op.europa.eu/en/web/eu-vocabularies	G01/G06/G08/G14/G32	FREE_NO_AUTH	PARTIAL
+U.S. Department of Education DAPIP	https://ope.ed.gov/dapip/	G13	FREE_NO_AUTH	PARTIAL
+ISO/IEC JTC1/SC22/WG14 C Standards / Public Drafts	https://open-std.org/jtc1/sc22/wg14/	G29/G32	FREE_NO_AUTH	PASS
+openFDA Drug Adverse Events	https://open.fda.gov/apis/	G23	FREE_NO_AUTH	PARTIAL
+openFDA Device 510(k)	https://open.fda.gov/apis/device/	G23/G33,G23	FREE_NO_AUTH	PARTIAL
+openFDA Device PMA	https://open.fda.gov/apis/device/pma/	G23	FREE_NO_AUTH	PARTIAL
+openFDA Device Registration & Listing	https://open.fda.gov/apis/device/registrationlisting/how-to-use-the-endpoint/	G23	FREE_NO_AUTH	PARTIAL
+openFDA GUDID / Device UDI	https://open.fda.gov/apis/device/udi/how-to-use-the-endpoint/	G23/G33	FREE_NO_AUTH	PARTIAL
+openFDA Drugs@FDA	https://open.fda.gov/apis/drug/drugsfda/	G23	FREE_NO_AUTH	PARTIAL
+openFDA Drug Labeling	https://open.fda.gov/apis/drug/label/	G23	FREE_NO_AUTH	PARTIAL
+SAM.gov Get Opportunities Public API	https://open.gsa.gov/api/get-opportunities-public-api/	G07/G10/G35	FREE_AUTH	PARTIAL
+Regulations.gov API v4	https://open.gsa.gov/api/regulationsgov/	G07/G08/G32	FREE_AUTH	PARTIAL
+OpenCompass / CompassRank & CompassHub	https://opencompass.org.cn/	G30	FREE_NO_AUTH	PARTIAL
+CERN Open Data Portal	https://opendata.cern.ch/	G19/G37	FREE_NO_AUTH	PARTIAL
+OpenML	https://openml.org/	G30/G37	FREE_NO_AUTH	PARTIAL
+OpenNeuro	https://openneuro.org/search	G03	FREE_NO_AUTH	PARTIAL
+Optuna Documentation Search	https://optuna.readthedocs.io/en/stable/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+OPUS｜Open Parallel Corpus Search / API	https://opus.nlpl.eu/	G14	FREE_NO_AUTH	PASS
+EPA Pesticide Product and Label System (PPLS)	https://ordspub.epa.gov/ords/pesticides/f?p=PPLS:1	G24/G33	FREE_NO_AUTH	PARTIAL
+OSV.dev API	https://osv.dev/	G29/G31	FREE_NO_AUTH	PASS
+Debian Packages Search	https://packages.debian.org/	G29	FREE_NO_AUTH	PARTIAL
+Ubuntu Packages Search	https://packages.ubuntu.com/	G29	FREE_NO_AUTH	PARTIAL
+Pan African Clinical Trials Registry (PACTR)	https://pactr.samrc.ac.za/	G23	FREE_NO_AUTH	PARTIAL
+WIPO PATENTSCOPE	https://patentscope.wipo.int/search/en/advancedSearch.jsf	G32	FREE_NO_AUTH	PARTIAL
+UN Peacemaker Peace Agreements Search	https://peacemaker.un.org/en/areas-of-work/peace-agreements-database-and-language-of-peace-tool/peace-agreements-search	G07	FREE_NO_AUTH	PARTIAL
+PEGI Game Ratings Search	https://pegi.info/search-pegi	G17	FREE_NO_AUTH	PARTIAL
+Perl Documentation / Perldoc Search	https://perldoc.perl.org/	G29	FREE_NO_AUTH	PASS
+PhilArchive	https://philarchive.org/	G02/G37	FREE_NO_AUTH	PARTIAL
+PhilPapers	https://philpapers.org/	G02/G37	FREE_NO_AUTH	PARTIAL
+PhilSci-Archive	https://philsci-archive.pitt.edu/	G02	FREE_NO_AUTH	PARTIAL
+NIST Atomic Spectra Database (ASD)	https://physics.nist.gov/asd	G19/G20	FREE_NO_AUTH	PARTIAL
+NIST CODATA	https://physics.nist.gov/cuu/Constants/index.html	G18/G19	FREE_NO_AUTH	PASS
+NIST Atomic Weights and Isotopic Compositions	https://physics.nist.gov/PhysRefData/Compositions/index.html	G20	FREE_NO_AUTH	PASS
+pkg.go.dev Search & API	https://pkg.go.dev/	G29	FREE_NO_AUTH	PARTIAL
+Alpine Linux Package Index	https://pkgs.alpinelinux.org/packages	G29	FREE_NO_AUTH	PARTIAL
+USDA PLANTS Database	https://plants.sc.egov.usda.gov/home/	G22/G24/G38	FREE_NO_AUTH	PARTIAL
+Stanford Encyclopedia of Philosophy Search	https://plato.stanford.edu/search	G02	FREE_NO_AUTH	PARTIAL
+Pleiades Gazetteer of Ancient Places	https://pleiades.stoa.org/	G04/G05	FREE_NO_AUTH	PARTIAL
+3GPP Specifications Portal Search	https://portal.3gpp.org/Specifications.aspx	G36	FREE_NO_AUTH	PARTIAL
+ARIADNE Archaeology Data Portal	https://portal.ariadne-infrastructure.eu/search	G04/G16/G37	FREE_NO_AUTH	PARTIAL
+Geoscience Australia Portal	https://portal.ga.gov.au/	G21/G27/G26/G37	FREE_NO_AUTH	PARTIAL
+Global Runoff Data Centre (GRDC) Data Portal	https://portal.grdc.bafg.de/	G21	FREE_NO_AUTH	PARTIAL
+ISSN Portal	https://portal.issn.org/search	G15	CONSTRAINED	PASS
+Kew Plants of the World Online (POWO)	https://powo.science.kew.org/	G22/G24	FREE_NO_AUTH	PASS
+IAEA Power Reactor Information System (PRIS)	https://pris.iaea.org/pris/	G27	CONSTRAINED	PARTIAL
+World Bank Projects & Operations	https://projects.worldbank.org/en/projects-operations/projects-home?lang=en	G07/G09/G10	FREE_NO_AUTH	PARTIAL
+PsychArchives	https://psycharchives.org/	G03	FREE_NO_AUTH	PARTIAL
+PsychPorta	https://psychporta.org/	G03	FREE_NO_AUTH	PARTIAL
+pub.dev Package Search	https://pub.dev/help/search	G29	FREE_NO_AUTH	PARTIAL
+NERIS Public｜Incident Basics	https://public.neris.fsri.org/	G34	FREE_NO_AUTH	PARTIAL
+FCC Public Inspection Files	https://publicfiles.fcc.gov/	G36	FREE_NO_AUTH	PARTIAL
+U.S. Copyright Public Records System (CPRS)	https://publicrecords.copyright.gov/	G32/G15	FREE_NO_AUTH	PARTIAL
+USGS Publications Warehouse / Mineral Commodity Summaries	https://pubs.usgs.gov/search?q=mineral+commodity+summaries	G27	FREE_NO_AUTH	PASS
+FDA Purple Book	https://purplebooksearch.fda.gov/	G23/G24	FREE_NO_AUTH	PARTIAL
+IRENASTAT Online Data Query Tool	https://pxweb.irena.org/pxweb/en/IRENASTAT/	G27/G37	FREE_NO_AUTH	PASS
+PyPI (Python Package Index)	https://pypi.org/	G29	FREE_NO_AUTH	PARTIAL
+King Fahd Glorious Qur'an Printing Complex｜Qur'an Developer Platform	https://qurancomplex.gov.sa/en/techquran/dev/	G02/G14/G29	FREE_NO_AUTH	PARTIAL
+FIDE Ratings Database	https://ratings.fide.com/	G17	FREE_NO_AUTH	PARTIAL
+Reactome Content Service	https://reactome.org/dev/content-service	G22	FREE_NO_AUTH	PARTIAL
+UK Charity Commission Register of Charities	https://register-of-charities.charitycommission.gov.uk/	G10/G11/G38	FREE_NO_AUTH	PARTIAL
+New Zealand Charities Register	https://register.charities.govt.nz/CharitiesRegister/Search	G10/G11/G38	FREE_NO_AUTH	PARTIAL
+FCA Financial Services Register	https://register.fca.org.uk/	G11/G12/G10	FREE_NO_AUTH	PARTIAL
+ESMA Registers	https://registers.esma.europa.eu/	G11/G32	FREE_NO_AUTH	PARTIAL
+FAA Aircraft Registration Inquiry	https://registry.faa.gov/aircraftinquiry/	G28	FREE_NO_AUTH	PARTIAL
+Identifiers.org Central Registry	https://registry.identifiers.org/	G01/G22/G23/G37	FREE_NO_AUTH	PARTIAL
+Terraform Registry	https://registry.terraform.io/	G29	FREE_NO_AUTH	PASS
+Sigstore Rekor Transparency Log	https://rekor.sigstore.dev/	G31	FREE_NO_AUTH	PARTIAL
+Ensembl REST API	https://rest.ensembl.org/	G22/G23	FREE_NO_AUTH	PARTIAL
+Austrian RIS Legal Information System	https://ris.bka.gv.at/	G08	FREE_NO_AUTH	PARTIAL
+ROAD Open Access Scholarly Resources	https://road.issn.org/advancedsearch	G01/G15/G37	FREE_NO_AUTH	PARTIAL
+AMD ROCm Documentation Search	https://rocm.docs.amd.com/en/latest/search.html	G30	FREE_NO_AUTH	PARTIAL
+Cuban Public Registry of Clinical Trials (RPCEC)	https://rpcec.sld.cu/	G23	FREE_NO_AUTH	PARTIAL
+FMCSA SAFER Company Snapshot / SMS	https://safer.fmcsa.dot.gov/CompanySnapshot.aspx	G28/G34/G10	FREE_NO_AUTH	PARTIAL
+FRA Safety Data Search / Public API	https://safetydata.fra.dot.gov/	G28	FREE_NO_AUTH	PARTIAL
+SAM.gov Exclusions Search	https://sam.gov/content/exclusions	G07/G10/G35	FREE_NO_AUTH	PARTIAL
+SAM.gov Entity Information	https://sam.gov/entity-information	G07/G10/G35	FREE_NO_AUTH	PARTIAL
+OFAC Sanctions List Search / Sanctions List Service	https://sanctionssearch.ofac.treas.gov/	G11/G35	FREE_NO_AUTH	PARTIAL
+scikit-learn Documentation Search	https://scikit-learn.org/stable/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+OpenSSF Scorecard Public Data / API	https://scorecard.dev/	G31	FREE_NO_AUTH	PARTIAL
+UK Sanctions List Search	https://search-uk-sanctions-list.service.gov.uk/	G35/G11	FREE_NO_AUTH	PARTIAL
+Greece National Printing Office Legislation Search	https://search.et.gr/en/search-legislation/	G08	FREE_NO_AUTH	PARTIAL
+NixOS Search Packages	https://search.nixos.org/packages	G29	FREE_NO_AUTH	PARTIAL
+CRAN / R Search	https://search.r-project.org/	G29/G30	FREE_NO_AUTH	PARTIAL
+Cisco Security Advisories / PSIRT Search	https://sec.cloudapps.cisco.com/security/center/Search.x	G29/G31	FREE_NO_AUTH	PARTIAL
+Debian Security Tracker	https://security-tracker.debian.org/tracker	G29/G31	FREE_NO_AUTH	PASS
+UNODC SHERLOC Case Law Database	https://sherloc.unodc.org/cld/v3/sherloc/cldb/index.html?lng=en	G08/G34	FREE_NO_AUTH	PARTIAL
+UNODC SHERLOC Legislation Database	https://sherloc.unodc.org/cld/v3/sherloc/legdb/	G08/G34	FREE_NO_AUTH	PARTIAL
+ESA ESASky	https://sky.esa.int/esasky/	G19/G37	FREE_NO_AUTH	PARTIAL
+Smithsonian Online Virtual Archives (SOVA)	https://sova.si.edu/	G04/G15/G16/G37	FREE_NO_AUTH	PARTIAL
+WMO OSCAR/Requirements	https://space.oscar.wmo.int/requirements	G21	FREE_NO_AUTH	PARTIAL
+SuiteSparse Matrix Collection	https://sparse.tamu.edu/	G18	FREE_NO_AUTH	PARTIAL
+JPL Horizons API	https://ssd-api.jpl.nasa.gov/doc/horizons.html	G19	FREE_NO_AUTH	PASS
+Singapore Statutes Online	https://sso.agc.gov.sg/	G08	FREE_NO_AUTH	PARTIAL
+The Stacks Project	https://stacks.math.columbia.edu/	G18	FREE_NO_AUTH	PARTIAL
+NASA Technical Standards System (NTSS)	https://standards.nasa.gov/	G25/G26/G29/G32	FREE_NO_AUTH	PARTIAL
+ASTM Standards / Standard Identifier Lookup	https://store.astm.org/e0008_e0008m-25.html	G25/G32	CONSTRAINED	PASS
+Swift Package Index	https://swiftpackageindex.com/	G29	FREE_NO_AUTH	PARTIAL
+CHILDES / TalkBankDB	https://talkbank.org/childes/	G03	FREE_AUTH	PARTIAL
+OHCHR Treaty Body Database	https://tbinternet.ohchr.org/_layouts/15/TreatyBodyExternal/TBSearch.aspx?Lang=en	G06	FREE_NO_AUTH	PARTIAL
+ECMAScript Language Specification (ECMA-262 / TC39)	https://tc39.es/ecma262/	G29	FREE_NO_AUTH	PASS
+GBIF Occurrence API	https://techdocs.gbif.org/en/openapi/	G22	FREE_NO_AUTH	PASS
+buildingSMART IFC Specifications Database	https://technical.buildingsmart.org/standards/ifc/ifc-schema-specifications/	G26/G32	FREE_NO_AUTH	PARTIAL
+NASA TechPort	https://techport.nasa.gov/	G19/G25/G30/G37	FREE_NO_AUTH	PARTIAL
+IP India Trade Mark Public Search	https://tmrsearch.ipindia.gov.in/tmrpublicsearch/	G32	FREE_NO_AUTH	PARTIAL
+ENTSO-E Transparency Platform	https://transparency.entsoe.eu/	G27/G09	FREE_AUTH	PARTIAL
+United Nations Treaty Collection / UN Treaty Series	https://treaties.un.org/	G07/G08	FREE_NO_AUTH	PARTIAL
+Apache TVM Documentation / Search	https://tvm.apache.org/docs/	G30	FREE_NO_AUTH	PARTIAL
+UAE Legislation	https://uaelegislation.gov.ae/en/search	G08	FREE_NO_AUTH	PARTIAL
+Ubuntu CVE Reports	https://ubuntu.com/security/cves	G29/G31	FREE_NO_AUTH	PARTIAL
+Ubuntu Security Notices (USN)	https://ubuntu.com/security/notices	G31	FREE_NO_AUTH	PASS
+UN Comtrade API	https://uncomtrade.org/docs/un-comtrade-api/	G09/G28	FREE_NO_AUTH	PARTIAL
+UNESCO Digital Library (UNESDOC)	https://unesdoc.unesco.org/	G06/G13/G15/G16/G37	FREE_NO_AUTH	PARTIAL
+UNSD Classifications Registry / ISIC	https://unstats.un.org/unsd/classifications/Econ/registry/	G09/G10/G25	FREE_NO_AUTH	PASS
+UNSD Energy Statistics API / UNdata Energy	https://unstats.un.org/unsd/energystats/data/	G27	FREE_NO_AUTH	PASS
+UNGEGN World Geographical Names Database	https://unstats.un.org/unsd/geoinfo/geonames/	G05	FREE_NO_AUTH	PARTIAL
+UNTERM	https://unterm.un.org/	G14	FREE_NO_AUTH	PARTIAL
+USACE Digital Library Technical Reports	https://usace.contentdm.oclc.org/digital/collection/p266001coll1	G25/G26/G37	FREE_NO_AUTH	PARTIAL
+UMLS Metathesaurus Browser	https://uts.nlm.nih.gov/uts/umls/home	G03/G14/G23	FREE_AUTH	PARTIAL
+VigiAccess	https://vigiaccess.org/	G23	FREE_NO_AUTH	PARTIAL
+Brønnøysund Register Centre Organisation Search	https://virksomhet.brreg.no/en/oppslag/enheter	G10	FREE_NO_AUTH	PARTIAL
+Finland PRH Virre Information Service	https://virre.prh.fi/	G10/G11	CONSTRAINED	PARTIAL
+CDS VizieR Catalogue Service	https://vizier.cds.unistra.fr/	G19/G37	FREE_NO_AUTH	PARTIAL
+UNESCO Thesaurus / Vocabulary Services	https://vocabularies.unesco.org/	G06/G13/G14/G16	FREE_NO_AUTH	PARTIAL
+NHTSA vPIC Vehicle API	https://vpic.nhtsa.dot.gov/api/	G28	FREE_NO_AUTH	PARTIAL
+Vue.js API Reference Search	https://vuejs.org/api/	G29	FREE_NO_AUTH	PARTIAL
+WOAH WAHIS	https://wahis.woah.org/	G24	FREE_NO_AUTH	PARTIAL
+WALS Online	https://wals.info/	G14/G15	FREE_NO_AUTH	PARTIAL
+WebAssembly Core Specification	https://webassembly.github.io/spec/core/	G29/G36	FREE_NO_AUTH	PASS
+RASFF Window	https://webgate.ec.europa.eu/rasff-window/screen/search	G24/G33	FREE_NO_AUTH	PARTIAL
+EU NANDO Notified Bodies Database	https://webgate.ec.europa.eu/single-market-compliance-space/notified-bodies	G26/G32/G33	FREE_NO_AUTH	PARTIAL
+USDA NRCS Web Soil Survey	https://websoilsurvey.sc.egov.usda.gov/App/HomePage.htm	G21/G24/G26	FREE_NO_AUTH	PARTIAL
+IEC Webstore Standards Search	https://webstore.iec.ch/	G25/G32/G36	CONSTRAINED	PASS
+Wetten.nl	https://wetten.overheid.nl/	G08	FREE_NO_AUTH	PARTIAL
+UNESCO World Heritage List / Search	https://whc.unesco.org/en/list/	G04/G16/G17	FREE_NO_AUTH	PASS
+UNESCO World Heritage Centre Search	https://whc.unesco.org/en/search/	G04/G16/G21	FREE_NO_AUTH	PARTIAL
+WHED｜World Higher Education Database	https://whed.net/	G13	CONSTRAINED	PARTIAL
+FCC Universal Licensing System (ULS) License Search	https://wireless2.fcc.gov/UlsApp/UlsSearch/searchLicense.jsp	G36/G38	FREE_NO_AUTH	PARTIAL
+CDC WONDER	https://wonder.cdc.gov/	G23/G21/G34	FREE_NO_AUTH	PARTIAL
+Princeton WordNet	https://wordnet.princeton.edu/search	G14	FREE_NO_AUTH	PARTIAL
+World Athletics Results Database	https://worldathletics.org/competition/calendar-results	G17	FREE_NO_AUTH	PASS
+EPO Espacenet	https://worldwide.espacenet.com/	G32	FREE_NO_AUTH	PARTIAL
+NTSB Aviation Investigation Search	https://www-s.ntsb.gov/Pages/AviationQueryV2.aspx	G28/G34	FREE_NO_AUTH	PARTIAL
+Drugs@FDA	https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm	G23/G24	FREE_NO_AUTH	PARTIAL
+FDA Orange Book	https://www.accessdata.fda.gov/scripts/cder/ob/index.cfm	G23/G24/G32	FREE_NO_AUTH	PARTIAL
+FDA MAUDE Database	https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfmaude/search.cfm	G23/G33	FREE_NO_AUTH	PARTIAL
+FDA Product Classification Database	https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfPCD/classification.cfm	G23/G33	FREE_NO_AUTH	PARTIAL
+FDA Premarket Approval (PMA) Database	https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfPMA/pma.cfm	G23/G33	FREE_NO_AUTH	PARTIAL
+FDA 510(k) Premarket Notification Database	https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfpmn/pmn.cfm	G23/G33	FREE_NO_AUTH	PARTIAL
+FDA Establishment Registration & Device Listing	https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRL/rl.cfm	G23/G33/G10	FREE_NO_AUTH	PARTIAL
+Australian Charities and Not-for-profits Commission Charity Register	https://www.acnc.gov.au/charity/charities	G10/G11/G38	FREE_NO_AUTH	PARTIAL
+EudraVigilance ADRreports.eu	https://www.adrreports.eu/	G23	FREE_NO_AUTH	PARTIAL
+AFRINIC RDAP	https://www.afrinic.net/whois-rdap	G36	FREE_NO_AUTH	PARTIAL
+Australian New Zealand Clinical Trials Registry (ANZCTR)	https://www.anzctr.org.au/TrialSearch.aspx	G23	FREE_NO_AUTH	PARTIAL
+APNIC RDAP	https://www.apnic.net/about-apnic/whois_search/about/rdap/	G36	FREE_NO_AUTH	PARTIAL
+NARA National Archives Catalog / API	https://www.archives.gov/research/catalog/help/api	G04/G15/G16	FREE_AUTH	PASS
+Argentina InfoLEG / Leyes Argentinas	https://www.argentina.gob.ar/normativa	G08	FREE_NO_AUTH	PARTIAL
+ARIN RDAP	https://www.arin.net/resources/registry/whois/rdap/	G36	FREE_NO_AUTH	PARTIAL
+National Endowment for the Arts｜Recent Grants / Literature Fellowships Search	https://www.arts.gov/grants/recent-grants/literature-fellowships	G16	FREE_NO_AUTH	PASS
+ASIC Registers Search	https://www.asic.gov.au/online-services/search-asic-registers	G10/G11/G12	CONSTRAINED	PARTIAL
+ASME Codes & Standards / Find Codes & Standards	https://www.asme.org/codes-standards/find-codes-standards	G25/G32	CONSTRAINED	PASS
+FAA Operations & Performance Data	https://www.aspm.faa.gov/	G28	CONSTRAINED	PARTIAL
+AusStage｜Australian Live Performance Database	https://www.ausstage.edu.au/pages/learn/search-ausstage	G16/G04/G37	FREE_NO_AUTH	PARTIAL
+BGS GeoIndex	https://www.bgs.ac.uk/map-viewers/geoindex-onshore/	G21/G26/G37	FREE_NO_AUTH	PARTIAL
+bioRxiv / medRxiv Search & API	https://www.biorxiv.org/search	G23/G37	FREE_NO_AUTH	PARTIAL
+BIPM Key Comparison Database (KCDB)	https://www.bipm.org/kcdb/	G18/G25/G32	FREE_NO_AUTH	PARTIAL
+BIS Interactive Commerce Control List	https://www.bis.gov/regulations/ear/interactive-commerce-control-list	G35/G32	FREE_NO_AUTH	PARTIAL
+Singapore ACRA Bizfile Entity Search	https://www.bizfile.gov.sg/	G10	FREE_NO_AUTH	PARTIAL
+BLS Public Data API	https://www.bls.gov/developers/	G09/G12/G37	FREE_NO_AUTH	PARTIAL
+BOE Legislación Database	https://www.boe.es/buscar/	G08	FREE_NO_AUTH	PARTIAL
+British Museum Collection Online	https://www.britishmuseum.org/collection/search	G04/G16	FREE_NO_AUTH	PARTIAL
+BTS Freight Analysis Framework (FAF) Data Tabulation Tool	https://www.bts.gov/faf	G28/G09	FREE_NO_AUTH	PASS
+buildingSMART Data Dictionary (bSDD)	https://www.buildingsmart.org/users/services/buildingsmart-data-dictionary/	G26/G32	FREE_NO_AUTH	PARTIAL
+Canada CRA List of Charities	https://www.canada.ca/en/revenue-agency/services/charities-giving/list-charities.html	G10/G11/G38	FREE_NO_AUTH	PARTIAL
+NCI EVS Explore / NCI Thesaurus	https://www.cancer.gov/about-nci/organization/cbiit/vocabulary	G03/G14/G23	FREE_NO_AUTH	PARTIAL
+CareerOneStop Scholarship Finder	https://www.careeronestop.org/Toolkit/Training/find-scholarships.aspx	G13	FREE_NO_AUTH	PARTIAL
+Catalogue of Life Search	https://www.catalogueoflife.org/data/search	G22	FREE_NO_AUTH	PARTIAL
+Common CA Database (CCADB) Public Reports	https://www.ccadb.org/resources	G31/G32	FREE_NO_AUTH	PARTIAL
+NIOSH Pocket Guide to Chemical Hazards	https://www.cdc.gov/niosh/npg/default.html	G12/G20/G25/G33	FREE_NO_AUTH	PARTIAL
+NIOSHTIC-2 Bibliographic Database	https://www.cdc.gov/niosh/pubs/	G12/G25/G37	FREE_NO_AUTH	PARTIAL
+U.S. Census Data API	https://www.census.gov/data/developers.html	G05/G06/G09/G10	FREE_AUTH	PARTIAL
+U.S. Census Geocoder API	https://www.census.gov/data/developers/guidance/api-user-guide.Example_API_Queries.html	G05	FREE_NO_AUTH	PARTIAL
+U.S. Census Household Pulse / HTOPS Data Tool	https://www.census.gov/programs-surveys/household-pulse-survey/data/data-tools.html	G06/G38	FREE_NO_AUTH	PARTIAL
+Chinese Clinical Trial Registry (ChiCTR)	https://www.chictr.org.cn/searchprojEN.html	G23	FREE_NO_AUTH	PARTIAL
+Church of England｜Canons Website Edition & Index	https://www.churchofengland.org/about/governance/legal-resources/canons-church-england	G02/G08	FREE_NO_AUTH	PARTIAL
+CISA Cybersecurity Advisories	https://www.cisa.gov/news-events/cybersecurity-advisories	G31/G35	FREE_NO_AUTH	PASS
+CIS Benchmarks	https://www.cisecurity.org/cis-benchmarks	G31/G32	FREE_NO_AUTH	PARTIAL
+EU Clinical Trials Register (EU-CTR / EudraCT legacy trials)	https://www.clinicaltrialsregister.eu/ctr-search/trial/index.html	G23	FREE_NO_AUTH	PARTIAL
+Cognitive Atlas	https://www.cognitiveatlas.org/	G03	FREE_NO_AUTH	PARTIAL
+Ecuador SERCOP Public Procurement Search	https://www.compraspublicas.gob.ec/ProcesoContratacion/compras/SL/view/BusquedaDeProcesos.cpe	G07/G10	FREE_NO_AUTH	PARTIAL
+CFPB Consumer Complaint Database	https://www.consumerfinance.gov/data-research/consumer-complaints/	G33/G38	FREE_NO_AUTH	PARTIAL
+UK Contracts Finder	https://www.contractsfinder.service.gov.uk/Search	G07/G10	FREE_NO_AUTH	PARTIAL
+Hong Kong Companies Registry e-Search	https://www.cr.gov.hk/en/electronic/e-servicesportal/e-search.htm	G10	CONSTRAINED	PARTIAL
+Retraction Watch Database via Crossref	https://www.crossref.org/blog/retraction-watch-database-now-openly-available/	G37	FREE_NO_AUTH	PARTIAL
+CSTB Document Search	https://www.cstb.fr/bases-donnees/rechercher-un-document	G26	FREE_NO_AUTH	PARTIAL
+CVE.org CVE Records	https://www.cve.org/	G31	FREE_NO_AUTH	PARTIAL
+DISA STIG Cyber Exchange	https://www.cyber.mil/stigs/	G31	FREE_NO_AUTH	PARTIAL
+Australia DFAT Consolidated Sanctions List	https://www.dfat.gov.au/international-relations/security/sanctions/consolidated-list	G35/G11	FREE_NO_AUTH	PARTIAL
+DIBt Approval Download	https://www.dibt.de/en/service/approval-download/search	G26	FREE_NO_AUTH	PARTIAL
+Cámara de Diputados Leyes Federales Database	https://www.diputados.gob.mx/LeyesBiblio/	G08	FREE_NO_AUTH	PARTIAL
+DVIDS Military Units Search / Unit API	https://www.dvidshub.net/units/	G35	FREE_AUTH	PARTIAL
+EBA Credit Institutions Register	https://www.eba.europa.eu/risk-and-data-analysis/data/registers-and-other-list-institutions/credit-institutions-register	G11/G10	FREE_NO_AUTH	PARTIAL
+EBA PSD2 Payment & Electronic Money Register	https://www.eba.europa.eu/risk-and-data-analysis/data/registers/payment-institutions-register	G11/G10	FREE_NO_AUTH	PARTIAL
+ChEBI REST API	https://www.ebi.ac.uk/chebi/tools	G20	FREE_NO_AUTH	PASS
+EMBL-EBI Single Cell Expression Atlas	https://www.ebi.ac.uk/gxa/sc	G22/G37	FREE_NO_AUTH	PARTIAL
+EMBL-EBI InterPro	https://www.ebi.ac.uk/interpro/	G22	FREE_NO_AUTH	PARTIAL
+EMBL-EBI Ontology Lookup Service (OLS)	https://www.ebi.ac.uk/ols4/ols3help	G14/G22	FREE_NO_AUTH	PARTIAL
+EMBL-EBI PRIDE Archive	https://www.ebi.ac.uk/pride/archive/	G22/G37	FREE_NO_AUTH	PARTIAL
+eCFR Search / API	https://www.ecfr.gov/	G08/G32	FREE_NO_AUTH	PARTIAL
+U.S. EIA Petroleum Navigator / Weekly Supply Estimates	https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx?f=W&n=PET&s=WCRFPUS2	G27	FREE_NO_AUTH	PASS
+U.S. EIA Open Data API	https://www.eia.gov/opendata/index.php/api	G27/G38	FREE_AUTH	PARTIAL
+EEA GEMET	https://www.eionet.europa.eu/gemet/en/search/	G14/G21	FREE_NO_AUTH	PARTIAL
+Elections Canada Political Financing Search	https://www.elections.ca/WPAPPS/WPF/EN/CCS/Index	G07	FREE_NO_AUTH	PARTIAL
+EMA Medicine Finder / Advanced Search	https://www.ema.europa.eu/en/medicines	G23/G24	FREE_NO_AUTH	PARTIAL
+World Bank Enterprise Surveys Data	https://www.enterprisesurveys.org/en/data	G09/G10	FREE_AUTH	PARTIAL
+EOTA European Technical Assessment (ETA) Database	https://www.eota.eu/etassessments	G26/G32/G33	FREE_NO_AUTH	PARTIAL
+EPA Envirofacts Data Service API	https://www.epa.gov/enviro/envirofacts-data-service-api	G21/G33	FREE_NO_AUTH	PARTIAL
+EPA Toxics Release Inventory (TRI) Search	https://www.epa.gov/enviro/tri-search-user-guide	G21/G33/G20	FREE_NO_AUTH	PARTIAL
+EPPO Global Database	https://www.eppo.int/RESOURCES/eppo_databases/global_database	G22/G24	FREE_NO_AUTH	PARTIAL
+USACE ERDC Knowledge Core / Library Search	https://www.erdc.usace.army.mil/Library/	G25/G26/G37	FREE_NO_AUTH	PARTIAL
+Erlang/OTP System Documentation Search	https://www.erlang.org/doc/system/readme.html	G29	FREE_NO_AUTH	PARTIAL
+DoD Issuances｜Directives / Instructions / Manuals	https://www.esd.whs.mil/Directives/issuances/dodd/	G35	FREE_NO_AUTH	PARTIAL
+ESRB Game Ratings Search	https://www.esrb.org/search/	G17	FREE_NO_AUTH	PARTIAL
+eTenders Ireland	https://www.etenders.gov.ie/epps/home.do	G07/G10	FREE_NO_AUTH	PARTIAL
+ETSI Standards Search	https://www.etsi.org/standards/	G32/G36	FREE_NO_AUTH	PARTIAL
+EUIPO IP Search Databases	https://www.euipo.europa.eu/en/search-ip	G32	FREE_NO_AUTH	PARTIAL
+Europeana Search API	https://www.europeana.eu/en/apis	G04/G15/G16/G37	FREE_AUTH	PARTIAL
+FAA AVInfo Safety Data	https://www.faa.gov/av-info	G28	FREE_NO_AUTH	PARTIAL
+FAOLEX	https://www.fao.org/faolex/en/	G08/G21/G24	FREE_NO_AUTH	PARTIAL
+FAOSTAT API	https://www.fao.org/FAOSTAT/en/	G09/G24/G38	FREE_NO_AUTH	PASS
+FAO FishStatJ / Online Query Panel	https://www.fao.org/fishery/static/FishStatJ/	G24	FREE_NO_AUTH	PASS
+FDA Adverse Event Monitoring System (AEMS) Public Dashboard	https://www.fda.gov/safety/fda-adverse-event-monitoring-system-aems	G23/G24/G33	FREE_NO_AUTH	PARTIAL
+FDA Enforcement Reports / openFDA Enforcement APIs	https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts/enforcement-reports	G23/G24/G33	FREE_NO_AUTH	PARTIAL
+Fedlex	https://www.fedlex.admin.ch/	G08	FREE_NO_AUTH	PARTIAL
+OpenFEMA Disaster Declarations Summaries API	https://www.fema.gov/about/openfema/disaster-declarations-summaries	G21/G34	FREE_NO_AUTH	PARTIAL
+FFIEC National Information Center (NIC)	https://www.ffiec.gov/npw/Institution/Index	G11/G10	FREE_NO_AUTH	PARTIAL
+FIBA Events History / Games & Results	https://www.fiba.basketball/en/history	G17	FREE_NO_AUTH	PASS
+FIFA Match Centre	https://www.fifa.com/match-centre	G17	FREE_NO_AUTH	PASS
+UK Find a Tender	https://www.find-tender.service.gov.uk/Search	G07/G10	FREE_NO_AUTH	PARTIAL
+Finlex	https://www.finlex.fi/en/search	G08	FREE_NO_AUTH	PARTIAL
+FIS Calendar & Results Database	https://www.fis-ski.com/DB	G17	FREE_NO_AUTH	PARTIAL
+USDA FSIS Recalls & Public Health Alerts	https://www.fsis.usda.gov/recalls	G24/G33	FREE_NO_AUTH	PARTIAL
+Geoscience Australia Place Names Search	https://www.ga.gov.au/scientific-topics/national-location-information/dataspatial-applications	G05	FREE_NO_AUTH	PARTIAL
+GDACS API	https://www.gdacs.org/gdacsapi/swagger/index.html	G21/G34	FREE_NO_AUTH	PARTIAL
+Singapore GeBIZ	https://www.gebiz.gov.sg/	G07/G10	FREE_NO_AUTH	PARTIAL
+Gesetze im Internet	https://www.gesetze-im-internet.de/	G08	FREE_NO_AUTH	PARTIAL
+New Zealand GETS	https://www.gets.govt.nz/ExternalIndex.htm	G07/G10	FREE_NO_AUTH	PARTIAL
+Getty Thesaurus of Geographic Names (TGN)	https://www.getty.edu/research/tools/vocabularies/tgn/	G04/G05/G16	FREE_NO_AUTH	PARTIAL
+Getty Art & Architecture Thesaurus (AAT)	https://www.getty.edu/vow/AATSearchPage.jsp	G04/G14/G16/G26	FREE_NO_AUTH	PARTIAL
+GLEIF LEI API	https://www.gleif.org/en/lei-data/gleif-api	G10/G37	FREE_NO_AUTH	PARTIAL
+GMC｜Search Our Registers	https://www.gmc-uk.org/registration-and-licensing/our-registers	G12/G23	FREE_NO_AUTH	PARTIAL
+GNU Bash Reference Manual	https://www.gnu.org/software/bash/manual/bash.html	G29	FREE_NO_AUTH	PARTIAL
+Brazil Compras.gov.br	https://www.gov.br/compras/pt-br	G07/G10	FREE_NO_AUTH	PARTIAL
+UK Register of Regulated Qualifications	https://www.gov.uk/find-a-regulated-qualification	G12/G13	FREE_NO_AUTH	PARTIAL
+FCDO Foreign Travel Advice	https://www.gov.uk/foreign-travel-advice	G17/G38	FREE_NO_AUTH	PARTIAL
+UK General Register Office｜Historic Birth & Death Index	https://www.gov.uk/research-family-history	G04/G06	FREE_AUTH	PARTIAL
+South African Government Acts Database	https://www.gov.za/documents/acts	G08	FREE_NO_AUTH	PARTIAL
+GovInfo Search	https://www.govinfo.gov/	G07/G08	FREE_NO_AUTH	PARTIAL
+Grants.gov Search API	https://www.grants.gov/api/common/search2	G07/G10/G37	FREE_NO_AUTH	PARTIAL
+Haskell 2010 Language Report	https://www.haskell.org/onlinereport/haskell2010/	G29	FREE_NO_AUTH	PARTIAL
+HHS OHRP Regulations & Guidance Index	https://www.hhs.gov/ohrp/regulations-and-policy/guidance/index.html	G02/G23/G32	FREE_NO_AUTH	PARTIAL
+国税庁 法人番号公表サイト	https://www.houjin-bangou.nta.go.jp/	G10/G11	FREE_NO_AUTH	PARTIAL
+IAF CertSearch	https://www.iafcertsearch.org/	G32/G10	FREE_AUTH	PARTIAL
+IANA Root Zone Database	https://www.iana.org/domains/root/db	G36	FREE_NO_AUTH	PARTIAL
+IANA Protocol Registries	https://www.iana.org/protocols	G29/G36/G32	FREE_NO_AUTH	PARTIAL
+ICPSR Data Search	https://www.icpsr.umich.edu/sites/icpsr/find-data	G03/G06/G09/G13/G37	CONSTRAINED	PARTIAL
+IMF DataMapper API / Country Profiles	https://www.imf.org/external/datamapper/	G09	FREE_NO_AUTH	PASS
+India Code	https://www.indiacode.nic.in/	G08	FREE_NO_AUTH	PARTIAL
+Human Phenotype Ontology Browser	https://www.informatics.jax.org/vocab/hp_ontology	G03/G14/G22/G23	FREE_NO_AUTH	PARTIAL
+Consolidated Canadian Autonomous Sanctions List	https://www.international.gc.ca/world-monde/international_relations-relations_internationales/sanctions/consolidated-consolide.aspx?lang=eng	G35/G11	FREE_NO_AUTH	PARTIAL
+INTERPOL Public Notices Search	https://www.interpol.int/How-we-work/Notices	G34/G35	CONSTRAINED	PARTIAL
+electronic Irish Statute Book (eISB)	https://www.irishstatutebook.ie/eli/advanced-search.html	G08	FREE_NO_AUTH	PARTIAL
+ISO Online Browsing Platform (OBP)	https://www.iso.org/obp/ui/	G14/G25/G26/G29/G30/G32	CONSTRAINED	PASS
+ISRCTN Registry	https://www.isrctn.com/	G23	FREE_NO_AUTH	PARTIAL
+ITF World Tennis Tour Player Search	https://www.itftennis.com/en/players/	G17	FREE_NO_AUTH	PARTIAL
+NIST/SEMATECH e-Handbook of Statistical Methods	https://www.itl.nist.gov/div898/handbook/	G18/G25/G37	FREE_NO_AUTH	PARTIAL
+ITU Space Explorer	https://www.itu.int/itu-r/space/apps/public/spaceexplorer/	G36/G19	CONSTRAINED	PARTIAL
+ITU-T Recommendations Database Search	https://www.itu.int/ITU-T/recommendations/search.aspx	G32/G36	FREE_NO_AUTH	PARTIAL
+J-PlatPat	https://www.j-platpat.inpit.go.jp/	G32	FREE_NO_AUTH	PARTIAL
+Kaggle Models	https://www.kaggle.com/models	G30	FREE_NO_AUTH	PARTIAL
+CERT/CC Vulnerability Notes Database	https://www.kb.cert.org/vuls/search/	G31	FREE_NO_AUTH	PARTIAL
+KIPRIS	https://www.kipris.or.kr/khome/main.do	G32	FREE_NO_AUTH	PARTIAL
+LACNIC RDAP	https://www.lacnic.net/1484/2/lacnic/a-new-service-designed-to-improve-on-the-traditional-whois	G36	CONSTRAINED	PARTIAL
+Légifrance	https://www.legifrance.gouv.fr/recherche	G08	FREE_NO_AUTH	PARTIAL
+Australian Federal Register of Legislation	https://www.legislation.gov.au/	G08	FREE_NO_AUTH	PARTIAL
+Legislation.gov.uk API	https://www.legislation.gov.uk/	G08	FREE_NO_AUTH	PARTIAL
+New Zealand Legislation	https://www.legislation.govt.nz/	G08	FREE_NO_AUTH	PARTIAL
+LMFDB	https://www.lmfdb.org/	G18	FREE_NO_AUTH	PARTIAL
+Library of Congress API	https://www.loc.gov/apis/json-and-yaml/	G15	FREE_NO_AUTH	PASS
+Lua Reference Manual / Source Index	https://www.lua.org/ftp/	G29	FREE_NO_AUTH	PARTIAL
+MATLAB Documentation / docsearch	https://www.mathworks.com/help/matlab/ref/docsearch.html	G29/G30	FREE_NO_AUTH	PASS
+NANPA NPA / Area Code Search	https://www.nanpa.com/reports/npa-reports	G36	FREE_NO_AUTH	PARTIAL
+PubMed / NCBI E-utilities	https://www.ncbi.nlm.nih.gov/books/NBK25499/	G03/G23/G37	FREE_NO_AUTH	PARTIAL
+NCBI Datasets v2	https://www.ncbi.nlm.nih.gov/datasets/docs/v2/api/rest-api/	G22	FREE_NO_AUTH	PARTIAL
+NCBI GEO DataSets	https://www.ncbi.nlm.nih.gov/gds/	G22/G37	FREE_NO_AUTH	PARTIAL
+NIH Genetic Testing Registry (GTR)	https://www.ncbi.nlm.nih.gov/gtr/	G23/G22	FREE_NO_AUTH	PARTIAL
+NOAA NCEI Search & Data APIs	https://www.ncei.noaa.gov/access/search/documentation/	G21	FREE_NO_AUTH	PASS
+NOAA NCEI Storm Events Database	https://www.ncei.noaa.gov/stormevents/	G21/G34	FREE_NO_AUTH	PARTIAL
+NIST CSF 2.0 Informative References Catalog	https://www.nist.gov/cyberframework/informative-references	G31	FREE_NO_AUTH	PARTIAL
+NIST ILThermo (SRD 147)	https://www.nist.gov/srd/nist-standard-reference-database-147	G20	FREE_NO_AUTH	PARTIAL
+NNDC NuDat 3	https://www.nndc.bnl.gov/nudat3/	G19	FREE_NO_AUTH	PASS
+Normattiva	https://www.normattiva.it/	G08	FREE_NO_AUTH	PARTIAL
+National Park Service Data API	https://www.nps.gov/subjects/developer/api-documentation.htm	G17/G38/G05	FREE_AUTH	PARTIAL
+NRC Event Notification Reports Search	https://www.nrc.gov/reading-rm/doc-collections/event-status/event/index	G27/G34	FREE_NO_AUTH	PARTIAL
+NRC Licensee Event Reports Search	https://www.nrc.gov/reading-rm/doc-collections/event-status/index	G27/G34	FREE_NO_AUTH	PARTIAL
+NSF Award Search	https://www.nsf.gov/funding/award-search	G37	FREE_NO_AUTH	PARTIAL
+Numdam	https://www.numdam.org/	G18	FREE_NO_AUTH	PARTIAL
+NZQA Qualifications Search	https://www.nzqa.govt.nz/nzqf/search/results.do	G12/G13	FREE_NO_AUTH	PARTIAL
+VIAF API	https://www.oclc.org/developer/api/oclc-apis/viaf.en.html	G01/G15	FREE_NO_AUTH	PARTIAL
+ISO/IEC JTC1/SC22/WG21 C++ Standards / Public Working Drafts	https://www.open-std.org/jtc1/sc22/wg21/	G29/G32	FREE_NO_AUTH	PASS
+Mexico Orden Jurídico Nacional	https://www.ordenjuridico.gob.mx/bavanzada	G08	FREE_NO_AUTH	PARTIAL
+OSHA Occupational Chemical Database	https://www.osha.gov/chemicaldata/search	G12/G20/G25/G33	FREE_NO_AUTH	PARTIAL
+OSHA Standards / Standard Number Lookup	https://www.osha.gov/laws-regs/regulations/standardnumber/1910	G25/G08/G34	FREE_NO_AUTH	PASS
+OSHA Establishment / Inspection Search	https://www.osha.gov/ords/imis/establishment.html	G12/G25	FREE_NO_AUTH	PARTIAL
+日本政府 調達ポータル（GEPS）	https://www.p-portal.go.jp/pps-web-biz/UAA01/OAA0101	G07/G10	FREE_NO_AUTH	PARTIAL
+PANGAEA Data Publisher Search	https://www.pangaea.de/	G21/G22/G24/G37	FREE_NO_AUTH	PARTIAL
+International Paralympic Committee Historical Results / Paris 2024 Results	https://www.paralympic.org/results/historical	G17	FREE_NO_AUTH	PASS
+Perseus Digital Library	https://www.perseus.tufts.edu/hopper/	G02/G15/G16	FREE_NO_AUTH	PARTIAL
+PhenX Toolkit	https://www.phenxtoolkit.org/search	G03/G23/G37	CONSTRAINED	PARTIAL
+PHMSA Hazmat Incident Report Search	https://www.phmsa.dot.gov/hazmat-program-management-data-and-statistics/data-operations/incident-statistics	G28/G34/G33	FREE_NO_AUTH	PARTIAL
+PHP Manual Lookup	https://www.php.net/lookup-form.php	G29	FREE_NO_AUTH	PASS
+Public Contracts Scotland	https://www.publiccontractsscotland.gov.uk/search/Search_mainpage.aspx	G07/G10	FREE_NO_AUTH	PARTIAL
+RCSB Protein Data Bank Search API	https://www.rcsb.org/docs/programmatic-access/web-apis-overview	G20/G22	FREE_NO_AUTH	PASS
+UNHCR Refworld	https://www.refworld.org/	G06/G08	FREE_NO_AUTH	PARTIAL
+Denmark Retsinformation	https://www.retsinformation.dk/extremesearch	G08	FREE_NO_AUTH	PARTIAL
+RFC Editor Search	https://www.rfc-editor.org/search/	G29/G31/G36	FREE_NO_AUTH	PARTIAL
+Rhea REST API	https://www.rhea-db.org/help/rest-api	G20/G22	FREE_NO_AUTH	PASS
+CPSC SaferProducts.gov	https://www.saferproducts.gov/	G33/G38	FREE_NO_AUTH	PARTIAL
+USGS ScienceBase Catalog / API	https://www.sciencebase.gov/catalog/	G21/G37	FREE_NO_AUTH	PARTIAL
+SEDAR+ Public Search	https://www.sedarplus.ca/home/	G10/G11	FREE_NO_AUTH	PARTIAL
+Sell2Wales	https://www.sell2wales.gov.wales/Search/Search_mainpage.aspx	G07/G10	FREE_NO_AUTH	PARTIAL
+Smithsonian Open Access API	https://www.si.edu/OpenAccess	G04/G16	FREE_NO_AUTH	PARTIAL
+Sri Lanka Clinical Trials Registry (SLCTR)	https://www.slctr.lk/	G23	FREE_NO_AUTH	PARTIAL
+NOAA SWPC Data Service / Archive	https://www.spaceweather.gov/content/data-access	G19/G21	FREE_NO_AUTH	PARTIAL
+Colombia SUIN-Juriscol	https://www.suin-juriscol.gov.co/	G08	FREE_NO_AUTH	PARTIAL
+Svensk författningssamling (SFS)	https://www.svenskforfattningssamling.se/	G08	FREE_NO_AUTH	PARTIAL
+Swift Language Reference / The Swift Programming Language	https://www.swift.org/documentation/tspl/	G29	FREE_NO_AUTH	PARTIAL
+AusTender	https://www.tenders.gov.au/	G07/G10	FREE_AUTH	PARTIAL
+TensorFlow API Documentation	https://www.tensorflow.org/api_docs/python/tf	G29/G30	FREE_NO_AUTH	PARTIAL
+TensorFlow Hub Model Repository	https://www.tensorflow.org/hub/	G29/G30	FREE_NO_AUTH	PARTIAL
+Australian Register of Therapeutic Goods (ARTG)	https://www.tga.gov.au/products/regulations-all-products/about-australian-register-therapeutic-goods-artg	G23/G24/G33	FREE_NO_AUTH	PARTIAL
+Thai Clinical Trials Registry (TCTR)	https://www.thaiclinicaltrials.org/	G23	FREE_NO_AUTH	PARTIAL
+U.S. Consolidated Screening List Search	https://www.trade.gov/consolidated-screening-list	G35	FREE_NO_AUTH	PARTIAL
+FTA National Transit Database (NTD) Transit Agency Profiles	https://www.transit.dot.gov/ntd/transit-agency-profiles	G28	FREE_NO_AUTH	PASS
+TypeScript Handbook / Reference	https://www.typescriptlang.org/docs/handbook/intro	G29	FREE_NO_AUTH	PARTIAL
+UNHCR Refugee Data Finder API	https://www.unhcr.org/refugee-statistics/	G06	FREE_NO_AUTH	PARTIAL
+UniProt REST API / UniProtKB	https://www.uniprot.org/help/api	G22	FREE_NO_AUTH	PARTIAL
+UNOOSA Online Index of Objects Launched into Outer Space	https://www.unoosa.org/oosa/osoindex/index.jspx	G19	FREE_NO_AUTH	PASS
+UNROCA｜UN Register of Conventional Arms Database	https://www.unroca.org/	G35/G09	FREE_NO_AUTH	PARTIAL
+Germany Unternehmensregister	https://www.unternehmensregister.de/	G10/G11	FREE_NO_AUTH	PARTIAL
+UN Tourism Data Dashboard	https://www.unwto.org/tourism-data/un-tourism-tourism-dashboard	G17	FREE_NO_AUTH	PARTIAL
+USACE Section 408 Requests Database	https://www.usace.army.mil/Missions/Civil-Works/Section408/	G26/G07	FREE_NO_AUTH	PARTIAL
+USGS The National Map / TNM Access API	https://www.usgs.gov/tools/download-data-maps-national-map	G05	FREE_NO_AUTH	PASS
+USGS Geographic Names Information System (GNIS)	https://www.usgs.gov/tools/geographic-names-information-system-gnis	G05/G04	FREE_NO_AUTH	PARTIAL
+USPTO Patent Public Search	https://www.uspto.gov/patents/search/patent-public-search	G32	FREE_NO_AUTH	PARTIAL
+USPTO Trademark Search	https://www.uspto.gov/trademarks/search	G32	FREE_NO_AUTH	PARTIAL
+Vatican IntraText｜The New American Bible	https://www.vatican.va/archive/ENG0839/_INDEX.HTM	G02/G15	FREE_NO_AUTH	PARTIAL
+W3C Standards and Drafts Search	https://www.w3.org/TR/	G29/G32/G36	FREE_NO_AUTH	PASS
+W3C WAI｜WCAG 2.2 Quick Reference	https://www.w3.org/WAI/WCAG22/quickref/	G06/G29/G32	FREE_NO_AUTH	PARTIAL
+WCO Trade Tools Harmonized System Search	https://www.wcotradetools.org/en/harmonized-system	G09/G32	CONSTRAINED	PARTIAL
+WHO Global Health Observatory (GHO) OData API	https://www.who.int/data/gho	G23/G06/G37	FREE_NO_AUTH	PARTIAL
+WHO ICTRP Search Portal	https://www.who.int/tools/clinical-trials-registry-platform/the-ictrp-search-portal	G23/G37	FREE_NO_AUTH	PARTIAL
+WIPO Global Brand Database	https://www.wipo.int/en/web/global-brand-database	G32	FREE_NO_AUTH	PARTIAL
+WIPO Lex	https://www.wipo.int/en/web/wipolex	G08/G32	FREE_NO_AUTH	PARTIAL
+World Medical Association Policy Search	https://www.wma.net/policy/	G02/G23/G32	FREE_NO_AUTH	PARTIAL
+World Rugby Fixtures & Results	https://www.world.rugby/tournaments/fixtures-results	G17	FREE_NO_AUTH	PASS
+World Aquatics Results Database	https://www.worldaquatics.com/results	G17	FREE_NO_AUTH	PASS
+Switzerland Zefix Central Business Name Index	https://www.zefix.admin.ch/en/search/entity/welcome	G10	FREE_NO_AUTH	PARTIAL
+XGBoost Documentation Search	https://xgboost.readthedocs.io/en/stable/search.html	G29/G30	FREE_NO_AUTH	PARTIAL
+zbMATH Open	https://zbmath.org/	G18/G37	FREE_NO_AUTH	PARTIAL
+Zig Language Reference / Standard Library Documentation	https://ziglang.org/documentation/master/	G29	FREE_NO_AUTH	PARTIAL
