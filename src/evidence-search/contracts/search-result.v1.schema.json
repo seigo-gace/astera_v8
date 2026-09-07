@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.result.v1",
+  "title": "ASTERA Evidence Search Result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "$defs": {
+    "queryExecutionRecord": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["query_id", "status", "provider_records"],
+      "properties": {
+        "query_id": { "type": "string", "minLength": 1 },
+        "claim_id": { "type": ["string", "null"] },
+        "role": { "type": ["string", "null"] },
+        "status": { "enum": ["FOUND", "NOT_FOUND", "RETRIEVAL_FAILED"] },
+        "provider_records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["provider_id", "status"],
+            "properties": {
+              "provider_id": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["FOUND", "NOT_FOUND", "RETRIEVAL_FAILED"] },
+              "error_code": { "type": ["string", "null"] },
+              "candidate_record_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "request_id",
+    "tenant_id",
+    "status",
+    "execution_time",
+    "effective_as_of",
+    "query_plan_hash",
+    "duration_ms",
+    "evidence",
+    "coverage",
+    "quality",
+    "query_execution",
+    "provider_execution",
+    "paid_usage_reports",
+    "ai_used",
+    "payment_executed",
+    "result_hash"
+  ],
+  "properties": {
+    "schema_version": { "const": "astera.evidence-search.result.v1" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "execution_time": { "type": "string", "format": "date-time" },
+    "effective_as_of": { "type": "string" },
+    "query_plan_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "evidence": { "type": "array" },
+    "coverage": { "type": "object" },
+    "quality": { "type": "object" },
+    "query_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial", "reinforcement"],
+      "properties": {
+        "initial": { "type": "array", "items": { "$ref": "#/$defs/queryExecutionRecord" } },
+        "reinforcement": { "type": "array", "items": { "$ref": "#/$defs/queryExecutionRecord" } }
+      }
+    },
+    "provider_execution": { "type": "object" },
+    "paid_usage_reports": { "type": "array" },
+    "ai_used": { "const": false },
+    "payment_executed": { "const": false },
+    "result_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -10,6 +10,8 @@ services:
       ASTERA_PORT: 7375
       ASTERA_DB: /data/astera.db
       ASTERA_LOG_CACHE_DIR: /cache/outbox
+      ASTERA_EVIDENCE_URL: http://127.0.0.1:7376
+      ASTERA_INTERNAL_SERVICE_SECRET_FILE: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
       ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
       ASTERA_TGS_PROJECT_ID: P002
     # TGserver binds only to host loopback. Host networking keeps both private
@@ -18,6 +20,10 @@ services:
     volumes:
       - astera-data:/data
       - /home/admin1/logs/astera-v8:/cache
+      - type: bind
+        source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        read_only: true
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7375/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -59,6 +65,46 @@ services:
       retries: 3
       start_period: 10s
 
+  astera-v8-evidence-search:
+    build: .
+    container_name: astera-v8-evidence-search
+    restart: unless-stopped
+    command: ["node", "src/evidence-search/api/start.js"]
+    env_file:
+      - .env
+    environment:
+      ASTERA_EVIDENCE_HOST: 127.0.0.1
+      ASTERA_EVIDENCE_PORT: 7376
+      ASTERA_EVALUATOR_API_URL: http://127.0.0.1:7374
+      ASTERA_EVIDENCE_PROVIDER_CONFIG: /app/config/evidence-providers.public.json
+      ASTERA_EVIDENCE_DB: /data/evidence-search.db
+      ASTERA_EVIDENCE_DURABLE_SPOOL: /data/evidence-jobs
+      ASTERA_INTERNAL_SERVICE_SECRET_FILE: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+      ASTERA_EVIDENCE_SPOOL_KEY_FILE: ${ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST:?Set ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST}
+      ASTERA_SEARCH_GLOBAL_CONCURRENCY: ${ASTERA_SEARCH_GLOBAL_CONCURRENCY:-8}
+      ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY: ${ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY:-2}
+    network_mode: host
+    volumes:
+      - astera-data:/data
+      - /home/admin1/logs/astera-v8:/cache
+      - type: bind
+        source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
+        read_only: true
+      - type: bind
+        source: ${ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST:?Set ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST}
+        target: ${ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST:?Set ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST}
+        read_only: true
+    depends_on:
+      astera-v8-evaluator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7376/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   astera-v8-cloudflared:
     image: cloudflare/cloudflared:2026.7.2@sha256:4f6655284ab3d252b7f28fedb19fe6c8fc82ee5b1295c20ac74d475e5398a52d
     profiles:
@@ -88,6 +134,8 @@ services:
 
 volumes:
   astera-data:
+    name: astera_v8_astera-data
+    external: true
 
 secrets:
   astera_v8_cloudflare_tunnel_token:

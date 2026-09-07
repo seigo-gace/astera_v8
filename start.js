@@ -18,10 +18,36 @@ function assertDockerProductionResidency(serviceName, allowEnvVar) {
 assertDockerProductionResidency('Astera v8', 'ASTERA_ALLOW_HOST_START');
 
 const KaguraServer = require('./src/server');
+const KaguraEngine = require('./src/kagura-engine');
+const EvidenceSearchClient = require('./src/evidence-search/api/client');
 const SQLiteStore = require('./src/store/sqlite-store');
 const StripeClient = require('./src/billing/stripe-client');
 const SubscriptionSync = require('./src/billing/subscription-sync');
 const Logger = require('./src/logger');
+
+function evidenceSearchClientConfigured() {
+  return Boolean(
+    process.env.ASTERA_EVIDENCE_URL
+    || process.env.ASTERA_EVIDENCE_HOST
+    || process.env.ASTERA_INTERNAL_SERVICE_SECRET
+    || process.env.ASTERA_INTERNAL_SERVICE_SECRET_FILE
+  );
+}
+
+function createEvidenceSearchClient(logger) {
+  if (!evidenceSearchClientConfigured()) return null;
+  try {
+    return new EvidenceSearchClient();
+  } catch (error) {
+    logger.write({
+      type: 'evidence_client_init_failed',
+      severity: 'warn',
+      text: 'Evidence Search client is not configured',
+      payload: { code: error.code || 'EVIDENCE_CLIENT_INIT_FAILED' }
+    });
+    return null;
+  }
+}
 
 const store = new SQLiteStore(process.env.ASTERA_DB || process.env.KAGURA_DB || 'astera.db');
 const logger = new Logger();
@@ -30,6 +56,12 @@ const stripe = new StripeClient({
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || ''
 });
 const subSync = new SubscriptionSync(store, stripe);
+const evidenceSearchClient = createEvidenceSearchClient(logger);
+const engine = new KaguraEngine({
+  poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
+  logger,
+  evidenceSearchClient
+});
 
 const server = new KaguraServer({
   port: Number(process.env.ASTERA_PORT || process.env.KAGURA_PORT || 7373),
@@ -38,7 +70,8 @@ const server = new KaguraServer({
   store,
   stripe,
   subSync,
-  logger
+  logger,
+  engine
 });
 
 server.start();
@@ -50,7 +83,8 @@ logger.write({
     store: store.mode,
     sqlite_error: store.sqliteError || null,
     tgserver_logging: logger.tgsEnabled,
-    tgserver_project: logger.projectId
+    tgserver_project: logger.projectId,
+    evidence_search_client: Boolean(evidenceSearchClient)
   }
 });
 

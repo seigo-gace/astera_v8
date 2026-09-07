@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evidence-search.module-response.v1",
+  "title": "ASTERA Evidence Search Module Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "module_id",
+    "module_version",
+    "operation",
+    "status",
+    "result"
+  ],
+  "properties": {
+    "schema_version": { "const": "astera.evidence-search.module-response.v1" },
+    "module_id": { "const": "astera-evidence-search" },
+    "module_version": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["SEARCH_EVIDENCE", "CALCULATE_PAID_USAGE", "HEALTH"] },
+    "status": { "const": "OK" },
+    "result": {}
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "operation": { "const": "SEARCH_EVIDENCE" } } },
+      "then": { "properties": { "result": { "$ref": "search-result.v1.schema.json" } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "CALCULATE_PAID_USAGE" } } },
+      "then": { "properties": { "result": { "$ref": "paid-usage-report.v1.schema.json" } } }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "HEALTH" } } },
+      "then": { "properties": { "result": { "type": "object" } } }
+    }
+  ]
+}
