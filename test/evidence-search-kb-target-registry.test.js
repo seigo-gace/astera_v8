@@ -4,10 +4,45 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-registry');
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
-const { attachKbTargets } = require('../src/evidence-search/providers/kb-target-aware-provider');
+const {
+  BINDING_MODE,
+  attachKbTargets,
+  attachKbTargetsToProviders,
+  targetMatchesCatalogSource
+} = require('../src/evidence-search/providers/kb-target-aware-provider');
 
 function byUrl(registry, url) {
   return registry.targets.find((target) => target.official_url === url);
+}
+
+function syntheticTarget(targetId, kb, officialUrl, genres = ['G01']) {
+  return Object.freeze({
+    target_id: targetId,
+    kb,
+    official_url: officialUrl,
+    host: new URL(officialUrl).hostname.toLowerCase(),
+    genres: Object.freeze([...genres]),
+    recorded_accesses: Object.freeze(['FREE_NO_AUTH']),
+    recorded_statuses: Object.freeze(['PASS']),
+    target_state: 'PUBLIC_NO_AUTH',
+    automatic_search_eligible: true
+  });
+}
+
+function syntheticProvider(providerId, domains = ['G01']) {
+  return {
+    provider_id: providerId,
+    source_class: 'FREE_OFFICIAL_LIVE',
+    certified: true,
+    domains,
+    routing_terms: [],
+    search: async () => ({
+      schema_version: 'astera.evidence-search.provider-result.v1',
+      provider_id: providerId,
+      candidates: [],
+      query_results: []
+    })
+  };
 }
 
 test('recorded KB target registry loads the deduplicated 714-row source as 663 runtime targets', () => {
@@ -114,4 +149,58 @@ test('KB target binding gates provider selection and the bound target reaches th
   assert.equal(receivedPlan.search_targets[0].kb, 'MITRE ATT&CK TAXII/STIX');
   assert.equal(result.search_targets[0].official_url, 'https://attack.mitre.org/resources/attack-data-and-tools/');
   assert.deepEqual(result.candidates, []);
+});
+
+test('canonical-name binding requires the same authority host and unique provider ownership', () => {
+  const registry = new KbTargetRegistry([
+    syntheticTarget('target-loc', 'Library of Congress API', 'https://www.loc.gov/apis/json-and-yaml/', ['G15']),
+    syntheticTarget('target-gbif', 'GBIF Occurrence API', 'https://techdocs.gbif.org/en/openapi/', ['G22']),
+    syntheticTarget('target-alpha', 'Alpha API Search', 'https://example.org/search', ['G01'])
+  ], { source_record_count: 3 });
+
+  assert.equal(targetMatchesCatalogSource(
+    registry.targets[0],
+    { name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/' }
+  ), true);
+  assert.equal(targetMatchesCatalogSource(
+    registry.targets[1],
+    { name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species' }
+  ), false);
+
+  const providers = attachKbTargetsToProviders([
+    syntheticProvider('loc-provider', ['G15']),
+    syntheticProvider('gbif-provider', ['G22']),
+    syntheticProvider('alpha-provider-a'),
+    syntheticProvider('alpha-provider-b')
+  ], registry, {
+    requireBinding: true,
+    providerDefinitions: [
+      { provider_id: 'loc-provider', enabled: true, catalog_source_ids: ['LOC'] },
+      { provider_id: 'gbif-provider', enabled: true, catalog_source_ids: ['GBIF'] },
+      { provider_id: 'alpha-provider-a', enabled: true, catalog_source_ids: ['ALPHA_A'] },
+      { provider_id: 'alpha-provider-b', enabled: true, catalog_source_ids: ['ALPHA_B'] }
+    ],
+    sourceCatalog: {
+      sources: [
+        { source_id: 'LOC', name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/', runtime_state: 'SEARCHABLE', provider_id: 'loc-provider' },
+        { source_id: 'GBIF', name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species', runtime_state: 'SEARCHABLE', provider_id: 'gbif-provider' },
+        { source_id: 'ALPHA_A', name: 'Alpha REST API', official_url: 'https://example.org/api/a', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-a' },
+        { source_id: 'ALPHA_B', name: 'Alpha REST API', official_url: 'https://example.org/api/b', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-b' }
+      ]
+    }
+  });
+
+  const byId = new Map(providers.map((provider) => [provider.provider_id, provider]));
+  assert.equal(byId.get('loc-provider').kb_target_binding.mode, BINDING_MODE);
+  assert.deepEqual(byId.get('loc-provider').kb_target_binding.target_ids, ['target-loc']);
+  assert.equal(byId.get('gbif-provider').kb_target_binding.automatic_target_count, 0);
+  assert.equal(byId.get('alpha-provider-a').kb_target_binding.automatic_target_count, 0);
+  assert.equal(byId.get('alpha-provider-b').kb_target_binding.automatic_target_count, 0);
+
+  const selectedLocTargets = byId.get('loc-provider').target_matcher({
+    domain_lens: { id: 'G15' },
+    primary_query_set: [{ text: 'Library of Congress books' }],
+    reinforcement_query_set: []
+  }, 'INITIAL');
+  assert.deepEqual(selectedLocTargets.map((target) => target.target_id), ['target-loc']);
 });

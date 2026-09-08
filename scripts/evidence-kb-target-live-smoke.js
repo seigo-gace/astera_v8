@@ -4,7 +4,10 @@ const path = require('node:path');
 const { loadEvidenceProviders, readConfig } = require('../src/evidence-search/providers/config-loader');
 const { loadEvidenceSourceCatalog } = require('../src/evidence-search/providers/source-catalog');
 const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-registry');
-const { attachKbTargetsToProviders } = require('../src/evidence-search/providers/kb-target-aware-provider');
+const {
+  BINDING_MODE,
+  attachKbTargetsToProviders
+} = require('../src/evidence-search/providers/kb-target-aware-provider');
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
 
 const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG
@@ -37,7 +40,10 @@ async function main() {
     boundProviders.flatMap((provider) => provider.kb_target_binding.target_ids || [])
   );
   if (!boundProviders.length || !boundTargetIds.size) {
-    throw new Error('no exact executable KB-target bindings were materialized');
+    throw new Error('no unique executable KB-target bindings were materialized');
+  }
+  if (boundTargetIds.size <= 14) {
+    throw new Error(`KB-target binding expansion did not exceed the previous 14-target baseline: ${boundTargetIds.size}`);
   }
 
   const providerRegistry = new ProviderRegistry(providers);
@@ -95,9 +101,10 @@ async function main() {
     status: 'KB_TARGET_LIVE_SEARCH_OK',
     kb_target_count: targetRegistry.target_count,
     automatic_kb_target_count: targetRegistry.automatic_target_count,
-    exact_bound_provider_count: boundProviders.length,
-    exact_bound_target_count: boundTargetIds.size,
-    binding_mode: 'EXACT_CATALOG_URL_OR_NAME',
+    bound_provider_count: boundProviders.length,
+    bound_target_count: boundTargetIds.size,
+    unbound_automatic_target_count: targetRegistry.automatic_target_count - boundTargetIds.size,
+    binding_mode: BINDING_MODE,
     provider_id: selected[0].provider_id,
     target: {
       target_id: dataCiteTarget.target_id,

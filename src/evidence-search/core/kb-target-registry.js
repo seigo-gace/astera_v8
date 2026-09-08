@@ -99,14 +99,16 @@ class KbTargetRegistry {
     const tokens = tokenize(queryText);
     const bindingUrls = new Set((options.official_urls || []).map(normalizeBindingUrl).filter(Boolean));
     const bindingNames = new Set((options.kb_names || []).map(normalizeBindingName).filter(Boolean));
-    const bindingRequired = options.binding_required === true || bindingUrls.size > 0 || bindingNames.size > 0;
+    const bindingTargetIds = new Set((options.target_ids || []).map(String).filter(Boolean));
+    const bindingRequired = options.binding_required === true || bindingUrls.size > 0 || bindingNames.size > 0 || bindingTargetIds.size > 0;
     const ranked = [];
     for (const target of this.targets) {
       if (!target.automatic_search_eligible) continue;
       if (bindingRequired) {
+        const idMatch = bindingTargetIds.has(String(target.target_id));
         const urlMatch = bindingUrls.has(normalizeBindingUrl(target.official_url));
         const nameMatch = bindingNames.has(normalizeBindingName(target.kb));
-        if (!urlMatch && !nameMatch) continue;
+        if (!idMatch && !urlMatch && !nameMatch) continue;
       }
       const domainMatch = !domain || target.genres.includes(domain);
       const haystack = `${target.kb} ${target.host} ${target.official_url}`.toLowerCase();

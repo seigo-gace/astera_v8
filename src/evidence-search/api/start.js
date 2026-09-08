@@ -9,7 +9,10 @@ const { evaluateInformationQuality } = require('../../quality-completion-evaluat
 const { loadEvidenceProviders, readConfig } = require('../providers/config-loader');
 const { loadEvidenceSourceCatalog } = require('../providers/source-catalog');
 const { KbTargetRegistry } = require('../core/kb-target-registry');
-const { attachKbTargetsToProviders } = require('../providers/kb-target-aware-provider');
+const {
+  BINDING_MODE,
+  attachKbTargetsToProviders
+} = require('../providers/kb-target-aware-provider');
 const { EvidenceJobStore } = require('../recovery/job-store');
 const { DurableEvidenceSpool } = require('../recovery/durable-spool');
 const { EvidenceJobManager } = require('../recovery/job-manager');
@@ -75,7 +78,7 @@ const boundProviderCount = providers.filter(
 ).length;
 if (boundProviderCount === 0) {
   throw startupFailure(
-    'Evidence Search has no provider with an exact executable KB-target binding',
+    'Evidence Search has no provider with a unique executable KB-target binding',
     'EVIDENCE_SEARCH_NO_BOUND_KB_TARGET_PROVIDER'
   );
 }
@@ -110,7 +113,7 @@ logger.write({
     provider_count: providers.length,
     active_provider_count: activeProviderCount,
     kb_target_bound_provider_count: boundProviderCount,
-    kb_target_binding_mode: 'EXACT_CATALOG_URL_OR_NAME',
+    kb_target_binding_mode: BINDING_MODE,
     kb_target_source_record_count: kbTargetRegistry.source_record_count,
     kb_target_count: kbTargetRegistry.target_count,
     automatic_kb_target_count: kbTargetRegistry.automatic_target_count,
