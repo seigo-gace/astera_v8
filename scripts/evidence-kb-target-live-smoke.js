@@ -30,7 +30,7 @@ const LIVE_CASES = Object.freeze([
   Object.freeze({ provider_id: 'rcsb-pdb-entry-search', target_name: 'RCSB Protein Data Bank Search API', domain: 'G20', query: '4HHB' }),
   Object.freeze({ provider_id: 'usgs-fdsn-event-record-search', target_name: 'USGS FDSN Event', domain: 'G21', query: 'usp000hvnu' }),
   Object.freeze({ provider_id: 'huggingface-hub-live-search', target_name: 'Hugging Face Hub Search', domain: 'G30', query: 'bert' }),
-  Object.freeze({ provider_id: 'pubchem-pug-rest-compound-search', target_name: 'PubChem PUG REST', domain: 'G20', query: 'aspirin' })
+  Object.freeze({ provider_id: 'pubchem-compound', target_name: 'PubChem PUG REST', domain: 'G20', query: 'aspirin' })
 ]);
 
 function recordIdentity(record) {
