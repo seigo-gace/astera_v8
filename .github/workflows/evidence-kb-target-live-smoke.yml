@@ -28,3 +28,11 @@ jobs:
           node-version: '22'
       - name: Run target-bound live search
         run: node scripts/evidence-kb-target-live-smoke.js
+      - name: Upload KB target binding report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-kb-target-binding-report
+          path: artifacts/evidence-kb-target-binding-report.json
+          if-no-files-found: warn
+          retention-days: 7

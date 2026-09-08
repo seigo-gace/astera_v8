@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { loadEvidenceProviders, readConfig } = require('../src/evidence-search/providers/config-loader');
 const { loadEvidenceSourceCatalog } = require('../src/evidence-search/providers/source-catalog');
@@ -12,9 +13,60 @@ const { ProviderRegistry } = require('../src/evidence-search/providers/provider-
 
 const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG
   || path.join(__dirname, '..', 'config', 'evidence-providers.public.json');
+const reportFile = process.env.ASTERA_EVIDENCE_BINDING_REPORT
+  || path.join(__dirname, '..', 'artifacts', 'evidence-kb-target-binding-report.json');
 
 function recordIdentity(record) {
   return String(record?.canonical_record_id || record?.record_id || record?.id || record?.canonical_url || record?.url || '').trim();
+}
+
+function writeBindingReport({ targetRegistry, providers }) {
+  const bindings = providers
+    .map((provider) => ({
+      provider_id: provider.provider_id,
+      source_class: provider.source_class,
+      binding_mode: provider?.kb_target_binding?.mode || null,
+      catalog_source_ids: [...(provider?.kb_target_binding?.catalog_source_ids || [])],
+      target_ids: [...(provider?.kb_target_binding?.target_ids || [])]
+    }))
+    .filter((provider) => provider.target_ids.length > 0)
+    .sort((a, b) => a.provider_id.localeCompare(b.provider_id));
+  const boundTargetIds = new Set(bindings.flatMap((provider) => provider.target_ids));
+  const boundTargets = targetRegistry.targets
+    .filter((target) => boundTargetIds.has(String(target.target_id)))
+    .map((target) => ({
+      target_id: target.target_id,
+      kb: target.kb,
+      official_url: target.official_url,
+      genres: [...target.genres],
+      target_state: target.target_state
+    }));
+  const unboundAutomaticTargets = targetRegistry.targets
+    .filter((target) => target.automatic_search_eligible && !boundTargetIds.has(String(target.target_id)))
+    .map((target) => ({
+      target_id: target.target_id,
+      kb: target.kb,
+      official_url: target.official_url,
+      genres: [...target.genres],
+      recorded_statuses: [...target.recorded_statuses]
+    }));
+  const report = {
+    schema_version: 'astera.evidence-search.kb-target-binding-report.v1',
+    generated_at: new Date().toISOString(),
+    binding_mode: BINDING_MODE,
+    source_record_count: targetRegistry.source_record_count,
+    kb_target_count: targetRegistry.target_count,
+    automatic_kb_target_count: targetRegistry.automatic_target_count,
+    bound_provider_count: bindings.length,
+    bound_target_count: boundTargetIds.size,
+    unbound_automatic_target_count: unboundAutomaticTargets.length,
+    provider_bindings: bindings,
+    bound_targets: boundTargets,
+    unbound_automatic_targets: unboundAutomaticTargets
+  };
+  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+  fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  return report;
 }
 
 async function main() {
@@ -33,17 +85,12 @@ async function main() {
     }
   );
 
-  const boundProviders = providers.filter(
-    (provider) => Number(provider?.kb_target_binding?.automatic_target_count || 0) > 0
-  );
-  const boundTargetIds = new Set(
-    boundProviders.flatMap((provider) => provider.kb_target_binding.target_ids || [])
-  );
-  if (!boundProviders.length || !boundTargetIds.size) {
+  const bindingReport = writeBindingReport({ targetRegistry, providers });
+  if (!bindingReport.bound_provider_count || !bindingReport.bound_target_count) {
     throw new Error('no unique executable KB-target bindings were materialized');
   }
-  if (boundTargetIds.size <= 14) {
-    throw new Error(`KB-target binding expansion did not exceed the previous 14-target baseline: ${boundTargetIds.size}`);
+  if (bindingReport.bound_target_count <= 14) {
+    throw new Error(`KB-target binding expansion did not exceed the previous 14-target baseline: ${bindingReport.bound_target_count}`);
   }
 
   const providerRegistry = new ProviderRegistry(providers);
@@ -101,10 +148,11 @@ async function main() {
     status: 'KB_TARGET_LIVE_SEARCH_OK',
     kb_target_count: targetRegistry.target_count,
     automatic_kb_target_count: targetRegistry.automatic_target_count,
-    bound_provider_count: boundProviders.length,
-    bound_target_count: boundTargetIds.size,
-    unbound_automatic_target_count: targetRegistry.automatic_target_count - boundTargetIds.size,
+    bound_provider_count: bindingReport.bound_provider_count,
+    bound_target_count: bindingReport.bound_target_count,
+    unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
     binding_mode: BINDING_MODE,
+    binding_report: path.relative(path.join(__dirname, '..'), reportFile),
     provider_id: selected[0].provider_id,
     target: {
       target_id: dataCiteTarget.target_id,
