@@ -131,15 +131,23 @@ class ProviderRegistry {
     );
   }
 
-  select(plan, phase = 'INITIAL') {
+  select(plan, phase = 'INITIAL', options = {}) {
     const allow = new Set(plan.source_policy.provider_allowlist);
     const deny = new Set(plan.source_policy.provider_denylist);
     const queryText = routingText(plan);
     const resolvedDomain = isResolvedDomainLens(plan.domain_lens);
     const domainId = resolvedDomain ? String(plan.domain_lens.id).toUpperCase() : null;
+    const requiredSourceClass = options.source_class
+      ? String(options.source_class).toUpperCase()
+      : null;
+    if (requiredSourceClass && !SOURCE_CLASSES.has(requiredSourceClass)) {
+      throw new TypeError(`source_class is invalid: ${requiredSourceClass}`);
+    }
+
     const selected = this.providers.filter((provider) => {
       if (!provider.certified) return false;
       if (provider.source_class === 'PAID_PROVIDER') return false;
+      if (requiredSourceClass && provider.source_class !== requiredSourceClass) return false;
       if (allow.size && !allow.has(provider.provider_id)) return false;
       if (deny.has(provider.provider_id)) return false;
       if (provider.source_class === 'FREE_PROJECTION' && !plan.source_policy.free_projection) return false;
@@ -164,13 +172,18 @@ class ProviderRegistry {
       if (!queryText) return false;
       return provider.routing_terms.some((term) => routingTermMatches(queryText, term));
     });
-    if (phase === 'INITIAL' && selected.length === 0) {
+
+    if (phase === 'INITIAL' && selected.length === 0 && options.allow_empty !== true) {
       const error = new Error('Evidence Search has no active provider for the canonical search plan');
       error.code = 'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER';
       error.status = 503;
       throw error;
     }
     return selected;
+  }
+
+  selectSourceClass(plan, sourceClass, phase = 'INITIAL') {
+    return this.select(plan, phase, { source_class: sourceClass, allow_empty: true });
   }
 
   health() {

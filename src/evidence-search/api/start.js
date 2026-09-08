@@ -34,21 +34,43 @@ function assertUsableProviderConfiguration(providers) {
       'EVIDENCE_PROVIDER_CONFIG_INVALID'
     );
   }
-  const activeProviderCount = providers.filter((provider) => provider?.certified === true).length;
-  if (activeProviderCount === 0) {
+  const activeProviders = providers.filter((provider) => provider?.certified === true);
+  if (activeProviders.length === 0) {
     throw startupFailure(
       'Evidence Search requires at least one enabled, certified provider before runtime startup',
       'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER'
     );
   }
-  return activeProviderCount;
+  const specialistProviderCount = activeProviders.filter(
+    (provider) => provider.source_class === 'FREE_PROJECTION'
+  ).length;
+  const currentProviderCount = activeProviders.filter(
+    (provider) => provider.source_class === 'FREE_OFFICIAL_LIVE'
+  ).length;
+  if (specialistProviderCount === 0) {
+    throw startupFailure(
+      'Evidence Search specialist KB lane requires at least one enabled, certified FREE_PROJECTION provider',
+      'EVIDENCE_SEARCH_SPECIALIST_KB_LANE_REQUIRED'
+    );
+  }
+  if (currentProviderCount === 0) {
+    throw startupFailure(
+      'Evidence Search current web lane requires at least one enabled, certified FREE_OFFICIAL_LIVE provider',
+      'EVIDENCE_SEARCH_CURRENT_WEB_LANE_REQUIRED'
+    );
+  }
+  return Object.freeze({
+    active_provider_count: activeProviders.length,
+    specialist_kb_provider_count: specialistProviderCount,
+    current_web_provider_count: currentProviderCount
+  });
 }
 
 const logger = new Logger();
 const kbTargetRegistry = KbTargetRegistry.load();
 const baseProviders = loadEvidenceProviders();
 const providers = attachKbTargetsToProviders(baseProviders, kbTargetRegistry);
-const activeProviderCount = assertUsableProviderConfiguration(providers);
+const providerState = assertUsableProviderConfiguration(providers);
 const jobStore = new EvidenceJobStore();
 const durableSpool = new DurableEvidenceSpool();
 const jobManager = new EvidenceJobManager({
@@ -67,7 +89,8 @@ const server = new EvidenceSearchApiServer({
       process.env.ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY || 2
     ),
     informationQualityEvaluator: evaluateInformationQuality,
-    informationQualityEvaluatorMode: 'IN_PROCESS'
+    informationQualityEvaluatorMode: 'IN_PROCESS',
+    requireDualSearchLanes: true
   }
 });
 
@@ -78,7 +101,10 @@ logger.write({
   text: 'Astera evidence search runtime initialized',
   payload: {
     provider_count: providers.length,
-    active_provider_count: activeProviderCount,
+    active_provider_count: providerState.active_provider_count,
+    specialist_kb_provider_count: providerState.specialist_kb_provider_count,
+    current_web_provider_count: providerState.current_web_provider_count,
+    dual_search_lanes_required: true,
     kb_target_source_record_count: kbTargetRegistry.source_record_count,
     kb_target_count: kbTargetRegistry.target_count,
     automatic_kb_target_count: kbTargetRegistry.automatic_target_count,
