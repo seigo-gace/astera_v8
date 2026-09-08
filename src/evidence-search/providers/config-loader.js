@@ -28,6 +28,7 @@ const REPLACED_BASE_PROVIDER_IDS = new Set(['data-gov-datasets']);
 const REPLACED_PUBLIC_SPECIALIST_PROVIDER_IDS = new Set(['open-library-search']);
 const REPLACED_SPECIALIST_PROVIDER_IDS = new Set(['nominatim-search', 'un-digital-library-search', 'go-packages-search', 'metacpan-search', 'met-museum-search']);
 const REPLACED_WORLD_PROVIDER_IDS = new Set(['ecolex-search', 'pubmed-search']);
+const WAVE5_REPLACED_PROVIDER_IDS = new Set(['huggingface-model-search']);
 const ACTIVE_PUBLIC_SPECIALIST = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS.filter((provider) => !REPLACED_PUBLIC_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id) && !REPLACED_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_WORLD_KB = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB.filter((provider) => !REPLACED_WORLD_PROVIDER_IDS.has(provider.provider_id)));
@@ -67,7 +68,7 @@ function readConfig(filePath) {
   if (!Array.isArray(base.providers)) throw configError('evidence provider configuration providers must be an array');
   const publicCatalog = String(base.source_catalog || '') === './evidence-source-catalog.public.json';
   const activeBaseProviders = base.providers.filter((provider) => !REPLACED_BASE_PROVIDER_IDS.has(provider?.provider_id));
-  const providers = publicCatalog
+  const assembledProviders = publicCatalog
     ? [
         ...activeBaseProviders,
         ...ACTIVE_PUBLIC_SPECIALIST,
@@ -80,6 +81,7 @@ function readConfig(filePath) {
         ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE5
       ]
     : [...base.providers];
+  const providers = publicCatalog ? assembledProviders.filter((provider) => !WAVE5_REPLACED_PROVIDER_IDS.has(provider?.provider_id)) : assembledProviders;
   const ids = new Set();
   for (const provider of providers) { const id = String(provider?.provider_id || ''); if (!id) continue; if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(id); }
   return { absolute, parsed: { ...base, providers } };
@@ -106,4 +108,4 @@ function loadEvidenceProviders(options = {}) {
   const ids = new Set(); for (const provider of providers) { if (ids.has(provider.provider_id)) throw configError(`duplicate configured provider_id: ${provider.provider_id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(provider.provider_id); }
   return Object.freeze(providers);
 }
-module.exports = { FREE_SOURCE_CLASSES, BLOCKED_PUBLIC_PROVIDER_IDS, RUNTIME_QUARANTINED_PROVIDER_IDS, REPLACED_BASE_PROVIDER_IDS, REPLACED_PUBLIC_SPECIALIST_PROVIDER_IDS, REPLACED_SPECIALIST_PROVIDER_IDS, REPLACED_WORLD_PROVIDER_IDS, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };
+module.exports = { FREE_SOURCE_CLASSES, BLOCKED_PUBLIC_PROVIDER_IDS, RUNTIME_QUARANTINED_PROVIDER_IDS, REPLACED_BASE_PROVIDER_IDS, REPLACED_PUBLIC_SPECIALIST_PROVIDER_IDS, REPLACED_SPECIALIST_PROVIDER_IDS, REPLACED_WORLD_PROVIDER_IDS, WAVE5_REPLACED_PROVIDER_IDS, isReservedPlaceholderHost, loadEvidenceProviders, readConfig };

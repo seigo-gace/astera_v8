@@ -6,6 +6,10 @@ const path = require('node:path');
 const REQUIRED_DOMAINS = Object.freeze(Array.from({ length: 38 }, (_, index) => `G${String(index + 1).padStart(2, '0')}`));
 const DEFAULT_KB_TARGET_FILE = path.join(__dirname, '..', '..', '..', 'config', 'evidence-kb-targets.public.tsv');
 const EXPECTED_HEADER = Object.freeze(['kb', 'official_url', 'genres_csv', 'accesses_csv', 'statuses_csv']);
+const RUNTIME_TARGET_ROWS = Object.freeze([
+  Object.freeze(['USGS FDSN Event', 'https://earthquake.usgs.gov/fdsnws/event/1/', 'G05,G21', 'FREE_NO_AUTH', 'PASS']),
+  Object.freeze(['PubChem PUG REST', 'https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest', 'G20', 'FREE_NO_AUTH', 'PASS'])
+]);
 
 function splitCsv(value) {
   return [...new Set(String(value || '').split(',').map((item) => item.trim()).filter(Boolean))];
@@ -50,7 +54,7 @@ function normalizeTarget(columns, index) {
   const blocked = statuses.includes('BLOCKED');
   const publicNoAuth = accesses.includes('FREE_NO_AUTH');
   const targetState = blocked ? 'BLOCKED' : publicNoAuth ? 'PUBLIC_NO_AUTH' : accesses.includes('FREE_AUTH') ? 'AUTH_REQUIRED' : accesses.includes('CONSTRAINED') ? 'CONSTRAINED' : 'RECORDED';
-  const target = {
+  return Object.freeze({
     target_id: `kb_target_${String(index).padStart(4, '0')}`,
     kb,
     official_url: officialUrl,
@@ -60,8 +64,7 @@ function normalizeTarget(columns, index) {
     recorded_statuses: Object.freeze(statuses),
     target_state: targetState,
     automatic_search_eligible: publicNoAuth && !blocked
-  };
-  return Object.freeze(target);
+  });
 }
 
 class KbTargetRegistry {
@@ -69,12 +72,14 @@ class KbTargetRegistry {
     if (!Array.isArray(targets) || targets.length === 0) throw new TypeError('KB targets must not be empty');
     const seen = new Set();
     for (const target of targets) {
-      const key = target.official_url.trim().toLowerCase();
+      const key = normalizeBindingUrl(target.official_url) || target.official_url.trim().toLowerCase();
       if (seen.has(key)) throw new Error(`duplicate KB target URL: ${target.official_url}`);
       seen.add(key);
     }
     this.targets = Object.freeze([...targets]);
     this.source_record_count = Number(options.source_record_count || targets.length);
+    this.base_target_count = Number(options.base_target_count || targets.length);
+    this.runtime_target_count = Number(options.runtime_target_count || 0);
     this.target_count = targets.length;
     this.automatic_target_count = targets.filter((target) => target.automatic_search_eligible).length;
     Object.freeze(this);
@@ -86,10 +91,16 @@ class KbTargetRegistry {
     if (lines.length < 2) throw new Error('KB target registry is empty');
     const header = lines[0].split('\t');
     if (header.length !== EXPECTED_HEADER.length || header.some((value, index) => value !== EXPECTED_HEADER[index])) throw new Error('KB target registry header is invalid');
-    const targets = lines.slice(1).map((line, index) => normalizeTarget(line.split('\t'), index + 1));
-    const expectedCount = Number(options.expected_target_count || 663);
-    if (expectedCount > 0 && targets.length !== expectedCount) throw new Error(`KB target registry expected ${expectedCount} targets, got ${targets.length}`);
-    return new KbTargetRegistry(targets, { source_record_count: options.source_record_count || 714 });
+    const baseTargets = lines.slice(1).map((line, index) => normalizeTarget(line.split('\t'), index + 1));
+    const expectedBaseCount = Number(options.expected_target_count || 663);
+    if (expectedBaseCount > 0 && baseTargets.length !== expectedBaseCount) throw new Error(`KB target registry expected ${expectedBaseCount} base targets, got ${baseTargets.length}`);
+    const runtimeTargets = RUNTIME_TARGET_ROWS.map((columns, index) => normalizeTarget(columns, baseTargets.length + index + 1));
+    const targets = [...baseTargets, ...runtimeTargets];
+    return new KbTargetRegistry(targets, {
+      source_record_count: options.source_record_count || (714 + runtimeTargets.length),
+      base_target_count: baseTargets.length,
+      runtime_target_count: runtimeTargets.length
+    });
   }
 
   select(plan, options = {}) {
@@ -124,7 +135,7 @@ class KbTargetRegistry {
   }
 
   summary() {
-    return Object.freeze({ source_record_count: this.source_record_count, target_count: this.target_count, automatic_target_count: this.automatic_target_count });
+    return Object.freeze({ source_record_count: this.source_record_count, base_target_count: this.base_target_count, runtime_target_count: this.runtime_target_count, target_count: this.target_count, automatic_target_count: this.automatic_target_count });
   }
 }
 
@@ -132,6 +143,7 @@ module.exports = {
   KbTargetRegistry,
   DEFAULT_KB_TARGET_FILE,
   REQUIRED_DOMAINS,
+  RUNTIME_TARGET_ROWS,
   normalizeBindingName,
   normalizeBindingUrl
 };

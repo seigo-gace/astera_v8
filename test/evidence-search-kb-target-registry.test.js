@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-registry');
+const { KbTargetRegistry, RUNTIME_TARGET_ROWS } = require('../src/evidence-search/core/kb-target-registry');
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
 const {
   BINDING_MODE,
@@ -46,11 +46,23 @@ function syntheticProvider(providerId, domains = ['G01']) {
   };
 }
 
-test('recorded KB target registry loads the deduplicated 714-row source as 663 runtime targets', () => {
+test('recorded KB target registry keeps the 663-row base and materializes verified runtime targets', () => {
   const registry = KbTargetRegistry.load();
-  assert.equal(registry.source_record_count, 714);
-  assert.equal(registry.target_count, 663);
-  assert.equal(new Set(registry.targets.map((target) => target.official_url.toLowerCase())).size, 663);
+  assert.equal(registry.base_target_count, 663);
+  assert.equal(registry.runtime_target_count, RUNTIME_TARGET_ROWS.length);
+  assert.equal(registry.target_count, 663 + RUNTIME_TARGET_ROWS.length);
+  assert.equal(registry.source_record_count, 714 + RUNTIME_TARGET_ROWS.length);
+  assert.equal(new Set(registry.targets.map((target) => target.official_url.toLowerCase())).size, registry.target_count);
+
+  const usgsFdsn = byUrl(registry, 'https://earthquake.usgs.gov/fdsnws/event/1/');
+  assert.ok(usgsFdsn);
+  assert.equal(usgsFdsn.automatic_search_eligible, true);
+  assert.ok(usgsFdsn.genres.includes('G21'));
+
+  const pubchem = byUrl(registry, 'https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest');
+  assert.ok(pubchem);
+  assert.equal(pubchem.automatic_search_eligible, true);
+  assert.deepEqual(pubchem.genres, ['G20']);
 
   const blocked = byUrl(registry, 'https://central.sonatype.org/search/rest-api-guide/');
   assert.ok(blocked);
@@ -96,11 +108,7 @@ test('KB target binding gates provider selection and the bound target reaches th
   const provider = attachKbTargets(baseProvider, registry, {
     requireBinding: true,
     limit: 16,
-    catalogSources: [{
-      source_id: 'MITRE_ATTACK',
-      name: 'MITRE ATT&CK',
-      official_url: 'https://attack.mitre.org/resources/attack-data-and-tools/'
-    }]
+    catalogSources: [{ source_id: 'MITRE_ATTACK', name: 'MITRE ATT&CK', official_url: 'https://attack.mitre.org/resources/attack-data-and-tools/' }]
   });
   const unboundProvider = attachKbTargets({
     ...baseProvider,
@@ -109,23 +117,14 @@ test('KB target binding gates provider selection and the bound target reaches th
   }, registry, {
     requireBinding: true,
     limit: 16,
-    catalogSources: [{
-      source_id: 'NO_MATCH',
-      name: 'No matching runtime KB',
-      official_url: 'https://no-match.invalid/'
-    }]
+    catalogSources: [{ source_id: 'NO_MATCH', name: 'No matching runtime KB', official_url: 'https://no-match.invalid/' }]
   });
 
   const providerRegistry = new ProviderRegistry([provider, unboundProvider]);
   const canonicalPlan = {
     question: 'MITRE ATT&CK threat technique',
     domain_lens: { id: 'G31' },
-    source_policy: {
-      provider_allowlist: [],
-      provider_denylist: [],
-      free_projection: true,
-      free_current: true
-    },
+    source_policy: { provider_allowlist: [], provider_denylist: [], free_projection: true, free_current: true },
     primary_query_set: [{ query_id: 'q1', text: 'MITRE ATT&CK threat technique' }],
     reinforcement_query_set: []
   };
@@ -159,14 +158,8 @@ test('canonical-name binding requires the same authority host and unique provide
     syntheticTarget('target-alpha', 'Alpha API Search', 'https://example.org/search', ['G01'])
   ], { source_record_count: 3 });
 
-  assert.equal(targetMatchesCatalogSource(
-    registry.targets[0],
-    { name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/' }
-  ), true);
-  assert.equal(targetMatchesCatalogSource(
-    registry.targets[1],
-    { name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species' }
-  ), false);
+  assert.equal(targetMatchesCatalogSource(registry.targets[0], { name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/' }), true);
+  assert.equal(targetMatchesCatalogSource(registry.targets[1], { name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species' }), false);
 
   const providers = attachKbTargetsToProviders([
     syntheticProvider('loc-provider', ['G15']),
@@ -181,14 +174,12 @@ test('canonical-name binding requires the same authority host and unique provide
       { provider_id: 'alpha-provider-a', enabled: true, catalog_source_ids: ['ALPHA_A'] },
       { provider_id: 'alpha-provider-b', enabled: true, catalog_source_ids: ['ALPHA_B'] }
     ],
-    sourceCatalog: {
-      sources: [
-        { source_id: 'LOC', name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/', runtime_state: 'SEARCHABLE', provider_id: 'loc-provider' },
-        { source_id: 'GBIF', name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species', runtime_state: 'SEARCHABLE', provider_id: 'gbif-provider' },
-        { source_id: 'ALPHA_A', name: 'Alpha REST API', official_url: 'https://example.org/api/a', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-a' },
-        { source_id: 'ALPHA_B', name: 'Alpha REST API', official_url: 'https://example.org/api/b', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-b' }
-      ]
-    }
+    sourceCatalog: { sources: [
+      { source_id: 'LOC', name: 'Library of Congress JSON/YAML Search', official_url: 'https://www.loc.gov/apis/', runtime_state: 'SEARCHABLE', provider_id: 'loc-provider' },
+      { source_id: 'GBIF', name: 'GBIF Species API', official_url: 'https://techdocs.gbif.org/en/openapi/species', runtime_state: 'SEARCHABLE', provider_id: 'gbif-provider' },
+      { source_id: 'ALPHA_A', name: 'Alpha REST API', official_url: 'https://example.org/api/a', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-a' },
+      { source_id: 'ALPHA_B', name: 'Alpha REST API', official_url: 'https://example.org/api/b', runtime_state: 'SEARCHABLE', provider_id: 'alpha-provider-b' }
+    ] }
   });
 
   const byId = new Map(providers.map((provider) => [provider.provider_id, provider]));
@@ -208,17 +199,14 @@ test('canonical-name binding requires the same authority host and unique provide
 
 test('explicit source-target aliases bind only predeclared canonical equivalents', () => {
   assert.ok(Object.keys(EXPLICIT_SOURCE_TARGET_URL_ALIASES).length >= 10);
-
   assert.equal(targetMatchesCatalogSource(
     syntheticTarget('pypi-target', 'PyPI (Python Package Index)', 'https://pypi.org/', ['G29']),
     { source_id: 'PYPI', name: 'Python Package Index Search', official_url: 'https://pypi.org/search/' }
   ), true);
-
   assert.equal(targetMatchesCatalogSource(
     syntheticTarget('ntrs-target', 'NASA Technical Reports Server (NTRS)', 'https://ntrs.nasa.gov/search', ['G37']),
     { source_id: 'NASA_NTRS', name: 'NASA Technical Reports Server Search API', official_url: 'https://ntrs.nasa.gov/api/openapi/' }
   ), true);
-
   assert.equal(targetMatchesCatalogSource(
     syntheticTarget('wrong-target', 'Unrelated NASA source', 'https://earthdata.nasa.gov/', ['G37']),
     { source_id: 'NASA_NTRS', name: 'NASA Technical Reports Server Search API', official_url: 'https://ntrs.nasa.gov/api/openapi/' }

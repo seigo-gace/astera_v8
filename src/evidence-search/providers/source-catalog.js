@@ -13,7 +13,8 @@ const RUNTIME_ENABLED_SOURCE_OVERRIDES = Object.freeze({
   ONET_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'onet-occupation-search', retrieval_strategy: 'LIVE_SEARCH_DETAIL_HTML' }),
   CLOJARS_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'clojars-project-search', retrieval_strategy: 'LIVE_SEARCH_DETAIL_HTML' }),
   SIMBAD_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'simbad-object-search', retrieval_strategy: 'LIVE_TEXT_RECORD' }),
-  NIST_OSAC_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nist-osac-registry-search', retrieval_strategy: 'LIVE_TEXT_FILTERED_REGISTRY' })
+  NIST_OSAC_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nist-osac-registry-search', retrieval_strategy: 'LIVE_TEXT_FILTERED_REGISTRY' }),
+  HUGGINGFACE_HUB: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'huggingface-hub-live-search', retrieval_strategy: 'LIVE_JSON_SEARCH' })
 });
 const RUNTIME_ADDED_SOURCES = Object.freeze([
   Object.freeze({
