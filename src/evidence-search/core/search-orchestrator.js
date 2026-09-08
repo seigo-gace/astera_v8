@@ -26,6 +26,7 @@ const SEARCH_LANES = Object.freeze({
     policy_key: 'free_current'
   })
 });
+const PROVIDER_EXECUTION_TIMEOUT_CAP_MS = 20_000;
 
 const sha256 = (value) => crypto
   .createHash('sha256')
@@ -137,7 +138,7 @@ function buildProviderTasks(providers, phase, plan, context, querySet) {
     provider,
     timeout_ms: Math.max(
       100,
-      Math.min(2500, provider.latency_p95_ms * 2, context.remaining_ms())
+      Math.min(PROVIDER_EXECUTION_TIMEOUT_CAP_MS, context.remaining_ms())
     ),
     run: () => provider.search(Object.freeze({
       schema_version: 'astera.evidence-search.provider-plan.v1',
