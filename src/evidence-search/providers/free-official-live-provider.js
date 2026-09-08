@@ -23,6 +23,15 @@ function queryText(plan) {
   return (plan.query_set || []).map((item) => item.text).join(' ');
 }
 
+function normalizeEndpointQuery(query, endpoint) {
+  const text = String(query?.text || '');
+  if (String(endpoint?.url_template || '').includes('datatracker.ietf.org/api/v1/doc/document/')) {
+    const rfc = text.match(/\bRFC[\s-]*(\d+)\b/i);
+    if (rfc) return Object.freeze({ ...query, text: `rfc${rfc[1]}` });
+  }
+  return query;
+}
+
 function escapeSparqlLiteral(value) {
   return String(value || '')
     .replace(/\\/g, '\\\\')
@@ -202,12 +211,13 @@ function createFreeOfficialLiveProvider(options = {}) {
       for (const query of queries) {
         const queryCandidates = [], queryFailures = [];
         let completedEndpoints = 0;
-        const singleQueryPlan = Object.freeze({ ...plan, query_set: Object.freeze([query]) });
         for (const endpoint of endpoints) {
+          const endpointQuery = normalizeEndpointQuery(query, endpoint);
+          const endpointQueryPlan = Object.freeze({ ...plan, query_set: Object.freeze([endpointQuery]) });
           let endpointError = null;
           for (let attempt = 1; attempt <= endpoint.maximum_attempts; attempt += 1) {
             try {
-              const url = applyTemplate(endpoint.url_template, singleQueryPlan, endpoint);
+              const url = applyTemplate(endpoint.url_template, endpointQueryPlan, endpoint);
               const remaining = Number(context.deadline_at || 0) - Date.now();
               if (Number(context.deadline_at || 0) > 0 && remaining <= 0) {
                 const error = new Error('official source deadline exhausted before request');
