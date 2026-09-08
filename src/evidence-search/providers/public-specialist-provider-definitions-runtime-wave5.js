@@ -27,7 +27,7 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE5 = Object.freeze([
   }),
   Object.freeze({
     provider_id: 'huggingface-hub-live-search', catalog_source_ids: ['HUGGINGFACE_HUB'], type: 'FREE_OFFICIAL_HTTP', enabled: true, certified: true,
-    source_family_id: 'huggingface-hub', priority: 6, domains: ['G30'], capabilities: [], allowed_hosts: ['huggingface.co'], smoke_query: 'bert',
+    source_family_id: 'huggingface-hub', priority: 6, domains: ['G29','G30'], capabilities: [], allowed_hosts: ['huggingface.co'], smoke_query: 'bert',
     endpoints: [{ endpoint_id: 'huggingface-model-search', url_template: 'https://huggingface.co/api/models?search={query}&limit=10&full=true', request_headers: { Accept: 'application/json' }, response_format: 'JSON', records_path: '', authority_id: 'huggingface-hub', publisher_name: 'Hugging Face', capability_id: 'model_repository_search', maximum_records: 10, timeout_ms: 12000, maximum_attempts: 2, field_map: { canonical_record_id: 'id', title: { path: 'id', default: '' }, excerpt: { path: 'tags', stringify: true }, updated_at: { path: 'lastModified', default: null }, fields: { pipeline_tag: { path: 'pipeline_tag', default: '' }, library_name: { path: 'library_name', default: '' }, downloads: { path: 'downloads', default: null }, likes: { path: 'likes', default: null }, private: { path: 'private', default: false } } }, fixed_fields: { source_role: 'OFFICIAL', language: 'und', rights: { access: 'public', reuse: 'source_specific' } } }],
     routing_terms: ['hugging face','huggingface','model','dataset','transformers','machine learning model','AI model','モデル','機械学習']
   }),
