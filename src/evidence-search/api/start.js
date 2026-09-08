@@ -13,6 +13,7 @@ const {
   BINDING_MODE,
   attachKbTargetsToProviders
 } = require('../providers/kb-target-aware-provider');
+const { createPassTargetFallbackProvider } = require('../providers/pass-target-fallback-provider');
 const { EvidenceJobStore } = require('../recovery/job-store');
 const { DurableEvidenceSpool } = require('../recovery/durable-spool');
 const { EvidenceJobManager } = require('../recovery/job-manager');
@@ -48,6 +49,17 @@ function assertUsableProviderConfiguration(providers) {
   return activeProviderCount;
 }
 
+function boundTargetIds(providers) {
+  return new Set((providers || []).flatMap((provider) => [...(provider?.kb_target_binding?.target_ids || [])].map(String)));
+}
+
+function unboundAutomaticPassTargetIds(registry, providers) {
+  const bound = boundTargetIds(providers);
+  return registry.targets
+    .filter((target) => target.automatic_search_eligible && target.recorded_statuses.includes('PASS') && !bound.has(String(target.target_id)))
+    .map((target) => String(target.target_id));
+}
+
 const logger = new Logger();
 const providerConfigFile = String(process.env.ASTERA_EVIDENCE_PROVIDER_CONFIG || '').trim();
 if (!providerConfigFile) {
@@ -66,12 +78,24 @@ if (!sourceCatalog) {
 }
 const kbTargetRegistry = KbTargetRegistry.load();
 const baseProviders = loadEvidenceProviders({ configFile: providerConfigAbsolute });
-const providers = attachKbTargetsToProviders(baseProviders, kbTargetRegistry, {
+const dedicatedProviders = attachKbTargetsToProviders(baseProviders, kbTargetRegistry, {
   providerDefinitions: providerConfig.providers,
   sourceCatalog,
   requireBinding: true,
   limit: 32
 });
+const fallbackTargetIds = unboundAutomaticPassTargetIds(kbTargetRegistry, dedicatedProviders);
+const providers = Object.freeze([
+  ...dedicatedProviders,
+  ...(fallbackTargetIds.length ? [createPassTargetFallbackProvider({ registry: kbTargetRegistry, target_ids: fallbackTargetIds, limit: 4 })] : [])
+]);
+const remainingUnboundPassTargetIds = unboundAutomaticPassTargetIds(kbTargetRegistry, providers);
+if (remainingUnboundPassTargetIds.length !== 0) {
+  throw startupFailure(
+    `Evidence Search has ${remainingUnboundPassTargetIds.length} verified public PASS KB targets without an executable runtime binding`,
+    'EVIDENCE_SEARCH_PASS_KB_TARGET_UNBOUND'
+  );
+}
 const activeProviderCount = assertUsableProviderConfiguration(providers);
 const boundProviderCount = providers.filter(
   (provider) => Number(provider?.kb_target_binding?.automatic_target_count || 0) > 0
@@ -117,6 +141,9 @@ logger.write({
     kb_target_source_record_count: kbTargetRegistry.source_record_count,
     kb_target_count: kbTargetRegistry.target_count,
     automatic_kb_target_count: kbTargetRegistry.automatic_target_count,
+    automatic_pass_kb_target_count: kbTargetRegistry.targets.filter((target) => target.automatic_search_eligible && target.recorded_statuses.includes('PASS')).length,
+    fallback_pass_kb_target_count: fallbackTargetIds.length,
+    unbound_pass_kb_target_count: remainingUnboundPassTargetIds.length,
     active_search_mode: 'FREE_ONLY',
     evaluator_mode: 'EVALUATOR_API_7374',
     durable_recovery: true,
