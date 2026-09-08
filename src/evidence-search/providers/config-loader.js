@@ -17,6 +17,7 @@ const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB, ROUTING_OVERRIDES_WORLD
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2, ROUTING_OVERRIDES_JURISDICTION_WAVE2 } = require('./public-specialist-provider-definitions-jurisdiction-wave2');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_PREVERIFIED_WAVE3, ROUTING_OVERRIDES_PREVERIFIED_WAVE3 } = require('./public-specialist-provider-definitions-preverified-wave3');
 const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4, ROUTING_OVERRIDES_RUNTIME_WAVE4 } = require('./public-specialist-provider-definitions-runtime-wave4');
+const { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE5, ROUTING_OVERRIDES_RUNTIME_WAVE5 } = require('./public-specialist-provider-definitions-runtime-wave5');
 
 const FREE_SOURCE_CLASSES = new Set(['FREE_PROJECTION', 'FREE_OFFICIAL_LIVE']);
 const RESERVED_PLACEHOLDER_BASE_HOSTS = Object.freeze(['example.com', 'example.net', 'example.org']);
@@ -31,7 +32,16 @@ const ACTIVE_PUBLIC_SPECIALIST = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINI
 const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id) && !REPLACED_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_WORLD_KB = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_WORLD_KB.filter((provider) => !REPLACED_WORLD_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_PREVERIFIED_WAVE3 = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_PREVERIFIED_WAVE3.filter((provider) => !RUNTIME_QUARANTINED_PROVIDER_IDS.has(provider.provider_id)));
-const PUBLIC_ROUTING_OVERRIDES = Object.freeze({ ...ROUTING_OVERRIDES, ...ROUTING_OVERRIDES_ALL_DOMAIN, ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION, ...ROUTING_OVERRIDES_WORLD_KB, ...ROUTING_OVERRIDES_JURISDICTION_WAVE2, ...ROUTING_OVERRIDES_PREVERIFIED_WAVE3, ...ROUTING_OVERRIDES_RUNTIME_WAVE4 });
+const PUBLIC_ROUTING_OVERRIDES = Object.freeze({
+  ...ROUTING_OVERRIDES,
+  ...ROUTING_OVERRIDES_ALL_DOMAIN,
+  ...ROUTING_OVERRIDES_SPECIALIST_EXPANSION,
+  ...ROUTING_OVERRIDES_WORLD_KB,
+  ...ROUTING_OVERRIDES_JURISDICTION_WAVE2,
+  ...ROUTING_OVERRIDES_PREVERIFIED_WAVE3,
+  ...ROUTING_OVERRIDES_RUNTIME_WAVE4,
+  ...ROUTING_OVERRIDES_RUNTIME_WAVE5
+});
 
 function configError(message, code = 'EVIDENCE_PROVIDER_CONFIG_INVALID') { const error = new Error(message); error.code = code; return error; }
 function normalizeConfiguredHost(value) { return String(value || '').trim().toLowerCase().replace(/\.$/, ''); }
@@ -57,7 +67,19 @@ function readConfig(filePath) {
   if (!Array.isArray(base.providers)) throw configError('evidence provider configuration providers must be an array');
   const publicCatalog = String(base.source_catalog || '') === './evidence-source-catalog.public.json';
   const activeBaseProviders = base.providers.filter((provider) => !REPLACED_BASE_PROVIDER_IDS.has(provider?.provider_id));
-  const providers = publicCatalog ? [...activeBaseProviders, ...ACTIVE_PUBLIC_SPECIALIST, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN, ...ACTIVE_SPECIALIST_EXPANSION, ...ACTIVE_WORLD_KB, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2, ...ACTIVE_PREVERIFIED_WAVE3, ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4] : [...base.providers];
+  const providers = publicCatalog
+    ? [
+        ...activeBaseProviders,
+        ...ACTIVE_PUBLIC_SPECIALIST,
+        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_ALL_DOMAIN,
+        ...ACTIVE_SPECIALIST_EXPANSION,
+        ...ACTIVE_WORLD_KB,
+        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_JURISDICTION_WAVE2,
+        ...ACTIVE_PREVERIFIED_WAVE3,
+        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4,
+        ...PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE5
+      ]
+    : [...base.providers];
   const ids = new Set();
   for (const provider of providers) { const id = String(provider?.provider_id || ''); if (!id) continue; if (ids.has(id)) throw configError(`duplicate configured provider_id: ${id}`, 'EVIDENCE_PROVIDER_DUPLICATE'); ids.add(id); }
   return { absolute, parsed: { ...base, providers } };

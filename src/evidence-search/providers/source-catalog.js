@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { RUNTIME_SOURCES_WAVE5 } = require('./public-specialist-provider-definitions-runtime-wave5');
 
 const REQUIRED_DOMAINS = Object.freeze(Array.from({ length: 38 }, (_, index) => `G${String(index + 1).padStart(2, '0')}`));
 const RUNTIME_STATES = new Set(['SEARCHABLE', 'VERIFIED_EXTRACTED', 'ADAPTER_REQUIRED', 'REQUIRES_AUTH', 'BLOCKED_ROUTE']);
@@ -28,7 +29,8 @@ const RUNTIME_ADDED_SOURCES = Object.freeze([
     provider_id: 'nasa-cmr-collection-search',
     jurisdiction_scope: 'GLOBAL',
     supports_jurisdiction_filter: false
-  })
+  }),
+  ...RUNTIME_SOURCES_WAVE5
 ]);
 const PUBLIC_CATALOG_BASENAME = 'evidence-source-catalog.public.json';
 const SPECIALIST_EXTENSION_BASENAME = 'evidence-source-catalog.specialist-expansion.json';

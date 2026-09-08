@@ -16,19 +16,26 @@ const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG
 const reportFile = process.env.ASTERA_EVIDENCE_BINDING_REPORT
   || path.join(__dirname, '..', 'artifacts', 'evidence-kb-target-binding-report.json');
 
-const REQUIRED_BOUND_TARGET_URLS = Object.freeze([
-  'https://www.eionet.europa.eu/gemet/en/search/',
-  'https://registry.terraform.io/',
-  'https://ntrs.nasa.gov/search',
-  'https://conan.io/center',
-  'https://pypi.org/',
-  'https://pkg.go.dev/',
-  'https://www.fao.org/faolex/en/',
-  'https://musicbrainz.org/doc/MusicBrainz_API/Search',
-  'https://developers.zenodo.org/',
-  'https://www.ncbi.nlm.nih.gov/books/NBK25499/',
-  'https://www.who.int/data/gho',
-  'https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html'
+const REQUIRED_BOUND_TARGET_NAMES = Object.freeze([
+  'NASA Earthdata CMR Search',
+  'IETF Datatracker',
+  'JPL Horizons API',
+  'Red Hat CVE Database',
+  'RCSB Protein Data Bank Search API',
+  'USGS FDSN Event',
+  'Hugging Face Hub Search',
+  'PubChem PUG REST'
+]);
+
+const LIVE_CASES = Object.freeze([
+  Object.freeze({ provider_id: 'nasa-cmr-collection-search', target_name: 'NASA Earthdata CMR Search', domain: 'G21', query: 'climate' }),
+  Object.freeze({ provider_id: 'ietf-datatracker-document-search', target_name: 'IETF Datatracker', domain: 'G36', query: 'RFC 8446' }),
+  Object.freeze({ provider_id: 'jpl-horizons-target-search', target_name: 'JPL Horizons API', domain: 'G19', query: 'Mars' }),
+  Object.freeze({ provider_id: 'redhat-cve-record-search', target_name: 'Red Hat CVE Database', domain: 'G31', query: 'CVE-2024-3094' }),
+  Object.freeze({ provider_id: 'rcsb-pdb-entry-search', target_name: 'RCSB Protein Data Bank Search API', domain: 'G20', query: '4HHB' }),
+  Object.freeze({ provider_id: 'usgs-fdsn-event-record-search', target_name: 'USGS FDSN Event', domain: 'G21', query: 'usp000hvnu' }),
+  Object.freeze({ provider_id: 'huggingface-hub-model-search', target_name: 'Hugging Face Hub Search', domain: 'G30', query: 'bert' }),
+  Object.freeze({ provider_id: 'pubchem-pug-rest-compound-search', target_name: 'PubChem PUG REST', domain: 'G20', query: 'aspirin' })
 ]);
 
 function recordIdentity(record) {
@@ -84,6 +91,72 @@ function writeBindingReport({ targetRegistry, providers }) {
   return report;
 }
 
+async function runLiveCase(providerRegistry, liveCase) {
+  const canonicalPlan = {
+    question: liveCase.query,
+    domain_lens: { id: liveCase.domain },
+    source_policy: {
+      provider_allowlist: [liveCase.provider_id],
+      provider_denylist: [],
+      free_projection: true,
+      free_current: true
+    },
+    primary_query_set: [{
+      query_id: `${liveCase.provider_id}-q1`,
+      claim_id: `${liveCase.provider_id}-claim`,
+      role: 'PRIMARY',
+      class: 'PRIMARY',
+      text: liveCase.query
+    }],
+    reinforcement_query_set: []
+  };
+
+  const selected = providerRegistry.select(canonicalPlan, 'INITIAL');
+  if (selected.length !== 1 || selected[0].provider_id !== liveCase.provider_id) {
+    throw new Error(`expected ${liveCase.provider_id}, got ${selected.map((item) => item.provider_id).join(',')}`);
+  }
+
+  const selectedTargets = selected[0].target_matcher(canonicalPlan, 'INITIAL');
+  const target = selectedTargets.find((item) => item.kb === liveCase.target_name);
+  if (!target) {
+    throw new Error(`${liveCase.target_name} KB target was not bound to ${liveCase.provider_id}`);
+  }
+
+  const result = await selected[0].search({
+    schema_version: 'astera.evidence-search.provider-plan.v1',
+    phase: 'INITIAL',
+    request_id: `kb-target-live-smoke-${liveCase.provider_id}`,
+    query_plan_hash: `kb-target-live-smoke-${liveCase.provider_id}`,
+    effective_as_of: new Date().toISOString(),
+    domain_lens: { id: liveCase.domain },
+    conditions: [],
+    query_set: canonicalPlan.primary_query_set,
+    maximum_results: 10
+  }, {
+    signal: new AbortController().signal,
+    deadline_at: Date.now() + 25_000,
+    tenant_id: 'kb-target-live-smoke',
+    request_id: `kb-target-live-smoke-${liveCase.provider_id}`
+  });
+
+  const query = result.query_results?.[0];
+  const identities = (result.candidates || []).map(recordIdentity).filter(Boolean);
+  if (query?.retrieval_status !== 'FOUND' || identities.length === 0) {
+    throw new Error(`${liveCase.provider_id} live search failed: ${query?.retrieval_status || 'NO_QUERY_RESULT'}`);
+  }
+  if (!Array.isArray(result.search_targets) || !result.search_targets.some((item) => item.target_id === target.target_id)) {
+    throw new Error(`${liveCase.provider_id} result did not retain KB target binding`);
+  }
+
+  return Object.freeze({
+    provider_id: liveCase.provider_id,
+    target_name: liveCase.target_name,
+    retrieval_status: query.retrieval_status,
+    candidate_count: result.candidates.length,
+    sample_record_id: identities[0]
+  });
+}
+
 async function main() {
   const { absolute, parsed } = readConfig(configFile);
   const sourceCatalog = loadEvidenceSourceCatalog(absolute, parsed.source_catalog);
@@ -101,67 +174,19 @@ async function main() {
   );
 
   const bindingReport = writeBindingReport({ targetRegistry, providers });
-  if (!bindingReport.bound_provider_count || !bindingReport.bound_target_count) {
-    throw new Error('no unique executable KB-target bindings were materialized');
+  if (bindingReport.bound_target_count < 36) {
+    throw new Error(`KB-target implementation wave did not reach 36 bound targets: ${bindingReport.bound_target_count}`);
   }
-  if (bindingReport.bound_target_count <= 28) {
-    throw new Error(`KB-target binding expansion did not exceed the previous 28-target baseline: ${bindingReport.bound_target_count}`);
-  }
-  const boundUrls = new Set(bindingReport.bound_targets.map((target) => target.official_url));
-  const missingTargets = REQUIRED_BOUND_TARGET_URLS.filter((url) => !boundUrls.has(url));
+  const boundNames = new Set(bindingReport.bound_targets.map((target) => target.kb));
+  const missingTargets = REQUIRED_BOUND_TARGET_NAMES.filter((name) => !boundNames.has(name));
   if (missingTargets.length) {
     throw new Error(`required KB target bindings missing: ${missingTargets.join(', ')}`);
   }
 
   const providerRegistry = new ProviderRegistry(providers);
-  const queryText = 'climate';
-  const canonicalPlan = {
-    question: queryText,
-    domain_lens: { id: 'G21' },
-    source_policy: {
-      provider_allowlist: ['nasa-cmr-collection-search'],
-      provider_denylist: [],
-      free_projection: true,
-      free_current: true
-    },
-    primary_query_set: [{ query_id: 'cmr-q1', claim_id: 'cmr-claim', role: 'PRIMARY', class: 'PRIMARY', text: queryText }],
-    reinforcement_query_set: []
-  };
-
-  const selected = providerRegistry.select(canonicalPlan, 'INITIAL');
-  if (selected.length !== 1 || selected[0].provider_id !== 'nasa-cmr-collection-search') {
-    throw new Error(`expected nasa-cmr-collection-search target-bound provider, got ${selected.map((item) => item.provider_id).join(',')}`);
-  }
-  const selectedTargets = selected[0].target_matcher(canonicalPlan, 'INITIAL');
-  const cmrTarget = selectedTargets.find(
-    (target) => target.official_url === 'https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html'
-  );
-  if (!cmrTarget) throw new Error('NASA Earthdata CMR KB target was not bound to nasa-cmr-collection-search');
-
-  const result = await selected[0].search({
-    schema_version: 'astera.evidence-search.provider-plan.v1',
-    phase: 'INITIAL',
-    request_id: 'kb-target-live-smoke-cmr',
-    query_plan_hash: 'kb-target-live-smoke-cmr',
-    effective_as_of: new Date().toISOString(),
-    domain_lens: { id: 'G21' },
-    conditions: [],
-    query_set: canonicalPlan.primary_query_set,
-    maximum_results: 10
-  }, {
-    signal: new AbortController().signal,
-    deadline_at: Date.now() + 20_000,
-    tenant_id: 'kb-target-live-smoke',
-    request_id: 'kb-target-live-smoke-cmr'
-  });
-
-  const query = result.query_results?.[0];
-  const identities = (result.candidates || []).map(recordIdentity).filter(Boolean);
-  if (query?.retrieval_status !== 'FOUND' || identities.length === 0) {
-    throw new Error(`NASA CMR target-bound live search failed: ${query?.retrieval_status || 'NO_QUERY_RESULT'}`);
-  }
-  if (!Array.isArray(result.search_targets) || !result.search_targets.some((target) => target.target_id === cmrTarget.target_id)) {
-    throw new Error('NASA CMR live provider result did not retain the selected KB target binding');
+  const liveResults = [];
+  for (const liveCase of LIVE_CASES) {
+    liveResults.push(await runLiveCase(providerRegistry, liveCase));
   }
 
   console.log(JSON.stringify({
@@ -171,18 +196,11 @@ async function main() {
     bound_provider_count: bindingReport.bound_provider_count,
     bound_target_count: bindingReport.bound_target_count,
     unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
-    required_bound_target_count: REQUIRED_BOUND_TARGET_URLS.length,
+    required_bound_target_count: REQUIRED_BOUND_TARGET_NAMES.length,
+    live_provider_count: liveResults.length,
     binding_mode: BINDING_MODE,
     binding_report: path.relative(path.join(__dirname, '..'), reportFile),
-    provider_id: selected[0].provider_id,
-    target: {
-      target_id: cmrTarget.target_id,
-      kb: cmrTarget.kb,
-      official_url: cmrTarget.official_url
-    },
-    retrieval_status: query.retrieval_status,
-    candidate_count: result.candidates.length,
-    sample_record_id: identities[0]
+    live_results: liveResults
   }, null, 2));
 }
 
