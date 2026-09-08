@@ -1,0 +1,30 @@
+name: Evidence KB Target Live Smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/evidence-kb-targets.public.tsv'
+      - 'config/evidence-providers.public.json'
+      - 'config/evidence-source-catalog*.json'
+      - 'src/evidence-search/**'
+      - 'scripts/evidence-kb-target-live-smoke.js'
+      - '.github/workflows/evidence-kb-target-live-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-kb-target-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run target-bound live search
+        run: node scripts/evidence-kb-target-live-smoke.js

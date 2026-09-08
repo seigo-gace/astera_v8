@@ -19,6 +19,22 @@ function tokenize(value) {
   return [...new Set(String(value || '').toLowerCase().match(/[\p{L}\p{N}._+-]{2,}/gu) || [])];
 }
 
+function normalizeBindingName(value) {
+  return String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function normalizeBindingUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    url.hash = '';
+    url.hostname = url.hostname.toLowerCase();
+    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
 function normalizeTarget(columns, index) {
   if (columns.length !== EXPECTED_HEADER.length) throw new Error(`KB target row ${index} must contain ${EXPECTED_HEADER.length} columns`);
   const [kbRaw, urlRaw, genresRaw, accessesRaw, statusesRaw] = columns;
@@ -81,9 +97,17 @@ class KbTargetRegistry {
     const domain = plan?.domain_lens?.id ? String(plan.domain_lens.id).toUpperCase() : null;
     const queryText = [...(plan?.primary_query_set || []), ...(plan?.reinforcement_query_set || [])].map((query) => query?.text || '').join(' ');
     const tokens = tokenize(queryText);
+    const bindingUrls = new Set((options.official_urls || []).map(normalizeBindingUrl).filter(Boolean));
+    const bindingNames = new Set((options.kb_names || []).map(normalizeBindingName).filter(Boolean));
+    const bindingRequired = options.binding_required === true || bindingUrls.size > 0 || bindingNames.size > 0;
     const ranked = [];
     for (const target of this.targets) {
       if (!target.automatic_search_eligible) continue;
+      if (bindingRequired) {
+        const urlMatch = bindingUrls.has(normalizeBindingUrl(target.official_url));
+        const nameMatch = bindingNames.has(normalizeBindingName(target.kb));
+        if (!urlMatch && !nameMatch) continue;
+      }
       const domainMatch = !domain || target.genres.includes(domain);
       const haystack = `${target.kb} ${target.host} ${target.official_url}`.toLowerCase();
       const tokenMatches = tokens.filter((token) => haystack.includes(token)).length;
@@ -102,4 +126,10 @@ class KbTargetRegistry {
   }
 }
 
-module.exports = { KbTargetRegistry, DEFAULT_KB_TARGET_FILE, REQUIRED_DOMAINS };
+module.exports = {
+  KbTargetRegistry,
+  DEFAULT_KB_TARGET_FILE,
+  REQUIRED_DOMAINS,
+  normalizeBindingName,
+  normalizeBindingUrl
+};

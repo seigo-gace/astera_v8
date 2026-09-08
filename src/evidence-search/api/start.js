@@ -6,7 +6,8 @@ assertContainerRuntime();
 const Logger = require('../../logger');
 const EvidenceSearchApiServer = require('./server');
 const { evaluateInformationQuality } = require('../../quality-completion-evaluator');
-const { loadEvidenceProviders } = require('../providers/config-loader');
+const { loadEvidenceProviders, readConfig } = require('../providers/config-loader');
+const { loadEvidenceSourceCatalog } = require('../providers/source-catalog');
 const { KbTargetRegistry } = require('../core/kb-target-registry');
 const { attachKbTargetsToProviders } = require('../providers/kb-target-aware-provider');
 const { EvidenceJobStore } = require('../recovery/job-store');
@@ -34,43 +35,50 @@ function assertUsableProviderConfiguration(providers) {
       'EVIDENCE_PROVIDER_CONFIG_INVALID'
     );
   }
-  const activeProviders = providers.filter((provider) => provider?.certified === true);
-  if (activeProviders.length === 0) {
+  const activeProviderCount = providers.filter((provider) => provider?.certified === true).length;
+  if (activeProviderCount === 0) {
     throw startupFailure(
       'Evidence Search requires at least one enabled, certified provider before runtime startup',
       'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER'
     );
   }
-  const specialistProviderCount = activeProviders.filter(
-    (provider) => provider.source_class === 'FREE_PROJECTION'
-  ).length;
-  const currentProviderCount = activeProviders.filter(
-    (provider) => provider.source_class === 'FREE_OFFICIAL_LIVE'
-  ).length;
-  if (specialistProviderCount === 0) {
-    throw startupFailure(
-      'Evidence Search specialist KB lane requires at least one enabled, certified FREE_PROJECTION provider',
-      'EVIDENCE_SEARCH_SPECIALIST_KB_LANE_REQUIRED'
-    );
-  }
-  if (currentProviderCount === 0) {
-    throw startupFailure(
-      'Evidence Search current web lane requires at least one enabled, certified FREE_OFFICIAL_LIVE provider',
-      'EVIDENCE_SEARCH_CURRENT_WEB_LANE_REQUIRED'
-    );
-  }
-  return Object.freeze({
-    active_provider_count: activeProviders.length,
-    specialist_kb_provider_count: specialistProviderCount,
-    current_web_provider_count: currentProviderCount
-  });
+  return activeProviderCount;
 }
 
 const logger = new Logger();
+const providerConfigFile = String(process.env.ASTERA_EVIDENCE_PROVIDER_CONFIG || '').trim();
+if (!providerConfigFile) {
+  throw startupFailure(
+    'ASTERA_EVIDENCE_PROVIDER_CONFIG is required for the Evidence Search runtime',
+    'EVIDENCE_PROVIDER_CONFIG_REQUIRED'
+  );
+}
+const { absolute: providerConfigAbsolute, parsed: providerConfig } = readConfig(providerConfigFile);
+const sourceCatalog = loadEvidenceSourceCatalog(providerConfigAbsolute, providerConfig.source_catalog);
+if (!sourceCatalog) {
+  throw startupFailure(
+    'Evidence Search source catalog is required for KB-target runtime binding',
+    'EVIDENCE_SOURCE_CATALOG_REQUIRED'
+  );
+}
 const kbTargetRegistry = KbTargetRegistry.load();
-const baseProviders = loadEvidenceProviders();
-const providers = attachKbTargetsToProviders(baseProviders, kbTargetRegistry);
-const providerState = assertUsableProviderConfiguration(providers);
+const baseProviders = loadEvidenceProviders({ configFile: providerConfigAbsolute });
+const providers = attachKbTargetsToProviders(baseProviders, kbTargetRegistry, {
+  providerDefinitions: providerConfig.providers,
+  sourceCatalog,
+  requireBinding: true,
+  limit: 32
+});
+const activeProviderCount = assertUsableProviderConfiguration(providers);
+const boundProviderCount = providers.filter(
+  (provider) => Number(provider?.kb_target_binding?.automatic_target_count || 0) > 0
+).length;
+if (boundProviderCount === 0) {
+  throw startupFailure(
+    'Evidence Search has no provider with an exact executable KB-target binding',
+    'EVIDENCE_SEARCH_NO_BOUND_KB_TARGET_PROVIDER'
+  );
+}
 const jobStore = new EvidenceJobStore();
 const durableSpool = new DurableEvidenceSpool();
 const jobManager = new EvidenceJobManager({
@@ -89,8 +97,7 @@ const server = new EvidenceSearchApiServer({
       process.env.ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY || 2
     ),
     informationQualityEvaluator: evaluateInformationQuality,
-    informationQualityEvaluatorMode: 'IN_PROCESS',
-    requireDualSearchLanes: true
+    informationQualityEvaluatorMode: 'IN_PROCESS'
   }
 });
 
@@ -101,10 +108,9 @@ logger.write({
   text: 'Astera evidence search runtime initialized',
   payload: {
     provider_count: providers.length,
-    active_provider_count: providerState.active_provider_count,
-    specialist_kb_provider_count: providerState.specialist_kb_provider_count,
-    current_web_provider_count: providerState.current_web_provider_count,
-    dual_search_lanes_required: true,
+    active_provider_count: activeProviderCount,
+    kb_target_bound_provider_count: boundProviderCount,
+    kb_target_binding_mode: 'EXACT_CATALOG_URL_OR_NAME',
     kb_target_source_record_count: kbTargetRegistry.source_record_count,
     kb_target_count: kbTargetRegistry.target_count,
     automatic_kb_target_count: kbTargetRegistry.automatic_target_count,

@@ -109,6 +109,7 @@ function normalizeProvider(provider, index) {
     interactive_eligible: provider.interactive_eligible !== false,
     supports_idempotency: provider.supports_idempotency === true,
     supports_operation_status: provider.supports_operation_status === true,
+    target_matcher: typeof provider.target_matcher === 'function' ? provider.target_matcher.bind(provider) : null,
     search: provider.search.bind(provider),
     revalidate: typeof provider.revalidate === 'function' ? provider.revalidate.bind(provider) : null,
     read_operation_status: typeof provider.read_operation_status === 'function'
@@ -131,23 +132,15 @@ class ProviderRegistry {
     );
   }
 
-  select(plan, phase = 'INITIAL', options = {}) {
+  select(plan, phase = 'INITIAL') {
     const allow = new Set(plan.source_policy.provider_allowlist);
     const deny = new Set(plan.source_policy.provider_denylist);
     const queryText = routingText(plan);
     const resolvedDomain = isResolvedDomainLens(plan.domain_lens);
     const domainId = resolvedDomain ? String(plan.domain_lens.id).toUpperCase() : null;
-    const requiredSourceClass = options.source_class
-      ? String(options.source_class).toUpperCase()
-      : null;
-    if (requiredSourceClass && !SOURCE_CLASSES.has(requiredSourceClass)) {
-      throw new TypeError(`source_class is invalid: ${requiredSourceClass}`);
-    }
-
     const selected = this.providers.filter((provider) => {
       if (!provider.certified) return false;
       if (provider.source_class === 'PAID_PROVIDER') return false;
-      if (requiredSourceClass && provider.source_class !== requiredSourceClass) return false;
       if (allow.size && !allow.has(provider.provider_id)) return false;
       if (deny.has(provider.provider_id)) return false;
       if (provider.source_class === 'FREE_PROJECTION' && !plan.source_policy.free_projection) return false;
@@ -157,6 +150,11 @@ class ProviderRegistry {
         provider.capabilities.includes('NO_REINFORCEMENT')
         || provider.capabilities.includes('INITIAL_ONLY')
       )) return false;
+
+      if (provider.target_matcher) {
+        const targets = provider.target_matcher(plan, phase);
+        if (!Array.isArray(targets) || targets.length === 0) return false;
+      }
 
       if (resolvedDomain) {
         if (provider.domains.length && !provider.domains.includes(domainId)) return false;
@@ -172,8 +170,7 @@ class ProviderRegistry {
       if (!queryText) return false;
       return provider.routing_terms.some((term) => routingTermMatches(queryText, term));
     });
-
-    if (phase === 'INITIAL' && selected.length === 0 && options.allow_empty !== true) {
+    if (phase === 'INITIAL' && selected.length === 0) {
       const error = new Error('Evidence Search has no active provider for the canonical search plan');
       error.code = 'EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER';
       error.status = 503;
@@ -182,15 +179,12 @@ class ProviderRegistry {
     return selected;
   }
 
-  selectSourceClass(plan, sourceClass, phase = 'INITIAL') {
-    return this.select(plan, phase, { source_class: sourceClass, allow_empty: true });
-  }
-
   health() {
     return this.providers.map((provider) => ({
       provider_id: provider.provider_id,
       source_class: provider.source_class,
       active_search_eligible: provider.certified && provider.source_class !== 'PAID_PROVIDER',
+      kb_target_binding_enforced: Boolean(provider.target_matcher),
       certified: provider.certified,
       capabilities: provider.capabilities,
       routing_terms: provider.routing_terms
