@@ -16,7 +16,7 @@ const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG
 const reportFile = process.env.ASTERA_EVIDENCE_BINDING_REPORT
   || path.join(__dirname, '..', 'artifacts', 'evidence-kb-target-binding-report.json');
 
-const REQUIRED_ALIAS_TARGET_URLS = Object.freeze([
+const REQUIRED_BOUND_TARGET_URLS = Object.freeze([
   'https://www.eionet.europa.eu/gemet/en/search/',
   'https://registry.terraform.io/',
   'https://ntrs.nasa.gov/search',
@@ -27,7 +27,8 @@ const REQUIRED_ALIAS_TARGET_URLS = Object.freeze([
   'https://musicbrainz.org/doc/MusicBrainz_API/Search',
   'https://developers.zenodo.org/',
   'https://www.ncbi.nlm.nih.gov/books/NBK25499/',
-  'https://www.who.int/data/gho'
+  'https://www.who.int/data/gho',
+  'https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html'
 ]);
 
 function recordIdentity(record) {
@@ -103,64 +104,64 @@ async function main() {
   if (!bindingReport.bound_provider_count || !bindingReport.bound_target_count) {
     throw new Error('no unique executable KB-target bindings were materialized');
   }
-  if (bindingReport.bound_target_count <= 17) {
-    throw new Error(`KB-target binding expansion did not exceed the previous 17-target baseline: ${bindingReport.bound_target_count}`);
+  if (bindingReport.bound_target_count <= 28) {
+    throw new Error(`KB-target binding expansion did not exceed the previous 28-target baseline: ${bindingReport.bound_target_count}`);
   }
   const boundUrls = new Set(bindingReport.bound_targets.map((target) => target.official_url));
-  const missingAliasTargets = REQUIRED_ALIAS_TARGET_URLS.filter((url) => !boundUrls.has(url));
-  if (missingAliasTargets.length) {
-    throw new Error(`explicit canonical alias bindings missing: ${missingAliasTargets.join(', ')}`);
+  const missingTargets = REQUIRED_BOUND_TARGET_URLS.filter((url) => !boundUrls.has(url));
+  if (missingTargets.length) {
+    throw new Error(`required KB target bindings missing: ${missingTargets.join(', ')}`);
   }
 
   const providerRegistry = new ProviderRegistry(providers);
-  const queryText = 'DataCite climate change';
+  const queryText = 'climate';
   const canonicalPlan = {
     question: queryText,
-    domain_lens: { id: 'G37' },
+    domain_lens: { id: 'G21' },
     source_policy: {
-      provider_allowlist: ['datacite-dois'],
+      provider_allowlist: ['nasa-cmr-collection-search'],
       provider_denylist: [],
       free_projection: true,
       free_current: true
     },
-    primary_query_set: [{ query_id: 'live-q1', claim_id: 'live-claim', role: 'PRIMARY', class: 'PRIMARY', text: queryText }],
+    primary_query_set: [{ query_id: 'cmr-q1', claim_id: 'cmr-claim', role: 'PRIMARY', class: 'PRIMARY', text: queryText }],
     reinforcement_query_set: []
   };
 
   const selected = providerRegistry.select(canonicalPlan, 'INITIAL');
-  if (selected.length !== 1 || selected[0].provider_id !== 'datacite-dois') {
-    throw new Error(`expected datacite-dois target-bound provider, got ${selected.map((item) => item.provider_id).join(',')}`);
+  if (selected.length !== 1 || selected[0].provider_id !== 'nasa-cmr-collection-search') {
+    throw new Error(`expected nasa-cmr-collection-search target-bound provider, got ${selected.map((item) => item.provider_id).join(',')}`);
   }
   const selectedTargets = selected[0].target_matcher(canonicalPlan, 'INITIAL');
-  const dataCiteTarget = selectedTargets.find(
-    (target) => target.official_url === 'https://api.datacite.org/'
+  const cmrTarget = selectedTargets.find(
+    (target) => target.official_url === 'https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html'
   );
-  if (!dataCiteTarget) throw new Error('DataCite KB target was not bound to datacite-dois');
+  if (!cmrTarget) throw new Error('NASA Earthdata CMR KB target was not bound to nasa-cmr-collection-search');
 
   const result = await selected[0].search({
     schema_version: 'astera.evidence-search.provider-plan.v1',
     phase: 'INITIAL',
-    request_id: 'kb-target-live-smoke',
-    query_plan_hash: 'kb-target-live-smoke',
+    request_id: 'kb-target-live-smoke-cmr',
+    query_plan_hash: 'kb-target-live-smoke-cmr',
     effective_as_of: new Date().toISOString(),
-    domain_lens: { id: 'G37' },
+    domain_lens: { id: 'G21' },
     conditions: [],
     query_set: canonicalPlan.primary_query_set,
-    maximum_results: 20
+    maximum_results: 10
   }, {
     signal: new AbortController().signal,
     deadline_at: Date.now() + 20_000,
     tenant_id: 'kb-target-live-smoke',
-    request_id: 'kb-target-live-smoke'
+    request_id: 'kb-target-live-smoke-cmr'
   });
 
   const query = result.query_results?.[0];
   const identities = (result.candidates || []).map(recordIdentity).filter(Boolean);
   if (query?.retrieval_status !== 'FOUND' || identities.length === 0) {
-    throw new Error(`target-bound live search failed: ${query?.retrieval_status || 'NO_QUERY_RESULT'}`);
+    throw new Error(`NASA CMR target-bound live search failed: ${query?.retrieval_status || 'NO_QUERY_RESULT'}`);
   }
-  if (!Array.isArray(result.search_targets) || !result.search_targets.some((target) => target.target_id === dataCiteTarget.target_id)) {
-    throw new Error('live provider result did not retain the selected KB target binding');
+  if (!Array.isArray(result.search_targets) || !result.search_targets.some((target) => target.target_id === cmrTarget.target_id)) {
+    throw new Error('NASA CMR live provider result did not retain the selected KB target binding');
   }
 
   console.log(JSON.stringify({
@@ -170,14 +171,14 @@ async function main() {
     bound_provider_count: bindingReport.bound_provider_count,
     bound_target_count: bindingReport.bound_target_count,
     unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
-    explicit_alias_target_count: REQUIRED_ALIAS_TARGET_URLS.length,
+    required_bound_target_count: REQUIRED_BOUND_TARGET_URLS.length,
     binding_mode: BINDING_MODE,
     binding_report: path.relative(path.join(__dirname, '..'), reportFile),
     provider_id: selected[0].provider_id,
     target: {
-      target_id: dataCiteTarget.target_id,
-      kb: dataCiteTarget.kb,
-      official_url: dataCiteTarget.official_url
+      target_id: cmrTarget.target_id,
+      kb: cmrTarget.kb,
+      official_url: cmrTarget.official_url
     },
     retrieval_status: query.retrieval_status,
     candidate_count: result.candidates.length,

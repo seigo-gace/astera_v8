@@ -14,6 +14,22 @@ const RUNTIME_ENABLED_SOURCE_OVERRIDES = Object.freeze({
   SIMBAD_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'simbad-object-search', retrieval_strategy: 'LIVE_TEXT_RECORD' }),
   NIST_OSAC_VERIFIED: Object.freeze({ runtime_state: 'SEARCHABLE', provider_id: 'nist-osac-registry-search', retrieval_strategy: 'LIVE_TEXT_FILTERED_REGISTRY' })
 });
+const RUNTIME_ADDED_SOURCES = Object.freeze([
+  Object.freeze({
+    source_id: 'NASA_CMR_VERIFIED',
+    name: 'NASA Earthdata CMR Search API',
+    authority: 'NASA Earth Science Data and Information System / Common Metadata Repository',
+    official_url: 'https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html',
+    category: 'VERIFIED_OFFICIAL_KB',
+    baseline_registry: false,
+    domains: ['G05', 'G21', 'G37'],
+    retrieval_strategy: 'LIVE_JSON',
+    runtime_state: 'SEARCHABLE',
+    provider_id: 'nasa-cmr-collection-search',
+    jurisdiction_scope: 'GLOBAL',
+    supports_jurisdiction_filter: false
+  })
+]);
 const PUBLIC_CATALOG_BASENAME = 'evidence-source-catalog.public.json';
 const SPECIALIST_EXTENSION_BASENAME = 'evidence-source-catalog.specialist-expansion.json';
 const WORLD_EXTENSION_BASENAME = 'evidence-source-catalog.world-kb.json';
@@ -48,7 +64,8 @@ function loadEvidenceSourceCatalog(configFile, relativePath) {
   if (parsed.schema_version !== 'astera.evidence-source-catalog.v1') throw catalogError('unsupported evidence source catalog schema', 'EVIDENCE_SOURCE_CATALOG_SCHEMA_UNSUPPORTED');
   if (!Array.isArray(parsed.sources) || parsed.sources.length === 0) throw catalogError('evidence source catalog sources must not be empty');
   const extensions = readPublicExtensions(absolute);
-  const rawSources = [...parsed.sources, ...extensions.sources];
+  const runtimeSources = path.basename(absolute) === PUBLIC_CATALOG_BASENAME ? RUNTIME_ADDED_SOURCES : [];
+  const rawSources = [...parsed.sources, ...extensions.sources, ...runtimeSources];
   const ids = new Set();
   const sources = rawSources.map((raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw catalogError(`sources[${index}] must be an object`);
@@ -158,4 +175,4 @@ function validateCatalogProviderCoverage(catalog, providerDefinitions = []) {
   return Object.freeze(Object.fromEntries(REQUIRED_DOMAINS.map((domain) => [domain, Object.freeze([...searchableCoverage.get(domain)].sort())])));
 }
 
-module.exports = { REQUIRED_DOMAINS, RUNTIME_STATES, RUNTIME_QUARANTINED_SOURCE_IDS, RUNTIME_ENABLED_SOURCE_OVERRIDES, loadEvidenceSourceCatalog, validateCatalogProviderCoverage, validateSpecialistCoverage };
+module.exports = { REQUIRED_DOMAINS, RUNTIME_STATES, RUNTIME_QUARANTINED_SOURCE_IDS, RUNTIME_ENABLED_SOURCE_OVERRIDES, RUNTIME_ADDED_SOURCES, loadEvidenceSourceCatalog, validateCatalogProviderCoverage, validateSpecialistCoverage };

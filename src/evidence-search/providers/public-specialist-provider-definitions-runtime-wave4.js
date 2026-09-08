@@ -220,6 +220,52 @@ const PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4 = Object.freeze([
       }
     }],
     routing_terms: ['nist osac', 'osac', 'forensic standard', 'forensic science', 'digital evidence', 'forensics', '法科学', 'デジタルフォレンジック', '鑑識']
+  }),
+  Object.freeze({
+    provider_id: 'nasa-cmr-collection-search',
+    catalog_source_ids: ['NASA_CMR_VERIFIED'],
+    type: 'FREE_OFFICIAL_HTTP',
+    enabled: true,
+    certified: true,
+    source_family_id: 'nasa-earthdata-cmr',
+    priority: 6,
+    domains: ['G05', 'G21', 'G37'],
+    capabilities: [],
+    allowed_hosts: ['cmr.earthdata.nasa.gov'],
+    smoke_query: 'climate',
+    endpoints: [{
+      endpoint_id: 'nasa-cmr-collection-keyword-search',
+      url_template: 'https://cmr.earthdata.nasa.gov/search/collections.json?keyword={query}&page_size=5',
+      request_headers: { Accept: 'application/json' },
+      response_format: 'JSON',
+      records_path: 'feed.entry',
+      authority_id: 'nasa-eosdis-cmr',
+      publisher_name: 'NASA Earth Science Data and Information System / Common Metadata Repository',
+      capability_id: 'earth_science_collection_search',
+      maximum_records: 5,
+      maximum_excerpt_chars: 32768,
+      timeout_ms: 12000,
+      maximum_attempts: 2,
+      field_map: {
+        canonical_record_id: 'id',
+        canonical_url: { path: 'links.0.href', default: '' },
+        title: { path: 'title', default: '' },
+        excerpt: { path: 'summary', default: '' },
+        updated_at: { path: 'updated', default: null },
+        fields: {
+          dataset_id: { path: 'dataset_id', default: '' },
+          short_name: { path: 'short_name', default: '' },
+          version_id: { path: 'version_id', default: '' },
+          data_center: { path: 'data_center', default: '' }
+        }
+      },
+      fixed_fields: {
+        source_role: 'OFFICIAL',
+        language: 'en',
+        rights: { access: 'public', reuse: 'public_metadata' }
+      }
+    }],
+    routing_terms: ['nasa earthdata', 'cmr', 'earth science', 'earth observation', 'remote sensing', 'climate', 'satellite', '地球観測', 'リモートセンシング', '気候', '衛星']
   })
 ]);
 
@@ -229,7 +275,8 @@ const ROUTING_OVERRIDES_RUNTIME_WAVE4 = Object.freeze({
   'onet-occupation-search': ['onet', 'occupation', 'job', 'career', 'skills', 'employment', '職業', '仕事', '職種', '技能', 'キャリア'],
   'clojars-project-search': ['clojars', 'clojure', 'clojurescript', 'leiningen', 'clojure package', 'Clojure', 'ClojureScript', 'パッケージ'],
   'simbad-object-search': ['simbad', 'star', 'astronomy', 'astronomical object', 'identifier', '天文', '恒星', '天体', '星'],
-  'nist-osac-registry-search': ['nist osac', 'osac', 'forensic standard', 'forensic science', 'digital evidence', 'forensics', '法科学', 'デジタルフォレンジック', '鑑識']
+  'nist-osac-registry-search': ['nist osac', 'osac', 'forensic standard', 'forensic science', 'digital evidence', 'forensics', '法科学', 'デジタルフォレンジック', '鑑識'],
+  'nasa-cmr-collection-search': ['nasa earthdata', 'cmr', 'earth science', 'earth observation', 'remote sensing', 'climate', 'satellite', '地球観測', 'リモートセンシング', '気候', '衛星']
 });
 
 module.exports = { PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_RUNTIME_WAVE4, ROUTING_OVERRIDES_RUNTIME_WAVE4 };
