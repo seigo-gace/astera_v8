@@ -38,83 +38,38 @@ const FALLBACK_LIVE_CASES = Object.freeze([
 function recordIdentity(record) {
   return String(record?.canonical_record_id || record?.record_id || record?.id || record?.canonical_url || record?.url || '').trim();
 }
-
 function boundTargetIds(providers) {
   return new Set(providers.flatMap((provider) => [...(provider?.kb_target_binding?.target_ids || [])].map(String)));
 }
-
 function automaticPassTargets(targetRegistry) {
   return targetRegistry.targets.filter((target) => target.automatic_search_eligible && target.recorded_statuses.includes('PASS'));
 }
-
 function buildRuntimeProviders({ targetRegistry, dedicatedProviders }) {
   const dedicatedBound = boundTargetIds(dedicatedProviders);
-  const fallbackTargetIds = automaticPassTargets(targetRegistry)
-    .filter((target) => !dedicatedBound.has(String(target.target_id)))
-    .map((target) => String(target.target_id));
-  const fallbackProvider = fallbackTargetIds.length
-    ? createPassTargetFallbackProvider({ registry: targetRegistry, target_ids: fallbackTargetIds, limit: 4 })
-    : null;
-  return Object.freeze({
-    providers: Object.freeze([...dedicatedProviders, ...(fallbackProvider ? [fallbackProvider] : [])]),
-    fallbackProvider,
-    fallbackTargetIds: Object.freeze(fallbackTargetIds)
-  });
+  const fallbackTargetIds = automaticPassTargets(targetRegistry).filter((target) => !dedicatedBound.has(String(target.target_id))).map((target) => String(target.target_id));
+  const fallbackProvider = fallbackTargetIds.length ? createPassTargetFallbackProvider({ registry: targetRegistry, target_ids: fallbackTargetIds, limit: 4 }) : null;
+  return Object.freeze({ providers: Object.freeze([...dedicatedProviders, ...(fallbackProvider ? [fallbackProvider] : [])]), fallbackProvider, fallbackTargetIds: Object.freeze(fallbackTargetIds) });
 }
-
 function writeBindingReport({ targetRegistry, providers }) {
-  const bindings = providers.map((provider) => ({
-    provider_id: provider.provider_id,
-    source_class: provider.source_class,
-    binding_mode: provider?.kb_target_binding?.mode || null,
-    catalog_source_ids: [...(provider?.kb_target_binding?.catalog_source_ids || [])],
-    target_ids: [...(provider?.kb_target_binding?.target_ids || [])]
-  })).filter((provider) => provider.target_ids.length > 0).sort((a, b) => a.provider_id.localeCompare(b.provider_id));
+  const bindings = providers.map((provider) => ({ provider_id: provider.provider_id, source_class: provider.source_class, binding_mode: provider?.kb_target_binding?.mode || null, catalog_source_ids: [...(provider?.kb_target_binding?.catalog_source_ids || [])], target_ids: [...(provider?.kb_target_binding?.target_ids || [])] })).filter((provider) => provider.target_ids.length > 0).sort((a, b) => a.provider_id.localeCompare(b.provider_id));
   const boundIds = new Set(bindings.flatMap((provider) => provider.target_ids));
   const passTargets = automaticPassTargets(targetRegistry);
   const unboundPassTargets = passTargets.filter((target) => !boundIds.has(String(target.target_id)));
   const unboundAutomaticTargets = targetRegistry.targets.filter((target) => target.automatic_search_eligible && !boundIds.has(String(target.target_id)));
-  const report = {
-    schema_version: 'astera.evidence-search.kb-target-binding-report.v3',
-    generated_at: new Date().toISOString(),
-    binding_mode: BINDING_MODE,
-    source_record_count: targetRegistry.source_record_count,
-    base_target_count: targetRegistry.base_target_count,
-    runtime_target_count: targetRegistry.runtime_target_count,
-    kb_target_count: targetRegistry.target_count,
-    automatic_kb_target_count: targetRegistry.automatic_target_count,
-    automatic_pass_target_count: passTargets.length,
-    bound_automatic_pass_target_count: passTargets.length - unboundPassTargets.length,
-    unbound_automatic_pass_target_count: unboundPassTargets.length,
-    bound_provider_count: bindings.length,
-    bound_target_count: boundIds.size,
-    unbound_automatic_target_count: unboundAutomaticTargets.length,
-    provider_bindings: bindings,
-    unbound_pass_targets: unboundPassTargets.map((target) => ({ target_id: target.target_id, kb: target.kb, official_url: target.official_url, genres: [...target.genres] }))
-  };
+  const report = { schema_version: 'astera.evidence-search.kb-target-binding-report.v3', generated_at: new Date().toISOString(), binding_mode: BINDING_MODE, source_record_count: targetRegistry.source_record_count, base_target_count: targetRegistry.base_target_count, runtime_target_count: targetRegistry.runtime_target_count, kb_target_count: targetRegistry.target_count, automatic_kb_target_count: targetRegistry.automatic_target_count, automatic_pass_target_count: passTargets.length, bound_automatic_pass_target_count: passTargets.length - unboundPassTargets.length, unbound_automatic_pass_target_count: unboundPassTargets.length, bound_provider_count: bindings.length, bound_target_count: boundIds.size, unbound_automatic_target_count: unboundAutomaticTargets.length, provider_bindings: bindings, unbound_pass_targets: unboundPassTargets.map((target) => ({ target_id: target.target_id, kb: target.kb, official_url: target.official_url, genres: [...target.genres] })) };
   fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   return report;
 }
 
 async function runDedicatedLiveCase(providerRegistry, liveCase) {
-  const canonicalPlan = {
-    question: liveCase.query,
-    domain_lens: { id: liveCase.domain },
-    source_policy: { provider_allowlist: [liveCase.provider_id], provider_denylist: [], free_projection: true, free_current: true },
-    primary_query_set: [{ query_id: `${liveCase.provider_id}-q1`, claim_id: `${liveCase.provider_id}-claim`, role: 'PRIMARY', class: 'PRIMARY', text: liveCase.query }],
-    reinforcement_query_set: []
-  };
+  const canonicalPlan = { question: liveCase.query, domain_lens: { id: liveCase.domain }, source_policy: { provider_allowlist: [liveCase.provider_id], provider_denylist: [], free_projection: true, free_current: true }, primary_query_set: [{ query_id: `${liveCase.provider_id}-q1`, claim_id: `${liveCase.provider_id}-claim`, role: 'PRIMARY', class: 'PRIMARY', text: liveCase.query }], reinforcement_query_set: [] };
   const selected = providerRegistry.select(canonicalPlan, 'INITIAL');
   if (selected.length !== 1 || selected[0].provider_id !== liveCase.provider_id) throw new Error(`expected ${liveCase.provider_id}, got ${selected.map((item) => item.provider_id).join(',')}`);
   const selectedTargets = selected[0].target_matcher(canonicalPlan, 'INITIAL');
   const target = selectedTargets.find((item) => item.kb === liveCase.target_name);
   if (!target) throw new Error(`${liveCase.target_name} KB target was not bound to ${liveCase.provider_id}`);
-  const result = await selected[0].search({
-    schema_version: 'astera.evidence-search.provider-plan.v1', phase: 'INITIAL',
-    request_id: `kb-target-live-smoke-${liveCase.provider_id}`, query_plan_hash: `kb-target-live-smoke-${liveCase.provider_id}`,
-    effective_as_of: new Date().toISOString(), domain_lens: { id: liveCase.domain }, conditions: [], query_set: canonicalPlan.primary_query_set, maximum_results: 10
-  }, { signal: new AbortController().signal, deadline_at: Date.now() + 25_000, remaining_ms: () => 25_000, tenant_id: 'kb-target-live-smoke', request_id: `kb-target-live-smoke-${liveCase.provider_id}` });
+  const result = await selected[0].search({ schema_version: 'astera.evidence-search.provider-plan.v1', phase: 'INITIAL', request_id: `kb-target-live-smoke-${liveCase.provider_id}`, query_plan_hash: `kb-target-live-smoke-${liveCase.provider_id}`, effective_as_of: new Date().toISOString(), domain_lens: { id: liveCase.domain }, conditions: [], query_set: canonicalPlan.primary_query_set, maximum_results: 10 }, { signal: new AbortController().signal, deadline_at: Date.now() + 25_000, remaining_ms: () => 25_000, tenant_id: 'kb-target-live-smoke', request_id: `kb-target-live-smoke-${liveCase.provider_id}` });
   const query = result.query_results?.[0];
   const identities = (result.candidates || []).map(recordIdentity).filter(Boolean);
   if (query?.retrieval_status !== 'FOUND' || identities.length === 0) throw new Error(`${liveCase.provider_id} live search failed: ${query?.retrieval_status || 'NO_QUERY_RESULT'}`);
@@ -126,13 +81,9 @@ async function runFallbackLiveCase(targetRegistry, fallbackTargetIds, liveCase) 
   if (!target) throw new Error(`fallback target missing: ${liveCase.target_name}`);
   const controller = new AbortController();
   const deadlineAt = Date.now() + 25_000;
-  const result = await searchOneTarget(target, liveCase.query, {
-    signal: controller.signal,
-    deadline_at: deadlineAt,
-    remaining_ms: () => Math.max(1, deadlineAt - Date.now())
-  }, secureGet);
+  const result = await searchOneTarget(target, liveCase.query, { signal: controller.signal, deadline_at: deadlineAt, remaining_ms: () => Math.max(1, deadlineAt - Date.now()) }, secureGet);
   const identities = result.candidates.map(recordIdentity).filter(Boolean);
-  if (identities.length === 0) throw new Error(`fallback live search failed for ${liveCase.target_name}`);
+  if (identities.length === 0) throw new Error(`fallback live search returned no actual record for ${liveCase.target_name}`);
   return Object.freeze({ provider_id: 'public-pass-kb-fallback', target_name: liveCase.target_name, retrieval_status: 'FOUND', candidate_count: result.candidates.length, sample_record_id: identities[0] });
 }
 
@@ -148,26 +99,17 @@ async function main() {
   const providerRegistry = new ProviderRegistry(runtime.providers);
   const liveResults = [];
   for (const liveCase of DEDICATED_LIVE_CASES) liveResults.push(await runDedicatedLiveCase(providerRegistry, liveCase));
-  for (const liveCase of FALLBACK_LIVE_CASES) liveResults.push(await runFallbackLiveCase(targetRegistry, runtime.fallbackTargetIds, liveCase));
-  console.log(JSON.stringify({
-    status: 'KB_TARGET_LIVE_SEARCH_OK',
-    base_target_count: targetRegistry.base_target_count,
-    runtime_target_count: targetRegistry.runtime_target_count,
-    kb_target_count: targetRegistry.target_count,
-    automatic_kb_target_count: targetRegistry.automatic_target_count,
-    automatic_pass_target_count: bindingReport.automatic_pass_target_count,
-    bound_automatic_pass_target_count: bindingReport.bound_automatic_pass_target_count,
-    unbound_automatic_pass_target_count: bindingReport.unbound_automatic_pass_target_count,
-    fallback_pass_target_count: runtime.fallbackTargetIds.length,
-    bound_provider_count: bindingReport.bound_provider_count,
-    bound_target_count: bindingReport.bound_target_count,
-    unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
-    dedicated_live_provider_count: DEDICATED_LIVE_CASES.length,
-    fallback_live_target_count: FALLBACK_LIVE_CASES.length,
-    live_result_count: liveResults.length,
-    binding_report: path.relative(path.join(__dirname, '..'), reportFile),
-    live_results: liveResults
-  }, null, 2));
+  const fallbackFailures = [];
+  for (const liveCase of FALLBACK_LIVE_CASES) {
+    try { liveResults.push(await runFallbackLiveCase(targetRegistry, runtime.fallbackTargetIds, liveCase)); }
+    catch (error) { fallbackFailures.push({ target_name: liveCase.target_name, query: liveCase.query, code: error.code || null, message: error.message }); }
+  }
+  if (fallbackFailures.length) {
+    const error = new Error(`fallback live search failures: ${JSON.stringify(fallbackFailures)}`);
+    error.code = 'FALLBACK_LIVE_SEARCH_FAILED';
+    throw error;
+  }
+  console.log(JSON.stringify({ status: 'KB_TARGET_LIVE_SEARCH_OK', base_target_count: targetRegistry.base_target_count, runtime_target_count: targetRegistry.runtime_target_count, kb_target_count: targetRegistry.target_count, automatic_kb_target_count: targetRegistry.automatic_target_count, automatic_pass_target_count: bindingReport.automatic_pass_target_count, bound_automatic_pass_target_count: bindingReport.bound_automatic_pass_target_count, unbound_automatic_pass_target_count: bindingReport.unbound_automatic_pass_target_count, fallback_pass_target_count: runtime.fallbackTargetIds.length, bound_provider_count: bindingReport.bound_provider_count, bound_target_count: bindingReport.bound_target_count, unbound_automatic_target_count: bindingReport.unbound_automatic_target_count, dedicated_live_provider_count: DEDICATED_LIVE_CASES.length, fallback_live_target_count: FALLBACK_LIVE_CASES.length, live_result_count: liveResults.length, binding_report: path.relative(path.join(__dirname, '..'), reportFile), live_results: liveResults }, null, 2));
 }
 
 main().catch((error) => {
