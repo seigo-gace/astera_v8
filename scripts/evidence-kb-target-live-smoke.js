@@ -19,7 +19,9 @@ const REQUIRED_BOUND_TARGET_NAMES = Object.freeze([
   'RCSB Protein Data Bank Search API',
   'USGS FDSN Event',
   'Hugging Face Hub Search',
-  'PubChem PUG REST'
+  'PubChem PUG REST',
+  'Debian Security Tracker',
+  'Art Institute of Chicago API'
 ]);
 
 const LIVE_CASES = Object.freeze([
@@ -30,7 +32,9 @@ const LIVE_CASES = Object.freeze([
   Object.freeze({ provider_id: 'rcsb-pdb-entry-search', target_name: 'RCSB Protein Data Bank Search API', domain: 'G20', query: '4HHB' }),
   Object.freeze({ provider_id: 'usgs-fdsn-event-record-search', target_name: 'USGS FDSN Event', domain: 'G21', query: 'usp000hvnu' }),
   Object.freeze({ provider_id: 'huggingface-hub-live-search', target_name: 'Hugging Face Hub Search', domain: 'G30', query: 'bert' }),
-  Object.freeze({ provider_id: 'pubchem-compound', target_name: 'PubChem PUG REST', domain: 'G20', query: 'aspirin' })
+  Object.freeze({ provider_id: 'pubchem-compound', target_name: 'PubChem PUG REST', domain: 'G20', query: 'aspirin' }),
+  Object.freeze({ provider_id: 'debian-security-tracker-record-search', target_name: 'Debian Security Tracker', domain: 'G31', query: 'CVE-2021-44228' }),
+  Object.freeze({ provider_id: 'artic-artworks-search', target_name: 'Art Institute of Chicago API', domain: 'G16', query: 'Water Lilies' })
 ]);
 
 function recordIdentity(record) {
@@ -101,7 +105,7 @@ async function main() {
   const targetRegistry = KbTargetRegistry.load();
   const providers = attachKbTargetsToProviders(loadEvidenceProviders({ configFile: absolute }), targetRegistry, { providerDefinitions: parsed.providers, sourceCatalog, requireBinding: true, limit: 32 });
   const bindingReport = writeBindingReport({ targetRegistry, providers });
-  if (bindingReport.bound_target_count < 34) throw new Error(`KB-target implementation wave did not reach 34 bound targets: ${bindingReport.bound_target_count}`);
+  if (bindingReport.bound_target_count < 36) throw new Error(`KB-target implementation wave did not reach 36 bound targets: ${bindingReport.bound_target_count}`);
   const boundNames = new Set(bindingReport.bound_targets.map((target) => target.kb));
   const missingTargets = REQUIRED_BOUND_TARGET_NAMES.filter((name) => !boundNames.has(name));
   if (missingTargets.length) throw new Error(`required KB target bindings missing: ${missingTargets.join(', ')}`);

@@ -8,7 +8,8 @@ const DEFAULT_KB_TARGET_FILE = path.join(__dirname, '..', '..', '..', 'config', 
 const EXPECTED_HEADER = Object.freeze(['kb', 'official_url', 'genres_csv', 'accesses_csv', 'statuses_csv']);
 const RUNTIME_TARGET_ROWS = Object.freeze([
   Object.freeze(['USGS FDSN Event', 'https://earthquake.usgs.gov/fdsnws/event/1/', 'G05,G21', 'FREE_NO_AUTH', 'PASS']),
-  Object.freeze(['PubChem PUG REST', 'https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest', 'G20', 'FREE_NO_AUTH', 'PASS'])
+  Object.freeze(['PubChem PUG REST', 'https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest', 'G20', 'FREE_NO_AUTH', 'PASS']),
+  Object.freeze(['Art Institute of Chicago API', 'https://api.artic.edu/docs/', 'G16', 'FREE_NO_AUTH', 'PASS'])
 ]);
 
 function splitCsv(value) {
