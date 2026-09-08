@@ -40,6 +40,22 @@ async function withEngine(fn) {
   }
 }
 
+class ConflictEvidenceEngine extends CanonicalAsteraEngine {
+  constructor(options = {}) {
+    super(options);
+    this._fixtureEvidence = null;
+  }
+
+  setFixtureEvidence(packet) {
+    this._fixtureEvidence = packet;
+    return this;
+  }
+
+  async resolveEvidenceForTask() {
+    return this._fixtureEvidence;
+  }
+}
+
 function evidenceCandidate({ id, role, family, authority, claim, url }) {
   return {
     candidate_id: id,
@@ -230,7 +246,8 @@ test('Case B: insufficient evidence keeps UNDETERMINED without speculative compl
 });
 
 test('Case C: evidence conflict preserves both sides and does not confirm or adopt either', async () => {
-  await withEngine(async (engine) => {
+  const engine = new ConflictEvidenceEngine({ poolSize: 2, logger: silentLogger });
+  try {
     const claimText = 'Node.js 22は本番で対応している。';
     const { task, plan, domain } = planForClaim(engine, claimText, 'G29');
     const claim = plan.claims[0];
@@ -246,13 +263,12 @@ test('Case C: evidence conflict preserves both sides and does not confirm or ado
         url: 'https://contradict.test/evidence'
       })
     ]);
+    engine.setFixtureEvidence(evidenceRaw);
 
-    const projected = projectCanonicalTask({
-      task: { ...task, canonical_plan: plan, domain },
-      evidenceRaw
-    });
+    const out = await engine.process({ question: claimText, language: 'ja' }, tenant);
 
-    const record = projected.canonical.records[0];
+    assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
+    const record = out.result.canonical_claims.records[0];
     assert.equal(record.confirmation.status, 'UNDETERMINED');
     assert.ok(record.confirmation.reasons.includes(UndeterminedReason.CONFLICT));
     assert.equal(record.confirmation.gates.G6, false);
@@ -262,17 +278,22 @@ test('Case C: evidence conflict preserves both sides and does not confirm or ado
     assert.ok(relations.includes(CandidateRelation.CONTRADICTS));
     assert.ok(record.confirmation.gate_details.contradiction_binding_ids.length >= 1);
 
-    const compare = projected.lanes.compare;
-    assert.ok(compare.contradiction_map.some((entry) => entry.type === 'EVIDENCE_CONFLICT'));
-    assert.equal(compare.selected_candidate, null);
-    assert.deepEqual(compare.candidate_ranking, []);
-    assert.equal(compare.verdict.decision, 'MATERIAL_ONLY');
-
-    const out = await engine.process({ question: claimText, language: 'ja' }, tenant);
-    assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
-    assert.equal(out.result.comparison.counts.conflicts >= 0 || out.result.comparison.counts.undetermined >= 1, true);
+    assert.ok(out.result.comparison.counts.conflicts >= 1);
+    assert.ok(out.result.comparison.contradiction_map.some((entry) => entry.type === 'EVIDENCE_CONFLICT'));
+    assert.equal(out.result.comparison.selected_candidate, null);
+    assert.deepEqual(out.result.comparison.candidate_ranking, []);
+    assert.equal(out.result.comparison.verdict.decision, 'MATERIAL_ONLY');
+    assertNoNormativeDecisionArtifacts(out.result, out.material.text);
     assert.match(out.material.text, /Contradiction:|type=EVIDENCE_CONFLICT|CONFLICT/);
-  });
+
+    const projected = projectCanonicalTask({
+      task: { ...task, canonical_plan: plan, domain },
+      evidenceRaw
+    });
+    assert.equal(projected.canonical.records[0].confirmation.status, record.confirmation.status);
+  } finally {
+    await engine.destroy();
+  }
 });
 
 test('Case C binding gate: CONFLICT bindings block CONFIRMED even when SUPPORTS exist', () => {
