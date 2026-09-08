@@ -4,6 +4,12 @@ const { secureGet } = require('./secure-http-transport');
 
 const SEARCH_NAMES = new Set(['q','query','search','term','keyword','keywords','text','s','searchtext','searchterm']);
 const NOISE_TOKENS = new Set(['the','and','for','with','from','into','api','search','official','documentation','database','portal','data','public','reference','tool']);
+const TARGET_SEED_OVERRIDES = Object.freeze({
+  'MySQL Reference Manual Search': 'https://dev.mysql.com/doc/refman/8.4/en/dynindex-function.html',
+  'Python Official Documentation Search': 'https://docs.python.org/3/genindex-all.html',
+  'Linux Kernel Documentation Search': 'https://docs.kernel.org/genindex.html',
+  'ECMAScript Language Specification (ECMA-262 / TC39)': 'https://tc39.es/ecma262/multipage/'
+});
 
 function decodeHtml(value) {
   return String(value || '')
@@ -28,8 +34,7 @@ function stripHtml(value) {
 }
 
 function queryTokens(value) {
-  return [...new Set(String(value || '').normalize('NFKC').toLowerCase()
-    .match(/[\p{L}\p{N}._+#-]{2,}/gu) || [])]
+  return [...new Set(String(value || '').normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}._+#-]{2,}/gu) || [])]
     .filter((token) => !NOISE_TOKENS.has(token));
 }
 
@@ -118,19 +123,14 @@ function discoverSearchUrls(html, baseUrl, query, allowedHosts) {
   }
 
   const base = new URL(baseUrl);
-  const pathname = base.pathname.toLowerCase();
-  const common = [];
-  if (/search|find|lookup|results|query/.test(pathname)) {
+  if (/search|find|lookup|results|query/.test(base.pathname.toLowerCase())) {
     for (const key of ['q','query','search','keyword','term']) {
       const candidate = new URL(base);
       candidate.searchParams.set(key, query);
-      common.push(candidate.toString());
+      add(candidate.toString());
     }
   }
-  for (const suffix of [`/search?q=${encodeURIComponent(query)}`, `/search?query=${encodeURIComponent(query)}`, `/search/?q=${encodeURIComponent(query)}`]) {
-    common.push(new URL(suffix, `${base.origin}/`).toString());
-  }
-  for (const candidate of common) add(candidate);
+  for (const suffix of [`/search?q=${encodeURIComponent(query)}`, `/search?query=${encodeURIComponent(query)}`, `/search/?q=${encodeURIComponent(query)}`]) add(new URL(suffix, `${base.origin}/`).toString());
   return output.slice(0, 8);
 }
 
@@ -145,17 +145,19 @@ function extractLinks(html, baseUrl, query, allowedHosts) {
     let parsed;
     try { parsed = new URL(href, baseUrl); } catch { continue; }
     if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname.toLowerCase())) continue;
+    const fragment = parsed.hash;
     parsed.hash = '';
-    const url = parsed.toString();
-    if (seen.has(url) || url === baseUrl) continue;
-    seen.add(url);
+    const cleanUrl = parsed.toString();
+    const identityUrl = fragment ? `${cleanUrl}${fragment}` : cleanUrl;
+    if (seen.has(identityUrl) || cleanUrl === baseUrl) continue;
+    seen.add(identityUrl);
     const anchor = stripHtml(match[6] || '');
-    const text = `${anchor} ${parsed.pathname} ${parsed.search}`.toLowerCase();
+    const text = `${anchor} ${parsed.pathname} ${parsed.search} ${fragment}`.toLowerCase();
     const matches = tokens.filter((token) => text.includes(token)).length;
     const identifier = tokens.some((token) => /\d/.test(token) && token.length >= 4 && text.includes(token));
     let score = matches * 100 + (identifier ? 1000 : 0);
-    if (/detail|record|item|document|standard|spec|result|entry|profile|vulnerability|cve|dataset|project|article|publication|law|regulation|notice|match|event|taxon|strain|reaction/i.test(url)) score += 30;
-    if (score > 0) output.push({ url, anchor, score });
+    if (/detail|record|item|document|standard|spec|result|entry|profile|vulnerability|cve|dataset|project|article|publication|law|regulation|notice|match|event|taxon|strain|reaction|index|reference|functions|lifecycle/i.test(identityUrl)) score += 30;
+    if (score > 0) output.push({ url: cleanUrl, canonical_url: identityUrl, anchor, score });
   }
   return output.sort((a, b) => b.score - a.score || a.url.localeCompare(b.url)).slice(0, 12);
 }
@@ -164,12 +166,12 @@ function jsonText(value) {
   try { return JSON.stringify(value); } catch { return String(value || ''); }
 }
 
-function createCandidate({ target, url, title, bodyText, query, providerId }) {
+function createCandidate({ target, url, canonicalUrl, title, bodyText, query, providerId }) {
   const excerpt = excerptAround(bodyText, query);
   if (!excerpt || contentScore(excerpt, query) <= 0) return null;
   return Object.freeze({
-    canonical_record_id: url,
-    canonical_url: url,
+    canonical_record_id: canonicalUrl || url,
+    canonical_url: canonicalUrl || url,
     title: String(title || target.kb || url).slice(0, 2048),
     excerpt,
     source_id: target.target_id,
@@ -180,7 +182,7 @@ function createCandidate({ target, url, title, bodyText, query, providerId }) {
     publisher_id: target.host,
     publisher_name: target.kb,
     language: 'und',
-    retrieval_trace: Object.freeze({ provider_id: providerId, endpoint_id: target.target_id, current_pointer_verified: true, search_page_used_for_discovery_only: url !== target.official_url }),
+    retrieval_trace: Object.freeze({ provider_id: providerId, endpoint_id: target.target_id, current_pointer_verified: true, search_page_used_for_discovery_only: (canonicalUrl || url) !== target.official_url }),
     rights: Object.freeze({ access: 'public', reuse: 'source_specific' })
   });
 }
@@ -188,7 +190,7 @@ function createCandidate({ target, url, title, bodyText, query, providerId }) {
 async function fetchPage(url, allowedHosts, context, transport) {
   const response = await transport(url, {
     allowedHosts: [...allowedHosts],
-    maxBytes: 6 * 1024 * 1024,
+    maxBytes: 16 * 1024 * 1024,
     timeoutMs: Math.max(1000, Math.min(12000, Number(context.remaining_ms?.() || 12000))),
     signal: context.signal,
     headers: { Accept: 'text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5' }
@@ -201,8 +203,8 @@ async function fetchPage(url, allowedHosts, context, transport) {
   return response;
 }
 
-async function searchOneTarget(target, query, context, transport) {
-  const seed = new URL(target.official_url);
+async function searchOneTarget(target, query, context, transport = secureGet) {
+  const seed = new URL(TARGET_SEED_OVERRIDES[target.kb] || target.official_url);
   const allowedHosts = new Set(hostVariants(seed));
   const visited = new Set();
   const fetched = [];
@@ -248,16 +250,15 @@ async function searchOneTarget(target, query, context, transport) {
       const type = String(response.headers['content-type'] || '').toLowerCase();
       const raw = response.body.toString('utf8');
       const bodyText = type.includes('json') ? jsonText(JSON.parse(raw)) : stripHtml(raw);
-      const candidate = createCandidate({ target, url: response.url, title: type.includes('html') ? extractTitle(raw, link.anchor || target.kb) : (link.anchor || target.kb), bodyText, query, providerId: 'public-pass-kb-fallback' });
+      const candidate = createCandidate({ target, url: response.url, canonicalUrl: link.canonical_url, title: type.includes('html') ? extractTitle(raw, link.anchor || target.kb) : (link.anchor || target.kb), bodyText, query, providerId: 'public-pass-kb-fallback' });
       if (candidate) candidates.push(candidate);
       if (candidates.length >= 3) break;
     } catch {}
   }
 
-  if (!candidates.length && !bestSearch) {
-    const seedText = stripHtml(seedHtml);
-    const seedCandidate = createCandidate({ target, url: seedResponse.url, title: extractTitle(seedHtml, target.kb), bodyText: seedText, query, providerId: 'public-pass-kb-fallback' });
-    if (seedCandidate) candidates.push(seedCandidate);
+  if (!candidates.length && contentScore(stripHtml(discoveryHtml), query) > 0) {
+    const candidate = createCandidate({ target, url: discoveryUrl, title: extractTitle(discoveryHtml, target.kb), bodyText: stripHtml(discoveryHtml), query, providerId: 'public-pass-kb-fallback' });
+    if (candidate) candidates.push(candidate);
   }
   return { candidates, requests: fetched.length };
 }
@@ -314,17 +315,9 @@ function createPassTargetFallbackProvider(options = {}) {
         queryResults.push(Object.freeze({ query_id: String(query.query_id), retrieval_status: queryCandidates.length ? 'FOUND' : (failures.some((item) => item.query_id === String(query.query_id)) ? 'RETRIEVAL_FAILED' : 'NOT_FOUND'), candidate_record_ids: Object.freeze(queryCandidates.map((item) => item.canonical_record_id)), error_code: queryCandidates.length ? null : (failures.find((item) => item.query_id === String(query.query_id))?.code || null), endpoint_count: targets.length, completed_endpoint_count: Math.max(0, targets.length - failures.filter((item) => item.query_id === String(query.query_id)).length) }));
       }
       const complete = queryResults.filter((item) => item.retrieval_status !== 'RETRIEVAL_FAILED').length;
-      return Object.freeze({
-        coverage_state: complete === queryResults.length ? 'COMPLETE_FOR_QUERY_SCOPE' : complete ? 'PARTIAL_FOR_QUERY_SCOPE' : 'UNKNOWN',
-        candidates: Object.freeze(allCandidates),
-        query_results: Object.freeze(queryResults),
-        search_targets: Object.freeze(targets),
-        current_watermark: Object.freeze({ provider_id: providerId, completed_at: new Date().toISOString(), coverage_state: complete === queryResults.length ? 'COMPLETE' : complete ? 'PARTIAL' : 'UNKNOWN' }),
-        usage: Object.freeze({ requests, results: allCandidates.length, query_count: queryResults.length, target_count: targets.length }),
-        failures: Object.freeze(failures)
-      });
+      return Object.freeze({ coverage_state: complete === queryResults.length ? 'COMPLETE_FOR_QUERY_SCOPE' : complete ? 'PARTIAL_FOR_QUERY_SCOPE' : 'UNKNOWN', candidates: Object.freeze(allCandidates), query_results: Object.freeze(queryResults), search_targets: Object.freeze(targets), current_watermark: Object.freeze({ provider_id: providerId, completed_at: new Date().toISOString(), coverage_state: complete === queryResults.length ? 'COMPLETE' : complete ? 'PARTIAL' : 'UNKNOWN' }), usage: Object.freeze({ requests, results: allCandidates.length, query_count: queryResults.length, target_count: targets.length }), failures: Object.freeze(failures) });
     }
   });
 }
 
-module.exports = { createPassTargetFallbackProvider, contentScore, discoverSearchUrls, extractLinks, queryTokens, searchOneTarget, stripHtml };
+module.exports = { TARGET_SEED_OVERRIDES, createPassTargetFallbackProvider, contentScore, discoverSearchUrls, extractLinks, queryTokens, searchOneTarget, stripHtml };
