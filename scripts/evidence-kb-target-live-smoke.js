@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { loadEvidenceProviders, readConfig } = require('../src/evidence-search/providers/config-loader');
 const { loadEvidenceSourceCatalog } = require('../src/evidence-search/providers/source-catalog');
-const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-registry');
-const { BINDING_MODE, attachKbTargetsToProviders } = require('../src/evidence-search/providers/kb-target-aware-provider');
+const { KbTargetRegistry, normalizeBindingName, normalizeBindingUrl } = require('../src/evidence-search/core/kb-target-registry');
+const { BINDING_MODE, attachKbTargetsToProviders, targetMatchesCatalogSource } = require('../src/evidence-search/providers/kb-target-aware-provider');
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
 
 const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG || path.join(__dirname, '..', 'config', 'evidence-providers.public.json');
@@ -37,11 +37,112 @@ const LIVE_CASES = Object.freeze([
   Object.freeze({ provider_id: 'artic-artworks-search', target_name: 'Art Institute of Chicago API', domain: 'G16', query: 'Water Lilies' })
 ]);
 
+const NAME_NOISE = new Set([
+  'api','rest','json','xml','html','search','official','documentation','docs','doc','web','service','services','database','db','portal','reference','references','tool','tools','public','online','data','dataset','datasets','metadata','version','v1','v2','v3','v4','the','and','of','for','to'
+]);
+
 function recordIdentity(record) {
   return String(record?.canonical_record_id || record?.record_id || record?.id || record?.canonical_url || record?.url || '').trim();
 }
 
-function writeBindingReport({ targetRegistry, providers }) {
+function hostname(value) {
+  try { return new URL(String(value || '').trim()).hostname.toLowerCase().replace(/^www\./, ''); }
+  catch { return ''; }
+}
+
+function authorityDomain(value) {
+  const host = hostname(value);
+  if (!host) return '';
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  const secondLevelCountry = new Set(['co.uk','org.uk','gov.uk','ac.uk','com.au','org.au','gov.au','co.jp','ne.jp','or.jp','go.jp','co.nz','org.nz','govt.nz']);
+  const tail2 = parts.slice(-2).join('.');
+  const tail3 = parts.slice(-3).join('.');
+  return secondLevelCountry.has(tail2) ? tail3 : tail2;
+}
+
+function nameTokens(value) {
+  return [...new Set(normalizeBindingName(value)
+    .replace(/&/g, ' and ')
+    .replace(/[|｜/\\()[\]{}:;,._+@#?!'"`~-]+/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !NAME_NOISE.has(token) && !/^v?\d+(?:\.\d+)*$/.test(token)))];
+}
+
+function fuzzyScore(target, source) {
+  const targetUrl = normalizeBindingUrl(target.official_url);
+  const sourceUrl = normalizeBindingUrl(source.official_url);
+  if (targetUrl && sourceUrl && targetUrl === sourceUrl) return 1000;
+  if (normalizeBindingName(target.kb) === normalizeBindingName(source.name)) return 950;
+  const t = nameTokens(target.kb);
+  const s = nameTokens(source.name);
+  const common = t.filter((token) => s.includes(token));
+  const union = new Set([...t, ...s]).size || 1;
+  const jaccard = common.length / union;
+  const sameAuthorityDomain = authorityDomain(target.official_url) && authorityDomain(target.official_url) === authorityDomain(source.official_url);
+  const relatedHost = hostname(target.official_url) && hostname(source.official_url) && (
+    hostname(target.official_url) === hostname(source.official_url)
+    || hostname(target.official_url).endsWith(`.${hostname(source.official_url)}`)
+    || hostname(source.official_url).endsWith(`.${hostname(target.official_url)}`)
+  );
+  let score = common.length * 35 + Math.round(jaccard * 100);
+  if (sameAuthorityDomain) score += 90;
+  if (relatedHost) score += 60;
+  if (source.runtime_state === 'SEARCHABLE') score += 10;
+  if (source.provider_id) score += 10;
+  return score;
+}
+
+function diagnoseUnboundPassTargets({ targetRegistry, sourceCatalog, parsed, boundTargetIds }) {
+  const enabledProviderIds = new Set(parsed.providers.filter((provider) => provider && provider.enabled !== false).map((provider) => String(provider.provider_id || '')));
+  const passTargets = targetRegistry.targets.filter((target) => target.automatic_search_eligible && target.recorded_statuses.includes('PASS'));
+  const unboundPassTargets = passTargets.filter((target) => !boundTargetIds.has(String(target.target_id)));
+  return {
+    automatic_pass_target_count: passTargets.length,
+    bound_automatic_pass_target_count: passTargets.length - unboundPassTargets.length,
+    unbound_automatic_pass_target_count: unboundPassTargets.length,
+    unbound_pass_targets: unboundPassTargets.map((target) => {
+      const currentMatches = sourceCatalog.sources.filter((source) => targetMatchesCatalogSource(target, source));
+      const suggestions = sourceCatalog.sources
+        .map((source) => ({ source, score: fuzzyScore(target, source) }))
+        .filter((item) => item.score >= 80)
+        .sort((a, b) => b.score - a.score || String(a.source.source_id).localeCompare(String(b.source.source_id)))
+        .slice(0, 5)
+        .map(({ source, score }) => ({
+          score,
+          source_id: source.source_id,
+          name: source.name,
+          official_url: source.official_url,
+          runtime_state: source.runtime_state,
+          provider_id: source.provider_id,
+          provider_enabled: source.provider_id ? enabledProviderIds.has(String(source.provider_id)) : false
+        }));
+      let reason = 'NO_MATCHING_SOURCE';
+      if (currentMatches.length > 0) {
+        const searchable = currentMatches.filter((source) => source.runtime_state === 'SEARCHABLE' && source.provider_id);
+        if (!searchable.length) reason = 'MATCHED_SOURCE_NOT_SEARCHABLE';
+        else if (!searchable.some((source) => enabledProviderIds.has(String(source.provider_id)))) reason = 'MATCHED_PROVIDER_NOT_ENABLED';
+        else reason = 'MATCHED_BUT_NOT_UNIQUELY_BOUND';
+      } else if (suggestions.some((item) => item.runtime_state === 'SEARCHABLE' && item.provider_enabled)) {
+        reason = 'LIKELY_BINDING_MATCH_GAP';
+      } else if (suggestions.length > 0) {
+        reason = 'LIKELY_SOURCE_NOT_EXECUTABLE';
+      }
+      return {
+        target_id: target.target_id,
+        kb: target.kb,
+        official_url: target.official_url,
+        genres: [...target.genres],
+        reason,
+        current_matches: currentMatches.map((source) => ({ source_id: source.source_id, name: source.name, runtime_state: source.runtime_state, provider_id: source.provider_id, provider_enabled: source.provider_id ? enabledProviderIds.has(String(source.provider_id)) : false })),
+        suggestions
+      };
+    })
+  };
+}
+
+function writeBindingReport({ targetRegistry, providers, sourceCatalog, parsed }) {
   const bindings = providers.map((provider) => ({
     provider_id: provider.provider_id,
     source_class: provider.source_class,
@@ -50,10 +151,11 @@ function writeBindingReport({ targetRegistry, providers }) {
     target_ids: [...(provider?.kb_target_binding?.target_ids || [])]
   })).filter((provider) => provider.target_ids.length > 0).sort((a, b) => a.provider_id.localeCompare(b.provider_id));
   const boundTargetIds = new Set(bindings.flatMap((provider) => provider.target_ids));
-  const boundTargets = targetRegistry.targets.filter((target) => boundTargetIds.has(String(target.target_id))).map((target) => ({ target_id: target.target_id, kb: target.kb, official_url: target.official_url, genres: [...target.genres], target_state: target.target_state }));
+  const boundTargets = targetRegistry.targets.filter((target) => boundTargetIds.has(String(target.target_id))).map((target) => ({ target_id: target.target_id, kb: target.kb, official_url: target.official_url, genres: [...target.genres], target_state: target.target_state, recorded_statuses: [...target.recorded_statuses] }));
   const unboundAutomaticTargets = targetRegistry.targets.filter((target) => target.automatic_search_eligible && !boundTargetIds.has(String(target.target_id))).map((target) => ({ target_id: target.target_id, kb: target.kb, official_url: target.official_url, genres: [...target.genres], recorded_statuses: [...target.recorded_statuses] }));
+  const passDiagnostics = diagnoseUnboundPassTargets({ targetRegistry, sourceCatalog, parsed, boundTargetIds });
   const report = {
-    schema_version: 'astera.evidence-search.kb-target-binding-report.v1',
+    schema_version: 'astera.evidence-search.kb-target-binding-report.v2',
     generated_at: new Date().toISOString(),
     binding_mode: BINDING_MODE,
     source_record_count: targetRegistry.source_record_count,
@@ -64,9 +166,13 @@ function writeBindingReport({ targetRegistry, providers }) {
     bound_provider_count: bindings.length,
     bound_target_count: boundTargetIds.size,
     unbound_automatic_target_count: unboundAutomaticTargets.length,
+    automatic_pass_target_count: passDiagnostics.automatic_pass_target_count,
+    bound_automatic_pass_target_count: passDiagnostics.bound_automatic_pass_target_count,
+    unbound_automatic_pass_target_count: passDiagnostics.unbound_automatic_pass_target_count,
     provider_bindings: bindings,
     bound_targets: boundTargets,
-    unbound_automatic_targets: unboundAutomaticTargets
+    unbound_automatic_targets: unboundAutomaticTargets,
+    unbound_pass_diagnostics: passDiagnostics.unbound_pass_targets
   };
   fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -104,7 +210,7 @@ async function main() {
   if (!sourceCatalog) throw new Error('public evidence source catalog is required');
   const targetRegistry = KbTargetRegistry.load();
   const providers = attachKbTargetsToProviders(loadEvidenceProviders({ configFile: absolute }), targetRegistry, { providerDefinitions: parsed.providers, sourceCatalog, requireBinding: true, limit: 32 });
-  const bindingReport = writeBindingReport({ targetRegistry, providers });
+  const bindingReport = writeBindingReport({ targetRegistry, providers, sourceCatalog, parsed });
   if (bindingReport.bound_target_count < 36) throw new Error(`KB-target implementation wave did not reach 36 bound targets: ${bindingReport.bound_target_count}`);
   const boundNames = new Set(bindingReport.bound_targets.map((target) => target.kb));
   const missingTargets = REQUIRED_BOUND_TARGET_NAMES.filter((name) => !boundNames.has(name));
@@ -118,6 +224,9 @@ async function main() {
     runtime_target_count: targetRegistry.runtime_target_count,
     kb_target_count: targetRegistry.target_count,
     automatic_kb_target_count: targetRegistry.automatic_target_count,
+    automatic_pass_target_count: bindingReport.automatic_pass_target_count,
+    bound_automatic_pass_target_count: bindingReport.bound_automatic_pass_target_count,
+    unbound_automatic_pass_target_count: bindingReport.unbound_automatic_pass_target_count,
     bound_provider_count: bindingReport.bound_provider_count,
     bound_target_count: bindingReport.bound_target_count,
     unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
