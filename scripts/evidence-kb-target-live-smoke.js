@@ -16,6 +16,20 @@ const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG
 const reportFile = process.env.ASTERA_EVIDENCE_BINDING_REPORT
   || path.join(__dirname, '..', 'artifacts', 'evidence-kb-target-binding-report.json');
 
+const REQUIRED_ALIAS_TARGET_URLS = Object.freeze([
+  'https://www.eionet.europa.eu/gemet/en/search/',
+  'https://registry.terraform.io/',
+  'https://ntrs.nasa.gov/search',
+  'https://conan.io/center',
+  'https://pypi.org/',
+  'https://pkg.go.dev/',
+  'https://www.fao.org/faolex/en/',
+  'https://musicbrainz.org/doc/MusicBrainz_API/Search',
+  'https://developers.zenodo.org/',
+  'https://www.ncbi.nlm.nih.gov/books/NBK25499/',
+  'https://www.who.int/data/gho'
+]);
+
 function recordIdentity(record) {
   return String(record?.canonical_record_id || record?.record_id || record?.id || record?.canonical_url || record?.url || '').trim();
 }
@@ -89,8 +103,13 @@ async function main() {
   if (!bindingReport.bound_provider_count || !bindingReport.bound_target_count) {
     throw new Error('no unique executable KB-target bindings were materialized');
   }
-  if (bindingReport.bound_target_count <= 14) {
-    throw new Error(`KB-target binding expansion did not exceed the previous 14-target baseline: ${bindingReport.bound_target_count}`);
+  if (bindingReport.bound_target_count <= 17) {
+    throw new Error(`KB-target binding expansion did not exceed the previous 17-target baseline: ${bindingReport.bound_target_count}`);
+  }
+  const boundUrls = new Set(bindingReport.bound_targets.map((target) => target.official_url));
+  const missingAliasTargets = REQUIRED_ALIAS_TARGET_URLS.filter((url) => !boundUrls.has(url));
+  if (missingAliasTargets.length) {
+    throw new Error(`explicit canonical alias bindings missing: ${missingAliasTargets.join(', ')}`);
   }
 
   const providerRegistry = new ProviderRegistry(providers);
@@ -151,6 +170,7 @@ async function main() {
     bound_provider_count: bindingReport.bound_provider_count,
     bound_target_count: bindingReport.bound_target_count,
     unbound_automatic_target_count: bindingReport.unbound_automatic_target_count,
+    explicit_alias_target_count: REQUIRED_ALIAS_TARGET_URLS.length,
     binding_mode: BINDING_MODE,
     binding_report: path.relative(path.join(__dirname, '..'), reportFile),
     provider_id: selected[0].provider_id,

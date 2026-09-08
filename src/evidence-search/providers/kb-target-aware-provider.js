@@ -6,7 +6,20 @@ const {
   normalizeBindingUrl
 } = require('../core/kb-target-registry');
 
-const BINDING_MODE = 'EXACT_OR_CANONICAL_NAME_SAME_AUTHORITY_UNIQUE';
+const BINDING_MODE = 'EXACT_OR_EXPLICIT_ALIAS_OR_CANONICAL_NAME_SAME_AUTHORITY_UNIQUE';
+const EXPLICIT_SOURCE_TARGET_URL_ALIASES = Object.freeze({
+  GEMET: Object.freeze(['https://www.eionet.europa.eu/gemet/en/search/']),
+  TERRAFORM_REGISTRY: Object.freeze(['https://registry.terraform.io/']),
+  NASA_NTRS: Object.freeze(['https://ntrs.nasa.gov/search']),
+  CONAN_CENTER: Object.freeze(['https://conan.io/center']),
+  PYPI: Object.freeze(['https://pypi.org/']),
+  GO_PACKAGES: Object.freeze(['https://pkg.go.dev/']),
+  FAOLEX: Object.freeze(['https://www.fao.org/faolex/en/']),
+  MUSICBRAINZ: Object.freeze(['https://musicbrainz.org/doc/MusicBrainz_API/Search']),
+  ZENODO: Object.freeze(['https://developers.zenodo.org/']),
+  PUBMED: Object.freeze(['https://www.ncbi.nlm.nih.gov/books/NBK25499/']),
+  WHO_GHO: Object.freeze(['https://www.who.int/data/gho'])
+});
 const NAME_NOISE_TOKENS = new Set([
   'api', 'rest', 'json', 'yaml', 'xml', 'html',
   'search', 'official', 'documentation', 'docs', 'doc',
@@ -58,11 +71,20 @@ function normalizeBindingCoreName(value) {
   return tokens.join(' ');
 }
 
+function explicitSourceTargetMatch(target, source) {
+  const aliases = EXPLICIT_SOURCE_TARGET_URL_ALIASES[String(source?.source_id || '')];
+  if (!aliases?.length) return false;
+  const targetUrl = normalizeBindingUrl(target?.official_url);
+  if (!targetUrl) return false;
+  return aliases.some((value) => normalizeBindingUrl(value) === targetUrl);
+}
+
 function targetMatchesCatalogSource(target, source) {
   if (!target || !source) return false;
   const targetUrl = normalizeBindingUrl(target.official_url);
   const sourceUrl = normalizeBindingUrl(source.official_url);
   if (targetUrl && sourceUrl && targetUrl === sourceUrl) return true;
+  if (explicitSourceTargetMatch(target, source)) return true;
 
   const targetName = normalizeBindingName(target.kb);
   const sourceName = normalizeBindingName(source.name);
@@ -199,8 +221,10 @@ function attachKbTargetsToProviders(providers, registry, options = {}) {
 
 module.exports = {
   BINDING_MODE,
+  EXPLICIT_SOURCE_TARGET_URL_ALIASES,
   attachKbTargets,
   attachKbTargetsToProviders,
+  explicitSourceTargetMatch,
   resolveProviderCatalogSources,
   targetMatchesCatalogSource,
   normalizeBindingCoreName,

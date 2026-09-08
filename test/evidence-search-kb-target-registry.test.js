@@ -6,6 +6,7 @@ const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-regi
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
 const {
   BINDING_MODE,
+  EXPLICIT_SOURCE_TARGET_URL_ALIASES,
   attachKbTargets,
   attachKbTargetsToProviders,
   targetMatchesCatalogSource
@@ -203,4 +204,23 @@ test('canonical-name binding requires the same authority host and unique provide
     reinforcement_query_set: []
   }, 'INITIAL');
   assert.deepEqual(selectedLocTargets.map((target) => target.target_id), ['target-loc']);
+});
+
+test('explicit source-target aliases bind only predeclared canonical equivalents', () => {
+  assert.ok(Object.keys(EXPLICIT_SOURCE_TARGET_URL_ALIASES).length >= 10);
+
+  assert.equal(targetMatchesCatalogSource(
+    syntheticTarget('pypi-target', 'PyPI (Python Package Index)', 'https://pypi.org/', ['G29']),
+    { source_id: 'PYPI', name: 'Python Package Index Search', official_url: 'https://pypi.org/search/' }
+  ), true);
+
+  assert.equal(targetMatchesCatalogSource(
+    syntheticTarget('ntrs-target', 'NASA Technical Reports Server (NTRS)', 'https://ntrs.nasa.gov/search', ['G37']),
+    { source_id: 'NASA_NTRS', name: 'NASA Technical Reports Server Search API', official_url: 'https://ntrs.nasa.gov/api/openapi/' }
+  ), true);
+
+  assert.equal(targetMatchesCatalogSource(
+    syntheticTarget('wrong-target', 'Unrelated NASA source', 'https://earthdata.nasa.gov/', ['G37']),
+    { source_id: 'NASA_NTRS', name: 'NASA Technical Reports Server Search API', official_url: 'https://ntrs.nasa.gov/api/openapi/' }
+  ), false);
 });
