@@ -5,11 +5,12 @@ const { secureGet } = require('./secure-http-transport');
 const SEARCH_NAMES = new Set(['q','query','search','term','keyword','keywords','text','s','searchtext','searchterm']);
 const NOISE_TOKENS = new Set(['the','and','for','with','from','into','api','search','official','documentation','database','portal','data','public','reference','tool']);
 const TARGET_SEED_OVERRIDES = Object.freeze({
-  'MySQL Reference Manual Search': 'https://dev.mysql.com/doc/refman/8.4/en/dynindex-function.html',
   'Python Official Documentation Search': 'https://docs.python.org/3/genindex-all.html',
   'Linux Kernel Documentation Search': 'https://docs.kernel.org/genindex.html',
   'ECMAScript Language Specification (ECMA-262 / TC39)': 'https://tc39.es/ecma262/multipage/'
 });
+const MYSQL_ORACLE_ROOT = 'https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/';
+const MYSQL_FUNCTION_INDEX = `${MYSQL_ORACLE_ROOT}built-in-function-reference.html`;
 
 function decodeHtml(value) {
   return String(value || '')
@@ -169,17 +170,19 @@ function jsonText(value) {
 function createCandidate({ target, url, canonicalUrl, title, bodyText, query, providerId }) {
   const excerpt = excerptAround(bodyText, query);
   if (!excerpt || contentScore(excerpt, query) <= 0) return null;
+  let actualHost = target.host;
+  try { actualHost = new URL(canonicalUrl || url).hostname.toLowerCase(); } catch {}
   return Object.freeze({
     canonical_record_id: canonicalUrl || url,
     canonical_url: canonicalUrl || url,
     title: String(title || target.kb || url).slice(0, 2048),
     excerpt,
     source_id: target.target_id,
-    source_family_id: `kb-target:${target.host}`,
+    source_family_id: `kb-target:${actualHost}`,
     capability_id: 'public_specialist_kb_direct_record',
     source_role: 'OFFICIAL',
-    authority_id: target.host,
-    publisher_id: target.host,
+    authority_id: actualHost,
+    publisher_id: actualHost,
     publisher_name: target.kb,
     language: 'und',
     retrieval_trace: Object.freeze({ provider_id: providerId, endpoint_id: target.target_id, current_pointer_verified: true, search_page_used_for_discovery_only: (canonicalUrl || url) !== target.official_url }),
@@ -203,8 +206,17 @@ async function fetchPage(url, allowedHosts, context, transport) {
   return response;
 }
 
+function resolveSeedUrl(target, query) {
+  if (target.kb === 'MySQL Reference Manual Search') {
+    const compact = String(query || '').trim();
+    if (/^[A-Za-z][A-Za-z0-9_]*(?:\(\))?$/.test(compact)) return MYSQL_FUNCTION_INDEX;
+    return `${MYSQL_ORACLE_ROOT}index.html`;
+  }
+  return TARGET_SEED_OVERRIDES[target.kb] || target.official_url;
+}
+
 async function searchOneTarget(target, query, context, transport = secureGet) {
-  const seed = new URL(TARGET_SEED_OVERRIDES[target.kb] || target.official_url);
+  const seed = new URL(resolveSeedUrl(target, query));
   const allowedHosts = new Set(hostVariants(seed));
   const visited = new Set();
   const fetched = [];
@@ -226,6 +238,7 @@ async function searchOneTarget(target, query, context, transport = secureGet) {
   }
 
   const seedHtml = seedResponse.body.toString('utf8');
+  const seedScore = contentScore(stripHtml(seedHtml), query);
   const searchUrls = discoverSearchUrls(seedHtml, seedResponse.url, query, allowedHosts);
   let bestSearch = null;
   for (const searchUrl of searchUrls) {
@@ -239,8 +252,9 @@ async function searchOneTarget(target, query, context, transport = secureGet) {
     } catch {}
   }
 
-  const discoveryHtml = bestSearch?.html || seedHtml;
-  const discoveryUrl = bestSearch?.response?.url || seedResponse.url;
+  const useSeed = seedScore > 0 && (!bestSearch || seedScore >= bestSearch.score);
+  const discoveryHtml = useSeed ? seedHtml : (bestSearch?.html || seedHtml);
+  const discoveryUrl = useSeed ? seedResponse.url : (bestSearch?.response?.url || seedResponse.url);
   const links = extractLinks(discoveryHtml, discoveryUrl, query, allowedHosts);
   const candidates = [];
   for (const link of links.slice(0, 5)) {
@@ -320,4 +334,4 @@ function createPassTargetFallbackProvider(options = {}) {
   });
 }
 
-module.exports = { TARGET_SEED_OVERRIDES, createPassTargetFallbackProvider, contentScore, discoverSearchUrls, extractLinks, queryTokens, searchOneTarget, stripHtml };
+module.exports = { TARGET_SEED_OVERRIDES, MYSQL_ORACLE_ROOT, MYSQL_FUNCTION_INDEX, createPassTargetFallbackProvider, contentScore, discoverSearchUrls, extractLinks, queryTokens, resolveSeedUrl, searchOneTarget, stripHtml };
