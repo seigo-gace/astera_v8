@@ -7,6 +7,7 @@ const { loadEvidenceSourceCatalog } = require('../src/evidence-search/providers/
 const { KbTargetRegistry } = require('../src/evidence-search/core/kb-target-registry');
 const { BINDING_MODE, attachKbTargetsToProviders } = require('../src/evidence-search/providers/kb-target-aware-provider');
 const { createPassTargetFallbackProvider, searchOneTarget } = require('../src/evidence-search/providers/pass-target-fallback-provider');
+const { secureGet } = require('../src/evidence-search/providers/secure-http-transport');
 const { ProviderRegistry } = require('../src/evidence-search/providers/provider-registry');
 
 const configFile = process.env.ASTERA_EVIDENCE_LIVE_CONFIG || path.join(__dirname, '..', 'config', 'evidence-providers.public.json');
@@ -129,7 +130,7 @@ async function runFallbackLiveCase(targetRegistry, fallbackTargetIds, liveCase) 
     signal: controller.signal,
     deadline_at: deadlineAt,
     remaining_ms: () => Math.max(1, deadlineAt - Date.now())
-  });
+  }, secureGet);
   const identities = result.candidates.map(recordIdentity).filter(Boolean);
   if (identities.length === 0) throw new Error(`fallback live search failed for ${liveCase.target_name}`);
   return Object.freeze({ provider_id: 'public-pass-kb-fallback', target_name: liveCase.target_name, retrieval_status: 'FOUND', candidate_count: result.candidates.length, sample_record_id: identities[0] });
