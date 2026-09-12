@@ -9,6 +9,7 @@ on:
       - 'config/evidence-source-catalog*.json'
       - 'src/evidence-search/**'
       - 'scripts/evidence-kb-target-live-smoke.js'
+      - 'scripts/evidence-kb-runtime-completion.js'
       - '.github/workflows/evidence-kb-target-live-smoke.yml'
   workflow_dispatch:
 
@@ -26,8 +27,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Run target-bound live search
+      - name: Run target-bound representative live search
         run: node scripts/evidence-kb-target-live-smoke.js
+      - name: Require all 663 base KB targets to be runtime-bound
+        run: node scripts/evidence-kb-runtime-completion.js
       - name: Upload KB target binding report
         if: always()
         uses: actions/upload-artifact@v4
