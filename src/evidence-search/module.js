@@ -1,13 +1,25 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const { SearchOrchestrator } = require('./core/search-orchestrator');
 const { calculateUsageReport } = require('./paid/usage-calculator');
+const { stableStringify } = require('../quality-completion-evaluator/utils/stable-json');
 
 const REQUEST_SCHEMA_VERSION = 'astera.evidence-search.module-request.v1';
 const RESPONSE_SCHEMA_VERSION = 'astera.evidence-search.module-response.v1';
 const OPERATIONS = Object.freeze({ SEARCH_EVIDENCE: 'SEARCH_EVIDENCE', CALCULATE_PAID_USAGE: 'CALCULATE_PAID_USAGE', HEALTH: 'HEALTH' });
 
 function fail(message, code = 'INVALID_MODULE_REQUEST') { const error = new Error(message); error.code = code; throw error; }
+function sha256(value) { return crypto.createHash('sha256').update(stableStringify(value)).digest('hex'); }
+
+function enforceAdoptedEvidenceBoundary(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+  if (result.status === 'FINAL_VALID') return result;
+  const { result_hash: ignoredResultHash, ...withoutHash } = result;
+  void ignoredResultHash;
+  const publishable = Object.freeze({ ...withoutHash, evidence: Object.freeze([]) });
+  return Object.freeze({ ...publishable, result_hash: sha256(publishable) });
+}
 
 class EvidenceSearchModule {
   constructor(options = {}) {
@@ -22,8 +34,9 @@ class EvidenceSearchModule {
     const operation = String(request.operation || '').trim().toUpperCase();
     if (!Object.values(OPERATIONS).includes(operation)) fail(`unsupported operation: ${operation || '(empty)'}`, 'UNSUPPORTED_MODULE_OPERATION');
     let result;
-    if (operation === OPERATIONS.SEARCH_EVIDENCE) result = await this.orchestrator.execute(request.payload, request.context || {});
-    else if (operation === OPERATIONS.CALCULATE_PAID_USAGE) result = calculateUsageReport(request.payload);
+    if (operation === OPERATIONS.SEARCH_EVIDENCE) {
+      result = enforceAdoptedEvidenceBoundary(await this.orchestrator.execute(request.payload, request.context || {}));
+    } else if (operation === OPERATIONS.CALCULATE_PAID_USAGE) result = calculateUsageReport(request.payload);
     else result = this.orchestrator.health();
     return Object.freeze({ schema_version: RESPONSE_SCHEMA_VERSION, module_id: this.moduleId, module_version: this.version, operation, status: 'OK', result });
   }
