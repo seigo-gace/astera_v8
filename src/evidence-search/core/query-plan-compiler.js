@@ -238,6 +238,7 @@ function compileQueryPlan(payload, context = {}) {
     source_policy:{
       free_projection:payload.search?.free_projection !== false,
       free_current:payload.search?.free_current !== false,
+      free_general_web:payload.search?.free_general_web !== false,
       paid_enabled:false,
       provider_allowlist:[...new Set((payload.provider_allowlist || []).map(normalizeText).filter(Boolean))].sort(),
       provider_denylist:[...new Set((payload.provider_denylist || []).map(normalizeText).filter(Boolean))].sort()

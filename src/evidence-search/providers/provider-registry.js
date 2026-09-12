@@ -3,6 +3,7 @@
 const SOURCE_CLASSES = new Set([
   'FREE_PROJECTION',
   'FREE_OFFICIAL_LIVE',
+  'FREE_GENERAL_WEB',
   'PAID_PROVIDER',
   'PRIVATE_SOURCE'
 ]);
@@ -145,6 +146,7 @@ class ProviderRegistry {
       if (deny.has(provider.provider_id)) return false;
       if (provider.source_class === 'FREE_PROJECTION' && !plan.source_policy.free_projection) return false;
       if (provider.source_class === 'FREE_OFFICIAL_LIVE' && !plan.source_policy.free_current) return false;
+      if (provider.source_class === 'FREE_GENERAL_WEB' && !plan.source_policy.free_general_web) return false;
       if (phase === 'INITIAL' && provider.capabilities.includes('REINFORCEMENT_ONLY')) return false;
       if (phase === 'REINFORCEMENT' && (
         provider.capabilities.includes('NO_REINFORCEMENT')
@@ -155,6 +157,8 @@ class ProviderRegistry {
         const targets = provider.target_matcher(plan, phase);
         if (!Array.isArray(targets) || targets.length === 0) return false;
       }
+
+      if (provider.source_class === 'FREE_GENERAL_WEB') return true;
 
       if (resolvedDomain) {
         if (provider.domains.length && !provider.domains.includes(domainId)) return false;

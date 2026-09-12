@@ -1,0 +1,31 @@
+name: Evidence General Web Live Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/evidence-search/providers/general-web-search-provider.js'
+      - 'src/evidence-search/providers/provider-registry.js'
+      - 'src/evidence-search/core/query-plan-compiler.js'
+      - 'src/evidence-search/api/start.js'
+      - 'src/evidence-search/contracts/search-request.v1.schema.json'
+      - 'test/evidence-search-general-web-provider.test.js'
+      - 'scripts/evidence-general-web-live-smoke.js'
+      - '.github/workflows/evidence-general-web-live-smoke.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  live-general-web-search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unit test general web provider
+        run: node --test test/evidence-search-general-web-provider.test.js
+      - name: Run free general web live search
+        run: node scripts/evidence-general-web-live-smoke.js

@@ -14,6 +14,7 @@ const {
   attachKbTargetsToProviders
 } = require('../providers/kb-target-aware-provider');
 const { createPassTargetFallbackProvider } = require('../providers/pass-target-fallback-provider');
+const { createGeneralWebSearchProvider } = require('../providers/general-web-search-provider');
 const { EvidenceJobStore } = require('../recovery/job-store');
 const { DurableEvidenceSpool } = require('../recovery/durable-spool');
 const { EvidenceJobManager } = require('../recovery/job-manager');
@@ -85,9 +86,11 @@ const dedicatedProviders = attachKbTargetsToProviders(baseProviders, kbTargetReg
   limit: 32
 });
 const fallbackTargetIds = unboundAutomaticPassTargetIds(kbTargetRegistry, dedicatedProviders);
+const generalWebProvider = createGeneralWebSearchProvider();
 const providers = Object.freeze([
   ...dedicatedProviders,
-  ...(fallbackTargetIds.length ? [createPassTargetFallbackProvider({ registry: kbTargetRegistry, target_ids: fallbackTargetIds, limit: 4 })] : [])
+  ...(fallbackTargetIds.length ? [createPassTargetFallbackProvider({ registry: kbTargetRegistry, target_ids: fallbackTargetIds, limit: 4 })] : []),
+  generalWebProvider
 ]);
 const remainingUnboundPassTargetIds = unboundAutomaticPassTargetIds(kbTargetRegistry, providers);
 if (remainingUnboundPassTargetIds.length !== 0) {
@@ -144,6 +147,7 @@ logger.write({
     automatic_pass_kb_target_count: kbTargetRegistry.targets.filter((target) => target.automatic_search_eligible && target.recorded_statuses.includes('PASS')).length,
     fallback_pass_kb_target_count: fallbackTargetIds.length,
     unbound_pass_kb_target_count: remainingUnboundPassTargetIds.length,
+    free_general_web_provider_count: providers.filter((provider) => provider?.source_class === 'FREE_GENERAL_WEB').length,
     active_search_mode: 'FREE_ONLY',
     evaluator_mode: 'EVALUATOR_API_7374',
     durable_recovery: true,
