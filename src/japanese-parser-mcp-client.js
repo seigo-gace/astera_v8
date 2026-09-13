@@ -16,16 +16,8 @@ function isJapaneseText(text) {
   return /[ぁ-んァ-ヶ一-龠々]/.test(String(text || ''));
 }
 
-// The current Astera contract routes every Japanese request through the
-// Deterministic Japanese Parser MCP. Keep the historical function name used by
-// KaguraEngine, but do not restore the former heuristic bypasses.
 function needsJapaneseParser(question) {
   return isJapaneseText(question);
-}
-
-function isExternalActionHint(question, request = {}) {
-  if ((request.analysis_task_packet?.tasks || []).some((task) => ['implement', 'improve', 'integrate', 'migrate', 'remove'].includes(task.action))) return true;
-  return /実装|変更|修正|改善|削除|移行|統合|接続|反映|Push|公開|deploy|release|replace|modify|remove/i.test(String(question || ''));
 }
 
 function validateParserResult(value, expectedOriginalText) {
@@ -108,24 +100,37 @@ class JapaneseParserMCPClient {
     this.ready = true;
   }
 
-  async analyze({ originalText, conversationContext = [], executionMode = 'external_action', runDeepAnalysis = true, deadlineMs = this.timeoutMs } = {}) {
+  async analyze({ originalText, conversationContext = [], executionMode = 'analysis', analysisDepth = 'auto', deadlineMs = this.timeoutMs } = {}) {
     const original = String(originalText || '');
     if (!original.trim()) throw parserError('PARSER_INPUT_EMPTY', 'Japanese Parser MCP requires non-empty originalText.');
     await this.initialize();
+    const effectiveDeadline = Number.isFinite(Number(deadlineMs)) ? Math.max(1, Math.min(60000, Number(deadlineMs))) : this.timeoutMs;
+    const depth = ['auto', 'fast', 'deep'].includes(String(analysisDepth)) ? String(analysisDepth) : 'auto';
+    const mode = ['analysis', 'comparison', 'planning', 'external_action'].includes(String(executionMode)) ? String(executionMode) : 'analysis';
     const started = process.hrtime.bigint();
     const result = await this._rpc('tools/call', {
       name: 'analyze_japanese',
       arguments: {
         original_text: original,
-        conversation_context: Array.isArray(conversationContext) ? conversationContext.map(String) : [],
-        execution_mode: executionMode,
-        run_deep_analysis: runDeepAnalysis === true,
-        absolute_deadline_ms: Number.isFinite(Number(deadlineMs)) ? Math.max(1, Math.min(60000, Number(deadlineMs))) : this.timeoutMs
+        conversation_context: Array.isArray(conversationContext) ? conversationContext.map(String).slice(-20) : [],
+        execution_mode: mode,
+        analysis_depth: depth,
+        deadline_ms: effectiveDeadline
       }
-    }, Math.max(this.timeoutMs + 20, Number(deadlineMs) + 20));
+    }, Math.max(this.timeoutMs + 20, effectiveDeadline + 20));
     const structured = parseToolResult(result, original);
     const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-    return { ...structured, astera_mcp_transport: { protocol_version: this.negotiatedProtocolVersion, elapsed_ms: Number(elapsedMs.toFixed(3)), tool: 'analyze_japanese' } };
+    return {
+      ...structured,
+      astera_mcp_transport: {
+        protocol_version: this.negotiatedProtocolVersion,
+        elapsed_ms: Number(elapsedMs.toFixed(3)),
+        tool: 'analyze_japanese',
+        execution_mode: mode,
+        analysis_depth: depth,
+        deadline_ms: effectiveDeadline
+      }
+    };
   }
 
   _startProcess() {
@@ -159,7 +164,10 @@ class JapaneseParserMCPClient {
       this.stdoutBuffer = this.stdoutBuffer.slice(index + 1);
       if (!line) continue;
       let message;
-      try { message = JSON.parse(line); } catch { this._failAll(parserError('PARSER_MCP_MALFORMED_JSON', 'Japanese Parser MCP emitted malformed JSON-RPC on stdout.')); continue; }
+      try { message = JSON.parse(line); } catch {
+        this._failAll(parserError('PARSER_MCP_MALFORMED_JSON', 'Japanese Parser MCP emitted malformed JSON-RPC on stdout.'));
+        continue;
+      }
       if (Object.hasOwn(message, 'id') && this.pending.has(message.id)) {
         const pending = this.pending.get(message.id);
         this.pending.delete(message.id);
@@ -179,8 +187,7 @@ class JapaneseParserMCPClient {
         reject(parserError('PARSER_MCP_TIMEOUT', `Japanese Parser MCP ${method} exceeded ${timeoutMs}ms.`, { method, timeout_ms: timeoutMs }));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, method });
-      const message = JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n';
-      this.process.stdin.write(message, 'utf8', (error) => {
+      this.process.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`, 'utf8', (error) => {
         if (!error) return;
         if (!this.pending.has(id)) return;
         this.pending.delete(id);
@@ -192,7 +199,7 @@ class JapaneseParserMCPClient {
 
   _notify(method, params) {
     if (!this.process?.stdin?.writable) throw parserError('PARSER_PROCESS_UNAVAILABLE', 'Japanese Parser MCP stdin is unavailable.');
-    this.process.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+    this.process.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`);
   }
 
   _failAll(error) {
@@ -216,12 +223,40 @@ class JapaneseParserMCPClient {
   }
 }
 
+let sharedClient = null;
+let sharedRefs = 0;
+let sharedDestroyTimer = null;
+
+function acquireSharedJapaneseParserClient(options = {}) {
+  if (sharedDestroyTimer) {
+    clearTimeout(sharedDestroyTimer);
+    sharedDestroyTimer = null;
+  }
+  if (!sharedClient) sharedClient = new JapaneseParserMCPClient(options);
+  sharedRefs += 1;
+  return sharedClient;
+}
+
+function releaseSharedJapaneseParserClient(client) {
+  if (!sharedClient || client !== sharedClient) return;
+  sharedRefs = Math.max(0, sharedRefs - 1);
+  if (sharedRefs !== 0 || sharedDestroyTimer) return;
+  sharedDestroyTimer = setTimeout(() => {
+    const target = sharedClient;
+    sharedClient = null;
+    sharedDestroyTimer = null;
+    if (target) void target.destroy();
+  }, 500);
+  sharedDestroyTimer.unref?.();
+}
+
 module.exports = {
   JapaneseParserMCPClient,
   MCP_PROTOCOL_VERSION,
   SUPPORTED_PROTOCOL_VERSIONS,
   isJapaneseText,
   needsJapaneseParser,
-  isExternalActionHint,
-  validateParserResult
+  validateParserResult,
+  acquireSharedJapaneseParserClient,
+  releaseSharedJapaneseParserClient
 };
