@@ -1,32 +1,18 @@
 'use strict';
 
 const analyzer = require('./judgment-materials-analyzer');
+const { getJapaneseParserRequest } = require('./japanese-parser-request-context');
+const { buildJapaneseParserFailureRequest } = require('./japanese-parser-mcp-adapter');
 
 const SCRIPT_TESTS = Object.freeze([
-  ['Hira', /\p{Script=Hiragana}/u],
-  ['Kana', /\p{Script=Katakana}/u],
-  ['Hani', /\p{Script=Han}/u],
-  ['Hang', /\p{Script=Hangul}/u],
-  ['Arab', /\p{Script=Arabic}/u],
-  ['Hebr', /\p{Script=Hebrew}/u],
-  ['Deva', /\p{Script=Devanagari}/u],
-  ['Beng', /\p{Script=Bengali}/u],
-  ['Guru', /\p{Script=Gurmukhi}/u],
-  ['Gujr', /\p{Script=Gujarati}/u],
-  ['Taml', /\p{Script=Tamil}/u],
-  ['Telu', /\p{Script=Telugu}/u],
-  ['Knda', /\p{Script=Kannada}/u],
-  ['Mlym', /\p{Script=Malayalam}/u],
-  ['Thai', /\p{Script=Thai}/u],
-  ['Laoo', /\p{Script=Lao}/u],
-  ['Mymr', /\p{Script=Myanmar}/u],
-  ['Khmr', /\p{Script=Khmer}/u],
-  ['Cyrl', /\p{Script=Cyrillic}/u],
-  ['Grek', /\p{Script=Greek}/u],
-  ['Armn', /\p{Script=Armenian}/u],
-  ['Geor', /\p{Script=Georgian}/u],
-  ['Ethi', /\p{Script=Ethiopic}/u],
-  ['Latn', /\p{Script=Latin}/u]
+  ['Hira', /\p{Script=Hiragana}/u], ['Kana', /\p{Script=Katakana}/u], ['Hani', /\p{Script=Han}/u],
+  ['Hang', /\p{Script=Hangul}/u], ['Arab', /\p{Script=Arabic}/u], ['Hebr', /\p{Script=Hebrew}/u],
+  ['Deva', /\p{Script=Devanagari}/u], ['Beng', /\p{Script=Bengali}/u], ['Guru', /\p{Script=Gurmukhi}/u],
+  ['Gujr', /\p{Script=Gujarati}/u], ['Taml', /\p{Script=Tamil}/u], ['Telu', /\p{Script=Telugu}/u],
+  ['Knda', /\p{Script=Kannada}/u], ['Mlym', /\p{Script=Malayalam}/u], ['Thai', /\p{Script=Thai}/u],
+  ['Laoo', /\p{Script=Lao}/u], ['Mymr', /\p{Script=Myanmar}/u], ['Khmr', /\p{Script=Khmer}/u],
+  ['Cyrl', /\p{Script=Cyrillic}/u], ['Grek', /\p{Script=Greek}/u], ['Armn', /\p{Script=Armenian}/u],
+  ['Geor', /\p{Script=Georgian}/u], ['Ethi', /\p{Script=Ethiopic}/u], ['Latn', /\p{Script=Latin}/u]
 ]);
 
 function normalizeLanguageTag(value) {
@@ -60,25 +46,16 @@ function detectLanguageMetadata(text, { language, locale, output_language: outpu
   const scripts = detectScripts(text);
   let resolvedLanguage = explicitLanguage;
   let basis = explicitLanguage ? 'EXPLICIT_LANGUAGE' : 'UNRESOLVED';
-
   if (!resolvedLanguage && (scripts.includes('Hira') || scripts.includes('Kana'))) {
-    resolvedLanguage = 'ja';
-    basis = 'SCRIPT_HIRAGANA_KATAKANA';
+    resolvedLanguage = 'ja'; basis = 'SCRIPT_HIRAGANA_KATAKANA';
   } else if (!resolvedLanguage && scripts.includes('Hang')) {
-    resolvedLanguage = 'ko';
-    basis = 'SCRIPT_HANGUL';
+    resolvedLanguage = 'ko'; basis = 'SCRIPT_HANGUL';
   } else if (!resolvedLanguage && likelyEnglish(text)) {
-    resolvedLanguage = 'en';
-    basis = 'HIGH_CONFIDENCE_ENGLISH_LEXICAL';
+    resolvedLanguage = 'en'; basis = 'HIGH_CONFIDENCE_ENGLISH_LEXICAL';
   }
-
   return Object.freeze({
-    language: resolvedLanguage || 'und',
-    locale: explicitLocale,
-    script: scripts[0] || 'Zyyy',
-    scripts: Object.freeze(scripts),
-    requested_output_language: requestedOutput || resolvedLanguage || 'und',
-    detection_basis: basis
+    language: resolvedLanguage || 'und', locale: explicitLocale, script: scripts[0] || 'Zyyy', scripts: Object.freeze(scripts),
+    requested_output_language: requestedOutput || resolvedLanguage || 'und', detection_basis: basis
   });
 }
 
@@ -125,19 +102,14 @@ function buildGenericRequest({ question = '', context = '', language, locale, ou
     const target = span.text.trim().slice(0, 160) || 'input';
     const dependsOn = index > 0 ? [`T${String(index).padStart(2, '0')}`] : [];
     return {
-      id,
-      source_span: { ...span },
-      raw_text: span.text,
-      clause_type: /[?？؟]$/u.test(span.text.trim()) ? 'question' : 'statement',
-      actionable: true,
-      action: 'analyze',
-      target,
+      id, source_span: { ...span }, raw_text: span.text,
+      clause_type: /[?？؟]$/u.test(span.text.trim()) ? 'question' : 'statement', actionable: true, action: 'analyze', target,
       objective: 'Preserve and analyze this clause without inferring unavailable language-specific semantics.',
       deliverables: [], premises: [], constraints: [], prohibitions: [], preserve: [], replace: [], conditions: [], exceptions: [], deadlines: [],
       priority: 'normal', order: index + 1, depends_on: dependsOn, parallelizable: false,
       success_criteria: ['Preserve original text and source span.', 'Do not invent unresolved language-specific semantics.'],
-      verification: [], completion_criteria: ['Preserve original text and source span.'],
-      unresolved: ['language_semantics'], evidence_need: { required: false, reasons: [], queries: genericTerms(span.text).slice(0, 12) }, external_action: false, hard_blockers: []
+      verification: [], completion_criteria: ['Preserve original text and source span.'], unresolved: ['language_semantics'],
+      evidence_need: { required: false, reasons: [], queries: genericTerms(span.text).slice(0, 12) }, external_action: false, hard_blockers: []
     };
   });
   const dependencies = tasks.slice(1).map((task, index) => ({ from: tasks[index].id, to: task.id, type: 'SOURCE_ORDER_PRESERVATION', reason: 'language_semantics_unresolved' }));
@@ -145,25 +117,21 @@ function buildGenericRequest({ question = '', context = '', language, locale, ou
   const unresolved = tasks.map((task) => `${task.id}:language_semantics`);
   const packet = {
     schema_version: 'astera.analysis-task-packet.v1', intent: 'analyze', tasks, dependencies, execution_waves: waves,
-    constraints: [], prohibitions: [], preserve: [], replace: [], verification: [],
-    completion_criteria: ['Preserve original text and source spans.'], unresolved, conflicts: [], hard_blockers: [],
-    source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span }))
+    constraints: [], prohibitions: [], preserve: [], replace: [], verification: [], completion_criteria: ['Preserve original text and source spans.'],
+    unresolved, conflicts: [], hard_blockers: [], source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span }))
   };
   return {
-    schema_version: 'astera.request-model.v2',
-    language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts,
-    output_language: metadata.requested_output_language,
-    normalized_question: normalized, original_question: original,
+    schema_version: 'astera.request-model.v2', language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts,
+    output_language: metadata.requested_output_language, normalized_question: normalized, original_question: original,
     target: tasks[0]?.target || '', target_confidence: 'low', action: 'analyze',
     objective: 'Structure the request while preserving unresolved language-specific semantics.',
     success_criteria: packet.completion_criteria, constraints: [], prohibitions: [], preserve: [], replace: [], verification: [],
     query_terms: genericTerms(`${normalized}\n${contextText}`), context_present: Boolean(contextText), context_length: contextText.length,
     instruction_map: { clause_count: tasks.length, task_count: tasks.length, correction_count: 0, prohibition_count: 0, preserve_count: 0, verification_count: 0 },
     instruction_understanding: {
-      mode: 'GLOBAL_LANGUAGE_ADAPTER', adapter: 'generic-unicode-fallback', semantic_resolution: 'limited',
-      parser: null, execution_allowed: true, blocked_reasons: [], warnings: ['LANGUAGE_SPECIFIC_SEMANTICS_UNRESOLVED'],
-      language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts,
-      detection_basis: metadata.detection_basis
+      mode: 'GLOBAL_LANGUAGE_ADAPTER', adapter: 'generic-unicode-fallback', semantic_resolution: 'limited', parser: null,
+      execution_allowed: true, blocked_reasons: [], warnings: ['LANGUAGE_SPECIFIC_SEMANTICS_UNRESOLVED'],
+      language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts, detection_basis: metadata.detection_basis
     },
     analysis_task_packet: packet
   };
@@ -172,28 +140,31 @@ function buildGenericRequest({ question = '', context = '', language, locale, ou
 function analyzeRequest(input = {}) {
   const metadata = detectLanguageMetadata(`${input.question || ''}\n${input.context || ''}`, input);
   const primary = metadata.language.split('-')[0];
-  if (primary === 'ja' || primary === 'en') {
+
+  if (primary === 'ja') {
+    const authoritative = getJapaneseParserRequest();
+    if (authoritative) return authoritative;
+    const error = Object.assign(new Error('Japanese input must be parsed by Deterministic Japanese Parser MCP before Astera canonical processing.'), { code: 'JAPANESE_PARSER_MCP_REQUIRED' });
+    return buildJapaneseParserFailureRequest(String(input.question || ''), error, {
+      ...metadata,
+      context_present: Boolean(String(input.context || '').trim()),
+      context_length: String(input.context || '').length
+    });
+  }
+
+  if (primary === 'en') {
     const request = analyzer.analyzeRequest({ question: input.question, context: input.context });
     return {
       ...request,
-      language: metadata.language,
-      locale: metadata.locale,
-      script: metadata.script,
-      scripts: metadata.scripts,
+      language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts,
       output_language: metadata.requested_output_language,
       instruction_understanding: {
-        ...(request.instruction_understanding || {}),
-        mode: 'GLOBAL_LANGUAGE_ADAPTER',
-        adapter: primary === 'ja' ? 'builtin-ja' : 'builtin-en',
-        semantic_resolution: 'adapter-resolved',
-        language: metadata.language,
-        locale: metadata.locale,
-        script: metadata.script,
-        scripts: metadata.scripts,
-        detection_basis: metadata.detection_basis
+        ...(request.instruction_understanding || {}), mode: 'GLOBAL_LANGUAGE_ADAPTER', adapter: 'builtin-en', semantic_resolution: 'adapter-resolved',
+        language: metadata.language, locale: metadata.locale, script: metadata.script, scripts: metadata.scripts, detection_basis: metadata.detection_basis
       }
     };
   }
+
   return buildGenericRequest(input, metadata);
 }
 
