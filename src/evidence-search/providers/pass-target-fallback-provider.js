@@ -1,6 +1,7 @@
 'use strict';
 
 const { secureGet } = require('./secure-http-transport');
+const { boundedMap } = require('../utils/bounded-map');
 
 const SEARCH_NAMES = new Set(['q','query','search','term','keyword','keywords','text','s','searchtext','searchterm']);
 const NOISE_TOKENS = new Set(['the','and','for','with','from','into','api','search','official','documentation','database','portal','data','public','reference','tool']);
@@ -215,26 +216,42 @@ function resolveSeedUrl(target, query) {
   return TARGET_SEED_OVERRIDES[target.kb] || target.official_url;
 }
 
-async function searchOneTarget(target, query, context, transport = secureGet) {
+async function searchOneTarget(target, query, context, transport = secureGet, sharedSeedCache = null) {
   const seed = new URL(resolveSeedUrl(target, query));
   const allowedHosts = new Set(hostVariants(seed));
   const visited = new Set();
   const fetched = [];
-  const fetchUnique = async (url) => {
+  let requests = 0;
+  const fetchUnique = async (url, cacheSeed = false) => {
     if (visited.has(url) || fetched.length >= 10) return null;
     visited.add(url);
-    const response = await fetchPage(url, allowedHosts, context, transport);
+    let response;
+    if (cacheSeed && sharedSeedCache instanceof Map) {
+      let promise = sharedSeedCache.get(url);
+      if (!promise) {
+        requests += 1;
+        promise = fetchPage(url, allowedHosts, context, transport).catch((error) => {
+          sharedSeedCache.delete(url);
+          throw error;
+        });
+        sharedSeedCache.set(url, promise);
+      }
+      response = await promise;
+    } else {
+      requests += 1;
+      response = await fetchPage(url, allowedHosts, context, transport);
+    }
     fetched.push(response);
     return response;
   };
 
-  const seedResponse = await fetchUnique(seed.toString());
-  if (!seedResponse) return { candidates: [], requests: fetched.length };
+  const seedResponse = await fetchUnique(seed.toString(), true);
+  if (!seedResponse) return { candidates: [], requests };
   const contentType = String(seedResponse.headers['content-type'] || '').toLowerCase();
   if (contentType.includes('json')) {
     const text = seedResponse.body.toString('utf8');
     const candidate = createCandidate({ target, url: seedResponse.url, title: target.kb, bodyText: text, query, providerId: 'public-pass-kb-fallback' });
-    return { candidates: candidate ? [candidate] : [], requests: fetched.length };
+    return { candidates: candidate ? [candidate] : [], requests };
   }
 
   const seedHtml = seedResponse.body.toString('utf8');
@@ -274,7 +291,7 @@ async function searchOneTarget(target, query, context, transport = secureGet) {
     const candidate = createCandidate({ target, url: discoveryUrl, title: extractTitle(discoveryHtml, target.kb), bodyText: stripHtml(discoveryHtml), query, providerId: 'public-pass-kb-fallback' });
     if (candidate) candidates.push(candidate);
   }
-  return { candidates, requests: fetched.length };
+  return { candidates, requests };
 }
 
 function selectionPlan(plan) {
@@ -292,6 +309,7 @@ function createPassTargetFallbackProvider(options = {}) {
   const providerId = 'public-pass-kb-fallback';
   const transport = options.transport || secureGet;
   const limit = Math.max(1, Math.min(8, Number(options.limit || 4)));
+  const searchConcurrency = Math.max(1, Math.min(8, Number(options.search_concurrency || process.env.ASTERA_FALLBACK_SEARCH_CONCURRENCY || 4)));
   const selectTargets = (plan) => registry.select(selectionPlan(plan), { limit, target_ids: [...ownedTargetIds], binding_required: true });
 
   return Object.freeze({
@@ -309,27 +327,59 @@ function createPassTargetFallbackProvider(options = {}) {
     kb_target_binding: Object.freeze({ mode: 'UNBOUND_PASS_TARGET_OFFICIAL_SITE_SEARCH', required: true, automatic_target_count: ownedTargets.length, target_ids: Object.freeze([...ownedTargetIds]), catalog_source_ids: Object.freeze([]) }),
     target_matcher: (plan) => selectTargets(plan),
     async search(plan, context = {}) {
+      const queries = Array.isArray(plan.query_set) ? plan.query_set : [];
+      const targets = selectTargets(plan);
+      const seedCache = new Map();
+      const jobs = queries.flatMap((query) => targets.map((target) => ({ query, target })));
+      const executions = await boundedMap(jobs, searchConcurrency, async ({ query, target }) => {
+        try {
+          const result = await searchOneTarget(target, String(query.text || ''), context, transport, seedCache);
+          return Object.freeze({ query_id: String(query.query_id), target_id: String(target.target_id), target, result, error: null });
+        } catch (error) {
+          return Object.freeze({ query_id: String(query.query_id), target_id: String(target.target_id), target, result: null, error });
+        }
+      });
+
       const allCandidates = [];
       const failures = [];
-      const queryResults = [];
+      const queryState = new Map(queries.map((query) => [String(query.query_id), { candidates: [], failures: 0, completed: 0 }]));
       let requests = 0;
-      const targets = selectTargets(plan);
-      for (const query of Array.isArray(plan.query_set) ? plan.query_set : []) {
-        const queryCandidates = [];
-        for (const target of targets) {
-          try {
-            const result = await searchOneTarget(target, String(query.text || ''), context, transport);
-            requests += result.requests;
-            queryCandidates.push(...result.candidates);
-          } catch (error) {
-            failures.push(Object.freeze({ query_id: String(query.query_id), target_id: target.target_id, code: error.code || 'PASS_TARGET_SEARCH_FAILED', message: error.message }));
-          }
+      for (const execution of executions) {
+        const state = queryState.get(execution.query_id);
+        if (execution.error) {
+          state.failures += 1;
+          failures.push(Object.freeze({ query_id: execution.query_id, target_id: execution.target_id, code: execution.error.code || 'PASS_TARGET_SEARCH_FAILED', message: execution.error.message }));
+          continue;
         }
-        allCandidates.push(...queryCandidates);
-        queryResults.push(Object.freeze({ query_id: String(query.query_id), retrieval_status: queryCandidates.length ? 'FOUND' : (failures.some((item) => item.query_id === String(query.query_id)) ? 'RETRIEVAL_FAILED' : 'NOT_FOUND'), candidate_record_ids: Object.freeze(queryCandidates.map((item) => item.canonical_record_id)), error_code: queryCandidates.length ? null : (failures.find((item) => item.query_id === String(query.query_id))?.code || null), endpoint_count: targets.length, completed_endpoint_count: Math.max(0, targets.length - failures.filter((item) => item.query_id === String(query.query_id)).length) }));
+        state.completed += 1;
+        requests += execution.result.requests;
+        state.candidates.push(...execution.result.candidates);
+        allCandidates.push(...execution.result.candidates);
       }
+
+      const queryResults = queries.map((query) => {
+        const queryId = String(query.query_id);
+        const state = queryState.get(queryId);
+        const firstFailure = failures.find((item) => item.query_id === queryId);
+        return Object.freeze({
+          query_id: queryId,
+          retrieval_status: state.candidates.length ? 'FOUND' : (state.failures ? 'RETRIEVAL_FAILED' : 'NOT_FOUND'),
+          candidate_record_ids: Object.freeze(state.candidates.map((item) => item.canonical_record_id)),
+          error_code: state.candidates.length ? null : (firstFailure?.code || null),
+          endpoint_count: targets.length,
+          completed_endpoint_count: state.completed
+        });
+      });
       const complete = queryResults.filter((item) => item.retrieval_status !== 'RETRIEVAL_FAILED').length;
-      return Object.freeze({ coverage_state: complete === queryResults.length ? 'COMPLETE_FOR_QUERY_SCOPE' : complete ? 'PARTIAL_FOR_QUERY_SCOPE' : 'UNKNOWN', candidates: Object.freeze(allCandidates), query_results: Object.freeze(queryResults), search_targets: Object.freeze(targets), current_watermark: Object.freeze({ provider_id: providerId, completed_at: new Date().toISOString(), coverage_state: complete === queryResults.length ? 'COMPLETE' : complete ? 'PARTIAL' : 'UNKNOWN' }), usage: Object.freeze({ requests, results: allCandidates.length, query_count: queryResults.length, target_count: targets.length }), failures: Object.freeze(failures) });
+      return Object.freeze({
+        coverage_state: complete === queryResults.length ? 'COMPLETE_FOR_QUERY_SCOPE' : complete ? 'PARTIAL_FOR_QUERY_SCOPE' : 'UNKNOWN',
+        candidates: Object.freeze(allCandidates),
+        query_results: Object.freeze(queryResults),
+        search_targets: Object.freeze(targets),
+        current_watermark: Object.freeze({ provider_id: providerId, completed_at: new Date().toISOString(), coverage_state: complete === queryResults.length ? 'COMPLETE' : complete ? 'PARTIAL' : 'UNKNOWN' }),
+        usage: Object.freeze({ requests, results: allCandidates.length, query_count: queryResults.length, target_count: targets.length, search_concurrency: Math.min(searchConcurrency, Math.max(1, jobs.length)), seed_cache_entries: seedCache.size }),
+        failures: Object.freeze(failures)
+      });
     }
   });
 }

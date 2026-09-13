@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const https = require('node:https');
 const { secureGet, resolvePublicAddress, createPinnedLookup } = require('./secure-http-transport');
+const { boundedMap } = require('../utils/bounded-map');
 
 const SEARCH_ROUTES = Object.freeze([
   Object.freeze({
@@ -258,6 +259,7 @@ function createGeneralWebSearchProvider(options = {}) {
   const searchGet = options.searchGet || secureGet;
   const pageGet = options.pageGet || publicPageGet;
   const resultLimit = Math.max(1, Math.min(8, Number(options.resultLimit || 4)));
+  const queryConcurrency = Math.max(1, Math.min(4, Number(options.query_concurrency || process.env.ASTERA_GENERAL_WEB_QUERY_CONCURRENCY || 4)));
   return Object.freeze({
     provider_id: 'free-general-web-search',
     source_class: 'FREE_GENERAL_WEB',
@@ -272,28 +274,37 @@ function createGeneralWebSearchProvider(options = {}) {
     certified: true,
     async search(plan, context = {}) {
       const querySet = Array.isArray(plan?.query_set) ? plan.query_set : [];
-      const candidates = [];
-      const queryResults = [];
-      for (const query of querySet.slice(0, 4)) {
+      const activeQueries = querySet.slice(0, 4);
+      const pageCache = new Map();
+      const executions = await boundedMap(activeQueries, queryConcurrency, async (query) => {
         const text = String(query?.text || '').trim();
         if (!text) {
-          queryResults.push({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: [], error_code: 'GENERAL_WEB_QUERY_EMPTY' });
-          continue;
+          return Object.freeze({
+            candidates: Object.freeze([]),
+            query_result: Object.freeze({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: Object.freeze([]), error_code: 'GENERAL_WEB_QUERY_EMPTY' })
+          });
         }
         try {
           const discovered = await discover(text, context, searchGet);
           if (!discovered.length) {
-            queryResults.push({ query_id: String(query.query_id), retrieval_status: 'NOT_FOUND', candidate_record_ids: [] });
-            continue;
+            return Object.freeze({
+              candidates: Object.freeze([]),
+              query_result: Object.freeze({ query_id: String(query.query_id), retrieval_status: 'NOT_FOUND', candidate_record_ids: Object.freeze([]), error_code: null })
+            });
           }
           const selected = discovered.slice(0, resultLimit);
           const fetched = await Promise.allSettled(selected.map(async (item) => {
-            const response = await pageGet(item.url, {
-              timeoutMs: 1100,
-              maxBytes: MAX_PAGE_BYTES,
-              maximumRedirects: MAX_PAGE_REDIRECTS,
-              signal: context.signal
-            });
+            let pending = pageCache.get(item.url);
+            if (!pending) {
+              pending = pageGet(item.url, {
+                timeoutMs: 1100,
+                maxBytes: MAX_PAGE_BYTES,
+                maximumRedirects: MAX_PAGE_REDIRECTS,
+                signal: context.signal
+              });
+              pageCache.set(item.url, pending);
+            }
+            const response = await pending;
             const record = extractPageRecord(response);
             if (!record) return null;
             const host = new URL(response.url).hostname.toLowerCase();
@@ -327,31 +338,39 @@ function createGeneralWebSearchProvider(options = {}) {
             });
           }));
           const records = fetched.filter((entry) => entry.status === 'fulfilled' && entry.value).map((entry) => entry.value);
-          candidates.push(...records);
-          queryResults.push({
-            query_id: String(query.query_id),
-            retrieval_status: records.length ? 'FOUND' : 'RETRIEVAL_FAILED',
-            candidate_record_ids: records.map((record) => record.canonical_record_id),
-            error_code: records.length ? null : 'GENERAL_WEB_PAGE_FETCH_FAILED'
+          return Object.freeze({
+            candidates: Object.freeze(records),
+            query_result: Object.freeze({
+              query_id: String(query.query_id),
+              retrieval_status: records.length ? 'FOUND' : 'RETRIEVAL_FAILED',
+              candidate_record_ids: Object.freeze(records.map((record) => record.canonical_record_id)),
+              error_code: records.length ? null : 'GENERAL_WEB_PAGE_FETCH_FAILED'
+            })
           });
         } catch (error) {
-          queryResults.push({
-            query_id: String(query.query_id),
-            retrieval_status: 'RETRIEVAL_FAILED',
-            candidate_record_ids: [],
-            error_code: String(error?.code || 'GENERAL_WEB_SEARCH_FAILED')
+          return Object.freeze({
+            candidates: Object.freeze([]),
+            query_result: Object.freeze({
+              query_id: String(query.query_id),
+              retrieval_status: 'RETRIEVAL_FAILED',
+              candidate_record_ids: Object.freeze([]),
+              error_code: String(error?.code || 'GENERAL_WEB_SEARCH_FAILED')
+            })
           });
         }
-      }
+      });
+
+      const candidates = executions.flatMap((item) => item.candidates);
+      const queryResults = executions.map((item) => item.query_result);
       for (const query of querySet.slice(4)) {
-        queryResults.push({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: [], error_code: 'GENERAL_WEB_QUERY_LIMIT' });
+        queryResults.push(Object.freeze({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: Object.freeze([]), error_code: 'GENERAL_WEB_QUERY_LIMIT' }));
       }
       return Object.freeze({
         coverage_state: 'PARTIAL_FOR_QUERY_SCOPE',
         current_watermark: new Date().toISOString(),
         candidates: Object.freeze(candidates),
         query_results: Object.freeze(queryResults),
-        usage: Object.freeze({ cost_minor: 0, paid: false, search_route: 'DUCKDUCKGO_NON_JS' })
+        usage: Object.freeze({ cost_minor: 0, paid: false, search_route: 'DUCKDUCKGO_NON_JS', query_concurrency: Math.min(queryConcurrency, Math.max(1, activeQueries.length)), page_cache_entries: pageCache.size })
       });
     }
   });

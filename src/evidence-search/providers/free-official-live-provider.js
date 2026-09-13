@@ -1,6 +1,7 @@
 'use strict';
 
 const { secureGet } = require('./secure-http-transport');
+const { boundedMap } = require('../utils/bounded-map');
 
 const FORMATS = new Set(['JSON', 'JSONL', 'TEXT']);
 const LIVE_SOURCE_CLASSES = new Set(['FREE_OFFICIAL_LIVE', 'FREE_PROJECTION']);
@@ -190,6 +191,7 @@ function createFreeOfficialLiveProvider(options = {}) {
   const endpoints = (options.endpoints || []).map((endpoint, index) => normalizeEndpoint(endpoint, index, allowedHosts));
   if (!endpoints.length) throw new TypeError('endpoints must not be empty');
   const transport = options.transport || secureGet;
+  const queryConcurrency = Math.max(1, Math.min(8, Number(options.query_concurrency || process.env.ASTERA_SEARCH_QUERY_CONCURRENCY || 4)));
 
   return Object.freeze({
     provider_id: providerId,
@@ -205,10 +207,9 @@ function createFreeOfficialLiveProvider(options = {}) {
     certified: options.certified !== false,
 
     async search(plan, context = {}) {
-      const candidates = [], failures = [], queryResults = [];
       let bytes = 0, requests = 0;
       const queries = Array.isArray(plan.query_set) ? plan.query_set : [];
-      for (const query of queries) {
+      const executions = await boundedMap(queries, queryConcurrency, async (query) => {
         const queryCandidates = [], queryFailures = [];
         let completedEndpoints = 0;
         for (const endpoint of endpoints) {
@@ -254,30 +255,39 @@ function createFreeOfficialLiveProvider(options = {}) {
             }
           }
           if (endpointError) {
-            const failure = { query_id: query.query_id, endpoint_id: endpoint.endpoint_id, code: endpointError.code || 'SOURCE_REQUEST_FAILED', message: endpointError.message };
-            queryFailures.push(failure);
-            failures.push(failure);
+            queryFailures.push(Object.freeze({
+              query_id: query.query_id,
+              endpoint_id: endpoint.endpoint_id,
+              code: endpointError.code || 'SOURCE_REQUEST_FAILED',
+              message: endpointError.message
+            }));
           }
         }
-        candidates.push(...queryCandidates);
         const status = completedEndpoints === 0 ? 'RETRIEVAL_FAILED' : queryCandidates.length ? 'FOUND' : 'NOT_FOUND';
-        queryResults.push(Object.freeze({
-          query_id: String(query.query_id),
-          retrieval_status: status,
-          candidate_record_ids: Object.freeze([...new Set(queryCandidates.map(recordIdentity).filter(Boolean))].sort()),
-          error_code: status === 'RETRIEVAL_FAILED' ? (queryFailures[0]?.code || 'OFFICIAL_SOURCE_ALL_FAILED') : null,
-          endpoint_count: endpoints.length,
-          completed_endpoint_count: completedEndpoints
-        }));
-      }
+        return Object.freeze({
+          candidates: Object.freeze(queryCandidates),
+          failures: Object.freeze(queryFailures),
+          query_result: Object.freeze({
+            query_id: String(query.query_id),
+            retrieval_status: status,
+            candidate_record_ids: Object.freeze([...new Set(queryCandidates.map(recordIdentity).filter(Boolean))].sort()),
+            error_code: status === 'RETRIEVAL_FAILED' ? (queryFailures[0]?.code || 'OFFICIAL_SOURCE_ALL_FAILED') : null,
+            endpoint_count: endpoints.length,
+            completed_endpoint_count: completedEndpoints
+          })
+        });
+      });
 
+      const candidates = executions.flatMap((item) => item.candidates);
+      const failures = executions.flatMap((item) => item.failures);
+      const queryResults = executions.map((item) => item.query_result);
       const completeQueries = queryResults.filter((item) => item.retrieval_status !== 'RETRIEVAL_FAILED').length;
       return Object.freeze({
         coverage_state: completeQueries === queryResults.length ? 'COMPLETE_FOR_QUERY_SCOPE' : completeQueries ? 'PARTIAL_FOR_QUERY_SCOPE' : 'UNKNOWN',
         candidates: Object.freeze(candidates),
         query_results: Object.freeze(queryResults),
         current_watermark: Object.freeze({ provider_id: providerId, completed_at: new Date().toISOString(), coverage_state: completeQueries === queryResults.length ? 'COMPLETE' : completeQueries ? 'PARTIAL' : 'UNKNOWN' }),
-        usage: Object.freeze({ requests, results: candidates.length, response_bytes: bytes, query_count: queries.length }),
+        usage: Object.freeze({ requests, results: candidates.length, response_bytes: bytes, query_count: queries.length, query_concurrency: Math.min(queryConcurrency, Math.max(1, queries.length)) }),
         failures: Object.freeze(failures)
       });
     }
