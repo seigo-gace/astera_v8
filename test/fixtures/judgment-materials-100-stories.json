@@ -1,0 +1,1071 @@
+{
+  "schema_version": "astera.judgment-materials-100.v1",
+  "taxonomy_version": "1.0.0",
+  "count": 100,
+  "stories": [
+    {
+      "id": "G01-01",
+      "expected_domain": "G01",
+      "question": "一般知識・百科・情報資源の文脈で、一般知識・百科・情報資源とMeSHメタデータと図書館カタログを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G01",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G01-02",
+      "expected_domain": "G01",
+      "question": "MeSHメタデータと図書館カタログを題材に、MeSHメタデータと図書館カタログと百科の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G01",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G02-01",
+      "expected_domain": "G02",
+      "question": "哲学・倫理・宗教・思想の文脈で、哲学・倫理・宗教・思想と応用倫理と宗教思想を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G02",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G02-02",
+      "expected_domain": "G02",
+      "question": "応用倫理と宗教思想を題材に、応用倫理と宗教思想と哲学の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G02",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G03-01",
+      "expected_domain": "G03",
+      "question": "心理・認知・行動科学の文脈で、心理・認知・行動科学と認知心理学の記憶研究を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G03",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G03-02",
+      "expected_domain": "G03",
+      "question": "認知心理学の記憶研究を題材に、認知心理学の記憶研究と心理の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G03",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G04-01",
+      "expected_domain": "G04",
+      "question": "歴史・考古・系譜の文脈で、歴史・考古・系譜と中世史の考古資料を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G04",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G04-02",
+      "expected_domain": "G04",
+      "question": "中世史の考古資料を題材に、中世史の考古資料と歴史の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G04",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G05-01",
+      "expected_domain": "G05",
+      "question": "地理・地図・人口・地域の文脈で、地理・地図・人口・地域とGISによる人口地理分析を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G05",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G05-02",
+      "expected_domain": "G05",
+      "question": "GISによる人口地理分析を題材に、GISによる人口地理分析と地理の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G05",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G06-01",
+      "expected_domain": "G06",
+      "question": "社会・人権・福祉・家族の文脈で、社会・人権・福祉・家族と障害者福祉と人権を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G06",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G06-02",
+      "expected_domain": "G06",
+      "question": "障害者福祉と人権を題材に、障害者福祉と人権と社会の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G06",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G07-01",
+      "expected_domain": "G07",
+      "question": "政治・行政・公共政策・国際関係の文脈で、政治・行政・公共政策・国際関係と公共政策と行政評価を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G07",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G07-02",
+      "expected_domain": "G07",
+      "question": "公共政策と行政評価を題材に、公共政策と行政評価と政治の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G07",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G08-01",
+      "expected_domain": "G08",
+      "question": "法律・司法・規制の文脈で、法律・司法・規制と不法行為の損害賠償請求を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G08",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G08-02",
+      "expected_domain": "G08",
+      "question": "不法行為の損害賠償請求を題材に、不法行為の損害賠償請求と法律の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G08",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G09-01",
+      "expected_domain": "G09",
+      "question": "経済・開発・貿易の文脈で、経済・開発・貿易と国際貿易と経済成長を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G09",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G09-02",
+      "expected_domain": "G09",
+      "question": "国際貿易と経済成長を題材に、国際貿易と経済成長と経済の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G09",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G10-01",
+      "expected_domain": "G10",
+      "question": "Business・経営・Marketing・Entrepreneurshipの文脈で、Business・経営・Marketing・Entrepreneurshipと事業戦略とマーケティングを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G10",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G10-02",
+      "expected_domain": "G10",
+      "question": "事業戦略とマーケティングを題材に、事業戦略とマーケティングとbusinessの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G10",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G11-01",
+      "expected_domain": "G11",
+      "question": "金融・会計・税務・保険の文脈で、金融・会計・税務・保険と銀行決済と会計監査を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G11",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G11-02",
+      "expected_domain": "G11",
+      "question": "銀行決済と会計監査を題材に、銀行決済と会計監査と金融の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G11",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G12-01",
+      "expected_domain": "G12",
+      "question": "労働・職業・人材・Skillの文脈で、労働・職業・人材・Skillと職業Skillと労働市場を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G12",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G12-02",
+      "expected_domain": "G12",
+      "question": "職業Skillと労働市場を題材に、職業Skillと労働市場と労働の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G12",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G13-01",
+      "expected_domain": "G13",
+      "question": "教育・学習・資格の文脈で、教育・学習・資格と大学教育のカリキュラムを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G13",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G13-02",
+      "expected_domain": "G13",
+      "question": "大学教育のカリキュラムを題材に、大学教育のカリキュラムとcurriculumの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G13",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G14-01",
+      "expected_domain": "G14",
+      "question": "言語・言語学・辞書・翻訳の文脈で、言語・言語学・辞書・翻訳と日本語の形態論と翻訳を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G14",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G14-02",
+      "expected_domain": "G14",
+      "question": "日本語の形態論と翻訳を題材に、日本語の形態論と翻訳とlanguageの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G14",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G15-01",
+      "expected_domain": "G15",
+      "question": "文学・出版・図書館・Archiveの文脈で、文学・出版・図書館・Archiveと近代小説の文学批評を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G15",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G15-02",
+      "expected_domain": "G15",
+      "question": "近代小説の文学批評を題材に、近代小説の文学批評と文学の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G15",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G16-01",
+      "expected_domain": "G16",
+      "question": "芸術・文化・音楽・Mediaの文脈で、芸術・文化・音楽・Mediaと音楽と映画の文化研究を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G16",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G16-02",
+      "expected_domain": "G16",
+      "question": "音楽と映画の文化研究を題材に、音楽と映画の文化研究と芸術の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G16",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G17-01",
+      "expected_domain": "G17",
+      "question": "Sports・Recreation・観光・Gameの文脈で、Sports・Recreation・観光・Gameとサッカー大会と観光を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G17",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G17-02",
+      "expected_domain": "G17",
+      "question": "サッカー大会と観光を題材に、サッカー大会と観光とsportsの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G17",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G18-01",
+      "expected_domain": "G18",
+      "question": "数学・統計・Logicの文脈で、数学・統計・Logicと確率統計と最適化を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G18",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G18-02",
+      "expected_domain": "G18",
+      "question": "確率統計と最適化を題材に、確率統計と最適化とlogicの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G18",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G19-01",
+      "expected_domain": "G19",
+      "question": "物理・天文・宇宙の文脈で、物理・天文・宇宙と量子物理と宇宙観測を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G19",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G19-02",
+      "expected_domain": "G19",
+      "question": "量子物理と宇宙観測を題材に、量子物理と宇宙観測とphysicsの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G19",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G20-01",
+      "expected_domain": "G20",
+      "question": "化学・物質・材料の文脈で、化学・物質・材料と有機化学と高分子材料を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G20",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G20-02",
+      "expected_domain": "G20",
+      "question": "有機化学と高分子材料を題材に、有機化学と高分子材料とchemistryの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G20",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G21-01",
+      "expected_domain": "G21",
+      "question": "地球・環境・気候・災害の文脈で、地球・環境・気候・災害と気候変動と洪水災害を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G21",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G21-02",
+      "expected_domain": "G21",
+      "question": "気候変動と洪水災害を題材に、気候変動と洪水災害とclimateの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G21",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G22-01",
+      "expected_domain": "G22",
+      "question": "生物・生命科学・生態の文脈で、生物・生命科学・生態と遺伝子と細胞生物学を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G22",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G22-02",
+      "expected_domain": "G22",
+      "question": "遺伝子と細胞生物学を題材に、遺伝子と細胞生物学と生物の観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G22",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G23-01",
+      "expected_domain": "G23",
+      "question": "70歳の父が30分前から胸の強い痛みと冷や汗を訴えています。自宅で様子を見るか救急要請かの判断材料を、Red Flagと既往・薬剤を軸に構造化したい。",
+      "tags": [
+        "genre-pair",
+        "G23",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G23-02",
+      "expected_domain": "G23",
+      "question": "慢性腰痛の母が新しい市販の湿布と既存の降圧薬を併用しようとしています。相互作用リスクと確認すべき事実を比較列挙し、断定診断は出さず材料だけ整理したい。",
+      "tags": [
+        "genre-pair",
+        "G23",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G24-01",
+      "expected_domain": "G24",
+      "question": "農業・林業・水産・食品・獣医の文脈で、農業・林業・水産・食品・獣医と作物栽培と食品安全を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G24",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G24-02",
+      "expected_domain": "G24",
+      "question": "作物栽培と食品安全を題材に、作物栽培と食品安全とagricultureの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G24",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G25-01",
+      "expected_domain": "G25",
+      "question": "工学・製造・産業技術の文脈で、工学・製造・産業技術と機械製造と品質工学を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G25",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G25-02",
+      "expected_domain": "G25",
+      "question": "機械製造と品質工学を題材に、機械製造と品質工学とengineeringの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G25",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G26-01",
+      "expected_domain": "G26",
+      "question": "建築・建設・土木・BIM・都市の文脈で、建築・建設・土木・BIM・都市とBIMによる耐震建築設計を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G26",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G26-02",
+      "expected_domain": "G26",
+      "question": "BIMによる耐震建築設計を題材に、BIMによる耐震建築設計とarchitectureの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G26",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G27-01",
+      "expected_domain": "G27",
+      "question": "Energy・資源・Utilityの文脈で、Energy・資源・Utilityと再生可能エネルギーと送電網を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G27",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G27-02",
+      "expected_domain": "G27",
+      "question": "再生可能エネルギーと送電網を題材に、再生可能エネルギーと送電網とenergyの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G27",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G28-01",
+      "expected_domain": "G28",
+      "question": "交通・物流・Mobilityの文脈で、交通・物流・Mobilityと鉄道物流と公共交通を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G28",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G28-02",
+      "expected_domain": "G28",
+      "question": "鉄道物流と公共交通を題材に、鉄道物流と公共交通とlogisticsの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G28",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G29-01",
+      "expected_domain": "G29",
+      "question": "IT・Computer・System・Application開発の文脈で、IT・Computer・System・Application開発とAPIサーバーのシステム開発を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G29",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G29-02",
+      "expected_domain": "G29",
+      "question": "APIサーバーのシステム開発を題材に、APIサーバーのシステム開発とapiの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G29",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G30-01",
+      "expected_domain": "G30",
+      "question": "AI・Data Science・Robotの文脈で、AI・Data Science・RobotとLLMエージェントの機械学習を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G30",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G30-02",
+      "expected_domain": "G30",
+      "question": "LLMエージェントの機械学習を題材に、LLMエージェントの機械学習とaiの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G30",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G31-01",
+      "expected_domain": "G31",
+      "question": "Cybersecurity・Privacy・暗号の文脈で、Cybersecurity・Privacy・暗号とCVE脆弱性とマルウェア攻撃を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G31",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G31-02",
+      "expected_domain": "G31",
+      "question": "CVE脆弱性とマルウェア攻撃を題材に、CVE脆弱性とマルウェア攻撃とcveの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G31",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G32-01",
+      "expected_domain": "G32",
+      "question": "標準・特許・知的財産・Compliance・計量の文脈で、標準・特許・知的財産・Compliance・計量とISO規格と特許コンプライアンスを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G32",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G32-02",
+      "expected_domain": "G32",
+      "question": "ISO規格と特許コンプライアンスを題材に、ISO規格と特許コンプライアンスとcomplianceの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G32",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G33-01",
+      "expected_domain": "G33",
+      "question": "商品・Commerce・Consumer・製品安全の文脈で、商品・Commerce・Consumer・製品安全と消費者向け製品リコールを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G33",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G33-02",
+      "expected_domain": "G33",
+      "question": "消費者向け製品リコールを題材に、消費者向け製品リコールとcommerceの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G33",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G34-01",
+      "expected_domain": "G34",
+      "question": "店舗内で現金がなくなった事案について、映像・レジログ・立会人の記述をどう保全・照合すべきか判断材料を構造化したい。逮捕や有罪断定はせず、Evidence chain を整理したい。",
+      "tags": [
+        "genre-pair",
+        "G34",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G34-02",
+      "expected_domain": "G34",
+      "question": "デジタル端末から削除された可能性のあるログについて、鑑識上の取得順序と保全条件を比較したい。実行指示ではなく、未確定要素と公式手続の観点を列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G34",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G35-01",
+      "expected_domain": "G35",
+      "question": "海上での偶発接触リスクが報告されています。Mission、Threat、民間保護、撤退条件を比較し、作戦命令ではなく判断材料を構造化したい。",
+      "tags": [
+        "genre-pair",
+        "G35",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G35-02",
+      "expected_domain": "G35",
+      "question": "防衛と国家安全保障の文脈で、国境近傍の監視強化案と外交調整案を、法的制約と補給制約で比較したい。武力行使の実行指示は出さず、未確定とHard blocker候補だけ整理したい。",
+      "tags": [
+        "genre-pair",
+        "G35",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G36-01",
+      "expected_domain": "G36",
+      "question": "通信・Telecom・Internet・Broadcastの文脈で、通信・Telecom・Internet・Broadcastと5G通信とインターネットルーティングを複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G36",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G36-02",
+      "expected_domain": "G36",
+      "question": "5G通信とインターネットルーティングを題材に、5G通信とインターネットルーティングとbroadcastの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G36",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G37-01",
+      "expected_domain": "G37",
+      "question": "科学研究・Innovation・Knowledge Productionの文脈で、科学研究・Innovation・Knowledge Productionと研究論文の査読と引用分析を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G37",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G37-02",
+      "expected_domain": "G37",
+      "question": "研究論文の査読と引用分析を題材に、研究論文の査読と引用分析とinnovationの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G37",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G38-01",
+      "expected_domain": "G38",
+      "question": "家庭・生活・Personal・Hobbyの文脈で、家庭・生活・Personal・Hobbyと家庭料理と園芸の趣味を複数の出典で比較し判断材料を構造化したい。成功条件は出典・制約・未確定を明示することである。",
+      "tags": [
+        "genre-pair",
+        "G38",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "G38-02",
+      "expected_domain": "G38",
+      "question": "家庭料理と園芸の趣味を題材に、家庭料理と園芸の趣味とhobbyの観点で前提・リスク・比較軸を整理したい。断定結論は出さず、材料だけを列挙したい。",
+      "tags": [
+        "genre-pair",
+        "G38",
+        "constraints",
+        "material-only"
+      ]
+    },
+    {
+      "id": "BND-01-hard-blocker",
+      "expected_domain": "G29",
+      "question": "APIを変更する。APIを変更するな。成功条件は互換性を維持することである。",
+      "tags": [
+        "boundary",
+        "hard_blocker",
+        "prohibition"
+      ]
+    },
+    {
+      "id": "BND-02-compare-ab",
+      "expected_domain": "G10",
+      "question": "事業戦略の新規事業A案とB案を、初期投資・回収期間・ブランドリスクで比較する。勝者は決めず判断材料だけ欲しい。",
+      "tags": [
+        "boundary",
+        "compare",
+        "material-only"
+      ]
+    },
+    {
+      "id": "BND-03-preserve-prohibit",
+      "expected_domain": "G29",
+      "question": "READMEは残す。mainブランチは変更するな。API契約を確認し、互換性を維持して改善する。",
+      "tags": [
+        "boundary",
+        "preserve",
+        "prohibition"
+      ]
+    },
+    {
+      "id": "BND-04-condition-branch",
+      "expected_domain": "G29",
+      "question": "API仕様を公式根拠で検証する。検証が成功した場合にのみ段階移行を計画する。Rollback可能を成功条件とする。",
+      "tags": [
+        "boundary",
+        "condition"
+      ]
+    },
+    {
+      "id": "BND-05-cve-today",
+      "expected_domain": "G31",
+      "question": "使用中のLibraryに重大なCVEが見つかった。停止せず今日行う対策と恒久対策を分けて判断材料を比較したい。",
+      "tags": [
+        "boundary",
+        "security",
+        "compare"
+      ]
+    },
+    {
+      "id": "BND-06-credit-accounting",
+      "expected_domain": "G11",
+      "question": "月額課金に加え前払いクレジットを販売する。売上計上、未使用残高、返金、失効の扱いを比較して材料整理したい。",
+      "tags": [
+        "boundary",
+        "finance",
+        "compare"
+      ]
+    },
+    {
+      "id": "BND-07-balcony-garden",
+      "expected_domain": "G38",
+      "question": "初心者がベランダで食べられる野菜を育てたい。手間、費用、失敗しにくさを比較し、最初の一種類を決める材料が欲しい。",
+      "tags": [
+        "boundary",
+        "home",
+        "compare"
+      ]
+    },
+    {
+      "id": "BND-08-medical-emergency",
+      "expected_domain": "G23",
+      "question": "70歳の父が30分前から胸の強い痛みと冷や汗を訴えています。自宅で様子を見るべきか、救急車を呼ぶべきか判断したい。",
+      "tags": [
+        "boundary",
+        "medical",
+        "real-example"
+      ]
+    },
+    {
+      "id": "BND-09-api-migration-en",
+      "expected_domain": "G29",
+      "question": "Compare two API migration options for a Node.js service. Success means compatibility, rollback, and zero downtime.",
+      "language": "en",
+      "tags": [
+        "boundary",
+        "english",
+        "software"
+      ]
+    },
+    {
+      "id": "BND-10-mixed-it-security",
+      "expected_domain": "G31",
+      "question": "本番APIにCVEが報告された。Patch適用とWAFルール追加を、ダウンタイムとロールバック可能性で比較し材料を整理したい。",
+      "tags": [
+        "boundary",
+        "mixed",
+        "G29",
+        "G31"
+      ]
+    },
+    {
+      "id": "BND-11-transport-logistics",
+      "expected_domain": "G28",
+      "question": "鉄道とトラックの長距離物流を、コスト・遅延リスク・CO2で比較する。契約更新の判断材料だけ欲しい。",
+      "tags": [
+        "boundary",
+        "transport"
+      ]
+    },
+    {
+      "id": "BND-12-legal-contract",
+      "expected_domain": "G08",
+      "question": "SaaS契約の解約通知期限と損害賠償条項を、法域が日本である前提で比較整理したい。勝訴断定はせず材料だけ。",
+      "tags": [
+        "boundary",
+        "legal"
+      ]
+    },
+    {
+      "id": "BND-13-policy-pilot",
+      "expected_domain": "G07",
+      "question": "子育て支援給付のPilot案と全面導入案を、予算・公平性・事務負荷で比較したい。政策決定は外部に委ねる。",
+      "tags": [
+        "boundary",
+        "policy"
+      ]
+    },
+    {
+      "id": "BND-14-ai-human-review",
+      "expected_domain": "G30",
+      "question": "LLMを顧客問い合わせの一次回答に使う案と、Human Review必須案を、幻覚リスクとLatencyで比較したい。",
+      "tags": [
+        "boundary",
+        "ai"
+      ]
+    },
+    {
+      "id": "BND-15-research-repro",
+      "expected_domain": "G37",
+      "question": "査読済み論文の再現実験が失敗した。Sample、Code、Limitationを比較し、引用更新の判断材料を構造化したい。",
+      "tags": [
+        "boundary",
+        "research"
+      ]
+    },
+    {
+      "id": "BND-16-environment-flood",
+      "expected_domain": "G21",
+      "question": "河川氾濫警報下で、避難指示と在宅待機の条件を、地域の標高と過去の浸水深で比較整理したい。",
+      "tags": [
+        "boundary",
+        "environment"
+      ]
+    },
+    {
+      "id": "BND-17-education-curriculum",
+      "expected_domain": "G13",
+      "question": "大学のプログラミング基礎科目を、Project型と試験中心型で比較する。学習目標達成の判断材料が欲しい。",
+      "tags": [
+        "boundary",
+        "education"
+      ]
+    },
+    {
+      "id": "BND-18-translation-tone",
+      "expected_domain": "G14",
+      "question": "技術Whitepaperを英日で公開する。直訳と意訳を、用語統一と読者層の観点で比較し材料だけ整理したい。",
+      "tags": [
+        "boundary",
+        "language"
+      ]
+    },
+    {
+      "id": "BND-19-product-recall",
+      "expected_domain": "G33",
+      "question": "特定Lotの電池パックで発熱報告がある。Recall範囲の広げ方と販売停止の条件を、証拠の確度別に比較したい。",
+      "tags": [
+        "boundary",
+        "product"
+      ]
+    },
+    {
+      "id": "BND-20-telecom-5g",
+      "expected_domain": "G36",
+      "question": "5G基地局の新設候補地AとBを、周波数干渉とバックホaulコストで比較する。設置決定はしない。",
+      "tags": [
+        "boundary",
+        "telecom"
+      ]
+    },
+    {
+      "id": "BND-21-energy-grid",
+      "expected_domain": "G27",
+      "question": "太陽光追加と蓄電池追加を、Peak shavingと送電契約の観点で比較したい。投資判断材料だけ欲しい。",
+      "tags": [
+        "boundary",
+        "energy"
+      ]
+    },
+    {
+      "id": "BND-22-construction-seismic",
+      "expected_domain": "G26",
+      "question": "耐震補強案XとYを、工期・コスト・利用者避難条件で比較する。採用案は決めず材料整理。",
+      "tags": [
+        "boundary",
+        "construction"
+      ]
+    },
+    {
+      "id": "BND-23-agriculture-food",
+      "expected_domain": "G24",
+      "question": "有機栽培と慣行栽培のトマトを、収量・食品安全・コストで比較し、出荷判断材料を構造化したい。",
+      "tags": [
+        "boundary",
+        "agriculture"
+      ]
+    },
+    {
+      "id": "BND-24-philosophy-ethics",
+      "expected_domain": "G02",
+      "question": "生成AIの学習データ利用について、応用倫理の観点で功利主義と義務論の論点を比較し、断定せず整理したい。",
+      "tags": [
+        "boundary",
+        "philosophy",
+        "compare"
+      ]
+    }
+  ]
+}

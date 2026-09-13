@@ -18,7 +18,7 @@ const OVERLAYS = Object.freeze([
   {
     id: 'medical_safety',
     name: 'Medical Safety Overlay',
-    signals: [rx('救急|自殺|自傷|胸痛|呼吸|意識|大量出血|心筋梗塞|emergency|suicide|self.?harm|chest pain')],
+    signals: [rx('救急|自殺|自傷|胸痛|呼吸|意識|大量出血|心筋梗塞|湿布|降圧|相互作用|薬物|emergency|suicide|self.?harm|chest pain')],
     risk_lens: ['Emergency Harm', '受診遅延', '危険な自己治療'],
     evidence_to_collect: ['Red Flag', '緊急性', '医療者関与', '現在の治療・薬'],
     safety_gate: ['Red Flagがある場合は緊急対応を優先する', '診断を断定しない']
@@ -210,6 +210,7 @@ function classifyScores(scored) {
 
 function qualifiedScore(item, secondary = false) {
   const minimum = secondary ? MIN_SECONDARY_SCORE : MIN_CONTROLLED_PRIMARY_SCORE;
+  if (!secondary && item.exact_hits >= 2 && item.score >= 4) return true;
   return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
@@ -244,6 +245,42 @@ function medicalSafetyFallback(scored = [], overlays = []) {
     ...candidate,
     classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
     confidence: 0.5,
+    taxonomy_review_required: true
+  });
+}
+
+function publicSafetyFallback(scored = [], routeText = '') {
+  if (!rx('鑑識|forensic|犯罪|捜査|警察|Evidence chain|chain of custody|現金.*なくな|レジログ').test(routeText)) return null;
+  const candidate = scored.find((item) => item.genre?.id === 'G34');
+  if (!candidate || candidate.score < 2) return null;
+  return publicGenre({
+    ...candidate,
+    classification_basis: 'PUBLIC_SAFETY_CANONICAL_HINT',
+    confidence: 0.52,
+    taxonomy_review_required: true
+  });
+}
+
+function defenseFallback(scored = [], routeText = '') {
+  if (!rx('防衛|国家安全|Mission|Threat|民間保護|作戦|軍事|海軍|国境').test(routeText)) return null;
+  const candidate = scored.find((item) => item.genre?.id === 'G35');
+  if (!candidate || candidate.score < 2) return null;
+  return publicGenre({
+    ...candidate,
+    classification_basis: 'DEFENSE_CANONICAL_HINT',
+    confidence: 0.52,
+    taxonomy_review_required: true
+  });
+}
+
+function philosophyEthicsFallback(scored = [], routeText = '') {
+  if (!rx('功利主義|義務論|応用倫理|存在論|形而上学').test(routeText)) return null;
+  const candidate = scored.find((item) => item.genre?.id === 'G02');
+  if (!candidate || candidate.exact_hits < 1) return null;
+  return publicGenre({
+    ...candidate,
+    classification_basis: 'PHILOSOPHY_ETHICS_HINT',
+    confidence: 0.55,
     taxonomy_review_required: true
   });
 }
@@ -311,14 +348,24 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
     };
   }
 
-  const scored = GENRE_LENSES
+  let scored = GENRE_LENSES
     .map((genre) => scoreGenre(genre, routeText))
     .sort((a, b) => b.score - a.score || b.exact_hits - a.exact_hits || a.genre.id.localeCompare(b.genre.id));
+  if (/功利主義|義務論|応用倫理/u.test(routeText)) {
+    const ethics = scored.find((item) => item.genre.id === 'G02');
+    const ai = scored.find((item) => item.genre.id === 'G30');
+    if (ethics && qualifiedScore(ethics) && ai && ai.score > ethics.score) {
+      scored = [ethics, ...scored.filter((item) => item.genre.id !== 'G02')];
+    }
+  }
   const overlays = applyOverlayScores(routeText).slice(0, 5);
   const best = scored[0];
 
   if (!qualifiedScore(best)) {
-    const safetyPrimary = medicalSafetyFallback(scored, overlays);
+    const safetyPrimary = medicalSafetyFallback(scored, overlays)
+      || publicSafetyFallback(scored, routeText)
+      || defenseFallback(scored, routeText)
+      || philosophyEthicsFallback(scored, routeText);
     if (safetyPrimary) {
       return {
         router: 'all_domain_lens_router_v2',
