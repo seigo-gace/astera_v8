@@ -18,14 +18,18 @@ COPY config ./config
 COPY test ./test
 COPY .env.example ./
 
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+RUN apt-get update && apt-get install -y --no-install-recommends git python3 python3-pip \
+    && pip3 install --no-cache-dir --break-system-packages \
+      "mcp>=1.28.1,<2" \
+      "pydantic>=2.13.4,<3" \
+      "PyYAML>=6.0.3,<7" \
+      "regex>=2026.7.19,<2027" \
+      "sudachipy==0.6.11" \
+      "sudachidict-core==20260428" \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip \
-    && pip3 install --no-cache-dir --break-system-packages sudachipy sudachidict_core \
-    && rm -rf /var/lib/apt/lists/*
 ENV SUDACHI_BIN=sudachipy
-ENV SUDACHI_DICT_VERSION=sudachidict_core-latest
+ENV SUDACHI_DICT_VERSION=sudachidict-core-20260428
 
 RUN chmod +x scripts/*.sh \
     && mkdir -p /data /data/evidence-jobs /cache/outbox \
