@@ -24,11 +24,55 @@ function queryText(plan) {
   return (plan.query_set || []).map((item) => item.text).join(' ');
 }
 
+function resolveIetfDocumentName(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  const rfcMatch = raw.match(/\bRFC[\s-]*(\d+)\b/i);
+  if (rfcMatch) return `rfc${rfcMatch[1]}`;
+  if (/^rfc\d+$/i.test(raw)) return raw.toLowerCase();
+  const draftMatch = raw.match(/\b(draft-[a-z0-9]+(?:-[a-z0-9]+)*)\b/i);
+  if (draftMatch) return draftMatch[1].toLowerCase();
+  if (/^draft-[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(raw)) return raw.toLowerCase();
+  return null;
+}
+
+function isIetfProviderEndpoint(endpoint) {
+  const template = String(endpoint?.url_template || '');
+  return template.includes('datatracker.ietf.org') || template.includes('rfc-editor.org');
+}
+
+function shouldAttemptIetfEndpoint(endpoint, queryTextValue) {
+  const route = String(endpoint?.ietf_route || '').toUpperCase();
+  if (!route) return true;
+  const documentName = resolveIetfDocumentName(queryTextValue);
+  if (route === 'DOCUMENT_JSON' || route === 'DOCUMENT_API_EXACT') return Boolean(documentName);
+  if (route === 'RFC_EDITOR_JSON') return Boolean(documentName && /^rfc\d+$/.test(documentName));
+  if (route === 'DOCUMENT_API_SEARCH') return !documentName;
+  return true;
+}
+
+function finalizeIetfRecord(record, endpoint, documentName) {
+  if (!isIetfProviderEndpoint(endpoint)) return record;
+  const name = String(documentName || record.canonical_record_id || '').trim().toLowerCase();
+  if (!name) return record;
+  if (!record.canonical_record_id) {
+    record.canonical_record_id = name;
+  } else if (/^RFC\d+$/i.test(String(record.canonical_record_id))) {
+    record.canonical_record_id = name;
+  }
+  if (!record.canonical_url) {
+    record.canonical_url = `https://datatracker.ietf.org/doc/${name}/`;
+  }
+  return record;
+}
+
 function normalizeEndpointQuery(query, endpoint) {
   const text = String(query?.text || '');
-  if (String(endpoint?.url_template || '').includes('datatracker.ietf.org/api/v1/doc/document/')) {
-    const rfc = text.match(/\bRFC[\s-]*(\d+)\b/i);
-    if (rfc) return Object.freeze({ ...query, text: `rfc${rfc[1]}` });
+  if (!isIetfProviderEndpoint(endpoint)) return query;
+  const documentName = resolveIetfDocumentName(text);
+  const route = String(endpoint?.ietf_route || '').toUpperCase();
+  if (documentName && (route === 'DOCUMENT_JSON' || route === 'DOCUMENT_API_EXACT' || route === 'RFC_EDITOR_JSON')) {
+    return Object.freeze({ ...query, text: documentName });
   }
   return query;
 }
@@ -154,6 +198,7 @@ function normalizeEndpoint(raw, index, allowedHosts) {
   return Object.freeze({
     endpoint_id: endpointId,
     url_template: urlTemplate,
+    ietf_route: raw.ietf_route ? String(raw.ietf_route).toUpperCase() : '',
     query_template: raw.query_template ? String(raw.query_template) : '',
     request_headers: requestHeaders,
     response_format: responseFormat,
@@ -214,7 +259,9 @@ function createFreeOfficialLiveProvider(options = {}) {
         let completedEndpoints = 0;
         for (const endpoint of endpoints) {
           const endpointQuery = normalizeEndpointQuery(query, endpoint);
+          if (!shouldAttemptIetfEndpoint(endpoint, endpointQuery.text)) continue;
           const endpointQueryPlan = Object.freeze({ ...plan, query_set: Object.freeze([endpointQuery]) });
+          const documentName = resolveIetfDocumentName(endpointQuery.text);
           let endpointError = null;
           for (let attempt = 1; attempt <= endpoint.maximum_attempts; attempt += 1) {
             try {
@@ -240,10 +287,10 @@ function createFreeOfficialLiveProvider(options = {}) {
                 throw error;
               }
               completedEndpoints += 1;
-              const records = parseResponse(response, endpoint, provider).map((record) => ({
+              const records = parseResponse(response, endpoint, provider).map((record) => finalizeIetfRecord({
                 ...record,
                 retrieval_trace: { ...(record.retrieval_trace || {}), query_id: query.query_id, query_role: query.role || query.class || null }
-              }));
+              }, endpoint, documentName));
               queryCandidates.push(...records);
               endpointError = null;
               break;
@@ -299,7 +346,10 @@ module.exports = {
   compileQueryTemplate,
   createFreeOfficialLiveProvider,
   escapeSparqlLiteral,
+  finalizeIetfRecord,
   getPath,
   mapRecord,
-  parseResponse
+  parseResponse,
+  resolveIetfDocumentName,
+  shouldAttemptIetfEndpoint
 };
