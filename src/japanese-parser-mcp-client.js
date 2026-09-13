@@ -5,17 +5,8 @@ const { spawn } = require('node:child_process');
 const MCP_PROTOCOL_VERSION = '2025-11-25';
 const SUPPORTED_PROTOCOL_VERSIONS = new Set(['2025-11-25', '2025-06-18', '2025-03-26']);
 const SERVER_NAME = 'deterministic-japanese-parser';
-const DEFAULT_PYTHON = '/home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/python';
 const DEFAULT_DJPMCP = '/home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp';
-const PYTHON_API_BRIDGE = `
-import json
-import sys
-from deterministic_japanese_parser_mcp import AnalyzeRequest, ParserEngine
-payload = json.load(sys.stdin)
-request = AnalyzeRequest.model_validate(payload)
-response = ParserEngine().analyze(request)
-sys.stdout.write(json.dumps(response.model_dump(mode="json"), ensure_ascii=False))
-`;
+const DISABLED_MODES = new Set(['python-api', 'stdio-docker', 'http', 'streamable-http']);
 
 function parserError(code, message, details = {}) {
   const error = new Error(message);
@@ -66,7 +57,16 @@ function parseToolResult(result, expectedOriginalText) {
 }
 
 function resolveParserMode(options = {}) {
-  return String(options.mode || process.env.ASTERA_JAPANESE_PARSER_MODE || 'python-api').trim().toLowerCase();
+  return String(options.mode || process.env.ASTERA_JAPANESE_PARSER_MODE || 'stdio').trim().toLowerCase();
+}
+
+function assertSupportedMode(mode) {
+  if (DISABLED_MODES.has(mode)) {
+    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is disabled; use stdio with djpmcp.`);
+  }
+  if (mode !== 'stdio') {
+    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is unsupported; use stdio.`);
+  }
 }
 
 function defaultDeadlineMs(options = {}) {
@@ -75,72 +75,38 @@ function defaultDeadlineMs(options = {}) {
 
 function isJapaneseParserConfigured(options = {}) {
   const mode = resolveParserMode(options);
-  if (mode === 'python-api') {
-    return Boolean(String(options.python || process.env.ASTERA_JAPANESE_PARSER_PYTHON || DEFAULT_PYTHON).trim());
-  }
-  if (mode === 'stdio-docker') {
-    return Boolean(String(options.dockerImage || process.env.ASTERA_JAPANESE_PARSER_DOCKER_IMAGE || '').trim());
-  }
-  return Boolean(String(options.command || process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP).trim());
+  if (DISABLED_MODES.has(mode)) return false;
+  if (mode !== 'stdio') return false;
+  const command = String(options.command || process.env.ASTERA_JAPANESE_PARSER_COMMAND || '').trim();
+  if (!command) return false;
+  return true;
 }
 
-function buildTransportTrace({ transport, protocolVersion, serverVersion, structured, startedNs }) {
+function buildTransportTrace({ protocolVersion, serverVersion, structured, startedNs }) {
   const elapsedMs = Number(process.hrtime.bigint() - startedNs) / 1e6;
   return {
     parser: SERVER_NAME,
-    transport,
+    transport: 'stdio',
     protocol_version: protocolVersion || null,
     server_version: serverVersion || structured?.versions?.parser || null,
     semantic_hash: structured?.meaning_graph?.semantic_hash || null,
     overall_status: structured?.overall_status || null,
     execution_allowed: structured?.execution_allowed == null ? null : structured.execution_allowed === true,
     latency_ms: Number(elapsedMs.toFixed(3)),
-    tool: transport === 'python-api' ? 'ParserEngine.analyze' : 'analyze_japanese'
+    tool: 'analyze_japanese'
   };
-}
-
-function runPythonApiOnce(pythonPath, payload, timeoutMs, spawnImpl = spawn) {
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    const child = spawnImpl(pythonPath, ['-c', PYTHON_API_BRIDGE], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true
-    });
-    const timer = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch {}
-      reject(parserError('PARSER_MCP_TIMEOUT', `Japanese Parser Python API exceeded ${timeoutMs}ms.`));
-    }, timeoutMs);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-    child.stderr.on('data', (chunk) => { stderr += String(chunk).slice(-4096); });
-    child.once('error', (error) => {
-      clearTimeout(timer);
-      reject(parserError('PARSER_PROCESS_START_FAILED', `Failed to start Japanese Parser Python API: ${error.message}`));
-    });
-    child.once('exit', (code, signal) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(parserError('PARSER_PROCESS_EXITED', `Japanese Parser Python API exited code=${code} signal=${signal || 'none'} stderr=${stderr.trim()}`.trim()));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout.trim()));
-      } catch {
-        reject(parserError('PARSER_SCHEMA_INVALID', 'Japanese Parser Python API returned non-JSON stdout.'));
-      }
-    });
-    child.stdin.write(JSON.stringify(payload));
-    child.stdin.end();
-  });
 }
 
 async function runStdioAnalyzeOnce({ command, args, cwd, env, requestArguments, timeoutMs, spawnImpl = spawn }) {
   return new Promise((resolve, reject) => {
     let child;
+    const childEnv = { ...env };
+    const hostLdLibraryPath = String(env.ASTERA_JAPANESE_PARSER_LD_LIBRARY_PATH || process.env.ASTERA_JAPANESE_PARSER_LD_LIBRARY_PATH || '').trim();
+    if (hostLdLibraryPath) {
+      childEnv.LD_LIBRARY_PATH = hostLdLibraryPath;
+    }
     try {
-      child = spawnImpl(command, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+      child = spawnImpl(command, args, { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     } catch (error) {
       reject(parserError('PARSER_PROCESS_START_FAILED', `Failed to start Japanese Parser MCP stdio: ${error.message}`));
       return;
@@ -268,12 +234,11 @@ async function runStdioAnalyzeOnce({ command, args, cwd, env, requestArguments, 
 class JapaneseParserMCPClient {
   constructor(options = {}) {
     this.mode = resolveParserMode(options);
-    this.python = String(options.python || process.env.ASTERA_JAPANESE_PARSER_PYTHON || DEFAULT_PYTHON);
+    assertSupportedMode(this.mode);
     this.command = String(options.command || process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP);
     this.args = options.args || [];
     this.cwd = options.cwd || process.env.ASTERA_JAPANESE_PARSER_CWD || undefined;
     this.env = { ...process.env, ...(options.env || {}) };
-    this.dockerImage = String(options.dockerImage || process.env.ASTERA_JAPANESE_PARSER_DOCKER_IMAGE || '').trim();
     this.deadlineMs = defaultDeadlineMs(options);
     this.timeoutMs = Number(options.timeoutMs || process.env.ASTERA_JAPANESE_PARSER_TIMEOUT_MS || this.deadlineMs + 5000);
     this.spawnImpl = options.spawnImpl || spawn;
@@ -304,36 +269,9 @@ class JapaneseParserMCPClient {
     };
     const callTimeout = Math.max(this.timeoutMs, requestArguments.deadline_ms + 5000);
 
-    if (this.mode === 'python-api') {
-      const structured = validateParserResult(
-        await runPythonApiOnce(this.python, requestArguments, callTimeout, this.spawnImpl),
-        original
-      );
-      return {
-        ...structured,
-        astera_mcp_transport: buildTransportTrace({
-          transport: 'python-api',
-          protocolVersion: null,
-          serverVersion: structured.versions?.parser || null,
-          structured,
-          startedNs: started
-        })
-      };
-    }
-
-    let command = this.command;
-    let args = [...this.args];
-    let transport = 'stdio-oneshot';
-    if (this.mode === 'stdio-docker') {
-      if (!this.dockerImage) throw parserError('PARSER_DOCKER_IMAGE_NOT_CONFIGURED', 'ASTERA_JAPANESE_PARSER_DOCKER_IMAGE is required for stdio-docker mode.');
-      command = 'docker';
-      args = ['run', '-i', '--rm', this.dockerImage, ...args];
-      transport = 'stdio-docker-oneshot';
-    }
-
     const { result, negotiatedProtocolVersion, serverVersion } = await runStdioAnalyzeOnce({
-      command,
-      args,
+      command: this.command,
+      args: [...this.args],
       cwd: this.cwd,
       env: this.env,
       requestArguments,
@@ -344,7 +282,6 @@ class JapaneseParserMCPClient {
     return {
       ...structured,
       astera_mcp_transport: buildTransportTrace({
-        transport,
         protocolVersion: negotiatedProtocolVersion,
         serverVersion,
         structured,
@@ -366,5 +303,6 @@ module.exports = {
   validateParserResult,
   isJapaneseParserConfigured,
   resolveParserMode,
-  defaultDeadlineMs
+  defaultDeadlineMs,
+  DEFAULT_DJPMCP
 };

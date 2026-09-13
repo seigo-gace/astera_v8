@@ -10,9 +10,10 @@ services:
       ASTERA_PORT: 7375
       ASTERA_DB: /data/astera.db
       ASTERA_LOG_CACHE_DIR: /cache/outbox
-      ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-stdio-docker}
-      ASTERA_JAPANESE_PARSER_DOCKER_IMAGE: ${ASTERA_JAPANESE_PARSER_DOCKER_IMAGE:-deterministic-japanese-parser-mcp:latest}
+      ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-stdio}
+      ASTERA_JAPANESE_PARSER_COMMAND: /home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp
       ASTERA_JAPANESE_PARSER_DEADLINE_MS: ${ASTERA_JAPANESE_PARSER_DEADLINE_MS:-5000}
+      DJPMCP_LOG_PATH: /tmp/djpmcp-parser.jsonl
       ASTERA_EVIDENCE_URL: http://127.0.0.1:7376
       ASTERA_INTERNAL_SERVICE_SECRET_FILE: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
       ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
@@ -23,6 +24,10 @@ services:
     volumes:
       - astera-data:/data
       - /home/admin1/logs/astera-v8:/cache
+      - type: bind
+        source: /home/admin1/projects/Deterministic-Japanese-Parser-MCP
+        target: /home/admin1/projects/Deterministic-Japanese-Parser-MCP
+        read_only: true
       - type: bind
         source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
         target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}

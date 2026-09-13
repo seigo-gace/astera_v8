@@ -1,38 +1,29 @@
 'use strict';
 
-const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const {
   JapaneseParserMCPClient,
   isJapaneseParserConfigured,
-  resolveParserMode,
-  defaultDeadlineMs
+  DEFAULT_DJPMCP
 } = require('../src/japanese-parser-mcp-client');
 
-const mode = resolveParserMode();
-const options = {
-  mode,
-  python: process.env.ASTERA_JAPANESE_PARSER_PYTHON || '/usr/bin/python3',
-  dockerImage: process.env.ASTERA_JAPANESE_PARSER_DOCKER_IMAGE || 'deterministic-japanese-parser-mcp:latest',
-  deadlineMs: defaultDeadlineMs(),
-  timeoutMs: Number(process.env.ASTERA_JAPANESE_PARSER_TIMEOUT_MS || 15000)
-};
+const command = process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP;
 
-function dockerCliAvailable() {
-  if (mode !== 'stdio-docker') return true;
-  return spawnSync('docker', ['version'], { encoding: 'utf8' }).status === 0;
-}
-
-test(`live ${mode} parser returns AnalyzeResponse for door command`, { skip: !isJapaneseParserConfigured(options) || !dockerCliAvailable() }, async () => {
-  const client = new JapaneseParserMCPClient(options);
+test('live stdio djpmcp returns AnalyzeResponse for door command', {
+  skip: !isJapaneseParserConfigured({ mode: 'stdio', command }) || !fs.existsSync(command)
+}, async () => {
+  const client = new JapaneseParserMCPClient({ mode: 'stdio', command });
   const result = await client.analyze({
-    originalText: 'ドアを開けてください',
+    originalText: 'ドアを開けてください。',
     executionMode: 'analysis',
-    deadlineMs: options.deadlineMs
+    deadlineMs: 5000
   });
+  assert.equal(result.astera_mcp_transport.transport, 'stdio');
+  assert.equal(result.astera_mcp_transport.tool, 'analyze_japanese');
+  assert.ok(result.astera_mcp_transport.protocol_version);
   assert.ok(['COMPLETE', 'PARTIAL', 'FAILED'].includes(result.overall_status));
   assert.ok(Array.isArray(result.meaning_graph?.propositions));
   assert.ok(result.meaning_graph.propositions.length >= 1);
-  assert.ok(String(result.astera_mcp_transport.transport).includes(mode === 'python-api' ? 'python-api' : 'stdio'));
 });
