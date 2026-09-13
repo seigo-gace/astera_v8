@@ -13,13 +13,30 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout Astera
         uses: actions/checkout@v4
+
+      - name: Checkout Deterministic Japanese Parser MCP
+        uses: actions/checkout@v4
+        with:
+          repository: seigo-gace/Deterministic-Japanese-Parser-MCP
+          ref: 6f09ec2b048e1250436d4a46ccaff095d43cca15
+          path: vendor/djpmcp
+
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Japanese Parser MCP
+        run: python -m pip install ./vendor/djpmcp
+
       - name: Run repository tests
         run: npm test
