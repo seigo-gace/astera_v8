@@ -5,6 +5,19 @@ const inputUnderstanding = require('./input-understanding');
 const { enrichRequest } = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
+const {
+  needsJapaneseParser,
+  acquireSharedJapaneseParserClient,
+  releaseSharedJapaneseParserClient
+} = require('./japanese-parser-mcp-client');
+const {
+  projectJapaneseParserResponse,
+  buildJapaneseParserFailureRequest
+} = require('./japanese-parser-mcp-adapter');
+const {
+  runWithJapaneseParserRequest,
+  getJapaneseParserRequest
+} = require('./japanese-parser-request-context');
 
 function clarificationQuestions(request = {}, context = '') {
   const packet = request.analysis_task_packet || {};
@@ -51,7 +64,23 @@ function blockedMaterial({ request, hardBlockers, lang }) {
 }
 
 class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
+  constructor(options = {}) {
+    super(options);
+    this.japaneseParserClient = options.japaneseParserClient || null;
+    this._japaneseParserInjected = Boolean(options.japaneseParserClient);
+    this._japaneseParserSharedAcquired = false;
+  }
+
+  _getJapaneseParserClient() {
+    if (this.japaneseParserClient) return this.japaneseParserClient;
+    this.japaneseParserClient = acquireSharedJapaneseParserClient();
+    this._japaneseParserSharedAcquired = true;
+    return this.japaneseParserClient;
+  }
+
   prepareRequest(input = {}) {
+    const authoritative = getJapaneseParserRequest();
+    if (authoritative) return authoritative;
     const understood = inputUnderstanding.analyzeRequest(input);
     return enrichRequest(understood, input);
   }
@@ -125,6 +154,40 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
+    const authoritative = getJapaneseParserRequest();
+    const metadata = inputUnderstanding.detectLanguageMetadata(`${question}\n${context}`, input);
+    const primaryLanguage = String(metadata.language || '').split('-')[0];
+    const japanese = primaryLanguage === 'ja' || needsJapaneseParser(`${question}\n${context}`);
+
+    if (japanese && question && !authoritative) {
+      const projectionMetadata = {
+        ...metadata,
+        context_present: Boolean(context),
+        context_length: context.length
+      };
+      let prepared;
+      try {
+        const parsed = await this._getJapaneseParserClient().analyze({
+          originalText: question,
+          conversationContext: context ? [context] : [],
+          executionMode: 'analysis',
+          analysisDepth: 'auto',
+          deadlineMs: Number(process.env.ASTERA_JAPANESE_PARSER_TIMEOUT_MS || 50)
+        });
+        prepared = projectJapaneseParserResponse(parsed, projectionMetadata);
+      } catch (error) {
+        prepared = buildJapaneseParserFailureRequest(question, error, projectionMetadata);
+        this.logger?.write?.({
+          tenantId: tenant.id,
+          type: 'japanese_parser_mcp_failure',
+          severity: 'error',
+          text: 'Authoritative Japanese Parser MCP failed; Astera stopped without builtin fallback.',
+          payload: { code: error?.code || 'JAPANESE_PARSER_FAILED', message: error?.message || String(error) }
+        });
+      }
+      return runWithJapaneseParserRequest(prepared, () => this.process(input, tenant, executionContext));
+    }
+
     const request = this.prepareRequest({
       question,
       context,
@@ -231,6 +294,18 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     }
     if (out?.runtime) out.runtime.human_reader_mode = request.human_reader.mode;
     return out;
+  }
+
+  async destroy() {
+    try {
+      await super.destroy();
+    } finally {
+      if (this._japaneseParserSharedAcquired && this.japaneseParserClient) {
+        this._japaneseParserSharedAcquired = false;
+        releaseSharedJapaneseParserClient(this.japaneseParserClient);
+        this.japaneseParserClient = null;
+      }
+    }
   }
 }
 
