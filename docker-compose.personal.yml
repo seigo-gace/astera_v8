@@ -11,10 +11,17 @@ services:
       ASTERA_LOG_CACHE_DIR: /cache/outbox
       ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
       ASTERA_TGS_PROJECT_ID: P003
+      ASTERA_JAPANESE_PARSER_CWD: /opt/djpmcp
+      PYTHONPATH: /opt/djpmcp/src
+      DJPMCP_LOG_PATH: /cache/djpmcp-parser.jsonl
     network_mode: host
     volumes:
       - astera-data-personal:/data
       - /home/admin1/logs/astera-v8-personal:/cache
+      - type: bind
+        source: ${ASTERA_JAPANESE_PARSER_SOURCE:-../Deterministic-Japanese-Parser-MCP}
+        target: /opt/djpmcp
+        read_only: true
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7374/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
