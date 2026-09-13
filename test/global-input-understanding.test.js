@@ -27,9 +27,12 @@ for (const sample of samples) {
   });
 }
 
-test('Japanese uses builtin adapter instead of global fallback', () => {
+test('Japanese delegates semantics to external MCP adapter metadata', () => {
   const result = analyzeRequest({ question: 'APIの現状を検証して。', language: 'ja' });
-  assert.equal(result.instruction_understanding.adapter, 'builtin-ja');
+  assert.equal(result.instruction_understanding.adapter, 'deterministic-japanese-parser-mcp');
+  assert.equal(result.instruction_understanding.semantic_resolution, 'mcp-authoritative');
+  assert.equal(result.analysis_task_packet.tasks.length, 0);
+  assert.ok(result.analysis_task_packet.unresolved.includes('japanese_semantics_pending_mcp'));
   assert.ok(['Hira', 'Kana', 'Hani'].includes(result.script));
   assert.ok(result.scripts.includes('Hira'));
   assert.ok(result.scripts.includes('Hani'));

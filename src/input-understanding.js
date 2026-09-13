@@ -169,10 +169,73 @@ function buildGenericRequest({ question = '', context = '', language, locale, ou
   };
 }
 
+function buildJapaneseMcpDelegatedRequest(input = {}, metadata) {
+  const original = String(input.question || '');
+  const normalized = original.normalize('NFKC').replace(/\r\n?/g, '\n').trim();
+  const contextText = String(input.context || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
+  return {
+    schema_version: 'astera.request-model.v2',
+    language: metadata.language,
+    locale: metadata.locale,
+    script: metadata.script,
+    scripts: metadata.scripts,
+    output_language: metadata.requested_output_language,
+    normalized_question: normalized,
+    original_question: original,
+    target: '',
+    target_confidence: 'low',
+    action: 'analyze',
+    objective: 'Japanese semantics are resolved exclusively by Deterministic Japanese Parser MCP.',
+    success_criteria: [],
+    constraints: [],
+    prohibitions: [],
+    preserve: [],
+    replace: [],
+    verification: [],
+    query_terms: [],
+    context_present: Boolean(contextText),
+    context_length: contextText.length,
+    instruction_map: { clause_count: 0, task_count: 0, correction_count: 0, prohibition_count: 0, preserve_count: 0, verification_count: 0 },
+    instruction_understanding: {
+      mode: 'MCP_DELEGATED',
+      adapter: 'deterministic-japanese-parser-mcp',
+      semantic_resolution: 'mcp-authoritative',
+      parser: 'deterministic-japanese-parser',
+      execution_allowed: true,
+      blocked_reasons: [],
+      language: metadata.language,
+      locale: metadata.locale,
+      script: metadata.script,
+      scripts: metadata.scripts,
+      detection_basis: metadata.detection_basis
+    },
+    analysis_task_packet: {
+      schema_version: 'astera.analysis-task-packet.v1',
+      intent: 'analyze',
+      tasks: [],
+      dependencies: [],
+      execution_waves: [],
+      constraints: [],
+      prohibitions: [],
+      preserve: [],
+      replace: [],
+      verification: [],
+      completion_criteria: [],
+      unresolved: ['japanese_semantics_pending_mcp'],
+      conflicts: [],
+      hard_blockers: [],
+      source_spans: []
+    }
+  };
+}
+
 function analyzeRequest(input = {}) {
   const metadata = detectLanguageMetadata(`${input.question || ''}\n${input.context || ''}`, input);
   const primary = metadata.language.split('-')[0];
-  if (primary === 'ja' || primary === 'en') {
+  if (primary === 'ja') {
+    return buildJapaneseMcpDelegatedRequest(input, metadata);
+  }
+  if (primary === 'en') {
     const request = analyzer.analyzeRequest({ question: input.question, context: input.context });
     return {
       ...request,
@@ -184,7 +247,7 @@ function analyzeRequest(input = {}) {
       instruction_understanding: {
         ...(request.instruction_understanding || {}),
         mode: 'GLOBAL_LANGUAGE_ADAPTER',
-        adapter: primary === 'ja' ? 'builtin-ja' : 'builtin-en',
+        adapter: 'builtin-en',
         semantic_resolution: 'adapter-resolved',
         language: metadata.language,
         locale: metadata.locale,

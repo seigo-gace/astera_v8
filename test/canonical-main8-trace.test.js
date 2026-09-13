@@ -7,8 +7,18 @@ const { POLICY_TRADE_OFF_NOTES, QUERY_ROLES, buildCanonicalTaskPlan } = require(
 const { routeDomainTemplates } = require('../src/domain-template-router');
 const { projectCanonicalTask } = require('../src/canonical-task-projection');
 
+const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+
 const tenant = { id: 'trace-test', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
+
+function createEngine(options = {}) {
+  return new CanonicalAsteraEngine({
+    logger: silentLogger,
+    japaneseParserClient: createMockJapaneseParserClient(),
+    ...options
+  });
+}
 const MAIN8_ORDER = Object.freeze([
   '01_purpose',
   '02_premise',
@@ -158,7 +168,7 @@ function canonicalBindingForCandidate(projected, candidateId) {
 }
 
 test('hard instruction contradiction stops before Task/Claim/Evidence and never fabricates Main8', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
+  const engine = createEngine({ poolSize: 3 });
   try {
     const out = await engine.process({
       question: 'APIを変更する。APIを変更するな。成功条件は互換性を維持することである。',
@@ -178,7 +188,7 @@ test('hard instruction contradiction stops before Task/Claim/Evidence and never 
 });
 
 test('all Main8 Decision Basis entries expose instruction understanding on an executable request', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
+  const engine = createEngine({ poolSize: 3 });
   try {
     const out = await engine.process({
       question: 'APIを検証する。成功条件は互換性を維持することである。',
@@ -209,7 +219,7 @@ test('all Main8 Decision Basis entries expose instruction understanding on an ex
 });
 
 test('unresolved deictic short request returns clarification instead of guessed Main8', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = createEngine({ poolSize: 2 });
   try {
     const out = await engine.process({ question: 'どう？', language: 'ja' }, tenant);
     assert.equal(out.result.type, 'clarification_needed');
@@ -223,7 +233,7 @@ test('unresolved deictic short request returns clarification instead of guessed 
 });
 
 test('Main8 05/06 preserve multi and comparison material for golden compare input', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
+  const engine = createEngine({ poolSize: 3 });
   try {
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',
@@ -318,7 +328,7 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
 });
 
 test('Main8 05/06 HTTP lossless text preserves EN compare material', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 3, logger: silentLogger });
+  const engine = createEngine({ poolSize: 3 });
   try {
     const out = await engine.process({
       question: 'Compare A and B on cost and safety.',
@@ -355,14 +365,14 @@ test('Main8 05/06 HTTP lossless text preserves EN compare material', async () =>
 });
 
 test('Main8 06 HTTP text preserves evidence source identity from internal compare refs', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = createEngine({ poolSize: 2 });
   try {
-    const compareRequest = engine.prepareRequest({
+    const compareRequest = await engine.prepareRequest({
       question: 'A案とB案を費用と安全性で比較する。',
       language: 'ja'
     });
     const compareTask = compareRequest.analysis_task_packet.tasks[0];
-    const claimRequest = engine.prepareRequest({
+    const claimRequest = await engine.prepareRequest({
       question: 'A案の費用は公式根拠で検証する。',
       language: 'ja'
     });

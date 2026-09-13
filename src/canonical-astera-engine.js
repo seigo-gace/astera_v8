@@ -5,6 +5,8 @@ const inputUnderstanding = require('./input-understanding');
 const { enrichRequest } = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
+const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
+const { prepareJapaneseRequestViaMcp } = require('./canonical-v4-engine');
 
 function clarificationQuestions(request = {}, context = '') {
   const packet = request.analysis_task_packet || {};
@@ -51,9 +53,35 @@ function blockedMaterial({ request, hardBlockers, lang }) {
 }
 
 class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
-  prepareRequest(input = {}) {
+  constructor(options = {}) {
+    super(options);
+    if (options.japaneseParserClient === undefined) {
+      this.japaneseParserClient = isJapaneseParserConfigured(options.japaneseParserOptions || {})
+        ? new JapaneseParserMCPClient(options.japaneseParserOptions || {})
+        : null;
+    } else {
+      this.japaneseParserClient = options.japaneseParserClient;
+    }
+  }
+
+  async prepareRequest(input = {}) {
+    const question = String(input.question || '');
+    if (needsJapaneseParser(question)) {
+      const prepared = await prepareJapaneseRequestViaMcp(input, {
+        client: this.japaneseParserClient,
+        logger: this.logger
+      });
+      return enrichRequest(prepared, input);
+    }
     const understood = inputUnderstanding.analyzeRequest(input);
     return enrichRequest(understood, input);
+  }
+
+  async destroy() {
+    if (this.japaneseParserClient && typeof this.japaneseParserClient.destroy === 'function') {
+      await this.japaneseParserClient.destroy();
+    }
+    await super.destroy();
   }
 
   frame(args) {
@@ -125,7 +153,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
-    const request = this.prepareRequest({
+    const request = await this.prepareRequest({
       question,
       context,
       language: input.language,

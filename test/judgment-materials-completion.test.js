@@ -15,6 +15,8 @@ const { evaluateClaimConfirmation, UndeterminedReason } = require('../src/v4-can
 const { CandidateRelation, EvidenceSource } = require('../src/v4-canonical/evidence-binding');
 const { factLane, riskLane, multiLane, inquiryLane, compareLane, buildFiveLanes } = require('../src/v4-canonical/lanes');
 
+const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+
 const silentLogger = { write() {} };
 const tenant = { id: 'judgment-materials-completion', is_global: true, plan: 'admin' };
 
@@ -32,7 +34,11 @@ const MAIN8_ORDER = Object.freeze([
 const FIVE_LANES = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare']);
 
 async function withEngine(fn) {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = new CanonicalAsteraEngine({
+    poolSize: 2,
+    logger: silentLogger,
+    japaneseParserClient: createMockJapaneseParserClient()
+  });
   try {
     await fn(engine);
   } finally {
@@ -171,8 +177,8 @@ function forgedEvidencePacket() {
   };
 }
 
-function planForClaim(engine, claimText, domainPrimary = null) {
-  const prepared = engine.prepareRequest({ question: claimText, language: 'ja' });
+async function planForClaim(engine, claimText, domainPrimary = null) {
+  const prepared = await engine.prepareRequest({ question: claimText, language: 'ja' });
   const task = prepared.analysis_task_packet.tasks[0];
   const domain = domainPrimary ? { primary: { id: domainPrimary } } : routeDomainTemplates({ question: claimText });
   const plan = buildCanonicalTaskPlan(task, domain);
@@ -249,7 +255,7 @@ test('Case C: evidence conflict preserves both sides and does not confirm or ado
   const engine = new ConflictEvidenceEngine({ poolSize: 2, logger: silentLogger });
   try {
     const claimText = 'Node.js 22は本番で対応している。';
-    const { task, plan, domain } = planForClaim(engine, claimText, 'G29');
+    const { task, plan, domain } = await planForClaim(engine, claimText, 'G29');
     const claim = plan.claims[0];
     const supportClaim = claim.raw_text;
     const contradictClaim = 'Node.js 22は本番で対応していない。';
@@ -478,7 +484,7 @@ test('Case H: Main8 sections remain fixed at 01-08', async () => {
 
 test('Case I: public boundary ignores forged preparedRequest task graph injection', async () => {
   await withEngine(async (engine) => {
-    const prepared = engine.prepareRequest({ question: 'APIを改善する。' });
+    const prepared = await engine.prepareRequest({ question: 'APIを改善する。' });
     prepared.analysis_task_packet.tasks = [{
       id: 'ATTACK-T1',
       action: 'destroy',

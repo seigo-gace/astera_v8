@@ -16,6 +16,8 @@ const {
 const { searchRequestFor } = require('../src/canonical-evidence-resolver');
 const { planQueriesForClaim } = require('../src/v4-canonical/query-planner');
 
+const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+
 const silentLogger={write(){}};
 const tenant={id:'test',is_global:true,plan:'admin'};
 
@@ -58,7 +60,7 @@ function understand(question,context=''){
   return enrichRequest(inputUnderstanding.analyzeRequest({question,context}),{question,context});
 }
 
-async function withEngine(fn){const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger});try{await fn(engine);}finally{await engine.destroy();}}
+async function withEngine(fn){const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger,japaneseParserClient:createMockJapaneseParserClient()});try{await fn(engine);}finally{await engine.destroy();}}
 
 test('Task and Claim are distinct stages and every external Claim has a COUNTER search role',()=>{
   const task=taskForClaim();
@@ -212,10 +214,10 @@ test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/rec
     setFixtureEvidence(packet){this._fixtureEvidence=packet;}
     async resolveEvidenceForTask(){return this._fixtureEvidence;}
   }
-  const engine=new EvidenceBackedEngine({poolSize:2,logger:silentLogger});
+  const engine=new EvidenceBackedEngine({poolSize:2,logger:silentLogger,japaneseParserClient:createMockJapaneseParserClient()});
   try{
     const claim='Node.js 22は本番対応している。';
-    const prepared=engine.prepareRequest({question:claim});
+    const prepared=await engine.prepareRequest({question:claim});
     const task=prepared.analysis_task_packet.tasks[0];
     const plan=buildCanonicalTaskPlan(task,{primary:{id:'G01'}});
     const evidence=validEvidence(claim,plan.search_plan.queries);

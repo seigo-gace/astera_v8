@@ -279,7 +279,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
 
   async process(input={},tenant={id:'unknown'},executionContext={}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
-    const request=this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
+    const request=await this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
     if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     const packet=request.analysis_task_packet;

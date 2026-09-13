@@ -5,11 +5,17 @@ const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { QUERY_ROLES } = require('../src/canonical-claim-runtime');
 
+const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+
 const silentLogger = { write() {} };
 const tenant = { id: 'public-boundary', is_global: true, plan: 'admin' };
 
 async function withEngine(fn) {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = new CanonicalAsteraEngine({
+    poolSize: 2,
+    logger: silentLogger,
+    japaneseParserClient: createMockJapaneseParserClient()
+  });
   try {
     await fn(engine);
   } finally {
@@ -69,7 +75,7 @@ function forgedEvidencePacket() {
 
 test('public process ignores attacker preparedRequest task graph', async () => {
   await withEngine(async (engine) => {
-    const prepared = engine.prepareRequest({ question: 'APIを改善する。' });
+    const prepared = await engine.prepareRequest({ question: 'APIを改善する。' });
     prepared.analysis_task_packet.tasks = [{
       id: 'ATTACK-T1',
       action: 'destroy',

@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { destroyGlobalCanonicalTaskAdmission } = require('../src/runtime/canonical-task-admission');
 
+const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+
 const tenant = { id: 'decision-materials-load', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,8 +35,8 @@ function rejectedEvidence(taskId) {
   };
 }
 
-function buildPrepared(engine, count, prefix = 'L') {
-  const seed = engine.prepareRequest({ question: 'FixtureAPIは有効である。', language: 'ja' });
+async function buildPrepared(engine, count, prefix = 'L') {
+  const seed = await engine.prepareRequest({ question: 'FixtureAPIは有効である。', language: 'ja' });
   const template = seed.analysis_task_packet.tasks[0];
   const tasks = Array.from({ length: count }, (_, index) => {
     const id = `${prefix}${String(index + 1).padStart(3, '0')}`;
@@ -107,7 +109,7 @@ class DecisionMaterialsLoadEngine extends CanonicalAsteraEngine {
     else this._fixturePrepared = prepared;
   }
 
-  prepareRequest(input = {}) {
+  async prepareRequest(input = {}) {
     const keyed = this._fixtureByQuestion.get(String(input.question || ''));
     if (keyed) return keyed;
     if (this._fixturePrepared) return this._fixturePrepared;
@@ -130,10 +132,10 @@ class DecisionMaterialsLoadEngine extends CanonicalAsteraEngine {
 for (const count of [8, 9, 20, 50, 100]) {
   test(`decision-materials completes ${count} Task load with hard Task concurrency <= 8 and default CPU worker pool 4`, async () => {
     await destroyGlobalCanonicalTaskAdmission();
-    const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger });
+    const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger, japaneseParserClient: createMockJapaneseParserClient() });
     try {
       const question = `${count} Task load fixture`;
-      const preparedRequest = buildPrepared(engine, count, `N${count}-`);
+      const preparedRequest = await buildPrepared(engine, count, `N${count}-`);
       engine.setFixturePrepared(preparedRequest, question);
       const out = await engine.process({ question }, tenant);
       assert.equal(out.result.type, 'cognitive_map');
@@ -153,12 +155,12 @@ for (const count of [8, 9, 20, 50, 100]) {
 
 test('simultaneous decision-material requests share the same server-wide maximum of 8 Task bodies', async () => {
   await destroyGlobalCanonicalTaskAdmission();
-  const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger, evidenceDelayMs: 8 });
+  const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger, evidenceDelayMs: 8, japaneseParserClient: createMockJapaneseParserClient() });
   try {
     const requests = [
-      buildPrepared(engine, 20, 'A-'),
-      buildPrepared(engine, 20, 'B-'),
-      buildPrepared(engine, 20, 'C-')
+      await buildPrepared(engine, 20, 'A-'),
+      await buildPrepared(engine, 20, 'B-'),
+      await buildPrepared(engine, 20, 'C-')
     ];
     const outputs = await Promise.all(requests.map((preparedRequest, index) => {
       const question = `simultaneous request ${index + 1}`;

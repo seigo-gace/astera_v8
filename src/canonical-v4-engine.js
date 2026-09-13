@@ -4,7 +4,7 @@ const WorkerPool = require('./worker-pool');
 const Logger = require('./logger');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest, normalizeEvidencePacket, deriveEvidenceNeed } = require('./judgment-materials-analyzer');
-const { JapaneseParserMCPClient, needsJapaneseParser, isExternalActionHint } = require('./japanese-parser-mcp-client');
+const { JapaneseParserMCPClient, needsJapaneseParser, isExternalActionHint, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
 const {
   unique,
   enrichTasks,
@@ -139,20 +139,120 @@ function requestFromParser(fastRequest, parserResult, originalText) {
   };
 }
 
-function degradedRequest(fastRequest, error) {
+function failClosedRequest(fastRequest, error) {
   const code = String(error?.code || 'PARSER_UNAVAILABLE');
-  const packet = fastRequest.analysis_task_packet;
+  const message = String(error?.message || code);
   return {
     ...fastRequest,
     analysis_task_packet: {
-      ...packet,
-      tasks: (packet.tasks || []).map((task) => ({ ...task, unresolved: unique([...(task.unresolved || []), 'japanese_parser_degraded']), hard_blockers: unique([...(task.hard_blockers || []), 'JAPANESE_PARSER_DEGRADED']) })),
-      unresolved: unique([...(packet.unresolved || []), `JAPANESE_PARSER_DEGRADED:${code}`]),
-      conflicts: [...(packet.conflicts || []), { type: 'JAPANESE_PARSER_DEGRADED', note: String(error?.message || code) }],
-      hard_blockers: unique([...(packet.hard_blockers || []), 'JAPANESE_PARSER_DEGRADED'])
+      schema_version: 'astera.analysis-task-packet.v2-canonical-v4',
+      intent: 'analyze',
+      tasks: [],
+      dependencies: [],
+      execution_waves: [],
+      constraints: [],
+      prohibitions: [],
+      preserve: [],
+      replace: [],
+      verification: [],
+      completion_criteria: [],
+      unresolved: unique([`JAPANESE_PARSER_FAIL_CLOSED:${code}`]),
+      conflicts: [{ type: 'JAPANESE_PARSER_FAIL_CLOSED', note: message }],
+      hard_blockers: unique(['JAPANESE_PARSER_FAIL_CLOSED', code]),
+      source_spans: []
     },
-    instruction_understanding: { mode: 'DEGRADED', parser: 'Deterministic-Japanese-Parser-MCP', execution_allowed: false, blocked_reasons: ['JAPANESE_PARSER_DEGRADED', code], error_code: code }
+    instruction_understanding: {
+      mode: 'FAIL_CLOSED',
+      parser: 'deterministic-japanese-parser',
+      execution_allowed: false,
+      blocked_reasons: unique(['JAPANESE_PARSER_FAIL_CLOSED', code]),
+      error_code: code,
+      transport: error?.transport || null
+    }
   };
+}
+
+function japaneseFastSkeleton(input = {}) {
+  const question = String(input.question || '');
+  const context = String(input.context || '');
+  return {
+    schema_version: 'astera.request-model.v3-canonical-v4',
+    normalized_question: question,
+    original_question: question,
+    target: '',
+    action: 'analyze',
+    objective: '',
+    success_criteria: [],
+    constraints: [],
+    prohibitions: [],
+    preserve: [],
+    replace: [],
+    verification: [],
+    query_terms: [],
+    context_present: Boolean(context.trim()),
+    context_length: context.trim().length,
+    analysis_task_packet: {
+      schema_version: 'astera.analysis-task-packet.v2-canonical-v4',
+      intent: 'analyze',
+      tasks: [],
+      dependencies: [],
+      execution_waves: [],
+      constraints: [],
+      prohibitions: [],
+      preserve: [],
+      replace: [],
+      verification: [],
+      completion_criteria: [],
+      unresolved: ['japanese_parser_pending'],
+      conflicts: [],
+      hard_blockers: [],
+      source_spans: []
+    },
+    instruction_understanding: {
+      mode: 'FAST_PATH',
+      parser: 'deterministic-japanese-parser',
+      execution_allowed: true,
+      blocked_reasons: []
+    }
+  };
+}
+
+async function prepareJapaneseRequestViaMcp(input = {}, { client, logger = null } = {}) {
+  const question = String(input.question || '');
+  const context = String(input.context || '');
+  const fast = japaneseFastSkeleton({ question, context });
+  if (!needsJapaneseParser(question)) return fast;
+  if (!client || typeof client.analyze !== 'function') {
+    return failClosedRequest(fast, { code: 'PARSER_CLIENT_NOT_CONFIGURED', message: 'Japanese Parser MCP client is not configured.' });
+  }
+  try {
+    const parserResult = await client.analyze({
+      originalText: question,
+      conversationContext: context ? [context] : [],
+      executionMode: isExternalActionHint(question, fast) ? 'external_action' : 'analysis',
+      analysisDepth: 'auto',
+      deadlineMs: Number(input.deadline_ms || input.deadlineMs || 5000)
+    });
+    if (parserResult.overall_status === 'FAILED') {
+      return failClosedRequest(fast, {
+        code: 'PARSER_OVERALL_FAILED',
+        message: 'Japanese Parser MCP returned overall_status FAILED.',
+        transport: parserResult.astera_mcp_transport || null
+      });
+    }
+    return requestFromParser(fast, parserResult, question);
+  } catch (error) {
+    if (logger && typeof logger.write === 'function') {
+      logger.write({
+        tenantId: 'system',
+        type: 'japanese_parser_fail_closed',
+        severity: 'warn',
+        text: 'Deterministic Japanese Parser MCP unavailable or invalid; Japanese semantic analysis stopped.',
+        payload: { error_code: error?.code || 'PARSER_ERROR' }
+      });
+    }
+    return failClosedRequest(fast, error);
+  }
 }
 
 function taskRouteText(task) {
@@ -203,24 +303,25 @@ class CanonicalV4Engine {
   constructor({ poolSize = 4, logger = new Logger(), japaneseParserClient = undefined, japaneseParserOptions = {}, evidenceSearch = null } = {}) {
     this.pool = new WorkerPool(poolSize);
     this.logger = logger;
-    this.japaneseParserClient = japaneseParserClient === undefined ? new JapaneseParserMCPClient(japaneseParserOptions) : japaneseParserClient;
+    if (japaneseParserClient === undefined) {
+      this.japaneseParserClient = isJapaneseParserConfigured(japaneseParserOptions)
+        ? new JapaneseParserMCPClient(japaneseParserOptions)
+        : null;
+    } else {
+      this.japaneseParserClient = japaneseParserClient;
+    }
     this.evidenceSearch = evidenceSearch;
   }
 
   async prepareRequest(input = {}) {
     const question = String(input.question || '');
     const context = String(input.context || '');
-    const fast = analyzeRequest({ question, context });
-    fast.instruction_understanding = { mode: 'FAST_PATH', parser: null, execution_allowed: true, blocked_reasons: [] };
-    if (!needsJapaneseParser(question, fast)) return fast;
-    if (!this.japaneseParserClient || typeof this.japaneseParserClient.analyze !== 'function') return degradedRequest(fast, { code: 'PARSER_CLIENT_NOT_CONFIGURED', message: 'Japanese Parser MCP client is not configured.' });
-    try {
-      const parserResult = await this.japaneseParserClient.analyze({ originalText: question, conversationContext: context ? [context] : [], executionMode: isExternalActionHint(question, fast) ? 'external_action' : 'analysis', runDeepAnalysis: true, deadlineMs: 50 });
-      return requestFromParser(fast, parserResult, question);
-    } catch (error) {
-      this.logger.write({ tenantId: 'system', type: 'japanese_parser_degraded', severity: 'warn', text: 'Deterministic Japanese Parser MCP unavailable or invalid; fail-closed degraded analysis used.', payload: { error_code: error?.code || 'PARSER_ERROR' } });
-      return degradedRequest(fast, error);
+    if (!needsJapaneseParser(question)) {
+      const fast = analyzeRequest({ question, context });
+      fast.instruction_understanding = { mode: 'FAST_PATH', parser: null, execution_allowed: true, blocked_reasons: [] };
+      return fast;
     }
+    return prepareJapaneseRequestViaMcp({ question, context }, { client: this.japaneseParserClient, logger: this.logger });
   }
 
   async process(input = {}, tenant = { id: 'unknown' }) {
@@ -234,9 +335,9 @@ class CanonicalV4Engine {
       const questions = [lang === 'ja' ? '確認が必要です。対象・目的・完了条件を具体化してください。' : 'Clarification is required. Specify the target, objective, and completion condition.'];
       return { result: { type: 'clarification_needed', request_model: baseRequest, questions }, material: this.clarify(questions, lang), prompt: '', runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: baseRequest.instruction_understanding?.mode || 'UNKNOWN' } };
     }
-    if (baseRequest.instruction_understanding?.mode === 'DEGRADED' && Array.from(question).length <= 4) {
+    if (baseRequest.instruction_understanding?.mode === 'FAIL_CLOSED' && Array.from(question).length <= 4) {
       const questions = [lang === 'ja' ? '確認が必要です。判断対象・目的・完了条件を具体化してください。' : 'Clarification is required. Specify the target, objective, and completion condition.'];
-      return { result: { type: 'clarification_needed', request_model: baseRequest, questions }, material: this.clarify(questions, lang), prompt: '', runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: 'DEGRADED' } };
+      return { result: { type: 'clarification_needed', request_model: baseRequest, questions }, material: this.clarify(questions, lang), prompt: '', runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: 'FAIL_CLOSED' } };
     }
 
     const enrichedTasks = enrichTasks(baseRequest.analysis_task_packet?.tasks || [], { question, context });
@@ -409,3 +510,7 @@ class CanonicalV4Engine {
 }
 
 module.exports = CanonicalV4Engine;
+module.exports.requestFromParser = requestFromParser;
+module.exports.failClosedRequest = failClosedRequest;
+module.exports.japaneseFastSkeleton = japaneseFastSkeleton;
+module.exports.prepareJapaneseRequestViaMcp = prepareJapaneseRequestViaMcp;
