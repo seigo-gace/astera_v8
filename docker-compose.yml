@@ -14,12 +14,17 @@ services:
       ASTERA_INTERNAL_SERVICE_SECRET_FILE: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
       ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
       ASTERA_TGS_PROJECT_ID: P002
-    # TGserver binds only to host loopback. Host networking keeps both private
-    # and lets Astera deliver structured logs directly to it.
+      ASTERA_JAPANESE_PARSER_CWD: /opt/djpmcp
+      PYTHONPATH: /opt/djpmcp/src
+      DJPMCP_LOG_PATH: /cache/djpmcp-parser.jsonl
     network_mode: host
     volumes:
       - astera-data:/data
       - /home/admin1/logs/astera-v8:/cache
+      - type: bind
+        source: ${ASTERA_JAPANESE_PARSER_SOURCE:-../Deterministic-Japanese-Parser-MCP}
+        target: /opt/djpmcp
+        read_only: true
       - type: bind
         source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
         target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
