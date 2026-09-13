@@ -27,12 +27,13 @@ for (const sample of samples) {
   });
 }
 
-test('Japanese uses builtin adapter instead of global fallback', () => {
+test('Japanese has no builtin fallback and fails closed when MCP context is absent', () => {
   const result = analyzeRequest({ question: 'APIの現状を検証して。', language: 'ja' });
-  assert.equal(result.instruction_understanding.adapter, 'builtin-ja');
-  assert.ok(['Hira', 'Kana', 'Hani'].includes(result.script));
-  assert.ok(result.scripts.includes('Hira'));
-  assert.ok(result.scripts.includes('Hani'));
+  assert.equal(result.instruction_understanding.adapter, 'deterministic-japanese-parser-mcp');
+  assert.equal(result.instruction_understanding.semantic_resolution, 'failed');
+  assert.equal(result.instruction_understanding.execution_allowed, false);
+  assert.ok(result.analysis_task_packet.hard_blockers.some((item) => item.includes('JAPANESE_PARSER_MCP_REQUIRED')));
+  assert.notEqual(result.instruction_understanding.adapter, 'builtin-ja');
 });
 
 test('high-confidence English can be inferred without forcing all Latin text to English', () => {
