@@ -2,11 +2,10 @@
 
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const inputUnderstanding=require('../src/input-understanding');
-const {enrichRequest}=require('../src/deterministic-task-decomposer');
+const { understandViaMockMcp } = require('./helpers/understand-via-mock-mcp');
 
-function understand(question,context=''){
-  return enrichRequest(inputUnderstanding.analyzeRequest({question,context}),{question,context});
+function understand(question, context = '') {
+  return understandViaMockMcp(question, context);
 }
 
 test('ASCII quotes and Markdown blockquotes are not executable Task sources',()=>{

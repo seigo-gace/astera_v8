@@ -3,8 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const inputUnderstanding = require('../src/input-understanding');
-const { enrichRequest } = require('../src/deterministic-task-decomposer');
+const { understandViaMockMcp } = require('./helpers/understand-via-mock-mcp');
 const {
   QUERY_ROLES,
   buildCanonicalTaskPlan,
@@ -56,8 +55,8 @@ function validEvidence(claim,queries=[]){
 function taskForClaim(text='Node.js 22は本番対応している。'){
   return{id:'T01',source_span:{start:0,end:text.length,text},raw_text:text,clause_type:'statement',actionable:true,action:'verify',target:'Node.js 22',objective:'対応状況を検証する',deliverables:[],premises:[],constraints:[],prohibitions:[],preserve:[],replace:[],conditions:[],exceptions:[],deadlines:[],priority:'normal',order:1,depends_on:[],parallelizable:true,success_criteria:[],verification:[],completion_criteria:[],unresolved:[],evidence_need:{required:true,reasons:['test'],queries:[]},external_action:false,hard_blockers:[]};
 }
-function understand(question,context=''){
-  return enrichRequest(inputUnderstanding.analyzeRequest({question,context}),{question,context});
+function understand(question, context = '') {
+  return understandViaMockMcp(question, context);
 }
 
 async function withEngine(fn){const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger,japaneseParserClient:createMockJapaneseParserClient()});try{await fn(engine);}finally{await engine.destroy();}}

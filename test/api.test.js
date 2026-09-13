@@ -8,6 +8,8 @@ const os = require('node:os');
 const path = require('node:path');
 const KaguraServer = require('../src/server');
 const AsteraEngine = require('../src/astera-engine');
+const KaguraEngine = require('../src/kagura-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const SQLiteStore = require('../src/store/sqlite-store');
 const StripeClient = require('../src/billing/stripe-client');
 const SubscriptionSync = require('../src/billing/subscription-sync');
@@ -41,7 +43,10 @@ const ALLOWED_PROCESS_FIELDS = Object.freeze([
 
 class CapturingProcessEngine extends AsteraEngine {
   constructor(options = {}) {
-    super(options);
+    super({
+      japaneseParserClient: defaultMockJapaneseParserClient(),
+      ...options
+    });
     this.capturedInputs = [];
   }
 
@@ -73,7 +78,12 @@ async function withServer(fn, options = {}) {
   const store = new SQLiteStore(path.join(dir, 'test.db'));
   const logger = options.logger || new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
   const stripe = options.stripe || new StripeClient();
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, store, stripe, subSync: new SubscriptionSync(store, stripe), logger, limiter: options.limiter, engine: options.engine });
+  const defaultEngine = new KaguraEngine({
+    poolSize: 1,
+    logger,
+    japaneseParserClient: defaultMockJapaneseParserClient()
+  });
+  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, store, stripe, subSync: new SubscriptionSync(store, stripe), logger, limiter: options.limiter, engine: options.engine || defaultEngine });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;
@@ -174,7 +184,7 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
       method: 'POST',
       path: '/process',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。', llm: { chain: ['null'] } })
+      body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。', language: 'ja', llm: { chain: ['null'] } })
     });
     assert.equal(process.status, 200);
     assert.match(process.headers['content-type'], /text\/plain/);
@@ -213,7 +223,7 @@ test('HTTP flow: short process request returns clarification text', async () => 
       method: 'POST',
       path: '/process',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: JSON.stringify({ question: 'どう？', llm: { chain: ['null'] } })
+      body: JSON.stringify({ question: 'どう？', language: 'ja', llm: { chain: ['null'] } })
     });
     assert.equal(process.status, 200);
     assert.match(process.headers['content-type'], /text\/plain/);

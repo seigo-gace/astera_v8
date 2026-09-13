@@ -252,7 +252,7 @@ test('Case B: insufficient evidence keeps UNDETERMINED without speculative compl
 });
 
 test('Case C: evidence conflict preserves both sides and does not confirm or adopt either', async () => {
-  const engine = new ConflictEvidenceEngine({ poolSize: 2, logger: silentLogger });
+  const engine = new ConflictEvidenceEngine({ poolSize: 2, logger: silentLogger, japaneseParserClient: createMockJapaneseParserClient() });
   try {
     const claimText = 'Node.js 22は本番で対応している。';
     const { task, plan, domain } = await planForClaim(engine, claimText, 'G29');

@@ -2,11 +2,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const inputUnderstanding = require('../src/input-understanding');
-const { enrichRequest, buildGraph } = require('../src/deterministic-task-decomposer');
+const { buildGraph } = require('../src/deterministic-task-decomposer');
+const { understandViaMockMcp } = require('./helpers/understand-via-mock-mcp');
 
 function understand(question, context = '') {
-  return enrichRequest(inputUnderstanding.analyzeRequest({ question, context }), { question, context });
+  return understandViaMockMcp(question, context);
 }
 
 test('canonical Task decomposition applies context constraints only to the deterministically matched Task when target scope is explicit', () => {

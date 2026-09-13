@@ -208,7 +208,8 @@ test('all Main8 Decision Basis entries expose instruction understanding on an ex
     for (const key of out.result.judgment.order) {
       const basis = out.result.judgment[key].decision_basis;
       assert.ok(basis.instruction_understanding);
-      assert.equal(basis.instruction_understanding.mode, 'GLOBAL_LANGUAGE_ADAPTER');
+      assert.equal(basis.instruction_understanding.parser, 'Deterministic-Japanese-Parser-MCP');
+      assert.equal(basis.instruction_understanding.mode, 'DEEP_PATH');
       assert.ok(Array.isArray(basis.hard_blockers));
       assert.equal(basis.hard_blockers.length, 0);
       assert.ok(Array.isArray(basis.blocking_conditions));
@@ -373,7 +374,7 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     });
     const compareTask = compareRequest.analysis_task_packet.tasks[0];
     const claimRequest = await engine.prepareRequest({
-      question: 'A案の費用は公式根拠で検証する。',
+      question: 'A案の費用は100万円である。',
       language: 'ja'
     });
     const claimTask = claimRequest.analysis_task_packet.tasks[0];

@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 
 const silentLogger={write(){}};
 
@@ -16,9 +17,9 @@ const CASES=[
 
 for(const item of CASES){
   test(`Canonical Main8へTask別Lensが反映される: ${item.name}`,async()=>{
-    const engine=new CanonicalAsteraEngine({poolSize:3,logger:silentLogger});
+    const engine=new CanonicalAsteraEngine({poolSize:3,logger:silentLogger,japaneseParserClient:defaultMockJapaneseParserClient()});
     try{
-      const out=await engine.process({question:item.question,moodAnswers:{deepThink:true,accuracy:true}},{id:'lens-integration',is_global:true,plan:'admin'});
+      const out=await engine.process({question:item.question,language:'ja',moodAnswers:{deepThink:true,accuracy:true}},{id:'lens-integration',is_global:true,plan:'admin'});
       assert.equal(out.result.type,'cognitive_map');
       assert.equal(out.result.non_ai,true);
       assert.equal(out.runtime.ai_used,false);

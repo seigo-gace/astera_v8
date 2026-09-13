@@ -9,10 +9,11 @@ const {
   DEFAULT_DJPMCP
 } = require('../src/japanese-parser-mcp-client');
 
+const liveEnabled = process.env.ASTERA_JAPANESE_PARSER_LIVE === '1';
 const command = process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP;
 
 test('live stdio djpmcp returns AnalyzeResponse for door command', {
-  skip: !isJapaneseParserConfigured({ mode: 'stdio', command }) || !fs.existsSync(command)
+  skip: !liveEnabled || !isJapaneseParserConfigured({ mode: 'stdio', command }) || !fs.existsSync(command)
 }, async () => {
   const client = new JapaneseParserMCPClient({ mode: 'stdio', command });
   const result = await client.analyze({

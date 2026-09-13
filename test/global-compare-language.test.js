@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const {
   extractComparisonCandidates,
   extractComparisonDimensionsFromText
@@ -12,7 +13,7 @@ const silentLogger = { write() {} };
 const tenant = { id: 'global-compare', is_global: true, plan: 'admin' };
 
 async function withEngine(fn) {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger, japaneseParserClient: defaultMockJapaneseParserClient() });
   try {
     await fn(engine);
   } finally {

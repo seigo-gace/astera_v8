@@ -23,7 +23,20 @@ test('Japanese builtin analyzer path is disabled in favor of MCP authority',()=>
 
 test('Japanese prepareRequest uses MCP projection instead of builtin decomposition',async()=>{await withEngine(async(engine)=>{const prepared=await engine.prepareRequest({question:'APIを改善する。'});assert.equal(prepared.instruction_understanding.parser,'Deterministic-Japanese-Parser-MCP');assert.ok(prepared.analysis_task_packet.tasks.length>=1);assert.equal(prepared.instruction_understanding.mode,'DEEP_PATH');});});
 
-test('internal test verification does not force external Evidence Search while external verification does',()=>{const request=analyzeRequest({question:'Verify the current API specification with official evidence. Then confirm behavior with tests.'}),external=request.analysis_task_packet.tasks[0],internal=request.analysis_task_packet.tasks[1];assert.equal(request.analysis_task_packet.tasks.length,2);assert.equal(deriveEvidenceNeed(external,routeDomainTemplates({question:external.source_span.text})).required,true);assert.equal(deriveEvidenceNeed(internal,routeDomainTemplates({question:internal.source_span.text})).required,false);});
+test('internal test verification does not force external Evidence Search while external verification does', () => {
+  const request = analyzeRequest({ question: 'Verify the current API specification with official evidence.' });
+  const external = request.analysis_task_packet.tasks[0];
+  const internal = {
+    ...external,
+    id: 'T02',
+    raw_text: 'Confirm behavior with internal tests only.',
+    source_span: { start: 0, end: 42, text: 'Confirm behavior with internal tests only.' },
+    verification: ['internal tests'],
+    evidence_need: { required: false, reasons: [], queries: [] }
+  };
+  assert.equal(deriveEvidenceNeed(external, routeDomainTemplates({ question: external.source_span.text })).required, true);
+  assert.equal(deriveEvidenceNeed(internal, routeDomainTemplates({ question: internal.source_span.text })).required, false);
+});
 
 test('Evidence FINAL_VALID compact packet still requires 80/95, reinforcement, corroboration, hash and non-AI contracts',()=>{const valid=normalizeEvidencePacket(validEvidence('API compatibility is preserved'));assert.equal(valid.state,'VALID');assert.equal(valid.initial_quality_score_bp,8500);assert.equal(valid.quality_score_bp,9700);assert.equal(valid.reinforcement_attempt_count,1);assert.equal(valid.new_corroboration_count,1);assert.equal(valid.distinct_authority_count,2);assert.equal(valid.distinct_source_family_count,2);const broken=validEvidence('API compatibility is preserved');broken.quality.reinforcement_attempt_count=0;broken.provider_execution.reinforcement=[];const rejected=normalizeEvidencePacket(broken);assert.equal(rejected.state,'REJECTED');assert.ok(rejected.eligibility_reasons.includes('REINFORCEMENT_COUNT_INVALID'));assert.ok(rejected.eligibility_reasons.includes('REINFORCEMENT_EXECUTION_MISSING'));});
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const { unique } = require('./judgment-materials-analyzer');
+const { unique, tokenOverlap } = require('./judgment-materials-analyzer');
 
 const norm = (value) => String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
 const genericTarget = (value) => !value || /^(?:入力対象|input target|対象|target|これ|それ|あれ|これら|それら)$/iu.test(norm(value));
@@ -777,7 +777,22 @@ function enrichRequest(request, input = {}) {
     ...branches.unresolved,
     ...tasks.flatMap((task) => (task.unresolved || []).map((item) => `${task.id}:${item}`))
   ]);
-  const hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers]);
+  const prohibitionReplaceBlockers = [];
+  const modifyTasks = tasks.filter((task) => (task.replace || []).length || task.action === 'improve');
+  const prohibitionTasks = tasks.filter((task) => task.clause_type === 'prohibition');
+  for (const left of modifyTasks) {
+    for (const right of prohibitionTasks) {
+      if (left.id === right.id) continue;
+      const leftText = [left.raw_text, left.target, ...(left.replace || [])].join(' ');
+      const rightText = [right.raw_text, right.target, ...(right.prohibitions || [])].join(' ');
+      if (tokenOverlap(leftText, rightText) >= 0.25) {
+        prohibitionReplaceBlockers.push('PROHIBITION_REPLACE_OVERLAP');
+        break;
+      }
+    }
+    if (prohibitionReplaceBlockers.length) break;
+  }
+  const hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers, ...prohibitionReplaceBlockers]);
   const enrichedPacket = {
     ...packet,
     schema_version: 'astera.analysis-task-packet.v2',

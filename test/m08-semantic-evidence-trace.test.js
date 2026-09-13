@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const { QUERY_ROLES, buildCanonicalTaskPlan } = require('../src/canonical-claim-runtime');
 const { routeDomainTemplates } = require('../src/domain-template-router');
 const { projectCanonicalTask } = require('../src/canonical-task-projection');
@@ -325,7 +326,7 @@ test('M08 query_role role conflict abstains regardless of initial execution orde
 });
 
 test('M10 no_normative_decision_generated invariant on Public engine.process compare path', async () => {
-  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger });
+  const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger, japaneseParserClient: defaultMockJapaneseParserClient() });
   try {
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',

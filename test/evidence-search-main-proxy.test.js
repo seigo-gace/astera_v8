@@ -8,6 +8,7 @@ const path = require('node:path');
 const { once } = require('node:events');
 const KaguraServer = require('../src/server');
 const KaguraEngine = require('../src/kagura-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const SQLiteStore = require('../src/store/sqlite-store');
 
 process.env.ASTERA_KEY_PEPPER = 'astera-test-key-pepper-32-bytes-minimum-value';
@@ -106,7 +107,7 @@ async function startMain({ evidenceSearchClient, engine, events = [] }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-main-evidence-'));
   const store = new SQLiteStore(path.join(root, 'astera.db'));
   const logger = createLogger(events);
-  const resolvedEngine = engine || new KaguraEngine({ logger, evidenceSearchClient });
+  const resolvedEngine = engine || new KaguraEngine({ logger, evidenceSearchClient, japaneseParserClient: defaultMockJapaneseParserClient() });
   const server = new KaguraServer({
     port: 0,
     host: '127.0.0.1',

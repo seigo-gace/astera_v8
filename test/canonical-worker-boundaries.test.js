@@ -3,6 +3,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const CanonicalAsteraEngine=require('../src/canonical-astera-engine');
+const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const {buildCanonicalTaskPlan,evaluateCanonicalTaskPlan,projectFiveLanes,deterministicPerspectiveExpansion}=require('../src/canonical-claim-runtime');
 
 const silentLogger={write(){}};
@@ -84,7 +85,7 @@ test('Deterministic Perspective Expansion restores fixed five material classes w
 });
 
 test('Canonical Engine exposes no legacy scoring/selection aliases',async()=>{
-  const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger});
+  const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger,japaneseParserClient:defaultMockJapaneseParserClient()});
   try{
     const out=await engine.process({question:'API互換性を比較する。'},tenant);
     assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
