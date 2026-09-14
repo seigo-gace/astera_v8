@@ -1,0 +1,632 @@
+{
+  "version": "astera.effect-stories.v1",
+  "created_at": "2026-09-14T03:31:00.000Z",
+  "story_count": 100,
+  "stories": [
+    {
+      "story_id": "EF-001",
+      "user_input": "市立図書館の貸出通知メール、どこから手を付ければいい？",
+      "coverage_domain": "G01",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-002",
+      "user_input": "県立博物館の常設展がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G02",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-003",
+      "user_input": "大学研究室の論文管理を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G03",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-004",
+      "user_input": "小売店の在庫アラートでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G04",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-005",
+      "user_input": "製造ラインの品質検査についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G05",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-006",
+      "user_input": "来月までにSaaSの解約率を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G06",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-007",
+      "user_input": "自治体の窓口混雑の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G07",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-008",
+      "user_input": "病院の予約変更で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G08",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 病院の予約変更の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-009",
+      "user_input": "物流拠点のピッキングは「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G09",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-010",
+      "user_input": "新規事業の参入判断を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G10",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-011",
+      "user_input": "広告予算の配分は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G11",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-012",
+      "user_input": "中古マンション購入で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G12",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-013",
+      "user_input": "副業と本業の時間配分、どこから手を付ければいい？",
+      "coverage_domain": "G13",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-014",
+      "user_input": "部活と受験勉強の両立がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G14",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-015",
+      "user_input": "出社日のルールを進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G15",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-016",
+      "user_input": "両家の費用分担でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G16",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-017",
+      "user_input": "施設と在宅の選択についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G17",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-018",
+      "user_input": "来月までに学習と運動のバランスを改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G18",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-019",
+      "user_input": "動物病院の通院頻度の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G19",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-020",
+      "user_input": "キャンセル保険の要否で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G20",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: キャンセル保険の要否の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-021",
+      "user_input": "経費計上の範囲は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G21",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-022",
+      "user_input": "家賃値上げへの対応を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G22",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-023",
+      "user_input": "市販薬と受診の判断は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G23",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-024",
+      "user_input": "筋トレと有酸素の配分で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G24",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-025",
+      "user_input": "家庭菜園の害虫、どこから手を付ければいい？",
+      "coverage_domain": "G25",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-026",
+      "user_input": "マンションの騒音がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G26",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-027",
+      "user_input": "近隣のゴミ置き場を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G27",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-028",
+      "user_input": "車の買い替えでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G28",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-029",
+      "user_input": "自社APIの互換性についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G29",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-030",
+      "user_input": "来月までにクラウド移行を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G30",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-031",
+      "user_input": "データベースのバックアップの精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G31",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-032",
+      "user_input": "社内Wikiの情報整理で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G32",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 社内Wikiの情報整理の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-033",
+      "user_input": "セキュリティインシデントは「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G33",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-034",
+      "user_input": "店舗のレジ不整合を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G34",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-035",
+      "user_input": "災害時の避難経路は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G35",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-036",
+      "user_input": "国際取引の為替で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G36",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-037",
+      "user_input": "著作権の確認方法、どこから手を付ければいい？",
+      "coverage_domain": "G37",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-038",
+      "user_input": "民間ロケットの失敗報道がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G38",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-039",
+      "user_input": "地域アーカイブの検索画面を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G01",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-040",
+      "user_input": "企画展の音声ガイドでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G02",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-041",
+      "user_input": "学会発表のスライド構成についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G03",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-042",
+      "user_input": "来月までにECサイトのカート離脱を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G04",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-043",
+      "user_input": "部品サプライヤーの納期の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G05",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-044",
+      "user_input": "新機能のオンボーディングで昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G06",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 新機能のオンボーディングの設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-045",
+      "user_input": "オンライン申請のエラー率は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G07",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-046",
+      "user_input": "診療科間の紹介フローを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G08",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-047",
+      "user_input": "配送遅延のクレームは予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G09",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-048",
+      "user_input": "既存事業の撤退タイミングで上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G10",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-049",
+      "user_input": "広告予算の配分、どこから手を付ければいい？",
+      "coverage_domain": "G11",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-050",
+      "user_input": "中古マンション購入がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G12",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-051",
+      "user_input": "個人の転職を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G13",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-052",
+      "user_input": "高校生の進路でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G14",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-053",
+      "user_input": "チームのリモート運用についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G15",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-054",
+      "user_input": "来月までに結婚式の規模を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G16",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-055",
+      "user_input": "高齢の親の介護の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G17",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-056",
+      "user_input": "子どもの習い事で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G18",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 子どもの習い事の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-057",
+      "user_input": "ペットの健康管理は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G19",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-058",
+      "user_input": "旅行先の天候リスクを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G20",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-059",
+      "user_input": "フリーランスの確定申告は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G21",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-060",
+      "user_input": "賃貸契約の更新で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G22",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-061",
+      "user_input": "市販薬と受診の判断、どこから手を付ければいい？",
+      "coverage_domain": "G23",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-062",
+      "user_input": "筋トレと有酸素の配分がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G24",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-063",
+      "user_input": "農薬を使わない対策を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G25",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-064",
+      "user_input": "管理組合への相談でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G26",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-065",
+      "user_input": "ルール違反への対応についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G27",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-066",
+      "user_input": "来月までにEVとガソリン車の比較を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G28",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-067",
+      "user_input": "段階的リリース計画の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G29",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-068",
+      "user_input": "オンプレとの併用期間で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G30",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: オンプレとの併用期間の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-069",
+      "user_input": "復旧テストの頻度は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G31",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-070",
+      "user_input": "古い手順書の扱いを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G32",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-071",
+      "user_input": "パスワード漏えいの疑いは予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G33",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-072",
+      "user_input": "現金差異の調査で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G34",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-073",
+      "user_input": "災害時の避難経路、どこから手を付ければいい？",
+      "coverage_domain": "G35",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-074",
+      "user_input": "国際取引の為替がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G36",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-075",
+      "user_input": "AI生成画像の利用を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G37",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-076",
+      "user_input": "宇宙関連ニュースの信頼性でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G38",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-077",
+      "user_input": "市立図書館の貸出通知メールについてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G01",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-078",
+      "user_input": "来月までに県立博物館の常設展を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G02",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-079",
+      "user_input": "大学研究室の論文管理の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G03",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-080",
+      "user_input": "小売店の在庫アラートで昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G04",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 小売店の在庫アラートの設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-081",
+      "user_input": "製造ラインの品質検査は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G05",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-082",
+      "user_input": "SaaSの解約率を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G06",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-083",
+      "user_input": "自治体の窓口混雑は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G07",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-084",
+      "user_input": "病院の予約変更で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G08",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-085",
+      "user_input": "配送遅延のクレーム、どこから手を付ければいい？",
+      "coverage_domain": "G09",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-086",
+      "user_input": "既存事業の撤退タイミングがなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G10",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-087",
+      "user_input": "SNSキャンペーンの反応を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G11",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-088",
+      "user_input": "固定金利と変動金利の選択でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G12",
+      "scenario_kind": "compare"
+    },
+    {
+      "story_id": "EF-089",
+      "user_input": "副業と本業の時間配分についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "coverage_domain": "G13",
+      "scenario_kind": "fact_check"
+    },
+    {
+      "story_id": "EF-090",
+      "user_input": "来月までに部活と受験勉強の両立を改善したい。途中で手戻りしない進め方を考えたい。",
+      "coverage_domain": "G14",
+      "scenario_kind": "plan"
+    },
+    {
+      "story_id": "EF-091",
+      "user_input": "出社日のルールの精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G15",
+      "scenario_kind": "improve"
+    },
+    {
+      "story_id": "EF-092",
+      "user_input": "両家の費用分担で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "coverage_domain": "G16",
+      "scenario_kind": "trouble",
+      "context": "直近の変更: 両家の費用分担の設定を触った可能性あり"
+    },
+    {
+      "story_id": "EF-093",
+      "user_input": "施設と在宅の選択は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "coverage_domain": "G17",
+      "scenario_kind": "contradiction"
+    },
+    {
+      "story_id": "EF-094",
+      "user_input": "学習と運動のバランスを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G18",
+      "scenario_kind": "insufficient_premise"
+    },
+    {
+      "story_id": "EF-095",
+      "user_input": "動物病院の通院頻度は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+      "coverage_domain": "G19",
+      "scenario_kind": "multi_condition",
+      "context": "関係部署=開発・法務・サポート"
+    },
+    {
+      "story_id": "EF-096",
+      "user_input": "キャンセル保険の要否で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "coverage_domain": "G20",
+      "scenario_kind": "emotional",
+      "context": "今日は残業3時間"
+    },
+    {
+      "story_id": "EF-097",
+      "user_input": "フリーランスの確定申告、どこから手を付ければいい？",
+      "coverage_domain": "G21",
+      "scenario_kind": "short"
+    },
+    {
+      "story_id": "EF-098",
+      "user_input": "賃貸契約の更新がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "coverage_domain": "G22",
+      "scenario_kind": "ambiguous"
+    },
+    {
+      "story_id": "EF-099",
+      "user_input": "慢性的な頭痛を進めたい。関係者が複数いて、予算・期限・品質のどれも譲れない。まず何を確認すべきか知りたい。",
+      "coverage_domain": "G23",
+      "scenario_kind": "complex"
+    },
+    {
+      "story_id": "EF-100",
+      "user_input": "フィットネスの目標でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G24",
+      "scenario_kind": "compare"
+    }
+  ],
+  "fixture_sha256": "93295c8334bf0100fb6f793868658c2dc8f91d859a13dd90012daa64545fc383"
+}

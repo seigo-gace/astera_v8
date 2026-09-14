@@ -1,0 +1,114 @@
+{
+  "story_id": "EF-074",
+  "scenario_kind": "ambiguous",
+  "coverage_domain": "G36",
+  "input": {
+    "question": "国際取引の為替がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+    "context": "",
+    "language": "ja"
+  },
+  "baseline": {
+    "material_excerpt": "国際取引の為替がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。"
+  },
+  "astera": {
+    "type": "cognitive_map",
+    "material_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:INSUFFICIENT_EVIDENCE / T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:RETRIEVAL_FAILED / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:INSUFFICIENT_EVIDENCE / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:RETRIEVAL_FAILED\n- derivation=Task DecompositionのPurposeを優先し、Action/Target/Source Spanと分離した目的を保持する。\nExternal Consumerへ渡す内容\n- T01[analyze] 判断対象を判断材料へ構造化する。\n- T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n---\n02 前提不足\n判断材料\n未解決の前提不足・Hard Constraint競合は検出されていない。\n導出根拠\n- rules=MAIN8-02-UNRESOL",
+    "task_count": 2,
+    "evidence_need_created": true
+  },
+  "evaluation": {
+    "baseline_scores": {
+      "R01_purpose_clear": 1,
+      "R02_premise_constraints": 0,
+      "R03_known_vs_unknown": 0,
+      "R04_gaps_explicit": 0,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 1,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "astera_scores": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 2,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 1,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 0
+    },
+    "delta": {
+      "R01_purpose_clear": 1,
+      "R02_premise_constraints": 2,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 0,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 0,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 0,
+      "R15_no_final_decision": -2
+    },
+    "BASELINE_TOTAL": 8,
+    "ASTERA_TOTAL": 26,
+    "IMPROVEMENT_DELTA": 18,
+    "story_outcome": "improved",
+    "added_value": {
+      "new_premises": [
+        "未解決の前提不足・Hard Constraint競合は検出されていない",
+        "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+        "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+        "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+      ],
+      "new_risks": [],
+      "new_counter": [],
+      "new_uncertain": [
+        "CONFIRMED 0件 / UNDETERMINED 2件",
+        "- T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+        "- T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+        "medium: T02:未確定Claimを確定事実として扱う危険",
+        "- T02:undetermined:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a[22] 未確定Claimを確定事実として扱う危険"
+      ],
+      "new_comparison_axes": [],
+      "new_evidence_needs": [
+        "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- evidence_refs=0",
+        "- blockers=T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:INSUFFICIENT_EVIDENCE / T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:RETRIEVAL_FAILED / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:INSUFFICIENT_EVIDENCE / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:RETRIEVAL_FAILED",
+        "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+        "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+      ],
+      "reinstruction_improvements": []
+    },
+    "violations": {
+      "hallucination": false,
+      "constraint_loss": false,
+      "false_confirmation": false,
+      "final_decision_violation": null,
+      "task_decomposition_failure": false,
+      "uncertainty_loss": false
+    },
+    "baseline_text_excerpt": "国際取引の為替がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+    "astera_text_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:INSUFFICIENT_EVIDENCE / T01:84b75ac62f33b53dd3c46582fceb0afdb00d532c7bf0132f327f195dd311cd95:RETRIEVAL_FAILED / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:INSUFFICIENT_EVIDENCE / T02:1a4e3e52a050173bb2e60b03d0a34bce687a43be16bad84698530a6b9e80db5a:RETRIEVAL_FAILED\n- derivation=Task DecompositionのPurposeを優先し、Action/Target/Source Spanと分離した目的を保持する。\nExternal Consumerへ渡す内容\n- T01[analyze] 判断対象を判断材料へ構造化する。\n- T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n---\n02 前提不足\n判断材料\n未解決の前提不足・Hard Constraint競合は検出されていない。\n導出根拠\n- rules=MAIN8-02-UNRESOL"
+  },
+  "process_error": null
+}

@@ -1,0 +1,112 @@
+{
+  "story_id": "EF-083",
+  "scenario_kind": "multi_condition",
+  "coverage_domain": "G07",
+  "input": {
+    "question": "自治体の窓口混雑は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。",
+    "context": "関係部署=開発・法務・サポート",
+    "language": "ja"
+  },
+  "baseline": {
+    "material_excerpt": "自治体の窓口混雑は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。\n関係部署=開発・法務・サポート"
+  },
+  "astera": {
+    "type": "cognitive_map",
+    "material_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=none\n- derivation=Task DecompositionのPurposeを優先し、Action/Target/Source Spanと分離した目的を保持する。\nExternal Consumerへ渡す内容\n- T01[analyze] 判断対象を判断材料へ構造化する。\n- T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n---\n02 前提不足\n判断材料\n未解決の前提不足・Hard Constraint競合は検出されていない。\n導出根拠\n- rules=MAIN8-02-UNRESOLVED-CONSTRAINT\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=none\n- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない。\nExternal Consumerへ渡す内容\n- 未解決の前提不足・Hard Constraint競合は検出されていない。\n---\n03 事実確認\n判断材料\nCONFIRMED 0件 / UNDETERMINED 0件\n導出根拠\n- rules=MAIN8-03-G1-G7-CANONICAL-CLAIMS\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=no",
+    "task_count": 2,
+    "evidence_need_created": true
+  },
+  "evaluation": {
+    "baseline_scores": {
+      "R01_purpose_clear": 0,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 0,
+      "R04_gaps_explicit": 0,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 2,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "astera_scores": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 2,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 0
+    },
+    "delta": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 0,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 0,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 0,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 0,
+      "R15_no_final_decision": -2
+    },
+    "BASELINE_TOTAL": 9,
+    "ASTERA_TOTAL": 26,
+    "IMPROVEMENT_DELTA": 17,
+    "story_outcome": "degraded",
+    "added_value": {
+      "new_premises": [
+        "未解決の前提不足・Hard Constraint競合は検出されていない",
+        "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+        "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+        "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+      ],
+      "new_risks": [],
+      "new_counter": [
+        "defensive:- / critical:- / counter:Counter / Alternative evidence angle / defensive:- / critical:- / counter:Counter / Alternative evidence angle"
+      ],
+      "new_uncertain": [
+        "CONFIRMED 0件 / UNDETERMINED 0件",
+        "- CONFIRMED 0件 / UNDETERMINED 0件"
+      ],
+      "new_comparison_axes": [],
+      "new_evidence_needs": [
+        "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- evidence_refs=0",
+        "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+        "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+      ],
+      "reinstruction_improvements": []
+    },
+    "violations": {
+      "hallucination": false,
+      "constraint_loss": true,
+      "false_confirmation": false,
+      "final_decision_violation": null,
+      "task_decomposition_failure": false,
+      "uncertainty_loss": false
+    },
+    "baseline_text_excerpt": "自治体の窓口混雑は予算10%以内、納期は来週金曜、既存ユーザーの操作は変えない、が条件。\n関係部署=開発・法務・サポート",
+    "astera_text_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=none\n- derivation=Task DecompositionのPurposeを優先し、Action/Target/Source Spanと分離した目的を保持する。\nExternal Consumerへ渡す内容\n- T01[analyze] 判断対象を判断材料へ構造化する。\n- T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n---\n02 前提不足\n判断材料\n未解決の前提不足・Hard Constraint競合は検出されていない。\n導出根拠\n- rules=MAIN8-02-UNRESOLVED-CONSTRAINT\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=none\n- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない。\nExternal Consumerへ渡す内容\n- 未解決の前提不足・Hard Constraint競合は検出されていない。\n---\n03 事実確認\n判断材料\nCONFIRMED 0件 / UNDETERMINED 0件\n導出根拠\n- rules=MAIN8-03-G1-G7-CANONICAL-CLAIMS\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=no"
+  },
+  "process_error": null
+}

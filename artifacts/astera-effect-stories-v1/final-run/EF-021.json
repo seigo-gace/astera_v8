@@ -1,0 +1,120 @@
+{
+  "story_id": "EF-021",
+  "scenario_kind": "contradiction",
+  "coverage_domain": "G21",
+  "input": {
+    "question": "経費計上の範囲は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+    "context": "",
+    "language": "ja"
+  },
+  "baseline": {
+    "material_excerpt": "経費計上の範囲は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。"
+  },
+  "astera": {
+    "type": "cognitive_map",
+    "material_excerpt": "01 本当の目的\n判断材料\nT01[preserve] 両方の意図を他変更から保護する。 / T02[verify] 両方の意図を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / ambiguity:0:{\"e",
+    "task_count": 2,
+    "evidence_need_created": true
+  },
+  "evaluation": {
+    "baseline_scores": {
+      "R01_purpose_clear": 1,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 0,
+      "R04_gaps_explicit": 0,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 2,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 2,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "astera_scores": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 2,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 2,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 2,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 0
+    },
+    "delta": {
+      "R01_purpose_clear": 1,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": 0,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 2,
+      "R12_condition_exception": 0,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 0,
+      "R15_no_final_decision": -2
+    },
+    "BASELINE_TOTAL": 12,
+    "ASTERA_TOTAL": 28,
+    "IMPROVEMENT_DELTA": 16,
+    "story_outcome": "improved",
+    "added_value": {
+      "new_premises": [
+        "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+        "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+      ],
+      "new_risks": [],
+      "new_counter": [],
+      "new_uncertain": [
+        "- blockers=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":96,\"急ぎ」と言われた\":92,\"経費計上の範囲\":88},\"resolution_reason\":null,\"span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"} / ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / T01:reference / T02:reference / T01:6c9f4dd665a802c6f055736f6af370a7301d18c13f56592541b3f7b4a6c882bd:INSUFFICIENT_EVIDENCE / T01:6c9f4dd665a802c6f055736f6af370a7301d18c13f56592541b3f7b4a6c882bd:PARSE_UNRESOLVED / T01:6c9f4dd665a802c6f055736f6af370a7301d18c13f56592541b3f7b4a6c882bd:SCOPE_UNKNOWN / T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:INSUFFICIENT_EVIDENCE / T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:PARSE_UNRESOLVED / T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:RETRIEVAL_FAILED / T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:SCOPE_UNKNOWN / T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:INSUFFICIENT_EVIDENCE / T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:PARSE_UNRESOLVED / T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:RETRIEVAL_FAILED / T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:SCOPE_UNKNOWN / T02:c2f3f368081440f4b5a688a7f077b9318f9a53a3a47a783a39aca2ea5b360cb4:INSUFFICIENT_EVIDENCE / T02:c2f3f368081440f4b5a688a7f077b9318f9a53a3a47a783a39aca2ea5b360cb4:PARSE_UNRESOLVED / T02:c2f3f368081440f4b5a688a7f077b9318f9a53a3a47a783a39aca2ea5b360cb4:SCOPE_UNKNOWN",
+        "unresolved=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / unresolved=meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / unresolved=meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / unresolved=ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":96,\"急ぎ」と言われた\":92,\"経費計上の範囲\":88},\"resolution_reason\":null,\"span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"} / unresolved=ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / unresolved=missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / unresolved=missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / unresolved=T01:reference / unresolved=T02:reference / missing=T01:6c9f4dd665a802c6f055736f6af370a7301d18c13f56592541b3f7b4a6c882bd:subject / missing=T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:predicate / missing=T01:d8f75fe2f0ed514b46d7409c6fe230414f253a091b8ca2b7ec0793cd6925fd85:subject / missing=T01:reference / missing=T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:predicate / missing=T02:96a4c2991f3f1c52c6b0dc6a9c52dfdc2fdd5b2b4acdad51bd85e429ead9306d:subject / missing=T02:c2f3f368081440f4b5a688a7f077b9318f9a53a3a47a783a39aca2ea5b360cb4:subject / missing=T02:reference",
+        "- unresolved=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}}",
+        "- unresolved=meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true}",
+        "- unresolved=meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true}",
+        "- unresolved=ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":96,\"急ぎ」と言われた\":92,\"経費計上の範囲\":88},\"resolution_reason\":null,\"span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"}",
+        "- unresolved=ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}}",
+        "- unresolved=missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true}",
+        "- unresolved=missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true}",
+        "- unresolved=T01:reference",
+        "- unresolved=T02:reference",
+        "- missing=T01:6c9f4dd665a802c6f055736f6af370a7301d18c13f56592541b3f7b4a6c882bd:subject"
+      ],
+      "new_comparison_axes": [],
+      "new_evidence_needs": [
+        "/ T02[verify] 両方の意図を明示条件と根拠に基づいて検証する",
+        "- evidence_refs=0",
+        "- T02[verify] 両方の意図を明示条件と根拠に基づいて検証する",
+        "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+      ],
+      "reinstruction_improvements": [
+        "T01[preserve] 両方の意図を他変更から保護する",
+        "- T01[preserve] 両方の意図を他変更から保護する"
+      ]
+    },
+    "violations": {
+      "hallucination": false,
+      "constraint_loss": false,
+      "false_confirmation": false,
+      "final_decision_violation": null,
+      "task_decomposition_failure": false,
+      "uncertainty_loss": false
+    },
+    "baseline_text_excerpt": "経費計上の範囲は「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+    "astera_text_excerpt": "01 本当の目的\n判断材料\nT01[preserve] 両方の意図を他変更から保護する。 / T02[verify] 両方の意図を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"経費計上の範囲\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":36,\"end\":38,\"source_text\":\"両方\"}} / meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":8,\"end\":12,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":24,\"end\":29,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / ambiguity:0:{\"e"
+  },
+  "process_error": null
+}

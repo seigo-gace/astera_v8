@@ -1,0 +1,96 @@
+{
+  "story_id": "EF-049",
+  "scenario_kind": "short",
+  "coverage_domain": "G11",
+  "input": {
+    "question": "広告予算の配分、どこから手を付ければいい？",
+    "context": "",
+    "language": "ja"
+  },
+  "baseline": {
+    "material_excerpt": "広告予算の配分、どこから手を付ければいい？"
+  },
+  "astera": {
+    "type": "clarification_needed",
+    "material_excerpt": "前提確認が必要です\n確認したいこと\n- 対象・行為・完了条件は何ですか？",
+    "task_count": 0,
+    "evidence_need_created": false
+  },
+  "evaluation": {
+    "baseline_scores": {
+      "R01_purpose_clear": 1,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 0,
+      "R04_gaps_explicit": 0,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 2,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "astera_scores": {
+      "R01_purpose_clear": 0,
+      "R02_premise_constraints": 1,
+      "R03_known_vs_unknown": 1,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": 1,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 0,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "delta": {
+      "R01_purpose_clear": -1,
+      "R02_premise_constraints": 0,
+      "R03_known_vs_unknown": 1,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 0,
+      "R09_no_false_certainty": -1,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": -2,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 0,
+      "R15_no_final_decision": 0
+    },
+    "BASELINE_TOTAL": 10,
+    "ASTERA_TOTAL": 9,
+    "IMPROVEMENT_DELTA": -1,
+    "story_outcome": "degraded",
+    "added_value": {
+      "new_premises": [],
+      "new_risks": [],
+      "new_counter": [],
+      "new_uncertain": [],
+      "new_comparison_axes": [],
+      "new_evidence_needs": [],
+      "reinstruction_improvements": []
+    },
+    "violations": {
+      "hallucination": false,
+      "constraint_loss": true,
+      "false_confirmation": false,
+      "final_decision_violation": null,
+      "task_decomposition_failure": false,
+      "uncertainty_loss": false
+    },
+    "baseline_text_excerpt": "広告予算の配分、どこから手を付ければいい？",
+    "astera_text_excerpt": "前提確認が必要です\n確認したいこと\n- 対象・行為・完了条件は何ですか？"
+  },
+  "process_error": null
+}

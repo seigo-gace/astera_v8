@@ -678,6 +678,35 @@ function isMaterialOnlyQuestion(question) {
   return /判断材料|材料整理|材料だけ|材料のみ|材料化|比較材料|比較軸|最終結論|最終判断は外部|外部AIに委ね|勝者|採用案|断定せず|材料を|構造化|分類と材料/i.test(q);
 }
 
+function isNaturalUserConsult(question) {
+  const q = norm(question);
+  if (!q || isMaterialOnlyQuestion(q)) return false;
+  const consultCue = /(?:したい|困って|相談|教えて|進め|比較|確認|整理|考え|手を付|方向|リスク|原因|どうす|何を先|漠然|うまくいっ|エラー|ぶつか|疲れ|条件|来月|来週|予算|納期)/i.test(q);
+  if (!consultCue && !/改善/i.test(q)) return false;
+  if (q.length < 20 && !/(?:困|相談|漠然|疲れ|ぶつか|条件|来月|来週|予算|納期|手を付|方向|どうす|何を先)/i.test(q)) return false;
+  return consultCue || /改善/i.test(q);
+}
+
+function parserFailClosedRequest(request = {}) {
+  const packet = request.analysis_task_packet || {};
+  const markers = [
+    ...(packet.hard_blockers || []),
+    ...(packet.unresolved || []),
+    ...((request.instruction_understanding?.blocked_reasons) || [])
+  ].map((item) => String(item));
+  if (request.instruction_understanding?.mode === 'FAIL_CLOSED') return true;
+  return markers.some((item) => /JAPANESE_PARSER_FAIL_CLOSED|PARSER_OVERALL_FAILED|PARSER_CLIENT_NOT_CONFIGURED|PARSER_ERROR/i.test(item));
+}
+
+function parserActionGuardOnly(request = {}) {
+  const packet = request.analysis_task_packet || {};
+  const blockers = (packet.hard_blockers || []).map(String);
+  if (!(packet.tasks || []).length && blockers.length) {
+    return blockers.every((item) => /PARSER_ACTION_GUARD_BLOCKED|NO_EXECUTABLE_ACTION|parser_task_graph_empty/i.test(item));
+  }
+  return false;
+}
+
 function synthesizeFallbackTasks(question) {
   const q = norm(question);
   if (!q) return [];
@@ -797,6 +826,38 @@ function supplementMaterialOnlyTasks(question, tasks) {
   return [t1, t2];
 }
 
+function expandNaturalConsultTasks(question, tasks) {
+  if (!isNaturalUserConsult(question) || tasks.length !== 1) return tasks;
+  const q = norm(question);
+  const first = { ...tasks[0] };
+  const target = first.target && !genericTarget(first.target)
+    ? first.target
+    : inferTarget(q, actionOccurrences(q)[0], first.target || '判断対象');
+  const secondAction = /比較|対立|案|vs|トレードオフ/i.test(q) ? 'compare' : 'verify';
+  const t1 = {
+    ...first,
+    id: 'T01',
+    order: 1,
+    target,
+    action: first.action === 'decide' ? 'analyze' : (first.action || 'analyze'),
+    objective: taskPurpose(first.action === 'decide' ? 'analyze' : (first.action || 'analyze'), target),
+    purpose: explicitPurpose(q, taskPurpose(first.action === 'decide' ? 'analyze' : (first.action || 'analyze'), target)),
+    source_span: { start: 0, end: q.length, text: q },
+    raw_text: q,
+    depends_on: []
+  };
+  const t2 = {
+    ...t1,
+    id: 'T02',
+    order: 2,
+    action: secondAction,
+    objective: taskPurpose(secondAction, target),
+    purpose: explicitPurpose(q, taskPurpose(secondAction, target)),
+    depends_on: []
+  };
+  return [t1, t2];
+}
+
 function enrichRequest(request, input = {}) {
   if (!request?.analysis_task_packet) return request;
   const question = String(input.question ?? request.original_question ?? request.normalized_question ?? '');
@@ -805,8 +866,12 @@ function enrichRequest(request, input = {}) {
   const sourceRegions = regions(question);
   const packet = request.analysis_task_packet;
   let kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
-  if (!kept.length && materialOnlyRequest) {
+  const maySynthesizeFallback = !parserFailClosedRequest(request)
+    && (materialOnlyRequest || isNaturalUserConsult(question) || parserActionGuardOnly(request));
+  let usedSynthesizedFallback = false;
+  if (!kept.length && norm(question) && maySynthesizeFallback) {
     kept = synthesizeFallbackTasks(question);
+    usedSynthesizedFallback = kept.length > 0;
   }
   const removed = (packet.tasks || []).filter((task) => !kept.includes(task));
 
@@ -827,6 +892,9 @@ function enrichRequest(request, input = {}) {
     superseded_by: []
   }));
   tasks = supplementMaterialOnlyTasks(question, tasks);
+  if (!parserFailClosedRequest(request) || parserActionGuardOnly(request)) {
+    tasks = expandNaturalConsultTasks(question, tasks);
+  }
 
   const originFinalMap = remapOriginMap(applyOriginAliases(expanded.originMap, collapsedPrefixes.aliases), remapped.idMap);
   const baseDeps = [];
@@ -900,7 +968,18 @@ function enrichRequest(request, input = {}) {
     if ((task.unresolved || []).length) appendSource(task.field_sources, 'unresolved', { source: 'task_graph', values: task.unresolved });
   }
 
-  const unresolved = unique([
+  if (usedSynthesizedFallback && isNaturalUserConsult(question)) {
+    for (const task of tasks) {
+      if (task.action === 'improve') {
+        task.action = 'analyze';
+        task.objective = taskPurpose('analyze', task.target);
+        task.purpose = explicitPurpose(question, task.objective);
+      }
+      task.unresolved = unique((task.unresolved || []).filter((item) => item !== 'deliverable'));
+    }
+  }
+
+  let unresolved = unique([
     ...inheritedUnresolved,
     ...corrections.unresolved,
     ...references.unresolved,
@@ -908,6 +987,9 @@ function enrichRequest(request, input = {}) {
     ...branches.unresolved,
     ...tasks.flatMap((task) => (task.unresolved || []).map((item) => `${task.id}:${item}`))
   ]);
+  if (usedSynthesizedFallback && isNaturalUserConsult(question)) {
+    unresolved = unresolved.filter((item) => !/^parser_/i.test(String(item)));
+  }
   const prohibitionReplaceBlockers = [];
   const modifyTasks = tasks.filter((task) => (task.replace || []).length || task.action === 'improve');
   const prohibitionTasks = tasks.filter((task) => task.clause_type === 'prohibition');
@@ -954,7 +1036,10 @@ function enrichRequest(request, input = {}) {
     'NEGATED_ACTION'
   ]);
   let hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers, ...prohibitionBlockers]);
-  if (materialOnlyRequest && tasks.length > 0 && graph.valid) {
+  const relaxParserGuardBlockers = (materialOnlyRequest || (usedSynthesizedFallback && isNaturalUserConsult(question)))
+    && tasks.length > 0
+    && graph.valid;
+  if (relaxParserGuardBlockers) {
     for (const item of hardBlockers) {
       const code = String(item);
       if (materialOnlyParserTensionCodes.has(code)) {
@@ -1021,8 +1106,10 @@ function enrichRequest(request, input = {}) {
       graph_validation: graph.valid ? 'VALID' : 'BLOCKED',
       execution_allowed: graph.valid && tasks.length > 0
         && !hardBlockers.some((item) => String(item).startsWith('TASK_GRAPH_CYCLE') || String(item) === 'JAPANESE_PARSER_FAIL_CLOSED')
-        && (hardBlockers.length === 0 || materialOnlyRequest)
-        && ((request.instruction_understanding?.execution_allowed !== false) || materialOnlyRequest),
+        && (hardBlockers.length === 0 || materialOnlyRequest || (usedSynthesizedFallback && isNaturalUserConsult(question)))
+        && ((request.instruction_understanding?.execution_allowed !== false)
+          || materialOnlyRequest
+          || (usedSynthesizedFallback && isNaturalUserConsult(question))),
       blocked_reasons: hardBlockers
     },
     analysis_task_packet: enrichedPacket
@@ -1032,6 +1119,7 @@ function enrichRequest(request, input = {}) {
 module.exports = {
   enrichRequest,
   isMaterialOnlyQuestion,
+  isNaturalUserConsult,
   regions,
   contextBindings,
   deliverables,

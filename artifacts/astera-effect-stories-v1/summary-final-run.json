@@ -1,0 +1,1127 @@
+{
+  "phase": "final",
+  "mock_mcp": false,
+  "fixture": "/home/admin1/projects/astera_v8/test/fixtures/astera-effect-stories-v1.json",
+  "corpus": 100,
+  "ran": 100,
+  "process_errors": 0,
+  "evidence_need_created": 84,
+  "BASELINE_TOTAL": 967,
+  "ASTERA_TOTAL": 2361,
+  "IMPROVEMENT_DELTA": 1394,
+  "IMPROVED_STORIES": 73,
+  "UNCHANGED_STORIES": 0,
+  "DEGRADED_STORIES": 27,
+  "HALLUCINATION_COUNT": 0,
+  "CONSTRAINT_LOSS_COUNT": 27,
+  "FALSE_CONFIRMATION_COUNT": 0,
+  "FINAL_DECISION_VIOLATION_COUNT": 0,
+  "TASK_DECOMPOSITION_FAILURE_COUNT": 0,
+  "UNCERTAINTY_LOSS_COUNT": 0,
+  "rubric_baseline": {
+    "R01_purpose_clear": 52,
+    "R02_premise_constraints": 42,
+    "R03_known_vs_unknown": 8,
+    "R04_gaps_explicit": 26,
+    "R05_risk_discovery": 0,
+    "R06_counter_view": 0,
+    "R07_comparison_axis": 10,
+    "R08_contradiction_kept": 40,
+    "R09_no_false_certainty": 200,
+    "R10_evidence_need": 8,
+    "R11_task_decomposition": 39,
+    "R12_condition_exception": 142,
+    "R13_ai_usable_structure": 0,
+    "R14_no_hallucination": 200,
+    "R15_no_final_decision": 200
+  },
+  "rubric_astera": {
+    "R01_purpose_clear": 168,
+    "R02_premise_constraints": 172,
+    "R03_known_vs_unknown": 185,
+    "R04_gaps_explicit": 198,
+    "R05_risk_discovery": 168,
+    "R06_counter_view": 168,
+    "R07_comparison_axis": 176,
+    "R08_contradiction_kept": 108,
+    "R09_no_false_certainty": 184,
+    "R10_evidence_need": 170,
+    "R11_task_decomposition": 137,
+    "R12_condition_exception": 126,
+    "R13_ai_usable_structure": 169,
+    "R14_no_hallucination": 200,
+    "R15_no_final_decision": 32
+  },
+  "rubric_delta": {
+    "R01_purpose_clear": 116,
+    "R02_premise_constraints": 130,
+    "R03_known_vs_unknown": 177,
+    "R04_gaps_explicit": 172,
+    "R05_risk_discovery": 168,
+    "R06_counter_view": 168,
+    "R07_comparison_axis": 166,
+    "R08_contradiction_kept": 68,
+    "R09_no_false_certainty": -16,
+    "R10_evidence_need": 162,
+    "R11_task_decomposition": 98,
+    "R12_condition_exception": -16,
+    "R13_ai_usable_structure": 169,
+    "R14_no_hallucination": 0,
+    "R15_no_final_decision": -168
+  },
+  "examples_improved": [
+    {
+      "story_id": "EF-001",
+      "scenario_kind": "short",
+      "user_input": "市立図書館の貸出通知メール、どこから手を付ければいい？",
+      "IMPROVEMENT_DELTA": 18,
+      "added_value": {
+        "new_premises": [
+          "未解決の前提不足・Hard Constraint競合は検出されていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+          "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-002",
+      "scenario_kind": "ambiguous",
+      "user_input": "県立博物館の常設展がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "IMPROVEMENT_DELTA": 18,
+      "added_value": {
+        "new_premises": [
+          "未解決の前提不足・Hard Constraint競合は検出されていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+          "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 2件",
+          "- T01:8ea90610c839c0c8d20e08635ec30efcf861fd74b9ee48c58739fbc7b869d16d:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+          "- T02:c786e5764d366e1b58ec04efc9242273cbce5b98099e7e7847a1ff3b8053b91a:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+          "medium: T01:未確定Claimを確定事実として扱う危険",
+          "- T01:undetermined:8ea90610c839c0c8d20e08635ec30efcf861fd74b9ee48c58739fbc7b869d16d[22] 未確定Claimを確定事実として扱う危険"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- blockers=T01:8ea90610c839c0c8d20e08635ec30efcf861fd74b9ee48c58739fbc7b869d16d:INSUFFICIENT_EVIDENCE / T01:8ea90610c839c0c8d20e08635ec30efcf861fd74b9ee48c58739fbc7b869d16d:RETRIEVAL_FAILED / T02:c786e5764d366e1b58ec04efc9242273cbce5b98099e7e7847a1ff3b8053b91a:INSUFFICIENT_EVIDENCE / T02:c786e5764d366e1b58ec04efc9242273cbce5b98099e7e7847a1ff3b8053b91a:RETRIEVAL_FAILED",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-004",
+      "scenario_kind": "compare",
+      "user_input": "小売店の在庫アラートでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "IMPROVEMENT_DELTA": 4,
+      "added_value": {
+        "new_premises": [],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-005",
+      "scenario_kind": "fact_check",
+      "user_input": "製造ラインの品質検査についてネット上で矛盾する説明を見た。どこが確かでどこが未確認か切り分けたい。",
+      "IMPROVEMENT_DELTA": 14,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "どこが確かでどこが未を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": [
+          "conflict=SOURCE_GUIDANCE_CONFLICT:CONFLICTING_PRIMARY_SOURCES_PRESERVED",
+          "- conflict=SOURCE_GUIDANCE_CONFLICT:CONFLICTING_PRIMARY_SOURCES_PRESERVED"
+        ]
+      }
+    },
+    {
+      "story_id": "EF-006",
+      "scenario_kind": "plan",
+      "user_input": "来月までにSaaSの解約率を改善したい。途中で手戻りしない進め方を考えたい。",
+      "IMPROVEMENT_DELTA": 15,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 来月までにSaaSの解約率を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- T02[verify] 来月までにSaaSの解約率を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-008",
+      "scenario_kind": "trouble",
+      "user_input": "病院の予約変更で昨日からエラーが増えた。ログはまだ全部見れてない。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 2件",
+          "- T01:8b57ae61557fb00ff6d0abbd907394f844e8a9621acabed5a3576d754ed4a083:UNDETERMINED:ログはまだ全部見れてない",
+          "- T02:987e24657f77e26d1413c92745d1c91c26a7eaec4db59872969f6923e8ca5d73:UNDETERMINED:ログはまだ全部見れてない",
+          "medium: T01:未確定Claimを確定事実として扱う危険"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- blockers=PARSER_ACTION_GUARD_BLOCKED / PARSER_MATERIAL_ONLY_TENSION / T01:8b57ae61557fb00ff6d0abbd907394f844e8a9621acabed5a3576d754ed4a083:INSUFFICIENT_EVIDENCE / T01:8b57ae61557fb00ff6d0abbd907394f844e8a9621acabed5a3576d754ed4a083:RETRIEVAL_FAILED / T02:987e24657f77e26d1413c92745d1c91c26a7eaec4db59872969f6923e8ca5d73:INSUFFICIENT_EVIDENCE / T02:987e24657f77e26d1413c92745d1c91c26a7eaec4db59872969f6923e8ca5d73:RETRIEVAL_FAILED",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":true,\"reasons\":[\"overlay:current_information\"],\"queries\":[\"判断対象\",\"判断対象を判断材料へ構造化する。\"]}",
+          "{\"required\":true,\"reasons\":[\"overlay:current_information\"],\"queries\":[\"判断対象\",\"判断対象を明示条件と根拠に基づいて検証する。\"]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-009",
+      "scenario_kind": "contradiction",
+      "user_input": "物流拠点のピッキングは「急ぎ」と言われたが、同じ会議で「慎重に」とも言われた。両方の意図を壊さず整理したい。",
+      "IMPROVEMENT_DELTA": 16,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "- blockers=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}} / meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":100,\"急ぎ」と言われた\":96,\"物流拠点のピッキング\":92},\"resolution_reason\":null,\"span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"} / ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}} / missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / T01:reference / T02:reference / T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:INSUFFICIENT_EVIDENCE / T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:PARSE_UNRESOLVED / T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:RETRIEVAL_FAILED / T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:SCOPE_UNKNOWN / T01:f16dd4140a67c30c6e0eef00efbc2aef6db85219d75e1f8a822940d6ed3ed7f6:INSUFFICIENT_EVIDENCE / T01:f16dd4140a67c30c6e0eef00efbc2aef6db85219d75e1f8a822940d6ed3ed7f6:PARSE_UNRESOLVED / T01:f16dd4140a67c30c6e0eef00efbc2aef6db85219d75e1f8a822940d6ed3ed7f6:SCOPE_UNKNOWN / T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:INSUFFICIENT_EVIDENCE / T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:PARSE_UNRESOLVED / T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:RETRIEVAL_FAILED / T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:SCOPE_UNKNOWN / T02:3184e7f6a54aad325c1fe4cdcabbacc472c53e24df8b479175727ef2080c73a6:INSUFFICIENT_EVIDENCE / T02:3184e7f6a54aad325c1fe4cdcabbacc472c53e24df8b479175727ef2080c73a6:PARSE_UNRESOLVED / T02:3184e7f6a54aad325c1fe4cdcabbacc472c53e24df8b479175727ef2080c73a6:SCOPE_UNKNOWN",
+          "unresolved=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}} / unresolved=meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / unresolved=meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / unresolved=ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":100,\"急ぎ」と言われた\":96,\"物流拠点のピッキング\":92},\"resolution_reason\":null,\"span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"} / unresolved=ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}} / unresolved=missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true} / unresolved=missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true} / unresolved=T01:reference / unresolved=T02:reference / missing=T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:predicate / missing=T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:subject / missing=T01:f16dd4140a67c30c6e0eef00efbc2aef6db85219d75e1f8a822940d6ed3ed7f6:subject / missing=T01:reference / missing=T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:predicate / missing=T02:009c2359deafa76baf8b2668dae65b3e53d396f52f90a999a855445cb2703bd7:subject / missing=T02:3184e7f6a54aad325c1fe4cdcabbacc472c53e24df8b479175727ef2080c73a6:subject / missing=T02:reference",
+          "- unresolved=meaning_unresolved:0:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}}",
+          "- unresolved=meaning_unresolved:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true}",
+          "- unresolved=meaning_unresolved:2:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true}",
+          "- unresolved=ambiguity:0:{\"expression\":\"両方\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"selected\":null,\"candidate_scores\":{\"同じ会議で「慎重に」と\":100,\"急ぎ」と言われた\":96,\"物流拠点のピッキング\":92},\"resolution_reason\":null,\"span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"},\"status\":\"AMBIGUOUS\"}",
+          "- unresolved=ambiguity:1:{\"type\":\"reference\",\"expression\":\"両方\",\"status\":\"AMBIGUOUS\",\"candidates\":[\"同じ会議で「慎重に」と\",\"急ぎ」と言われた\",\"物流拠点のピッキング\"],\"related_proposition_ids\":[],\"source_span\":{\"start\":39,\"end\":41,\"source_text\":\"両方\"}}",
+          "- unresolved=missing_information:0:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-001\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":11,\"end\":15,\"source_text\":\"「急ぎ」\"},\"reading_analysis\":true}",
+          "- unresolved=missing_information:1:{\"type\":\"reading_attribution_source\",\"attribution_id\":\"AT-002\",\"status\":\"INSUFFICIENT\",\"source_span\":{\"start\":27,\"end\":32,\"source_text\":\"「慎重に」\"},\"reading_analysis\":true}",
+          "- unresolved=T01:reference",
+          "- unresolved=T02:reference",
+          "- missing=T01:5128e413a7d1dc693f956c3f7060cb530d24455609969a92d630d4826de4ac8e:predicate"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 両方の意図を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- T02[verify] 両方の意図を明示条件と根拠に基づいて検証する",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": [
+          "T01[preserve] 両方の意図を他変更から保護する",
+          "- T01[preserve] 両方の意図を他変更から保護する"
+        ]
+      }
+    },
+    {
+      "story_id": "EF-010",
+      "scenario_kind": "insufficient_premise",
+      "user_input": "新規事業の参入判断を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "IMPROVEMENT_DELTA": 16,
+      "added_value": {
+        "new_premises": [
+          "未解決の前提不足・Hard Constraint競合は検出されていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+          "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 2件",
+          "- T01:17d41a3a1b9c7d305a1920fbb2934aa39be6553d666c635acee11b7ddc9b47f2:UNDETERMINED:新規事業の参入",
+          "- T02:186d067867ec1343058ddb80573b9af25f2f6e3ce7c701881fa1e5b85ceb1dc1:UNDETERMINED:新規事業の参入",
+          "medium: T01:未確定Claimを確定事実として扱う危険",
+          "- T01:undetermined:17d41a3a1b9c7d305a1920fbb2934aa39be6553d666c635acee11b7ddc9b47f2[22] 未確定Claimを確定事実として扱う危険"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 新規事業の参入を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- blockers=T01:17d41a3a1b9c7d305a1920fbb2934aa39be6553d666c635acee11b7ddc9b47f2:INSUFFICIENT_EVIDENCE / T01:17d41a3a1b9c7d305a1920fbb2934aa39be6553d666c635acee11b7ddc9b47f2:RETRIEVAL_FAILED / T02:186d067867ec1343058ddb80573b9af25f2f6e3ce7c701881fa1e5b85ceb1dc1:INSUFFICIENT_EVIDENCE / T02:186d067867ec1343058ddb80573b9af25f2f6e3ce7c701881fa1e5b85ceb1dc1:RETRIEVAL_FAILED",
+          "- T02[verify] 新規事業の参入を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":true,\"reasons\":[\"task_criteria_requires_external_evidence\",\"overlay:evidence_strict\"],\"queries\":[\"新規事業の参入\",\"新規事業の参入を判断材料へ構造化する。\",\"財務Data\",\"顧客Data\",\"競合情報\",\"市場調査\",\"実行Capacity\"]}",
+          "{\"required\":true,\"reasons\":[\"task_criteria_requires_external_evidence\",\"overlay:evidence_strict\",\"action:verify:external_evidence\"],\"queries\":[\"新規事業の参入\",\"新規事業の参入を明示条件と根拠に基づいて検証する。\",\"財務Data\",\"顧客Data\",\"競合情報\",\"市場調査\",\"実行Capacity\"]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-012",
+      "scenario_kind": "emotional",
+      "user_input": "中古マンション購入で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "- blockers=T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:INSUFFICIENT_EVIDENCE / T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:PARSE_UNRESOLVED / T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:RETRIEVAL_FAILED / T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:SCOPE_UNKNOWN / T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:INSUFFICIENT_EVIDENCE / T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:PARSE_UNRESOLVED / T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:RETRIEVAL_FAILED / T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:SCOPE_UNKNOWN",
+          "missing=T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:predicate / missing=T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:subject / missing=T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:predicate / missing=T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:subject",
+          "- missing=T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:predicate",
+          "- missing=T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:subject",
+          "- missing=T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:predicate",
+          "- missing=T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:subject",
+          "CONFIRMED 0件 / UNDETERMINED 2件",
+          "- T01:022fe7eb1d57cd0f6f6fb1cefe9a55c34168c054ca96806dcb26b1cdd085c7c2:UNDETERMINED:感情的にならずに次の打ち手を考えたい",
+          "- T02:d8f75f832034a0ab4d9009f456ca3a9d39800626d223c87994ceb9f041193637:UNDETERMINED:感情的にならずに次の打ち手を考えたい",
+          "medium: T01:未確定Claimを確定事実として扱う危険"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-013",
+      "scenario_kind": "short",
+      "user_input": "副業と本業の時間配分、どこから手を付ければいい？",
+      "IMPROVEMENT_DELTA": 18,
+      "added_value": {
+        "new_premises": [
+          "未解決の前提不足・Hard Constraint競合は検出されていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+          "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+        ],
+        "new_risks": [],
+        "new_counter": [
+          "defensive:- / critical:- / counter:Counter / Alternative evidence angle / defensive:- / critical:- / counter:Counter / Alternative evidence angle"
+        ],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-014",
+      "scenario_kind": "ambiguous",
+      "user_input": "部活と受験勉強の両立がなんかおかしい。詳しくはまだ言えないけど、早めに方向性が欲しい。",
+      "IMPROVEMENT_DELTA": 18,
+      "added_value": {
+        "new_premises": [
+          "未解決の前提不足・Hard Constraint競合は検出されていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない",
+          "- 未解決の前提不足・Hard Constraint競合は検出されていない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 2件",
+          "- T01:fa1689d54a1540838ea1961f2c81a890a70a59010747767805c102effee76590:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+          "- T02:558fcd45bb79570c298782f899c52b84037da8803ae68af3da0e1f7fe8c627f0:UNDETERMINED:詳しくはまだ言えないけど、早めに方向性が欲しい",
+          "medium: T02:未確定Claimを確定事実として扱う危険",
+          "- T02:undetermined:558fcd45bb79570c298782f899c52b84037da8803ae68af3da0e1f7fe8c627f0[22] 未確定Claimを確定事実として扱う危険"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- evidence_refs=0",
+          "- blockers=T01:fa1689d54a1540838ea1961f2c81a890a70a59010747767805c102effee76590:INSUFFICIENT_EVIDENCE / T01:fa1689d54a1540838ea1961f2c81a890a70a59010747767805c102effee76590:RETRIEVAL_FAILED / T02:558fcd45bb79570c298782f899c52b84037da8803ae68af3da0e1f7fe8c627f0:INSUFFICIENT_EVIDENCE / T02:558fcd45bb79570c298782f899c52b84037da8803ae68af3da0e1f7fe8c627f0:RETRIEVAL_FAILED",
+          "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "EF-016",
+      "scenario_kind": "compare",
+      "user_input": "両家の費用分担でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "IMPROVEMENT_DELTA": 4,
+      "added_value": {
+        "new_premises": [],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [],
+        "reinstruction_improvements": []
+      }
+    }
+  ],
+  "results": [
+    {
+      "story_id": "EF-001",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-002",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-003",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-004",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-005",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-006",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-007",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-008",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-009",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-010",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-011",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-012",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-013",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-014",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-015",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-016",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-017",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-018",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-019",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-020",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-021",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-022",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-023",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-024",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-025",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-026",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-027",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-028",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-029",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-030",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 0,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-031",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-032",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-033",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-034",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-035",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-036",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-037",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-038",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-039",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-040",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-041",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-042",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-043",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-044",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-045",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-046",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-047",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-048",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-049",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-050",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-051",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-052",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-053",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-054",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-055",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-056",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-057",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-058",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-059",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-060",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-061",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-062",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-063",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-064",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-065",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-066",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-067",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 0,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-068",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-069",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-070",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-071",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-072",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-073",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-074",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-075",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-076",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-077",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-078",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-079",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-080",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-081",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-082",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-083",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-084",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-085",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-086",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-087",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-088",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-089",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 14,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-090",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-091",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": -1,
+      "ASTERA_TOTAL": 9,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-092",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-093",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 28,
+      "BASELINE_TOTAL": 12
+    },
+    {
+      "story_id": "EF-094",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "EF-095",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-096",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "EF-097",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-098",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "EF-099",
+      "outcome": "degraded",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "EF-100",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 8
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
 const inputUnderstanding = require('./input-understanding');
-const { enrichRequest, isMaterialOnlyQuestion } = require('./deterministic-task-decomposer');
+const { enrichRequest, isMaterialOnlyQuestion, isNaturalUserConsult } = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
@@ -219,7 +219,9 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
         };
       }
 
-      const clarification = isMaterialOnlyQuestion(question) && (request.analysis_task_packet?.tasks?.length || 0) >= 1
+      const skipTargetClarification = (request.analysis_task_packet?.tasks?.length || 0) >= 1
+        && (isMaterialOnlyQuestion(question) || isNaturalUserConsult(question));
+      const clarification = skipTargetClarification
         ? []
         : clarificationQuestions(request, context);
       if (clarification.length) {

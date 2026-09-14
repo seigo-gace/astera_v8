@@ -1,0 +1,116 @@
+{
+  "story_id": "EF-024",
+  "scenario_kind": "emotional",
+  "coverage_domain": "G24",
+  "input": {
+    "question": "筋トレと有酸素の配分で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。",
+    "context": "今日は残業3時間",
+    "language": "ja"
+  },
+  "baseline": {
+    "material_excerpt": "筋トレと有酸素の配分で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。\n今日は残業3時間"
+  },
+  "astera": {
+    "type": "cognitive_map",
+    "material_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:INSUFFICIENT_EVIDENCE / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:PARSE_UNRESOLVED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:RETRIEVAL_FAILED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:SCOPE_UNKNOWN / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:INSUFFICIENT_EVIDENCE / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:PARSE_UNRESOLVED / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:RETRIEVAL_FAIL",
+    "task_count": 2,
+    "evidence_need_created": true
+  },
+  "evaluation": {
+    "baseline_scores": {
+      "R01_purpose_clear": 0,
+      "R02_premise_constraints": 0,
+      "R03_known_vs_unknown": 0,
+      "R04_gaps_explicit": 0,
+      "R05_risk_discovery": 0,
+      "R06_counter_view": 0,
+      "R07_comparison_axis": 0,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 0,
+      "R11_task_decomposition": 1,
+      "R12_condition_exception": 1,
+      "R13_ai_usable_structure": 0,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 2
+    },
+    "astera_scores": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 2,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 2,
+      "R09_no_false_certainty": 2,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 1,
+      "R12_condition_exception": 1,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 2,
+      "R15_no_final_decision": 0
+    },
+    "delta": {
+      "R01_purpose_clear": 2,
+      "R02_premise_constraints": 2,
+      "R03_known_vs_unknown": 2,
+      "R04_gaps_explicit": 2,
+      "R05_risk_discovery": 2,
+      "R06_counter_view": 2,
+      "R07_comparison_axis": 2,
+      "R08_contradiction_kept": 1,
+      "R09_no_false_certainty": 0,
+      "R10_evidence_need": 2,
+      "R11_task_decomposition": 0,
+      "R12_condition_exception": 0,
+      "R13_ai_usable_structure": 2,
+      "R14_no_hallucination": 0,
+      "R15_no_final_decision": -2
+    },
+    "BASELINE_TOTAL": 9,
+    "ASTERA_TOTAL": 26,
+    "IMPROVEMENT_DELTA": 17,
+    "story_outcome": "improved",
+    "added_value": {
+      "new_premises": [
+        "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+        "- derivation=Unresolved/Conflict/Hard Constraintを列挙し、推測補完しない"
+      ],
+      "new_risks": [],
+      "new_counter": [],
+      "new_uncertain": [
+        "- blockers=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:INSUFFICIENT_EVIDENCE / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:PARSE_UNRESOLVED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:RETRIEVAL_FAILED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:SCOPE_UNKNOWN / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:INSUFFICIENT_EVIDENCE / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:PARSE_UNRESOLVED / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:RETRIEVAL_FAILED / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:SCOPE_UNKNOWN",
+        "missing=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:predicate / missing=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:subject / missing=T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:predicate / missing=T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:subject",
+        "- missing=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:predicate",
+        "- missing=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:subject",
+        "- missing=T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:predicate",
+        "- missing=T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:subject",
+        "CONFIRMED 0件 / UNDETERMINED 2件",
+        "- T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:UNDETERMINED:感情的にならずに次の打ち手を考えたい",
+        "- T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:UNDETERMINED:感情的にならずに次の打ち手を考えたい",
+        "medium: T01:未確定Claimを確定事実として扱う危険"
+      ],
+      "new_comparison_axes": [],
+      "new_evidence_needs": [
+        "/ T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- evidence_refs=0",
+        "- T02[verify] 判断対象を明示条件と根拠に基づいて検証する",
+        "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+        "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+      ],
+      "reinstruction_improvements": []
+    },
+    "violations": {
+      "hallucination": false,
+      "constraint_loss": false,
+      "false_confirmation": false,
+      "final_decision_violation": null,
+      "task_decomposition_failure": false,
+      "uncertainty_loss": false
+    },
+    "baseline_text_excerpt": "筋トレと有酸素の配分で上司とぶつかって疲れた。感情的にならずに次の打ち手を考えたい。\n今日は残業3時間",
+    "astera_text_excerpt": "01 本当の目的\n判断材料\nT01[analyze] 判断対象を判断材料へ構造化する。 / T02[verify] 判断対象を明示条件と根拠に基づいて検証する。\n導出根拠\n- rules=MAIN8-01-TASK-GRAPH-OBJECTIVE\n- tasks=T01 / T02\n- lenses=-\n- evidence_refs=0\n- blockers=T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:INSUFFICIENT_EVIDENCE / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:PARSE_UNRESOLVED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:RETRIEVAL_FAILED / T01:bfa2e5061f8c89ab6cb7ff6195576ff15dac2aff4de4d95be72f27679d221c3e:SCOPE_UNKNOWN / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:INSUFFICIENT_EVIDENCE / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:PARSE_UNRESOLVED / T02:fa45dc0f9d833190f26d76996ddd75a0a01d6f1a0850b5143469aefa2f4f8c25:RETRIEVAL_FAIL"
+  },
+  "process_error": null
+}
