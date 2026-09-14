@@ -2,7 +2,13 @@
 
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
 const inputUnderstanding = require('./input-understanding');
-const { enrichRequest, extractInstructionUnderstandingFields, isMaterialOnlyQuestion, isNaturalUserConsult } = require('./deterministic-task-decomposer');
+const {
+  enrichRequest,
+  extractInstructionUnderstandingFields,
+  extractPublicConstraintLines,
+  isMaterialOnlyQuestion,
+  isNaturalUserConsult
+} = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
@@ -72,6 +78,48 @@ function packetMaterialSummary(request = {}, lang = 'ja') {
   if ((packet.prohibitions || []).length) lines.push(`${lang === 'ja' ? 'Prohibitions' : 'Prohibitions'}: ${(packet.prohibitions || []).join(' / ')}`);
   if ((packet.unresolved || []).length) lines.push(`${lang === 'ja' ? 'Unresolved' : 'Unresolved'}: ${(packet.unresolved || []).join(' / ')}`);
   return lines;
+}
+
+const MAIN8_SEPARATOR = '---';
+
+function sanitizePublicMaterialText(text) {
+  return String(text || '')
+    .replace(/\b[0-9a-f]{64}\b/gi, '')
+    .replace(/\bT\d+:[a-f0-9]{0,64}:[A-Z0-9_]+\b/gi, '')
+    .replace(/claim=[0-9a-f]{64}/gi, 'claim=')
+    .replace(/claim_id=[0-9a-f]{64}/gi, 'claim_id=')
+    .replace(/undetermined_claim_ids:\s*[0-9a-f]{64}/gi, 'undetermined_claim_ids:')
+    .replace(/\bHAS_STATE\b/g, '')
+    .replace(/\bPARSER_ACTION_GUARD_BLOCKED\b/g, '')
+    .replace(/\bNEGATED_ACTION\b/g, '')
+    .replace(/\bPARSE_UNRESOLVED\b/g, '')
+    .replace(/\bINSUFFICIENT_EVIDENCE\b/g, '')
+    .replace(/\bMODALITY_NOT_VERIFIABLE\b/g, '')
+    .replace(/\bFINAL_DECISION_PROHIBITED\b/g, '')
+    .replace(/\bMATERIAL_ONLY_REQUIRED\b/g, '')
+    .replace(/Lens=UNRESOLVED/g, '')
+    .replace(/最終結論 HAS_STATE[^\n]*/g, '')
+    .replace(/unresolved=T\d+:[^\n]+/g, '')
+    .replace(/missing=T\d+:[^\n]+/g, '')
+    .replace(/hard_constraint=[^\n]+判断材料[^\n]*/g, '')
+    .replace(/hard_constraint=[^\n]+最終結論[^\n]*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function buildMaterialOnlyPublicText(judgment) {
+  const blocks = [];
+  for (const key of judgment.order || []) {
+    const section = judgment[key];
+    if (!section) continue;
+    blocks.push(section.label);
+    const lines = judgment._public_section_lines?.[key]
+      || (section.items || []).map((item) => (String(item).startsWith('- ') ? item : `- ${item}`));
+    blocks.push(...(lines.length ? lines : [`- ${section.summary || '-'}`]));
+    blocks.push(MAIN8_SEPARATOR);
+  }
+  if (blocks.length && blocks[blocks.length - 1] === MAIN8_SEPARATOR) blocks.pop();
+  return blocks.join('\n');
 }
 
 function blockedMaterial({ request, hardBlockers, lang }) {
@@ -144,7 +192,10 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       return String(item || '');
     }));
 
-    const instruction = extractInstructionUnderstandingFields(String(args.request?.original_question || args.request?.normalized_question || ''));
+    const questionText = String(args.request?.original_question || args.request?.normalized_question || '');
+    const instruction = extractInstructionUnderstandingFields(questionText);
+    const materialOnly = isMaterialOnlyQuestion(questionText)
+      || (args.taskResults || []).some((result) => result.task?.material_only === true);
     const userGoal = packet.user_goal || instruction.user_goal
       || (args.taskResults || []).map((result) => result.task.user_goal || result.task.purpose).find((item) => item && !/判断材料へ構造化|UNRESOLVED/i.test(String(item)))
       || '-';
@@ -166,32 +217,38 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       }
     }
 
-    const constraintLines = [];
-    for (const record of (packet.constraint_records || [])) {
-      if (record.type === 'BUDGET' || /予算|%|％/u.test(String(record.value || ''))) constraintLines.push(`予算上限: ${record.value}`);
-      else constraintLines.push(`${record.type}: ${record.value}`);
-    }
-    for (const deadline of (packet.deadlines || [])) constraintLines.push(`期限: ${deadline}`);
-    for (const item of (packet.preserve || [])) constraintLines.push(`維持条件: ${item}`);
-    if (/予算/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('予算上限'))) {
-      const budget = String(args.request?.original_question || '').match(/予算[^。！？\n]{0,24}/u)?.[0];
-      if (budget) constraintLines.push(`予算上限: ${budget.replace(/^予算(?:は|:)?/u, '').trim()}`);
-    }
-    if (/来週金曜|納期/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('期限'))) {
-      const deadline = String(args.request?.original_question || '').match(/(?:納期|期限)[^。！？\n]{0,24}/u)?.[0];
-      if (deadline) constraintLines.push(`期限: ${deadline.replace(/^(?:納期|期限)(?:は|:)?/u, '').trim()}`);
-    }
-    if (/操作/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('維持条件'))) {
-      const preserve = String(args.request?.original_question || '').match(/既存[^。！？\n]{0,32}/u)?.[0];
-      if (preserve) constraintLines.push(`維持条件: ${preserve}`);
-    }
-    if (judgment['02_premise'] && constraintLines.length) {
-      judgment['02_premise'].items = unique([...(judgment['02_premise'].items || []), ...constraintLines]);
+    const publicConstraints = extractPublicConstraintLines(questionText);
+    const outputPolicy = packet.output_policy || instruction.output_policy;
+
+    if (materialOnly) {
+      judgment.presentation_mode = 'PUBLIC_MATERIAL_ONLY';
+      if (judgment['02_premise']) {
+        judgment['02_premise'].items = publicConstraints;
+        judgment['02_premise'].summary = publicConstraints.join(' / ') || '-';
+      }
+      judgment._public_section_lines = {
+        '01_purpose': purposeItems.map((item) => `- ${item}`),
+        '02_premise': publicConstraints.map((item) => `- ${item}`),
+        '03_facts': ['- ユーザー入力の目的と制約は01・02に整理済み。ドメイン事実Claimの追加検証は不要。'],
+        '04_crisis': ['- 入力記述のみでは確定できない実行リスクは、この段階では断定しない。'],
+        '05_opposition': ['- 慎重視点: 予算・納期・既存操作の維持と改善効果のトレードオフを材料として整理する。'],
+        '06_comparison': ['- 比較候補は入力されていない'],
+        '07_evidence_status': [
+          '- 外部Evidence検索: 不要（NOT_REQUIRED）',
+          '- Claim確認: 入力整理のみ（ドメインClaim未指定）'
+        ],
+        '08_reinstruction': unique([
+          '- 01の目的と02の制約を後続判断で保持する',
+          outputPolicy?.natural_ja ? `- Output Policy: ${outputPolicy.natural_ja}` : null,
+          '- Astera自身は採用・棄却・Ranking・Recommendation・最終Decisionを行わない。'
+        ].filter(Boolean))
+      };
+    } else if (judgment['02_premise'] && publicConstraints.length) {
+      judgment['02_premise'].items = unique([...(judgment['02_premise'].items || []), ...publicConstraints]);
       judgment['02_premise'].summary = judgment['02_premise'].items.join(' / ');
     }
 
-    const outputPolicy = packet.output_policy || instruction.output_policy;
-    if (judgment['08_reinstruction'] && outputPolicy?.natural_ja) {
+    if (!materialOnly && judgment['08_reinstruction'] && outputPolicy?.natural_ja) {
       const reinstructionItems = unique([
         ...(judgment['08_reinstruction'].items || []),
         `Output Policy: ${outputPolicy.natural_ja}`
@@ -240,17 +297,19 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
 
   material(judgment) {
     const base = super.material(judgment);
-    const scrub = (text) => String(text || '')
-      .replace(/\bHAS_STATE\b/g, '')
-      .replace(/\bPARSER_ACTION_GUARD_BLOCKED\b/g, '')
-      .replace(/\bNEGATED_ACTION\b/g, '')
-      .replace(/\bFINAL_DECISION_PROHIBITED\b/g, '')
-      .replace(/\bMATERIAL_ONLY_REQUIRED\b/g, '')
-      .replace(/最終結論 HAS_STATE[^\n]*/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    const text = scrub(base.text);
-    const compact_text = scrub(base.compact_text);
+    if (judgment.presentation_mode === 'PUBLIC_MATERIAL_ONLY') {
+      const text = buildMaterialOnlyPublicText(judgment);
+      const compact_text = (judgment.order || [])
+        .map((key) => {
+          const section = judgment[key];
+          return section ? `${section.label}: ${section.summary || '-'}` : null;
+        })
+        .filter(Boolean)
+        .join('\n');
+      return { ...base, text, compact_text };
+    }
+    const text = sanitizePublicMaterialText(base.text);
+    const compact_text = sanitizePublicMaterialText(base.compact_text);
     return { ...base, text, compact_text };
   }
 

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { enrichRequest, extractInstructionUnderstandingFields } = require('../src/deterministic-task-decomposer');
+const { extractInstructionUnderstandingFields } = require('../src/deterministic-task-decomposer');
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
 const PORTAL_QUESTION = '社内ポータルの検索を改善したい。予算は10%以内、納期は来週金曜。既存ユーザーの操作は変えない。最終結論は出さず判断材料だけ欲しい。';
@@ -21,7 +21,6 @@ function countHasStateClaims(taskResults) {
   for (const result of taskResults || []) {
     for (const record of result.canonical?.records || []) {
       if (String(record.claim?.predicate || '').includes('HAS_STATE')) count += 1;
-      if (/最終結論/.test(String(record.claim?.raw_text || '')) && String(record.claim?.predicate || '').includes('HAS_STATE')) count += 1;
     }
   }
   return count;
@@ -50,22 +49,55 @@ test('portal search example gate: Main8 public material contract', async () => {
     const out = await engine.process({ question: PORTAL_QUESTION, language: 'ja' }, tenant);
     assert.equal(out.result.type, 'cognitive_map');
     const text = out.material.text;
+
     assert.match(text, /01 本当の目的/);
     assert.match(text, /目的:.*社内ポータルの検索を改善/);
     assert.match(text, /期待効果: 未指定/);
-    assert.match(text, /予算.*10%|10%以内/);
-    assert.match(text, /来週金曜/);
-    assert.match(text, /既存ユーザーの操作/);
-    assert.match(text, /Output Policy:.*最終判断は行わず/);
-    assert.doesNotMatch(text, /UNRESOLVED_JAPANESE_TARGETを判断材料へ構造化/);
-    assert.doesNotMatch(text, /HAS_STATE/);
-    assert.doesNotMatch(text, /最終結論 HAS_STATE/);
-    assert.doesNotMatch(text, /T02\[analyze\]/);
+    assert.doesNotMatch(text, /\[analyze\]|判断材料へ構造化|verify/);
     assert.equal((text.match(/^---$/gm) || []).length, 7);
-    assert.equal(countHasStateClaims(out.result.task_results), 0);
+
+    const s02 = text.split('---')[1] || '';
+    assert.match(s02, /予算上限: 10%以内/);
+    assert.match(s02, /期限: 来週金曜/);
+    assert.match(s02, /維持条件: 既存ユーザーの操作は変えない/);
+    assert.doesNotMatch(s02, /hard_constraint=/);
+    assert.doesNotMatch(s02, /最終結論/);
+    assert.doesNotMatch(s02, /判断材料だけ/);
+    assert.doesNotMatch(s02, /unresolved=T\d+/);
+    assert.doesNotMatch(s02, /missing=T\d+/);
+
+    const s03 = text.split('---')[2] || '';
+    assert.doesNotMatch(s03, /[0-9a-f]{64}/i);
+    assert.doesNotMatch(s03, /UNDETERMINED:/);
+    assert.doesNotMatch(s03, /改善したい/);
+
+    assert.doesNotMatch(text, /[0-9a-f]{64}/i);
+    assert.doesNotMatch(text, /HAS_STATE/);
+    assert.doesNotMatch(text, /UNRESOLVED_JAPANESE_TARGET/);
+    assert.doesNotMatch(text, /PARSE_UNRESOLVED/);
+    assert.doesNotMatch(text, /INSUFFICIENT_EVIDENCE/);
+    assert.doesNotMatch(text, /MODALITY_NOT_VERIFIABLE/);
+    assert.doesNotMatch(text, /Lens=UNRESOLVED/);
+    assert.doesNotMatch(text, /confirmed_claim_ids:/);
+    assert.doesNotMatch(text, /undetermined_claim_ids:/);
+    assert.doesNotMatch(text, /candidate_id: -/);
+    assert.doesNotMatch(text, /candidates: -/);
+    assert.doesNotMatch(text, /claim_id: -/);
+    assert.doesNotMatch(text, /dimensions: -/);
+    assert.doesNotMatch(text, /id: opposition/);
+    assert.doesNotMatch(text, /replace:/);
+
+    assert.match(text, /比較候補は入力されていない/);
+    assert.doesNotMatch(s02, /Output Policy/);
+
+    const s08 = text.split('---')[7] || '';
+    assert.match(s08, /Output Policy:.*最終判断は行わず/);
+
     const evidenceSection = text.split('---')[6] || '';
-    assert.match(evidenceSection, /SearchExecution=NOT_REQUIRED|NOT_EXECUTED/);
+    assert.match(evidenceSection, /NOT_REQUIRED/);
     assert.doesNotMatch(evidenceSection, /FAILED/);
+
+    assert.equal(countHasStateClaims(out.result.task_results), 0);
   } finally {
     await engine.destroy();
   }

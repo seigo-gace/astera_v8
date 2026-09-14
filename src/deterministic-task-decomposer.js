@@ -326,7 +326,29 @@ function consolidateMaterialOnlyConsultTasks(question, tasks) {
   primary.effect_status = instruction.effect_status;
   primary.output_policy = instruction.output_policy;
   primary.material_only = true;
+  primary.replace = (primary.replace || []).filter((item) => !/UNRESOLVED/i.test(String(item)));
+  if (primary.action === 'improve') {
+    primary.unresolved = unique((primary.unresolved || []).filter((item) => item !== 'deliverable'));
+  }
   return [primary];
+}
+
+function extractPublicConstraintLines(question) {
+  const q = norm(question);
+  const lines = [];
+  const budget = q.match(/予算(?:は|:)?\s*([^。！？\n]+)/u);
+  if (budget) {
+    const value = norm(budget[1]).split(/[、,]/u)[0].trim();
+    if (value) lines.push(`予算上限: ${value}`);
+  }
+  const deadline = q.match(/(?:納期|期限)(?:は|:)?\s*([^。！？\n]+)/u);
+  if (deadline) {
+    const value = norm(deadline[1]).split(/[、,]/u)[0].trim();
+    if (value) lines.push(`期限: ${value}`);
+  }
+  const preserve = q.match(/既存[^。！？\n]+/u);
+  if (preserve) lines.push(`維持条件: ${norm(preserve[0])}`);
+  return unique(lines);
 }
 
 function inferTarget(text, actionMatch, fallback = '') {
@@ -1249,6 +1271,7 @@ function enrichRequest(request, input = {}) {
 module.exports = {
   enrichRequest,
   extractInstructionUnderstandingFields,
+  extractPublicConstraintLines,
   explicitPurposeSpan,
   isMaterialOnlyQuestion,
   isNaturalUserConsult,

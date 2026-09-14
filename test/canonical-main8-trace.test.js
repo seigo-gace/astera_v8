@@ -452,8 +452,7 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     }
     const material = engine.material(judgment);
     const materialText = material.text;
-    assert.match(materialText, new RegExp(`claim=${officialRef.claim_id}`));
-    assert.match(materialText, new RegExp(`binding=${officialRef.binding_id}`));
+    assert.doesNotMatch(materialText, /[0-9a-f]{64}/i);
     assert.match(materialText, new RegExp(`candidate=${officialRef.candidate_id}`));
     assert.match(materialText, new RegExp(`source_role=${officialRef.source_role}`));
     assert.match(materialText, new RegExp(`source_family_id=${officialRef.source_family_id}`));

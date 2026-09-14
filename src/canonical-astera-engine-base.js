@@ -246,8 +246,18 @@ function formatSection05Pass(section) {
 function formatSection06Pass(section) {
   const candidates = (section.comparison_candidates || []).map((candidate) =>
     typeof candidate === 'string' ? candidate : (candidate.label || candidate.candidate_id || '-')
-  );
+  ).filter((candidate) => candidate && candidate !== '-');
   const candidateMaterialBlocks = (section.candidate_materials || []).map((entry) => formatCandidateMaterialBlock(entry));
+  if (!candidates.length && !candidateMaterialBlocks.length) {
+    const conditionDiff = section.condition_differences || {};
+    const constraintLines = unique([
+      ...(conditionDiff.constraints || []),
+      ...(conditionDiff.preserve || [])
+    ]).filter((item) => item && !/UNRESOLVED/i.test(String(item)) && !/最終結論|判断材料だけ/u.test(String(item)));
+    const lines = ['- 比較候補は入力されていない'];
+    for (const constraint of constraintLines) lines.push(`- 制約: ${line(constraint)}`);
+    return lines.join('\n');
+  }
   const tradeOffDiffBlocks = (section.trade_off_differences || []).map((entry) => formatTradeOffDifferenceBlock(entry));
   const conditionDiff = section.condition_differences || {};
   const contradictionBlocks = (section.contradiction_map || []).map((entry) => [
