@@ -139,7 +139,7 @@ test('decision-materials calls Evidence Search API at the canonical search bound
 test('missing Evidence Search API client fails closed instead of silently continuing with NOT_PROVIDED', async () => {
   const events = [];
   const logger = { write(event) { events.push(event); } };
-  const engine = new AsteraEngine({ logger });
+  const engine = new AsteraEngine({ logger, evidenceSearchClient: null });
 
   try {
     const out = await engine.process({
