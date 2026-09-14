@@ -39,29 +39,57 @@ function isStructuralHardBlocker(code) {
   return value.startsWith('TASK_GRAPH_CYCLE');
 }
 
+function isParserMaterialTensionBlocker(code) {
+  const value = String(code || '');
+  return value === 'TIMEOUT'
+    || value === 'PARSER_ACTION_GUARD_BLOCKED'
+    || value === 'NO_EXECUTABLE_ACTION'
+    || value === 'NEGATED_ACTION';
+}
+
 function shouldBlockBeforePipeline(question, request, hardBlockers) {
   const materialOnly = isMaterialOnlyQuestion(question);
   const tasks = request.analysis_task_packet?.tasks?.length || 0;
   const graphValid = request.analysis_task_packet?.task_graph_validation?.valid !== false;
   const structural = hardBlockers.filter(isStructuralHardBlocker);
-  if (materialOnly && tasks > 0 && graphValid && !structural.length) return false;
-  if (request.instruction_understanding?.execution_allowed === false) return true;
-  return hardBlockers.length > 0;
+  const nonStructural = hardBlockers.filter((code) => !isStructuralHardBlocker(code));
+  const onlyMaterialTension = nonStructural.length > 0 && nonStructural.every(isParserMaterialTensionBlocker);
+  if (tasks > 0 && graphValid && !structural.length && (materialOnly || onlyMaterialTension)) return false;
+  if (structural.length) return true;
+  if (nonStructural.length && !onlyMaterialTension) return true;
+  if (request.instruction_understanding?.execution_allowed === false && !onlyMaterialTension && !materialOnly) return true;
+  return false;
+}
+
+function packetMaterialSummary(request = {}, lang = 'ja') {
+  const packet = request.analysis_task_packet || {};
+  const lines = [];
+  if ((packet.constraints || []).length) lines.push(`${lang === 'ja' ? 'Constraints' : 'Constraints'}: ${(packet.constraints || []).join(' / ')}`);
+  if ((packet.deadlines || []).length) lines.push(`${lang === 'ja' ? 'Deadlines' : 'Deadlines'}: ${(packet.deadlines || []).join(' / ')}`);
+  if ((packet.conditions || []).length) lines.push(`${lang === 'ja' ? 'Conditions' : 'Conditions'}: ${(packet.conditions || []).join(' / ')}`);
+  if ((packet.exceptions || []).length) lines.push(`${lang === 'ja' ? 'Exceptions' : 'Exceptions'}: ${(packet.exceptions || []).join(' / ')}`);
+  if ((packet.preserve || []).length) lines.push(`${lang === 'ja' ? 'Preserve' : 'Preserve'}: ${(packet.preserve || []).join(' / ')}`);
+  if ((packet.prohibitions || []).length) lines.push(`${lang === 'ja' ? 'Prohibitions' : 'Prohibitions'}: ${(packet.prohibitions || []).join(' / ')}`);
+  if ((packet.unresolved || []).length) lines.push(`${lang === 'ja' ? 'Unresolved' : 'Unresolved'}: ${(packet.unresolved || []).join(' / ')}`);
+  return lines;
 }
 
 function blockedMaterial({ request, hardBlockers, lang }) {
   const unresolved = request.analysis_task_packet?.unresolved || [];
+  const carry = packetMaterialSummary(request, lang);
   const lines = lang === 'ja'
     ? [
         'Task Graphを安全に実行できないため、後続処理を停止しました。',
         `Hard Blocker: ${hardBlockers.join(' / ') || '-'}`,
         `Unresolved: ${unresolved.join(' / ') || '-'}`,
+        ...carry,
         '推測で補完せず、Task/Claim/Evidence処理へ進めていません。'
       ]
     : [
         'Task Graph execution is blocked by a hard invariant.',
         `Hard Blocker: ${hardBlockers.join(' / ') || '-'}`,
         `Unresolved: ${unresolved.join(' / ') || '-'}`,
+        ...carry,
         'No Task/Claim/Evidence processing was performed by guessing through the blocker.'
       ];
   return { text: lines.join('\n'), compact_text: lines.join(' / ') };
@@ -82,7 +110,10 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
   async prepareRequest(input = {}) {
     const question = String(input.question || '');
     if (needsJapaneseParser(question)) {
-      const prepared = await prepareJapaneseRequestViaMcp(input, {
+      const prepared = await prepareJapaneseRequestViaMcp({
+        ...input,
+        deadline_ms: input.deadline_ms || input.parser_deadline_ms || Number(process.env.ASTERA_JAPANESE_PARSER_DEADLINE_MS || 8000)
+      }, {
         client: this.japaneseParserClient,
         logger: this.logger
       });
@@ -165,6 +196,19 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     return judgment;
   }
 
+  clarify(questions, lang, request = null) {
+    const base = super.clarify(questions, lang);
+    if (!request?.analysis_task_packet) return base;
+    const carry = packetMaterialSummary(request, lang);
+    if (!carry.length) return base;
+    const suffix = carry.join('\n');
+    return {
+      ...base,
+      text: `${base.text}\n${suffix}`,
+      compact_text: `${base.compact_text} / ${carry.join(' / ')}`
+    };
+  }
+
   async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
@@ -173,7 +217,8 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       context,
       language: input.language,
       locale: input.locale,
-      output_language: input.output_language
+      output_language: input.output_language,
+      deadline_ms: input.deadline_ms || input.parser_deadline_ms || Number(process.env.ASTERA_EFFECT_PARSER_DEADLINE_MS || 8000)
     });
 
     request.human_reader = readHumanState(question, input.moodAnswers || {});
@@ -239,7 +284,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
             human_reader: request.human_reader,
             questions: clarification
           },
-          material: { ...this.clarify(clarification, renderLang), no_normative_decision_generated: true },
+          material: { ...this.clarify(clarification, renderLang, request), no_normative_decision_generated: true },
           prompt: '',
           runtime: {
             ai_used: false,

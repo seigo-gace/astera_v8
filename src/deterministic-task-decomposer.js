@@ -114,6 +114,7 @@ function contextBindings(context) {
     if (/(?:場合|とき|なら|ならば|であれば|を条件に|if\b|when\b|provided that|unless)/i.test(text)) push('condition');
     if (/(?:ただし|例外|除く|を除き|except|however|but only)/i.test(text)) push('exception');
     if (/(?:最優先|優先|先に|まず|priority|first|before)/i.test(text)) push('priority');
+    if (/(?:期限|納期|締切|締め切|deadline|due date|hard_deadline|来週|来月|今週|今月|金曜|月曜|火曜|水曜|木曜|土曜|日曜|までに)/i.test(text)) push('deadline');
   }
   return bindings;
 }
@@ -289,6 +290,16 @@ function cloneTaskPart(task, part, actionMatch, partIndex, partCount) {
     order: task.order,
     depends_on: [],
     deliverables: unique([...(task.deliverables || []), ...deliverables(part.text)]),
+    constraints: [...(task.constraints || [])],
+    prohibitions: [...(task.prohibitions || [])],
+    preserve: [...(task.preserve || [])],
+    replace: [...(task.replace || [])],
+    conditions: [...(task.conditions || [])],
+    exceptions: [...(task.exceptions || [])],
+    deadlines: [...(task.deadlines || [])],
+    priority_records: [...(task.priority_records || [])],
+    constraint_records: (task.constraint_records || []).map((record) => ({ ...record })),
+    field_sources: task.field_sources ? JSON.parse(JSON.stringify(task.field_sources)) : undefined,
     unresolved: unique(task.unresolved || []),
     split_sequence: partIndex + 1,
     split_sequence_count: partCount
@@ -391,7 +402,17 @@ function remapTasks(tasks) {
     idMap.set(task.id, next);
     return { ...task, id: next, order: index + 1 };
   });
-  for (const task of output) task.depends_on = unique((task.depends_on || []).map((taskId) => idMap.get(taskId)).filter(Boolean));
+  for (const task of output) {
+    task.depends_on = unique((task.depends_on || []).map((taskId) => idMap.get(taskId)).filter(Boolean));
+    if (!task.field_sources) continue;
+    for (const entries of Object.values(task.field_sources)) {
+      for (const entry of entries) {
+        if (Array.isArray(entry.source_task_ids)) {
+          entry.source_task_ids = entry.source_task_ids.map((taskId) => idMap.get(taskId) || taskId);
+        }
+      }
+    }
+  }
   return { tasks: output, idMap };
 }
 
@@ -474,7 +495,15 @@ function applyContextBindings(tasks, bindings) {
       if (binding.kind === 'success') { task.success_criteria = unique([...(task.success_criteria || []), binding.value]); appendSource(task.field_sources, 'success_criteria', source); }
       if (binding.kind === 'completion') { task.completion_criteria = unique([...(task.completion_criteria || []), binding.value]); appendSource(task.field_sources, 'completion_criteria', source); }
       if (binding.kind === 'verification') { task.verification = unique([...(task.verification || []), binding.value]); appendSource(task.field_sources, 'verification', source); }
-      if (binding.kind === 'priority') { task.priority = 'high'; appendSource(task.field_sources, 'priority', source); }
+      if (binding.kind === 'priority') {
+        task.priority_records = unique([...(task.priority_records || []), binding.value]);
+        task.priority = task.priority_records[0] || task.priority || 'normal';
+        appendSource(task.field_sources, 'priority', { ...source, value: binding.value });
+      }
+      if (binding.kind === 'deadline') {
+        task.deadlines = unique([...(task.deadlines || []), binding.value]);
+        appendSource(task.field_sources, 'deadlines', source);
+      }
     }
   }
   return unresolved;
@@ -687,6 +716,22 @@ function isNaturalUserConsult(question) {
   return consultCue || /改善/i.test(q);
 }
 
+function dedupeEnrichedConstraintRecords(packetRecords = [], tasks = []) {
+  const out = [];
+  const seen = new Set();
+  for (const record of [...objectList(packetRecords), ...tasks.flatMap((task) => task.constraint_records || [])]) {
+    const key = record?.constraint_id || `${record?.type}:${record?.value}:${record?.target || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(record);
+  }
+  return out;
+}
+
+function objectList(items) {
+  return Array.isArray(items) ? items : [];
+}
+
 function parserFailClosedRequest(request = {}) {
   const packet = request.analysis_task_packet || {};
   const markers = [
@@ -696,6 +741,12 @@ function parserFailClosedRequest(request = {}) {
   ].map((item) => String(item));
   if (request.instruction_understanding?.mode === 'FAIL_CLOSED') return true;
   return markers.some((item) => /JAPANESE_PARSER_FAIL_CLOSED|PARSER_OVERALL_FAILED|PARSER_CLIENT_NOT_CONFIGURED|PARSER_ERROR/i.test(item));
+}
+
+function isMcpDeepPathRequest(request = {}) {
+  const understanding = request.instruction_understanding || {};
+  if (understanding.mode === 'DEEP_PATH') return true;
+  return /Deterministic-Japanese-Parser-MCP|deterministic-japanese-parser/i.test(String(understanding.parser || ''));
 }
 
 function parserActionGuardOnly(request = {}) {
@@ -865,8 +916,10 @@ function enrichRequest(request, input = {}) {
   const materialOnlyRequest = isMaterialOnlyQuestion(question);
   const sourceRegions = regions(question);
   const packet = request.analysis_task_packet;
+  const mcpDeepPath = isMcpDeepPathRequest(request);
   let kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
   const maySynthesizeFallback = !parserFailClosedRequest(request)
+    && !mcpDeepPath
     && (materialOnlyRequest || isNaturalUserConsult(question) || parserActionGuardOnly(request));
   let usedSynthesizedFallback = false;
   if (!kept.length && norm(question) && maySynthesizeFallback) {
@@ -892,7 +945,7 @@ function enrichRequest(request, input = {}) {
     superseded_by: []
   }));
   tasks = supplementMaterialOnlyTasks(question, tasks);
-  if (!parserFailClosedRequest(request) || parserActionGuardOnly(request)) {
+  if (!mcpDeepPath && (!parserFailClosedRequest(request) || parserActionGuardOnly(request))) {
     tasks = expandNaturalConsultTasks(question, tasks);
   }
 
@@ -1036,7 +1089,7 @@ function enrichRequest(request, input = {}) {
     'NEGATED_ACTION'
   ]);
   let hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers, ...prohibitionBlockers]);
-  const relaxParserGuardBlockers = (materialOnlyRequest || (usedSynthesizedFallback && isNaturalUserConsult(question)))
+  const relaxParserGuardBlockers = (materialOnlyRequest || mcpDeepPath || (usedSynthesizedFallback && isNaturalUserConsult(question)))
     && tasks.length > 0
     && graph.valid;
   if (relaxParserGuardBlockers) {
@@ -1046,12 +1099,6 @@ function enrichRequest(request, input = {}) {
         sourceConflicts.push({ type: 'PARSER_MATERIAL_ONLY_TENSION', note: code });
       }
     }
-    hardBlockers = hardBlockers.filter((item) => {
-      const code = String(item);
-      if (materialOnlyParserTensionCodes.has(code)) return false;
-      if (code.startsWith('JAPANESE_PARSER_FAIL_CLOSED') || code === 'PARSER_TOOL_ERROR' || code === 'PARSER_UNAVAILABLE' || code === 'PARSER_CLIENT_NOT_CONFIGURED') return false;
-      return true;
-    });
   }
   const enrichedPacket = {
     ...packet,
@@ -1081,12 +1128,20 @@ function enrichRequest(request, input = {}) {
       unresolved_context_binding_count: contextUnresolved.length
     },
     source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span })),
-    constraints: unique(tasks.flatMap((task) => task.constraints || [])),
-    prohibitions: unique(tasks.flatMap((task) => task.prohibitions || [])),
-    preserve: unique(tasks.flatMap((task) => task.preserve || [])),
-    replace: unique(tasks.flatMap((task) => task.replace || [])),
-    verification: unique(tasks.flatMap((task) => task.verification || [])),
-    completion_criteria: unique(tasks.flatMap((task) => task.completion_criteria || []))
+    constraint_records: dedupeEnrichedConstraintRecords(packet.constraint_records, tasks),
+    deadlines: unique([...(packet.deadlines || []), ...tasks.flatMap((task) => task.deadlines || [])]),
+    conditions: unique([...(packet.conditions || []), ...tasks.flatMap((task) => task.conditions || [])]),
+    exceptions: unique([...(packet.exceptions || []), ...tasks.flatMap((task) => task.exceptions || [])]),
+    priority_records: unique([
+      ...(packet.priority_records || []),
+      ...tasks.flatMap((task) => task.priority_records || [])
+    ]),
+    constraints: unique([...(packet.constraints || []), ...tasks.flatMap((task) => task.constraints || [])]),
+    prohibitions: unique([...(packet.prohibitions || []), ...tasks.flatMap((task) => task.prohibitions || [])]),
+    preserve: unique([...(packet.preserve || []), ...tasks.flatMap((task) => task.preserve || [])]),
+    replace: unique([...(packet.replace || []), ...tasks.flatMap((task) => task.replace || [])]),
+    verification: unique([...(packet.verification || []), ...tasks.flatMap((task) => task.verification || [])]),
+    completion_criteria: unique([...(packet.completion_criteria || []), ...tasks.flatMap((task) => task.completion_criteria || [])])
   };
 
   return {
@@ -1105,11 +1160,15 @@ function enrichRequest(request, input = {}) {
       multi_parent_dependencies: true,
       graph_validation: graph.valid ? 'VALID' : 'BLOCKED',
       execution_allowed: graph.valid && tasks.length > 0
-        && !hardBlockers.some((item) => String(item).startsWith('TASK_GRAPH_CYCLE') || String(item) === 'JAPANESE_PARSER_FAIL_CLOSED')
-        && (hardBlockers.length === 0 || materialOnlyRequest || (usedSynthesizedFallback && isNaturalUserConsult(question)))
+        && !hardBlockers.some((item) => String(item).startsWith('TASK_GRAPH_CYCLE') || /^JAPANESE_PARSER_FAIL_CLOSED/i.test(String(item)))
+        && (hardBlockers.length === 0
+          || materialOnlyRequest
+          || (usedSynthesizedFallback && isNaturalUserConsult(question))
+          || (mcpDeepPath && graph.valid))
         && ((request.instruction_understanding?.execution_allowed !== false)
           || materialOnlyRequest
-          || (usedSynthesizedFallback && isNaturalUserConsult(question))),
+          || (usedSynthesizedFallback && isNaturalUserConsult(question))
+          || mcpDeepPath),
       blocked_reasons: hardBlockers
     },
     analysis_task_packet: enrichedPacket
@@ -1120,6 +1179,8 @@ module.exports = {
   enrichRequest,
   isMaterialOnlyQuestion,
   isNaturalUserConsult,
+  isMcpDeepPathRequest,
+  parserFailClosedRequest,
   regions,
   contextBindings,
   deliverables,

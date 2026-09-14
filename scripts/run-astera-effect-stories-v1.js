@@ -109,7 +109,8 @@ async function main() {
       const input = {
         question: story.user_input,
         context: story.context || '',
-        language: 'ja'
+        language: 'ja',
+        deadline_ms: Number(process.env.ASTERA_EFFECT_PARSER_DEADLINE_MS || 8000)
       };
 
       let out = null;

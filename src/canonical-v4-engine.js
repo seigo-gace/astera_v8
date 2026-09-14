@@ -49,61 +49,366 @@ function structuredValues(task, type) {
   return objectList(task?.structured_constraints).filter((item) => item?.constraint_type === type).map((item) => String(item.value || '').trim()).filter(Boolean);
 }
 
-function parserTaskToAstera(task, originalText, parserResult, index) {
+const DEADLINE_CONSTRAINT_TYPES = new Set(['deadline', 'due', 'time', '納期', '期限', '締切', '締め切']);
+const CONSTRAINT_RECORD_TYPE_MAP = Object.freeze({
+  prohibition: 'PROHIBITION',
+  preserve: 'PRESERVE',
+  condition: 'CONDITION',
+  exception: 'EXCEPTION',
+  priority: 'PRIORITY',
+  premise: 'PREMISE',
+  deadline: 'DEADLINE',
+  due: 'DEADLINE',
+  time: 'DEADLINE',
+  limit: 'LIMIT',
+  dependency: 'DEPENDENCY',
+  completion_criteria: 'COMPLETION_CRITERIA',
+  verification_criteria: 'VERIFICATION',
+  verification: 'VERIFICATION',
+  success_criteria: 'SUCCESS_CRITERIA',
+  scope: 'SCOPE',
+  modify: 'REPLACE',
+  remove: 'REPLACE',
+  replace: 'REPLACE',
+  sequence: 'SEQUENCE',
+  completion: 'COMPLETION_CRITERIA',
+  success: 'SUCCESS_CRITERIA'
+});
+
+function dedupeConstraintRecords(records) {
+  const out = [];
+  const seen = new Set();
+  for (const record of records || []) {
+    if (!record?.constraint_id || seen.has(record.constraint_id)) continue;
+    seen.add(record.constraint_id);
+    out.push(record);
+  }
+  return out;
+}
+
+function normalizeConstraintRecordType(rawType) {
+  const key = String(rawType || '').trim().toLowerCase();
+  if (CONSTRAINT_RECORD_TYPE_MAP[key]) return CONSTRAINT_RECORD_TYPE_MAP[key];
+  if (DEADLINE_CONSTRAINT_TYPES.has(key)) return 'DEADLINE';
+  return 'LIMIT';
+}
+
+function parserSourceSpan(span, originalText, fallbackText = '') {
+  if (span && typeof span === 'object') {
+    const safe = safeSpan(span, originalText);
+    return { start: safe.start, end: safe.end, text: safe.text || fallbackText, valid: safe.valid };
+  }
+  return { start: 0, end: originalText.length, text: fallbackText || originalText, valid: true };
+}
+
+function buildConstraintRecord({
+  type,
+  value,
+  target = null,
+  scope = 'TASK',
+  sourceRole = 'parser',
+  sourceSpan = null,
+  taskIds = [],
+  status = 'ACTIVE',
+  fieldProvenance = null,
+  constraintId = null
+}) {
+  const normalizedValue = String(value || '').trim();
+  if (!normalizedValue) return null;
+  const recordType = typeof type === 'string' && type === type.toUpperCase() ? type : normalizeConstraintRecordType(type);
+  return {
+    constraint_id: constraintId || `CR-${recordType}-${Buffer.from(`${normalizedValue}:${target || ''}`).toString('base64url').slice(0, 16)}`,
+    type: recordType,
+    value: normalizedValue,
+    target: target || null,
+    scope,
+    source_role: sourceRole,
+    source_span: sourceSpan,
+    task_ids: unique(taskIds),
+    status,
+    field_provenance: fieldProvenance || { source: sourceRole }
+  };
+}
+
+function structuredConstraintRecords(task, taskId, originalText) {
+  const records = [];
+  let index = 0;
+  for (const item of objectList(task?.structured_constraints)) {
+    const span = parserSourceSpan(item.source_span || task.original_span, originalText, String(item.value || ''));
+    const record = buildConstraintRecord({
+      type: item.constraint_type,
+      value: item.value,
+      target: item.target || task.target || null,
+      scope: 'TASK',
+      sourceRole: 'parser_structured_constraint',
+      sourceSpan: { start: span.start, end: span.end, text: span.text },
+      taskIds: [taskId],
+      constraintId: item.constraint_id || `CR-SC-${taskId}-${index += 1}`
+    });
+    if (record) records.push(record);
+  }
+  for (const raw of objectList(task?.constraints)) {
+    const text = String(raw || '').trim();
+    if (!text) continue;
+    const split = /^([^:]+):(.+)$/.exec(text);
+    const record = buildConstraintRecord({
+      type: split ? split[1] : 'LIMIT',
+      value: split ? split[2] : text,
+      target: task.target || null,
+      scope: 'TASK',
+      sourceRole: 'parser_task_constraint',
+      sourceSpan: parserSourceSpan(task.original_span, originalText, text),
+      taskIds: [taskId],
+      constraintId: `CR-TC-${taskId}-${index += 1}`
+    });
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+function graphConstraintRecords(parserResult, taskIds, originalText) {
+  const records = [];
+  let index = 0;
+  for (const item of objectList(parserResult.task_graph?.constraints)) {
+    const span = parserSourceSpan(item.source_span, originalText, String(item.value || ''));
+    const record = buildConstraintRecord({
+      type: item.constraint_type,
+      value: item.value,
+      target: item.target || null,
+      scope: 'GLOBAL',
+      sourceRole: 'parser_task_graph_constraint',
+      sourceSpan: { start: span.start, end: span.end, text: span.text },
+      taskIds,
+      constraintId: item.constraint_id || `CR-GC-${index += 1}`
+    });
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+function propositionConstraintRecords(parserResult, taskIds, originalText) {
+  const records = [];
+  let index = 0;
+  const intentToType = {
+    prohibition: 'PROHIBITION',
+    preserve: 'PRESERVE',
+    condition: 'CONDITION',
+    exception: 'EXCEPTION',
+    priority: 'PRIORITY',
+    premise: 'PREMISE',
+    scope: 'SCOPE',
+    dependency: 'DEPENDENCY'
+  };
+  for (const proposition of objectList(parserResult.meaning_graph?.propositions)) {
+    const mapped = intentToType[String(proposition.intent_type || '').toLowerCase()];
+    if (!mapped) continue;
+    const span = parserSourceSpan(proposition.source_span, originalText, String(proposition.value || proposition.surface_predicate || ''));
+    const record = buildConstraintRecord({
+      type: mapped,
+      value: proposition.value || proposition.surface_predicate || proposition.predicate || span.text,
+      target: proposition.captures?.target || null,
+      scope: 'MEANING_GRAPH',
+      sourceRole: 'parser_proposition',
+      sourceSpan: { start: span.start, end: span.end, text: span.text },
+      taskIds,
+      constraintId: proposition.proposition_id ? `CR-P-${proposition.proposition_id}` : `CR-P-${index += 1}`
+    });
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+function aggregateConstraintViews(records) {
+  const pick = (type) => unique(records.filter((record) => record.type === type).map((record) => record.value));
+  const deadlines = pick('DEADLINE');
+  return {
+    constraint_records: records,
+    constraints: unique(records.filter((record) => !['DEADLINE', 'PROHIBITION', 'PRESERVE'].includes(record.type)).map((record) => `${record.type}:${record.value}`)),
+    prohibitions: pick('PROHIBITION'),
+    preserve: pick('PRESERVE'),
+    replace: pick('REPLACE'),
+    conditions: pick('CONDITION'),
+    exceptions: pick('EXCEPTION'),
+    deadlines,
+    priority_records: records.filter((record) => record.type === 'PRIORITY').map((record) => record.value),
+    verification: pick('VERIFICATION'),
+    completion_criteria: pick('COMPLETION_CRITERIA'),
+    success_criteria: pick('SUCCESS_CRITERIA')
+  };
+}
+
+function taskDeadlinesFromRecords(task, records) {
+  const fromTask = objectList(task.deadlines).map((item) => String(item || '').trim()).filter(Boolean);
+  const fromRecords = records.filter((record) => record.type === 'DEADLINE' && (record.task_ids.includes(task.id) || !record.task_ids.length)).map((record) => record.value);
+  const fromStructured = objectList(task.structured_constraints)
+    .filter((item) => DEADLINE_CONSTRAINT_TYPES.has(String(item.constraint_type || '').toLowerCase()) || normalizeConstraintRecordType(item.constraint_type) === 'DEADLINE')
+    .map((item) => String(item.value || '').trim())
+    .filter(Boolean);
+  return unique([...fromTask, ...fromStructured, ...structuredValues(task, 'deadline'), ...structuredValues(task, 'due'), ...fromRecords]);
+}
+
+function taskPriorityFields(task, records) {
+  const priorityRecords = unique([
+    ...structuredValues(task, 'priority'),
+    ...records.filter((record) => record.type === 'PRIORITY' && record.task_ids.includes(task.id)).map((record) => record.value)
+  ]);
+  return {
+    priority_records: priorityRecords,
+    priority: priorityRecords[0] || 'normal'
+  };
+}
+
+function parserResultHardBlockers(parserResult) {
+  const blocked = unique([
+    ...(parserResult.execution_allowed === false ? ['PARSER_ACTION_GUARD_BLOCKED'] : []),
+    ...objectList(parserResult.blocked_reasons).map((item) => String(item))
+  ]);
+  if (String(parserResult.overall_status || '') !== 'FAILED') {
+    return blocked.filter((item) => item !== 'TIMEOUT');
+  }
+  return blocked;
+}
+
+function propositionHasProjectionSignal(proposition) {
+  if (!proposition || typeof proposition !== 'object') return false;
+  if (proposition.executable_candidate === true) return true;
+  if (proposition.intent_type) return true;
+  if (proposition.predicate || proposition.surface_predicate) return true;
+  if (proposition.value && proposition.value !== proposition.text) return true;
+  if (Array.isArray(proposition.structured_constraints) && proposition.structured_constraints.length) return true;
+  return false;
+}
+
+function hasProjectableMcpMaterial(parserResult) {
+  return Boolean(
+    objectList(parserResult.task_graph?.constraints).length
+    || objectList(parserResult.meaning_graph?.unresolved).length
+    || objectList(parserResult.ambiguities).length
+    || objectList(parserResult.missing_information).length
+    || objectList(parserResult.meaning_graph?.propositions).some(propositionHasProjectionSignal)
+  );
+}
+
+function buildProjectedParserTask(parserResult, originalText) {
+  const propositions = objectList(parserResult.meaning_graph?.propositions);
+  const primary = propositions.find((item) => item.executable_candidate === true)
+    || propositions.find((item) => /request|action|desire|question|modify|comparison/i.test(String(item.intent_type || '')))
+    || propositions[0];
+  const span = parserSourceSpan(primary?.source_span, originalText, originalText);
+  const intent = String(primary?.intent_type || 'request').toLowerCase() === 'desire' ? 'request' : String(primary?.intent_type || 'request');
+  return {
+    task_id: 'A-001',
+    intent_type: intent,
+    action: primary?.predicate || primary?.surface_predicate || primary?.value || null,
+    target: primary?.captures?.target || primary?.arguments?.[0]?.value || primary?.arguments?.[0] || '',
+    status: primary?.status || 'PARTIAL',
+    original_span: { start: span.start, end: span.end, source_text: span.text },
+    dependencies: [],
+    external_action: parserResult.execution_allowed === false,
+    constraints: [],
+    structured_constraints: objectList(parserResult.task_graph?.constraints),
+    completion_criteria: [],
+    verification_criteria: [],
+    proposition_id: primary?.proposition_id || null
+  };
+}
+
+function parserTaskToAstera(task, originalText, parserResult, index, sharedRecords = []) {
   const span = safeSpan(task.original_span, originalText);
   const intent = String(task.intent_type || 'request');
+  const taskId = String(task.task_id || `A-${String(index + 1).padStart(3, '0')}`);
   const actionMap = {
     preserve: 'preserve', modify: 'improve', remove: 'remove', comparison: 'compare', decision: 'analyze',
     question: 'analyze', request: 'analyze', action: 'implement', prohibition: 'analyze', condition: 'analyze',
     sequence: 'analyze', exception: 'analyze', priority: 'analyze', correction: 'improve', scope: 'analyze',
     out_of_scope: 'analyze', dependency: 'analyze', completion_criteria: 'analyze', verification_criteria: 'verify',
-    premise: 'analyze', reference: 'analyze'
+    premise: 'analyze', reference: 'analyze', desire: 'analyze'
   };
   const action = actionMap[intent] || 'analyze';
-  const constraints = unique([...(task.constraints || []), ...objectList(task.structured_constraints).map((item) => `${item.constraint_type}:${item.value}`)]);
-  const prohibitions = unique([...structuredValues(task, 'prohibition'), ...(intent === 'prohibition' && task.target ? [`${task.target}を禁止する`] : [])]);
-  const preserve = unique([...structuredValues(task, 'preserve'), ...(intent === 'preserve' && task.target ? [`${task.target}を維持する`] : [])]);
-  const replace = unique([...(intent === 'modify' && task.target ? [`${task.target}を変更する`] : []), ...(intent === 'remove' && task.target ? [`${task.target}を除去する`] : [])]);
-  const completion = unique([...(task.completion_criteria || []), ...structuredValues(task, 'completion_criteria')]);
-  const verification = unique([...(task.verification_criteria || []), ...structuredValues(task, 'verification_criteria')]);
+  const taskRecords = dedupeConstraintRecords([
+    ...structuredConstraintRecords(task, taskId, originalText),
+    ...sharedRecords.filter((record) => record.task_ids.includes(taskId))
+  ]);
+  const aggregated = aggregateConstraintViews(taskRecords);
+  const deadlines = taskDeadlinesFromRecords(task, taskRecords);
+  const priorityFields = taskPriorityFields(task, taskRecords);
+  const constraints = unique([...(task.constraints || []), ...aggregated.constraints]);
+  const prohibitions = unique([...aggregated.prohibitions, ...structuredValues(task, 'prohibition'), ...(intent === 'prohibition' && task.target ? [`${task.target}を禁止する`] : [])]);
+  const preserve = unique([...aggregated.preserve, ...structuredValues(task, 'preserve'), ...(intent === 'preserve' && task.target ? [`${task.target}を維持する`] : [])]);
+  const replace = unique([...aggregated.replace, ...(intent === 'modify' && task.target ? [`${task.target}を変更する`] : []), ...(intent === 'remove' && task.target ? [`${task.target}を除去する`] : [])]);
+  const completion = unique([...(task.completion_criteria || []), ...aggregated.completion_criteria, ...structuredValues(task, 'completion_criteria')]);
+  const verification = unique([...(task.verification_criteria || []), ...aggregated.verification, ...structuredValues(task, 'verification_criteria')]);
   const unresolved = [];
   if (String(task.status || 'RESOLVED') !== 'RESOLVED') unresolved.push(`parser_task_status:${task.status}`);
   if (!span.valid) unresolved.push('parser_source_span_mismatch');
-  if (!task.target && !['question', 'request', 'action'].includes(intent)) unresolved.push('target');
+  if (!task.target && !['question', 'request', 'action', 'desire'].includes(intent)) unresolved.push('target');
   const hardBlockers = parserResult.execution_allowed === false && task.external_action === true
-    ? unique(['PARSER_ACTION_GUARD_BLOCKED', ...(parserResult.blocked_reasons || [])]) : [];
+    ? parserResultHardBlockers(parserResult) : [];
+  const objective = String(task.action && !/実行Task|生成する/i.test(task.action) ? task.action : (task.target || span.text || '要求を判断材料へ構造化する'));
+  const fieldSources = {
+    action: [{ source: 'parser', source_span: { start: span.start, end: span.end, text: span.text } }],
+    target: [{ source: 'parser', source_span: { start: span.start, end: span.end, text: span.text } }],
+    objective: [{ source: 'parser', source_span: { start: span.start, end: span.end, text: span.text } }],
+    deadlines: deadlines.length ? [{ source: 'parser', source_span: { start: span.start, end: span.end, text: span.text } }] : [],
+    priority: priorityFields.priority_records.length ? [{ source: 'parser', value: priorityFields.priority_records.join(' / ') }] : [{ source: 'parser', value: priorityFields.priority }],
+    constraints: constraints.length ? [{ source: 'parser', source_span: { start: span.start, end: span.end, text: span.text } }] : []
+  };
   return {
-    id: String(task.task_id || `A-${String(index + 1).padStart(3, '0')}`),
+    id: taskId,
     source_span: { start: span.start, end: span.end, text: span.text }, raw_text: span.text,
-    clause_type: intent, actionable: true, action, target: task.target || 'UNRESOLVED_JAPANESE_TARGET',
-    objective: String(task.action || task.target || span.text || '要求を判断材料へ構造化する'),
-    deliverables: [], premises: structuredValues(task, 'premise'), constraints, prohibitions, preserve, replace,
-    conditions: structuredValues(task, 'condition'), exceptions: structuredValues(task, 'exception'), deadlines: [],
-    priority: structuredValues(task, 'priority')[0] || 'normal', order: Number(task.execution_order || index + 1),
+    clause_type: intent, actionable: true, action, target: task.target || '',
+    objective,
+    deliverables: [], premises: unique([...structuredValues(task, 'premise'), ...taskRecords.filter((record) => record.type === 'PREMISE').map((record) => record.value)]),
+    constraints, prohibitions, preserve, replace,
+    conditions: unique([...aggregated.conditions, ...structuredValues(task, 'condition')]),
+    exceptions: unique([...aggregated.exceptions, ...structuredValues(task, 'exception')]),
+    deadlines,
+    ...priorityFields,
+    constraint_records: taskRecords,
+    order: Number(task.execution_order || index + 1),
     depends_on: unique(task.dependencies || []), parallelizable: !(task.dependencies || []).length,
-    success_criteria: completion, verification, completion_criteria: completion, unresolved,
+    success_criteria: unique([...aggregated.success_criteria, ...completion]),
+    verification,
+    completion_criteria: completion,
+    unresolved,
     evidence_need: { required: false, reasons: [], queries: [] }, external_action: task.external_action === true,
     hard_blockers: hardBlockers,
+    field_sources: fieldSources,
     parser_metadata: { proposition_id: task.proposition_id || null, status: task.status || null, intent_type: intent, execution_order: Number(task.execution_order || index + 1), original_action: task.action || null }
   };
 }
 
 function requestFromParser(fastRequest, parserResult, originalText) {
-  const tasks = objectList(parserResult.task_graph?.tasks).map((task, index) => parserTaskToAstera(task, originalText, parserResult, index));
+  let parserTasks = objectList(parserResult.task_graph?.tasks);
+  if (!parserTasks.length && hasProjectableMcpMaterial(parserResult)) {
+    parserTasks = [buildProjectedParserTask(parserResult, originalText)];
+  }
+  const preliminaryIds = parserTasks.map((task, index) => String(task.task_id || `A-${String(index + 1).padStart(3, '0')}`));
+  const sharedRecords = dedupeConstraintRecords([
+    ...graphConstraintRecords(parserResult, preliminaryIds, originalText),
+    ...propositionConstraintRecords(parserResult, preliminaryIds, originalText)
+  ]);
+  const tasks = parserTasks.map((task, index) => parserTaskToAstera(task, originalText, parserResult, index, sharedRecords));
   const dependencies = [];
   for (const task of tasks) for (const dependency of task.depends_on) dependencies.push({ from: dependency, to: task.id, type: 'PARSER_DEPENDENCY', reason: 'parser_task_graph' });
   for (const edge of objectList(parserResult.task_graph?.edges)) {
     const from = String(edge?.source || ''); const to = String(edge?.target || '');
     if (from && to && !dependencies.some((item) => item.from === from && item.to === to)) dependencies.push({ from, to, type: String(edge?.relation || 'PARSER_EDGE'), reason: 'parser_task_graph_edge' });
   }
-  const graphConstraints = objectList(parserResult.task_graph?.constraints);
-  const globalByType = (type) => unique(graphConstraints.filter((item) => item?.constraint_type === type).map((item) => String(item.value || '')).filter(Boolean));
-  const constraints = unique([...tasks.flatMap((task) => task.constraints), ...graphConstraints.map((item) => `${item.constraint_type}:${item.value}`)]);
-  const prohibitions = unique([...tasks.flatMap((task) => task.prohibitions), ...globalByType('prohibition')]);
-  const preserve = unique([...tasks.flatMap((task) => task.preserve), ...globalByType('preserve')]);
-  const replace = unique(tasks.flatMap((task) => task.replace));
-  const verification = unique(tasks.flatMap((task) => task.verification));
-  const completion = unique(tasks.flatMap((task) => task.completion_criteria));
+  const packetRecords = dedupeConstraintRecords([
+    ...sharedRecords,
+    ...tasks.flatMap((task) => task.constraint_records || [])
+  ]);
+  const packetViews = aggregateConstraintViews(packetRecords);
+  const constraints = unique([...tasks.flatMap((task) => task.constraints), ...packetViews.constraints]);
+  const prohibitions = unique([...tasks.flatMap((task) => task.prohibitions), ...packetViews.prohibitions]);
+  const preserve = unique([...tasks.flatMap((task) => task.preserve), ...packetViews.preserve]);
+  const replace = unique([...tasks.flatMap((task) => task.replace), ...packetViews.replace]);
+  const conditions = unique([...tasks.flatMap((task) => task.conditions || []), ...packetViews.conditions]);
+  const exceptions = unique([...tasks.flatMap((task) => task.exceptions || []), ...packetViews.exceptions]);
+  const deadlines = unique([...tasks.flatMap((task) => task.deadlines || []), ...packetViews.deadlines]);
+  const verification = unique([...tasks.flatMap((task) => task.verification), ...packetViews.verification]);
+  const completion = unique([...tasks.flatMap((task) => task.completion_criteria), ...packetViews.completion_criteria]);
   const unresolved = unique([
     ...tasks.flatMap((task) => task.unresolved.map((item) => `${task.id}:${item}`)),
     ...objectList(parserResult.meaning_graph?.unresolved).map((item, index) => `meaning_unresolved:${index}:${JSON.stringify(item)}`),
@@ -112,11 +417,19 @@ function requestFromParser(fastRequest, parserResult, originalText) {
     ...objectList(parserResult.unsupported_elements).map((item, index) => `unsupported:${index}:${JSON.stringify(item)}`),
     ...objectList(parserResult.timeouts).map((item, index) => `timeout:${index}:${JSON.stringify(item)}`),
     ...(parserResult.overall_status !== 'COMPLETE' ? [`parser_overall_status:${parserResult.overall_status}`] : []),
-    ...(!tasks.length ? ['parser_task_graph_empty'] : [])
+    ...(!parserTasks.length && !hasProjectableMcpMaterial(parserResult) ? ['parser_task_graph_empty'] : [])
   ]);
   const conflicts = objectList(parserResult.contradictions).map((item, index) => ({ type: String(item?.type || item?.code || 'PARSER_CONTRADICTION'), note: typeof item === 'string' ? item : JSON.stringify(item), parser_index: index }));
-  if (parserResult.execution_allowed === false) conflicts.push({ type: 'PARSER_ACTION_GUARD_BLOCKED', note: join(parserResult.blocked_reasons || [], 'execution_allowed=false') });
-  const hardBlockers = parserResult.execution_allowed === false ? unique(['PARSER_ACTION_GUARD_BLOCKED', ...(parserResult.blocked_reasons || [])]) : [];
+  if (parserResult.execution_allowed === false) {
+    conflicts.push({ type: 'PARSER_ACTION_GUARD_BLOCKED', note: join(parserResult.blocked_reasons || [], 'execution_allowed=false') });
+  }
+  for (const timeout of objectList(parserResult.timeouts)) {
+    conflicts.push({ type: 'PARSER_TIMEOUT', note: typeof timeout === 'string' ? timeout : JSON.stringify(timeout) });
+  }
+  const hardBlockers = unique([
+    ...parserResultHardBlockers(parserResult),
+    ...tasks.flatMap((task) => task.hard_blockers || [])
+  ]);
   return {
     ...fastRequest,
     schema_version: 'astera.request-model.v3-canonical-v4',
@@ -127,6 +440,9 @@ function requestFromParser(fastRequest, parserResult, originalText) {
     analysis_task_packet: {
       schema_version: 'astera.analysis-task-packet.v2-canonical-v4', intent: tasks[0]?.action || 'analyze', tasks, dependencies,
       execution_waves: [], constraints, prohibitions, preserve, replace, verification, completion_criteria: completion,
+      conditions, exceptions, deadlines,
+      constraint_records: packetRecords,
+      priority_records: packetViews.priority_records,
       unresolved, conflicts, hard_blockers: hardBlockers, source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span }))
     },
     instruction_understanding: {
@@ -134,7 +450,19 @@ function requestFromParser(fastRequest, parserResult, originalText) {
       analysis_path: parserResult.analysis_path, execution_allowed: parserResult.execution_allowed,
       blocked_reasons: parserResult.blocked_reasons || [], semantic_hash: parserResult.meaning_graph?.semantic_hash || null,
       meaning_graph_version: parserResult.meaning_graph?.graph_version || null, task_graph_version: parserResult.task_graph?.graph_version || null,
-      versions: parserResult.versions || {}, metrics: parserResult.metrics || {}, transport: parserResult.astera_mcp_transport || null
+      versions: parserResult.versions || {}, metrics: parserResult.metrics || {}, transport: parserResult.astera_mcp_transport || null,
+      meaning_graph: parserResult.meaning_graph || null,
+      task_graph: parserResult.task_graph || null,
+      propositions: objectList(parserResult.meaning_graph?.propositions),
+      parser_projection: {
+        propositions: objectList(parserResult.meaning_graph?.propositions),
+        unresolved: objectList(parserResult.meaning_graph?.unresolved),
+        task_graph: parserResult.task_graph || null,
+        structured_constraints: objectList(parserResult.task_graph?.constraints),
+        ambiguities: objectList(parserResult.ambiguities),
+        missing_information: objectList(parserResult.missing_information),
+        timeouts: objectList(parserResult.timeouts)
+      }
     }
   };
 }

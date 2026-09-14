@@ -217,7 +217,10 @@ function detectConstraintLoss(userInput, asteraText, result) {
     const constraintBlob = norm([
       ...(packet.constraints || []),
       ...(packet.prohibitions || []),
-      ...(packet.preserve || [])
+      ...(packet.preserve || []),
+      ...(packet.deadlines || []),
+      ...(packet.conditions || []),
+      ...(packet.constraint_records || []).map((record) => record.value)
     ].join('\n'));
     let lost = 0;
     for (const p of phrases) {
