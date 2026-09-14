@@ -190,9 +190,9 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
     assert.match(process.headers['content-type'], /text\/plain/);
     assert.equal(process.json, null);
     assert.match(process.body, /01 本当の目的/);
-    assert.match(process.body, /判断材料/);
-    assert.match(process.body, /External Consumerへ渡す内容/);
     assert.match(process.body, /08 主役AI／利用者への再指示/);
+    assert.doesNotMatch(process.body, /External Consumerへ渡す内容/);
+    assert.doesNotMatch(process.body, /^- derivation=/m);
     assert.equal((process.body.match(/^---$/gm) || []).length, 7);
     assert.doesNotMatch(process.body, /"result"/);
     assert.doesNotMatch(process.body, /"prompt"/);

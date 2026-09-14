@@ -272,11 +272,11 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
     assert.equal(failureReference.trade_off_material.status, 'INSUFFICIENT_TRADE_OFF_MATERIAL');
     assert.equal(humanFit.trade_off_material.status, 'INSUFFICIENT_TRADE_OFF_MATERIAL');
 
-    assert.match(materialText, /Trade-off Material/);
-    assert.match(materialText, /Candidates:/);
-    assert.match(materialText, /Dimensions:/);
-    assert.match(materialText, /Candidate Material:/);
-    assert.match(materialText, /Trade-off Difference:/);
+    assert.match(materialText, /- status:/);
+    assert.match(materialText, /- candidates:/);
+    assert.match(materialText, /- dimensions:/);
+    assert.match(materialText, /- candidate_id:/);
+    assert.match(materialText, /- dimension:/);
     assert.doesNotMatch(materialText, /dimensions=.*前進条件と反証/);
     assert.doesNotMatch(materialText, /dimensions=.*失敗回避材料/);
     assert.doesNotMatch(materialText, /dimensions=.*一括の勝者決定/);
@@ -293,9 +293,9 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
     if (sampleObservation) {
       assert.match(materialText, new RegExp(sampleObservation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
-    assert.match(materialText, /candidate_id=candidate:1:A案/);
-    assert.match(materialText, /label=A案/);
-    assert.match(materialText, /dimension=費用/);
+    assert.match(materialText, /candidate_id: candidate:1:A案/);
+    assert.match(materialText, /label: A案/);
+    assert.match(materialText, /dimension: 費用/);
 
     assert.ok(s06.scope_booleans);
     assert.ok(s06.supported_scope);
@@ -349,15 +349,14 @@ test('Main8 05/06 HTTP lossless text preserves EN compare material', async () =>
     if (sampleObservation) {
       assert.match(materialText, new RegExp(sampleObservation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
-    assert.match(materialText, /candidate_id=candidate:1:A/);
-    assert.match(materialText, /label=A/);
-    assert.match(materialText, /dimension=cost/i);
+    assert.match(materialText, /candidate_id: candidate:1:A/);
+    assert.match(materialText, /label: A/);
+    assert.match(materialText, /dimension: cost/i);
 
-    assert.match(materialText, /Candidate Material:/);
-    assert.match(materialText, /Trade-off Difference:/);
-    assert.match(materialText, /Per-candidate:/);
-    assert.match(materialText, /Condition Differences:/);
-    assert.match(materialText, /Unsupported Scope:/);
+    assert.match(materialText, /- candidate_id:/);
+    assert.match(materialText, /- dimension:/);
+    assert.match(materialText, /- constraints:/);
+    assert.match(materialText, /- unsupported_scope:/);
     assert.doesNotMatch(materialText, /A\[AVAILABLE/);
     assert.doesNotMatch(materialText, /cost\[MATERIAL/);
   } finally {
@@ -464,8 +463,8 @@ test('Main8 06 HTTP text preserves evidence source identity from internal compar
     if (counterCandidate) {
       assert.match(materialText, /query_role=COUNTER/);
     }
-    assert.match(materialText, /candidate_id=candidate:1:A案/);
-    assert.match(materialText, /Per-candidate:\ncandidate_id=candidate:1:A案/);
+    assert.match(materialText, /candidate_id: candidate:1:A案/);
+    assert.match(materialText, /- candidate_id: candidate:1:A案/);
     assert.doesNotMatch(materialText, /"claim_id"/);
   } finally {
     await engine.destroy();

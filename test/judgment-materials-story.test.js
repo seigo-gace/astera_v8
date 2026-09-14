@@ -221,7 +221,7 @@ test('Story 05: compare input keeps material-only comparison lanes', async () =>
     assert.deepEqual(s06.comparison_candidates.map((c) => c.label || c), ['A案', 'B案']);
     assert.equal(s06.selected_candidate, null);
     assert.deepEqual(s06.candidate_ranking, []);
-    assert.match(out.material.text, /candidate_id=candidate:1:A案/);
+    assert.match(out.material.text, /candidate_id: candidate:1:A案/);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   });
 });

@@ -20,6 +20,21 @@ const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mc
 const silentLogger = { write() {} };
 const tenant = { id: 'judgment-materials-completion', is_global: true, plan: 'admin' };
 
+function assertMaterialTextOmitsFixedEnvelope(materialText) {
+  assert.doesNotMatch(materialText, /^判断材料$/m);
+  assert.doesNotMatch(materialText, /^Judgment Material$/m);
+  assert.doesNotMatch(materialText, /導出根拠/);
+  assert.doesNotMatch(materialText, /Derivation Basis/);
+  assert.doesNotMatch(materialText, /External Consumerへ渡す内容/);
+  assert.doesNotMatch(materialText, /Material for External Consumer/);
+  assert.doesNotMatch(materialText, /^- rules=/m);
+  assert.doesNotMatch(materialText, /^- tasks=/m);
+  assert.doesNotMatch(materialText, /^- lenses=/m);
+  assert.doesNotMatch(materialText, /^- evidence_refs=\d/m);
+  assert.doesNotMatch(materialText, /^- blockers=/m);
+  assert.doesNotMatch(materialText, /^- derivation=/m);
+}
+
 const MAIN8_ORDER = Object.freeze([
   '01_purpose',
   '02_premise',
@@ -228,8 +243,7 @@ test('Case A: normal judgment materials expose Main8, five lanes, and evidence r
     }
 
     assert.match(out.material.text, /08 主役AI／利用者への再指示/);
-    assert.match(out.material.text, /External Consumerへ渡す内容/);
-    assert.match(out.material.text, /導出根拠/);
+    assertMaterialTextOmitsFixedEnvelope(out.material.text);
     assert.doesNotMatch(out.material.text, /"result"/);
   });
 });
@@ -290,7 +304,7 @@ test('Case C: evidence conflict preserves both sides and does not confirm or ado
     assert.deepEqual(out.result.comparison.candidate_ranking, []);
     assert.equal(out.result.comparison.verdict.decision, 'MATERIAL_ONLY');
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
-    assert.match(out.material.text, /Contradiction:|type=EVIDENCE_CONFLICT|CONFLICT/);
+    assert.match(out.material.text, /type: EVIDENCE_CONFLICT|EVIDENCE_CONFLICT|CONFLICT/);
 
     const projected = projectCanonicalTask({
       task: { ...task, canonical_plan: plan, domain },

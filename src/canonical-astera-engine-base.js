@@ -168,26 +168,30 @@ function formatUnsupportedScopeEntry(entry = {}) {
   return parts.join('; ');
 }
 
+function formatMaterialBulletField(key, value) {
+  return `- ${key}: ${line(value ?? '-')}`;
+}
+
 function formatTradeOffMaterialText(material) {
   const empty = !material || typeof material !== 'object' || Array.isArray(material);
   const lines = [
-    `status=${line(empty ? '-' : material.status)}`,
-    `dimensions=${!empty && material.dimensions?.length ? join(material.dimensions) : '-'}`,
-    `confirmed_claim_ids=${!empty && material.confirmed_claim_ids?.length ? join(material.confirmed_claim_ids) : '-'}`,
-    `undetermined_claim_ids=${!empty && material.undetermined_claim_ids?.length ? join(material.undetermined_claim_ids) : '-'}`,
-    `support_evidence_refs=${!empty && material.support_evidence_refs?.length ? formatEvidenceRefList(material.support_evidence_refs) : '-'}`,
-    `counter_evidence_refs=${!empty && material.counter_evidence_refs?.length ? formatEvidenceRefList(material.counter_evidence_refs) : '-'}`,
-    `missing_evidence_refs=${!empty && material.missing_evidence_refs?.length ? formatMissingEvidenceRefList(material.missing_evidence_refs) : '-'}`
+    formatMaterialBulletField('status', empty ? '-' : material.status),
+    formatMaterialBulletField('dimensions', !empty && material.dimensions?.length ? join(material.dimensions) : '-'),
+    formatMaterialBulletField('confirmed_claim_ids', !empty && material.confirmed_claim_ids?.length ? join(material.confirmed_claim_ids) : '-'),
+    formatMaterialBulletField('undetermined_claim_ids', !empty && material.undetermined_claim_ids?.length ? join(material.undetermined_claim_ids) : '-'),
+    formatMaterialBulletField('support_evidence_refs', !empty && material.support_evidence_refs?.length ? formatEvidenceRefList(material.support_evidence_refs) : '-'),
+    formatMaterialBulletField('counter_evidence_refs', !empty && material.counter_evidence_refs?.length ? formatEvidenceRefList(material.counter_evidence_refs) : '-'),
+    formatMaterialBulletField('missing_evidence_refs', !empty && material.missing_evidence_refs?.length ? formatMissingEvidenceRefList(material.missing_evidence_refs) : '-')
   ];
   if (!empty && material.policy_notes?.length) {
-    lines.push(`Trade-off Policy: ${join(material.policy_notes)}`);
+    lines.push(formatMaterialBulletField('policy_notes', join(material.policy_notes)));
   }
   if (!empty && material.material_by_dimension && typeof material.material_by_dimension === 'object') {
     for (const [dimension, entry] of Object.entries(material.material_by_dimension)) {
       const value = typeof entry === 'string'
         ? entry
         : join(entry.observations || entry.conditions || []);
-      lines.push(`${dimension}=${line(value)}`);
+      lines.push(formatMaterialBulletField(dimension, value));
     }
   }
   return lines.join('\n');
@@ -195,38 +199,26 @@ function formatTradeOffMaterialText(material) {
 
 function formatPerCandidateBlock(entry = {}) {
   return [
-    'Per-candidate:',
-    `candidate_id=${line(entry.candidate_id)}`,
-    `label=${line(entry.label || entry.candidate_id)}`,
-    `material_state=${line(entry.material_state)}`,
-    `observations=${entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'}`,
-    `confirmed_claim_ids=${entry.confirmed_claim_ids?.length ? join(entry.confirmed_claim_ids) : '-'}`,
-    `undetermined_claim_ids=${entry.undetermined_claim_ids?.length ? join(entry.undetermined_claim_ids) : '-'}`,
-    `supported_scopes=${entry.supported_scopes?.length ? entry.supported_scopes.map(formatSupportedScopeEntry).join(' / ') : '-'}`,
-    `evidence_refs=${entry.evidence_refs?.length ? formatEvidenceRefList(entry.evidence_refs) : '-'}`
+    formatMaterialBulletField('candidate_id', entry.candidate_id),
+    formatMaterialBulletField('label', entry.label || entry.candidate_id),
+    formatMaterialBulletField('material_state', entry.material_state),
+    formatMaterialBulletField('observations', entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'),
+    formatMaterialBulletField('confirmed_claim_ids', entry.confirmed_claim_ids?.length ? join(entry.confirmed_claim_ids) : '-'),
+    formatMaterialBulletField('undetermined_claim_ids', entry.undetermined_claim_ids?.length ? join(entry.undetermined_claim_ids) : '-'),
+    formatMaterialBulletField('supported_scopes', entry.supported_scopes?.length ? entry.supported_scopes.map(formatSupportedScopeEntry).join(' / ') : '-'),
+    formatMaterialBulletField('evidence_refs', entry.evidence_refs?.length ? formatEvidenceRefList(entry.evidence_refs) : '-')
   ].join('\n');
 }
 
 function formatCandidateMaterialBlock(entry = {}) {
-  return [
-    'Candidate Material:',
-    `candidate_id=${line(entry.candidate_id)}`,
-    `label=${line(entry.label)}`,
-    `material_state=${line(entry.material_state)}`,
-    `observations=${entry.observations?.length ? entry.observations.map((item) => line(item)).join(' / ') : '-'}`,
-    `confirmed_claim_ids=${entry.confirmed_claim_ids?.length ? join(entry.confirmed_claim_ids) : '-'}`,
-    `undetermined_claim_ids=${entry.undetermined_claim_ids?.length ? join(entry.undetermined_claim_ids) : '-'}`,
-    `supported_scopes=${entry.supported_scopes?.length ? entry.supported_scopes.map(formatSupportedScopeEntry).join(' / ') : '-'}`,
-    `evidence_refs=${entry.evidence_refs?.length ? formatEvidenceRefList(entry.evidence_refs) : '-'}`
-  ].join('\n');
+  return formatPerCandidateBlock(entry);
 }
 
 function formatTradeOffDifferenceBlock(entry = {}) {
   const lines = [
-    'Trade-off Difference:',
-    `dimension=${line(entry.dimension)}`,
-    `comparison_state=${line(entry.comparison_state || entry.status)}`,
-    `conditions=${entry.conditions?.length ? join(entry.conditions) : '-'}`
+    formatMaterialBulletField('dimension', entry.dimension),
+    formatMaterialBulletField('comparison_state', entry.comparison_state || entry.status),
+    formatMaterialBulletField('conditions', entry.conditions?.length ? join(entry.conditions) : '-')
   ];
   for (const candidate of entry.per_candidate || []) {
     lines.push(formatPerCandidateBlock(candidate));
@@ -242,11 +234,10 @@ function formatSection05Pass(section) {
   return perspectives.map((perspective) => {
     const focusText = Array.isArray(perspective.focus) ? join(perspective.focus) : line(perspective.focus);
     return [
-      `Perspective: ${line(perspective.id || perspective.class)}`,
-      `Focus: ${focusText}`,
-      `Conditions: ${join(perspective.conditions)}`,
-      `Failure Conditions: ${join(perspective.failure_conditions)}`,
-      'Trade-off Material:',
+      formatMaterialBulletField('id', perspective.id || perspective.class),
+      formatMaterialBulletField('focus', focusText),
+      formatMaterialBulletField('conditions', join(perspective.conditions)),
+      formatMaterialBulletField('failure_conditions', join(perspective.failure_conditions)),
       formatTradeOffMaterialText(perspective.trade_off_material)
     ].join('\n');
   }).join('\n\n');
@@ -260,22 +251,47 @@ function formatSection06Pass(section) {
   const tradeOffDiffBlocks = (section.trade_off_differences || []).map((entry) => formatTradeOffDifferenceBlock(entry));
   const conditionDiff = section.condition_differences || {};
   const contradictionBlocks = (section.contradiction_map || []).map((entry) => [
-    'Contradiction:',
-    `type=${line(entry.type)}`,
-    `claim_id=${line(entry.claim_id)}`,
-    `reasons=${join(entry.reasons)}`
+    formatMaterialBulletField('type', entry.type),
+    formatMaterialBulletField('claim_id', entry.claim_id),
+    formatMaterialBulletField('reasons', join(entry.reasons))
   ].join('\n'));
-  const supportedBlocks = (section.supported_scope || []).map((entry) => `Supported Scope: ${formatSupportedScopeEntry(entry)}`);
-  const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => `Unsupported Scope: ${formatUnsupportedScopeEntry(entry)}`);
+  const supportedBlocks = (section.supported_scope || []).map((entry) => formatMaterialBulletField('supported_scope', formatSupportedScopeEntry(entry)));
+  const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => formatMaterialBulletField('unsupported_scope', formatUnsupportedScopeEntry(entry)));
+  const emptyCandidateMaterial = [
+    formatMaterialBulletField('candidate_id', '-'),
+    formatMaterialBulletField('label', '-'),
+    formatMaterialBulletField('material_state', '-'),
+    formatMaterialBulletField('observations', '-'),
+    formatMaterialBulletField('confirmed_claim_ids', '-'),
+    formatMaterialBulletField('undetermined_claim_ids', '-'),
+    formatMaterialBulletField('supported_scopes', '-'),
+    formatMaterialBulletField('evidence_refs', '-')
+  ].join('\n');
+  const emptyTradeOffDiff = [
+    formatMaterialBulletField('dimension', '-'),
+    formatMaterialBulletField('comparison_state', '-'),
+    formatMaterialBulletField('conditions', '-')
+  ].join('\n');
+  const emptyContradiction = [
+    formatMaterialBulletField('type', '-'),
+    formatMaterialBulletField('claim_id', '-'),
+    formatMaterialBulletField('reasons', '-')
+  ].join('\n');
   return [
-    `Candidates: ${join(candidates)}`,
-    `Dimensions: ${join(section.dimensions)}`,
-    ...(candidateMaterialBlocks.length ? candidateMaterialBlocks : ['Candidate Material:', 'candidate_id=-', 'label=-', 'material_state=-', 'observations=-', 'confirmed_claim_ids=-', 'undetermined_claim_ids=-', 'supported_scopes=-', 'evidence_refs=-']),
-    ...(tradeOffDiffBlocks.length ? tradeOffDiffBlocks : ['Trade-off Difference:', 'dimension=-', 'comparison_state=-', 'conditions=-']),
-    `Condition Differences: constraints=${join(conditionDiff.constraints)}; prohibitions=${join(conditionDiff.prohibitions)}; preserve=${join(conditionDiff.preserve)}; replace=${join(conditionDiff.replace)}; conditions=${join(conditionDiff.conditions)}; exceptions=${join(conditionDiff.exceptions)}; dependencies=${join(conditionDiff.dependencies)}`,
-    ...(contradictionBlocks.length ? contradictionBlocks : ['Contradiction:', 'type=-', 'claim_id=-', 'reasons=-']),
-    ...(supportedBlocks.length ? supportedBlocks : ['Supported Scope: claim_id=-']),
-    ...(unsupportedBlocks.length ? unsupportedBlocks : ['Unsupported Scope: claim_id=-'])
+    formatMaterialBulletField('candidates', join(candidates)),
+    formatMaterialBulletField('dimensions', join(section.dimensions)),
+    ...(candidateMaterialBlocks.length ? candidateMaterialBlocks : [emptyCandidateMaterial]),
+    ...(tradeOffDiffBlocks.length ? tradeOffDiffBlocks : [emptyTradeOffDiff]),
+    formatMaterialBulletField('constraints', join(conditionDiff.constraints)),
+    formatMaterialBulletField('prohibitions', join(conditionDiff.prohibitions)),
+    formatMaterialBulletField('preserve', join(conditionDiff.preserve)),
+    formatMaterialBulletField('replace', join(conditionDiff.replace)),
+    formatMaterialBulletField('conditions_diff', join(conditionDiff.conditions)),
+    formatMaterialBulletField('exceptions', join(conditionDiff.exceptions)),
+    formatMaterialBulletField('dependencies', join(conditionDiff.dependencies)),
+    ...(contradictionBlocks.length ? contradictionBlocks : [emptyContradiction]),
+    ...(supportedBlocks.length ? supportedBlocks : [formatMaterialBulletField('supported_scope', 'claim_id=-')]),
+    ...(unsupportedBlocks.length ? unsupportedBlocks : [formatMaterialBulletField('unsupported_scope', 'claim_id=-')])
   ].join('\n');
 }
 
@@ -407,18 +423,15 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
   }
 
   material(judgment){
-    const heads=judgment.output_language==='en'?{one:'Judgment Material',basis:'Derivation Basis',pass:'Material for External Consumer'}:{one:'判断材料',basis:'導出根拠',pass:'External Consumerへ渡す内容'};
     const sections=ORDER.map((key)=>judgment[key]);
     const compact_text=sections.map((section)=>`${section.label}: ${line(section.summary)}`).join('\n');
     const text=ORDER.map((key)=>{
       const section=judgment[key];
-      const basis=section.decision_basis||{};
-      const basisLines=[`rules=${join(basis.rule_ids)}`,`tasks=${join(basis.task_ids)}`,`lenses=${join(basis.lens_ids)}`,`evidence_refs=${(basis.evidence_refs||[]).length}`,`blockers=${join(basis.blocking_conditions,'none')}`,`derivation=${line(basis.derivation)}`];
-      let passContent;
-      if(key==='05_opposition')passContent=formatSection05Pass(section);
-      else if(key==='06_comparison')passContent=formatSection06Pass(section);
-      else passContent=section.items?.length?section.items.map((item)=>`- ${line(item)}`).join('\n'):`- ${line(section.summary)}`;
-      return`${section.label}\n${heads.one}\n${line(section.summary)}\n${heads.basis}\n${basisLines.map((item)=>`- ${item}`).join('\n')}\n${heads.pass}\n${passContent}`;
+      let materialLines;
+      if(key==='05_opposition')materialLines=formatSection05Pass(section);
+      else if(key==='06_comparison')materialLines=formatSection06Pass(section);
+      else materialLines=section.items?.length?section.items.map((item)=>`- ${line(item)}`).join('\n'):`- ${line(section.summary)}`;
+      return`${section.label}\n${materialLines}`;
     }).join('\n---\n');
     return{mode:'judgment_material',target:'user_ai',raw_policy:'do_not_pass_raw_by_default',non_ai:true,decision_authority:'EXTERNAL_ONLY',format:judgment.format,text,compact_text,sections};
   }
