@@ -1,0 +1,627 @@
+{
+  "phase": "final",
+  "mock_mcp": false,
+  "fixture": "/app/test/fixtures/astera-effect-stories-unseen-v1.json",
+  "corpus": 32,
+  "ran": 32,
+  "process_errors": 0,
+  "evidence_need_created": 25,
+  "BASELINE_TOTAL": 280,
+  "ASTERA_TOTAL": 709,
+  "IMPROVEMENT_DELTA": 429,
+  "IMPROVED_STORIES": 31,
+  "UNCHANGED_STORIES": 1,
+  "DEGRADED_STORIES": 0,
+  "HALLUCINATION_COUNT": 0,
+  "CONSTRAINT_LOSS_COUNT": 0,
+  "FALSE_CONFIRMATION_COUNT": 0,
+  "FINAL_DECISION_VIOLATION_COUNT": 0,
+  "TASK_DECOMPOSITION_FAILURE_COUNT": 0,
+  "UNCERTAINTY_LOSS_COUNT": 0,
+  "rubric_baseline": {
+    "R01_purpose_clear": 19,
+    "R02_premise_constraints": 6,
+    "R03_known_vs_unknown": 3,
+    "R04_gaps_explicit": 10,
+    "R05_risk_discovery": 0,
+    "R06_counter_view": 0,
+    "R07_comparison_axis": 5,
+    "R08_contradiction_kept": 0,
+    "R09_no_false_certainty": 64,
+    "R10_evidence_need": 0,
+    "R11_task_decomposition": 7,
+    "R12_condition_exception": 38,
+    "R13_ai_usable_structure": 0,
+    "R14_no_hallucination": 64,
+    "R15_no_final_decision": 64
+  },
+  "rubric_astera": {
+    "R01_purpose_clear": 50,
+    "R02_premise_constraints": 60,
+    "R03_known_vs_unknown": 57,
+    "R04_gaps_explicit": 64,
+    "R05_risk_discovery": 50,
+    "R06_counter_view": 50,
+    "R07_comparison_axis": 51,
+    "R08_contradiction_kept": 25,
+    "R09_no_false_certainty": 57,
+    "R10_evidence_need": 50,
+    "R11_task_decomposition": 29,
+    "R12_condition_exception": 38,
+    "R13_ai_usable_structure": 50,
+    "R14_no_hallucination": 64,
+    "R15_no_final_decision": 14
+  },
+  "rubric_delta": {
+    "R01_purpose_clear": 31,
+    "R02_premise_constraints": 54,
+    "R03_known_vs_unknown": 54,
+    "R04_gaps_explicit": 54,
+    "R05_risk_discovery": 50,
+    "R06_counter_view": 50,
+    "R07_comparison_axis": 46,
+    "R08_contradiction_kept": 25,
+    "R09_no_false_certainty": -7,
+    "R10_evidence_need": 50,
+    "R11_task_decomposition": 22,
+    "R12_condition_exception": 0,
+    "R13_ai_usable_structure": 50,
+    "R14_no_hallucination": 0,
+    "R15_no_final_decision": -50
+  },
+  "examples_improved": [
+    {
+      "story_id": "US-001",
+      "scenario_kind": "short_natural",
+      "user_input": "来週の面接、緊張で眠れない。短く落ち着くための準備の順番だけ教えて。",
+      "IMPROVEMENT_DELTA": 15,
+      "added_value": {
+        "new_premises": [
+          "制約・期限・未確定のcarry-forward材料は現在列挙できていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- 制約・期限・未確定のcarry-forward材料は現在列挙できていない"
+        ],
+        "new_risks": [],
+        "new_counter": [
+          "defensive:- / critical:- / counter:Counter / Alternative evidence angle",
+          "- rules=MAIN8-05-COUNTER-ROLE-MATERIAL",
+          "- derivation=Multi/Perspective Expansionの実体を保持し、MAINLINE以外の視点とTrade-off材料を失わない"
+        ],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-002",
+      "scenario_kind": "ambiguous_target",
+      "user_input": "あの件、向こうが言うには「問題ない」らしいけど、こちらの感覚と合わない。何を聞き返すべきか迷う。",
+      "IMPROVEMENT_DELTA": 3,
+      "added_value": {
+        "new_premises": [],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-003",
+      "scenario_kind": "multi_task",
+      "user_input": "引っ越しの見積もり取得、荷物の梱包リスト作成、旧居の解約通知を全部今月中に終わらせたい。優先順位と依存関係を整理したい。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [
+          "defensive:- / critical:- / counter:Counter / Alternative evidence angle",
+          "- rules=MAIN8-05-COUNTER-ROLE-MATERIAL"
+        ],
+        "new_uncertain": [
+          "unresolved=T01:target / missing=T01:target",
+          "- unresolved=T01:target",
+          "- missing=T01:target",
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-004",
+      "scenario_kind": "condition_exception",
+      "user_input": "社内FAQを更新してほしい。ただし公開済みの返金ポリシー条文は変えず、新しい問い合わせ例だけ追記して。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "constraint[EXCEPTION]=excepts span=excepts / constraint[EXCEPTION]=excepts span=社内FAQを更新してほしい / exception=excepts / hard_blocker=PARSER_ACTION_GUARD_BLOCKED / hard_blocker=NEGATED_ACTION / unresolved=T01:deliverable / conflict=PARSER_ACTION_GUARD_BLOCKED:NEGATED_ACTION / conflict=PARSER_MATERIAL_ONLY_TENSION:PARSER_ACTION_GUARD_BLOCKED / conflict=PARSER_MATERIAL_ONLY_TENSION:NEGATED_ACTION / missing=T01:completion_criteria / missing=T01:deliverable / hard_constraint=exception:excepts / hard_constraint=EXCEPTION:excepts",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- constraint[EXCEPTION]=excepts span=excepts",
+          "- constraint[EXCEPTION]=excepts span=社内FAQを更新してほしい",
+          "- hard_constraint=exception:excepts"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "- unresolved=T01:deliverable",
+          "- missing=T01:completion_criteria",
+          "- missing=T01:deliverable"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-005",
+      "scenario_kind": "forbid_maintain",
+      "user_input": "顧客データのエクスポート機能は追加したいが、個人情報の二次利用は禁止のまま維持して。両立する設計の論点を洗い出して。",
+      "IMPROVEMENT_DELTA": 15,
+      "added_value": {
+        "new_premises": [
+          "constraint[PROHIBITION]=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は span=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は禁止 / unresolved=T01:deliverable / missing=T01:completion_criteria / missing=T01:deliverable / hard_constraint=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は / hard_constraint=顧客データのエクスポート機能は追加したいが、個人情報の二次利用はを禁止する / prohibition=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は / prohibition=顧客データのエクスポート機能は追加したいが、個人情報の二次利用はを禁止する",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- constraint[PROHIBITION]=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は span=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は禁止",
+          "- hard_constraint=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は",
+          "- hard_constraint=顧客データのエクスポート機能は追加したいが、個人情報の二次利用はを禁止する",
+          "- prohibition=顧客データのエクスポート機能は追加したいが、個人情報の二次利用は",
+          "- prohibition=顧客データのエクスポート機能は追加したいが、個人情報の二次利用はを禁止する"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "- unresolved=T01:deliverable",
+          "- missing=T01:completion_criteria",
+          "- missing=T01:deliverable",
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": [
+          "T01[implement] 禁止する",
+          "- T01[implement] 禁止する"
+        ]
+      }
+    },
+    {
+      "story_id": "US-006",
+      "scenario_kind": "deadline_budget",
+      "user_input": "展示会ブースの装飾を3/20までに仕上げたい。予算は税込45万以内。候補業者はまだ未選定。",
+      "IMPROVEMENT_DELTA": 15,
+      "added_value": {
+        "new_premises": [
+          "制約・期限・未確定のcarry-forward材料は現在列挙できていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- 制約・期限・未確定のcarry-forward材料は現在列挙できていない"
+        ],
+        "new_risks": [],
+        "new_counter": [
+          "defensive:- / critical:- / counter:Counter / Alternative evidence angle",
+          "- rules=MAIN8-05-COUNTER-ROLE-MATERIAL",
+          "- derivation=Multi/Perspective Expansionの実体を保持し、MAINLINE以外の視点とTrade-off材料を失わない"
+        ],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-007",
+      "scenario_kind": "task_order",
+      "user_input": "まず在庫棚卸し、その結果を見てから発注数を決め、最後に倉庫へ連絡する順で進めたい。手順の抜けがないか確認して。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "制約・期限・未確定のcarry-forward材料は現在列挙できていない",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- 制約・期限・未確定のcarry-forward材料は現在列挙できていない"
+        ],
+        "new_risks": [],
+        "new_counter": [
+          "defensive:- / critical:- / counter:Counter / Alternative evidence angle",
+          "- rules=MAIN8-05-COUNTER-ROLE-MATERIAL",
+          "- derivation=Multi/Perspective Expansionの実体を保持し、MAINLINE以外の視点とTrade-off材料を失わない"
+        ],
+        "new_uncertain": [
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-008",
+      "scenario_kind": "correction",
+      "user_input": "さっき「来週火曜納品」と言ったけど訂正で来週金曜。それ以外の条件はそのまま。影響範囲を整理して。",
+      "IMPROVEMENT_DELTA": 15,
+      "added_value": {
+        "new_premises": [
+          "constraint[PRESERVE]=それ以外の条件 span=それ以外の条件はそのまま / constraint[PRESERVE]=それ以外の条件 span=訂正で来週金曜 / unresolved=CORRECTION_SCOPE_UNRESOLVED:0-25 / unresolved=T01:deliverable / missing=T01:completion_criteria / missing=T01:deliverable / hard_constraint=preserve:それ以外の条件 / hard_constraint=それ以外の条件",
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない",
+          "- constraint[PRESERVE]=それ以外の条件 span=それ以外の条件はそのまま",
+          "- constraint[PRESERVE]=それ以外の条件 span=訂正で来週金曜",
+          "- hard_constraint=preserve:それ以外の条件",
+          "- hard_constraint=それ以外の条件"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "- blockers=CORRECTION_SCOPE_UNRESOLVED:0-25 / T01:deliverable",
+          "- unresolved=CORRECTION_SCOPE_UNRESOLVED:0-25",
+          "- unresolved=T01:deliverable",
+          "- missing=T01:completion_criteria",
+          "- missing=T01:deliverable",
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-009",
+      "scenario_kind": "premise_change",
+      "user_input": "当初はオフィス移転前提だったが、リモート継続に方針変更。すでに出した内装見積もりをどう扱うか整理したい。",
+      "IMPROVEMENT_DELTA": 17,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "hard_blocker=PARSER_ACTION_GUARD_BLOCKED / hard_blocker=NO_EXECUTABLE_ACTION / unresolved=T01:target / conflict=PARSER_ACTION_GUARD_BLOCKED:NO_EXECUTABLE_ACTION / conflict=PARSER_MATERIAL_ONLY_TENSION:PARSER_ACTION_GUARD_BLOCKED / conflict=PARSER_MATERIAL_ONLY_TENSION:NO_EXECUTABLE_ACTION / missing=T01:hard_blocker:NO_EXECUTABLE_ACTION / missing=T01:hard_blocker:PARSER_ACTION_GUARD_BLOCKED / missing=T01:target",
+          "- unresolved=T01:target",
+          "- missing=T01:hard_blocker:NO_EXECUTABLE_ACTION",
+          "- missing=T01:hard_blocker:PARSER_ACTION_GUARD_BLOCKED",
+          "- missing=T01:target",
+          "CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-010",
+      "scenario_kind": "quote_mixed_command",
+      "user_input": "メールに「至急対応」と書いてある一方、同じスレッドで「様子見で」とも書いてあった。実際に今やるべきことを切り分けて。",
+      "IMPROVEMENT_DELTA": 4,
+      "added_value": {
+        "new_premises": [],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-011",
+      "scenario_kind": "code_quote",
+      "user_input": "次の設定断片を見て、本番反映前に確認すべき点を挙げて。\n```yaml\nreplicas: 2\nmaxUnavailable: 0\n```",
+      "IMPROVEMENT_DELTA": 16,
+      "added_value": {
+        "new_premises": [
+          "- rules=MAIN8-02-UNRESOLVED-CONSTRAINT",
+          "- derivation=Unresolved/Conflict/Hard Constraint/Deadlineを列挙し、推測補完しない"
+        ],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [
+          "hard_blocker=PARSER_ACTION_GUARD_BLOCKED / hard_blocker=NO_EXECUTABLE_ACTION / conflict=PARSER_ACTION_GUARD_BLOCKED:NO_EXECUTABLE_ACTION / conflict=PARSER_MATERIAL_ONLY_TENSION:PARSER_ACTION_GUARD_BLOCKED / conflict=PARSER_MATERIAL_ONLY_TENSION:NO_EXECUTABLE_ACTION / missing=T01:hard_blocker:NO_EXECUTABLE_ACTION / missing=T01:hard_blocker:PARSER_ACTION_GUARD_BLOCKED",
+          "- missing=T01:hard_blocker:NO_EXECUTABLE_ACTION",
+          "- missing=T01:hard_blocker:PARSER_ACTION_GUARD_BLOCKED",
+          "CONFIRMED 0件 / UNDETERMINED 0件",
+          "- CONFIRMED 0件 / UNDETERMINED 0件"
+        ],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [
+          "- evidence_refs=0",
+          "- derivation=Evidence Search品質ではなくG1-G7全通過ClaimだけをCONFIRMEDとする",
+          "{\"required\":false,\"reasons\":[],\"queries\":[]}"
+        ],
+        "reinstruction_improvements": []
+      }
+    },
+    {
+      "story_id": "US-012",
+      "scenario_kind": "multi_domain",
+      "user_input": "子どもの習い事と親の介護の送迎が同じ週に重なった。仕事の稼働日は変えられない。両方の制約を崩さずに調整案を考えたい。",
+      "IMPROVEMENT_DELTA": 3,
+      "added_value": {
+        "new_premises": [],
+        "new_risks": [],
+        "new_counter": [],
+        "new_uncertain": [],
+        "new_comparison_axes": [],
+        "new_evidence_needs": [],
+        "reinstruction_improvements": []
+      }
+    }
+  ],
+  "results": [
+    {
+      "story_id": "US-001",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "US-002",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 3,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-003",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-004",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-005",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "US-006",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "US-007",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-008",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "US-009",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-010",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 7
+    },
+    {
+      "story_id": "US-011",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-012",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 3,
+      "ASTERA_TOTAL": 12,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-013",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-014",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-015",
+      "outcome": "unchanged",
+      "IMPROVEMENT_DELTA": 0,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "US-016",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-017",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 10
+    },
+    {
+      "story_id": "US-018",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 2,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-019",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-020",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-021",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-022",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 7
+    },
+    {
+      "story_id": "US-023",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 18,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-024",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 4,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 7
+    },
+    {
+      "story_id": "US-025",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 15,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 11
+    },
+    {
+      "story_id": "US-026",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 3,
+      "ASTERA_TOTAL": 11,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-027",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-028",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 8
+    },
+    {
+      "story_id": "US-029",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-030",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 17,
+      "ASTERA_TOTAL": 26,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-031",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    },
+    {
+      "story_id": "US-032",
+      "outcome": "improved",
+      "IMPROVEMENT_DELTA": 16,
+      "ASTERA_TOTAL": 25,
+      "BASELINE_TOTAL": 9
+    }
+  ]
+}
