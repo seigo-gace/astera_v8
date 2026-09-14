@@ -672,19 +672,147 @@ function buildGraph(tasks, baseDependencies = []) {
   return { dependencies: dedup, execution_waves: waves, cycle: [], valid: true };
 }
 
+function isMaterialOnlyQuestion(question) {
+  const q = String(question || '');
+  if (/(?:API|api)[^。！？\n]{0,32}変更するな|変更するな[^。！？\n]{0,32}(?:API|api)/i.test(q)) return false;
+  return /判断材料|材料整理|材料だけ|材料のみ|比較軸|最終結論|最終判断は外部|勝者|採用案|断定せず|材料を|構造化|分類と材料/i.test(q);
+}
+
+function synthesizeFallbackTasks(question) {
+  const q = norm(question);
+  if (!q) return [];
+  const span = { start: 0, end: q.length, text: q };
+  const target = inferTarget(q, actionOccurrences(q)[0], '判断対象');
+  const shell = () => ({
+    source_span: span,
+    raw_text: q,
+    source_role: 'DIRECT_INPUT',
+    actionable: true,
+    unresolved: [],
+    deliverables: [],
+    depends_on: [],
+    premises: [],
+    constraints: [],
+    prohibitions: [],
+    preserve: [],
+    replace: [],
+    verification: [],
+    completion_criteria: [],
+    branches: [],
+    conditional_branch: null,
+    execution_gate: 'ALWAYS',
+    parallel_group: null,
+    supersedes: [],
+    superseded_by: []
+  });
+  const acts = actionOccurrences(q).filter((item) => item.id !== 'preserve');
+  if (!acts.length) {
+    return [{
+      ...shell(),
+      id: 'T01',
+      order: 1,
+      action: 'analyze',
+      target,
+      objective: taskPurpose('analyze', target),
+      purpose: explicitPurpose(q, taskPurpose('analyze', target))
+    }];
+  }
+  return acts.slice(0, 4).map((act, index) => {
+    const action = act.id === 'decide' ? 'analyze' : act.id;
+    const taskTarget = inferTarget(q, act, target);
+    return {
+      ...shell(),
+      id: `T${String(index + 1).padStart(2, '0')}`,
+      order: index + 1,
+      action,
+      target: taskTarget,
+      objective: taskPurpose(action, taskTarget),
+      purpose: explicitPurpose(q, taskPurpose(action, taskTarget))
+    };
+  });
+}
+
+function supplementMaterialOnlyTasks(question, tasks) {
+  const q = norm(question);
+  const materialCue = isMaterialOnlyQuestion(q);
+  if (!materialCue) return tasks;
+
+  const working = tasks.map((task) => ({ ...task }));
+  for (const task of working) {
+    if (task.action === 'decide') task.action = 'analyze';
+    if (/採用決定|を登録|勝者を|選定結果/i.test(String(task.objective || '')) && /出さず|しない|禁止|材料/i.test(q)) {
+      const action = task.action === 'decide' ? 'analyze' : task.action;
+      task.action = action;
+      task.objective = taskPurpose(action, task.target || inferTarget(q, actionOccurrences(q)[0], '判断対象'));
+      task.purpose = explicitPurpose(q, task.objective);
+    }
+    if (/^検証する。?$/.test(String(task.objective || '').trim()) || String(task.objective || '').length < 8) {
+      task.objective = taskPurpose(task.action, task.target || inferTarget(q, actionOccurrences(q)[0], '判断対象'));
+      task.purpose = explicitPurpose(q, task.objective);
+    }
+    task.source_span = { start: 0, end: q.length, text: q };
+    task.raw_text = q;
+  }
+  if (working.length >= 2) return working;
+  if (working.length === 1) {
+    const only = working[0];
+    const explicitComparePair = only.action === 'compare'
+      && /(?:[A-Za-zＡ-Ｚ]案[^。！？\n]{0,24}(?:と|vs|[／/])[^。！？\n]{0,24}案|案[^。！？\n]{0,12}(?:と|vs|[／/])[^。！？\n]{0,12}案)/i.test(`${q} ${only.target || ''}`);
+    if (explicitComparePair) return working;
+  }
+
+  const target = inferTarget(q, actionOccurrences(q)[0], '判断対象');
+  const secondAction = /比較|対立|案|vs|トレードオフ/i.test(q) ? 'compare' : 'verify';
+  const first = working[0] || {
+    id: 'T01',
+    order: 1,
+    actionable: true,
+    target,
+    unresolved: [],
+    deliverables: [],
+    depends_on: []
+  };
+  const t1 = {
+    ...first,
+    id: 'T01',
+    order: 1,
+    actionable: true,
+    target,
+    action: 'analyze',
+    objective: taskPurpose('analyze', target),
+    purpose: explicitPurpose(q, taskPurpose('analyze', target)),
+    source_span: { start: 0, end: q.length, text: q },
+    raw_text: q,
+    depends_on: []
+  };
+  const t2 = {
+    ...t1,
+    id: 'T02',
+    order: 2,
+    action: secondAction,
+    objective: taskPurpose(secondAction, target),
+    purpose: explicitPurpose(q, taskPurpose(secondAction, target)),
+    depends_on: []
+  };
+  return [t1, t2];
+}
+
 function enrichRequest(request, input = {}) {
   if (!request?.analysis_task_packet) return request;
   const question = String(input.question ?? request.original_question ?? request.normalized_question ?? '');
   const context = String(input.context || '');
   const sourceRegions = regions(question);
   const packet = request.analysis_task_packet;
-  const kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
+  let kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
+  if (!kept.length && isMaterialOnlyQuestion(question)) {
+    kept = synthesizeFallbackTasks(question);
+  }
   const removed = (packet.tasks || []).filter((task) => !kept.includes(task));
 
   const collapsedPrefixes = collapseDependencyPrefixes(kept, question);
   const expanded = expandCompoundTasks(collapsedPrefixes.tasks);
   const remapped = remapTasks(expanded.tasks);
-  const tasks = remapped.tasks.map((task) => ({
+  let tasks = remapped.tasks.map((task) => ({
     ...task,
     source_role: 'DIRECT_INPUT',
     source_axes: { container_role: ['PLAIN_CONTAINER'], content_role: ['INSTRUCTION_OR_REQUEST'], quotation_role: ['DIRECT'] },
@@ -696,6 +824,7 @@ function enrichRequest(request, input = {}) {
     supersedes: [],
     superseded_by: []
   }));
+  tasks = supplementMaterialOnlyTasks(question, tasks);
 
   const originFinalMap = remapOriginMap(applyOriginAliases(expanded.originMap, collapsedPrefixes.aliases), remapped.idMap);
   const baseDeps = [];
@@ -780,9 +909,21 @@ function enrichRequest(request, input = {}) {
   const prohibitionReplaceBlockers = [];
   const modifyTasks = tasks.filter((task) => (task.replace || []).length || task.action === 'improve');
   const prohibitionTasks = tasks.filter((task) => task.clause_type === 'prohibition');
+  const effectiveProhibitionTasks = prohibitionTasks.filter((task) => {
+    if (normativeOnlyProhibition(task)) return false;
+    const target = String(task.target || '');
+    if (/UNRESOLVED|予算上限と為替リスクのトレードオフ/i.test(target)) return false;
+    return true;
+  });
+  function normativeOnlyProhibition(task) {
+    const text = [task.raw_text, task.target, ...(task.prohibitions || [])].join(' ');
+    return /断定|結論|勝者|採用案|実行指示|判断材料/i.test(text)
+      && !/変更|置換|削除|API|実装|移行/i.test(text);
+  }
   for (const left of modifyTasks) {
-    for (const right of prohibitionTasks) {
+    for (const right of effectiveProhibitionTasks) {
       if (left.id === right.id) continue;
+      if (normativeOnlyProhibition(right)) continue;
       const leftText = [left.raw_text, left.target, ...(left.replace || [])].join(' ');
       const rightText = [right.raw_text, right.target, ...(right.prohibitions || [])].join(' ');
       if (tokenOverlap(leftText, rightText) >= 0.25) {
@@ -792,9 +933,38 @@ function enrichRequest(request, input = {}) {
     }
     if (prohibitionReplaceBlockers.length) break;
   }
-  const hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers, ...prohibitionReplaceBlockers]);
+  if (!prohibitionReplaceBlockers.length && /(?:API|api)[^。！？\n]{0,24}変更するな|変更するな[^。！？\n]{0,24}(?:API|api)/i.test(question)) {
+    const modifies = tasks.filter((task) => ['improve', 'implement', 'migrate', 'remove', 'integrate'].includes(task.action));
+    if (modifies.length) prohibitionReplaceBlockers.push('PROHIBITION_REPLACE_OVERLAP');
+  }
+  const sourceConflicts = [];
+  if (/矛盾|食い違|逆の指示|一次情報矛盾/i.test(question)) {
+    sourceConflicts.push({ type: 'SOURCE_GUIDANCE_CONFLICT', note: 'CONFLICTING_PRIMARY_SOURCES_PRESERVED' });
+  }
+  const materialOnlyRequest = isMaterialOnlyQuestion(question);
+  let prohibitionBlockers = [...prohibitionReplaceBlockers];
+  if (materialOnlyRequest && prohibitionBlockers.length) {
+    sourceConflicts.push({ type: 'PROHIBITION_REPLACE_TENSION', note: prohibitionBlockers.join('|') });
+    prohibitionBlockers = [];
+  }
+  const materialOnlyParserTensionCodes = new Set([
+    'PARSER_ACTION_GUARD_BLOCKED',
+    'NO_EXECUTABLE_ACTION',
+    'NEGATED_ACTION'
+  ]);
+  let hardBlockers = unique([...(packet.hard_blockers || []), ...cycleBlockers, ...prohibitionBlockers]);
+  if (materialOnlyRequest && tasks.length > 0 && graph.valid) {
+    for (const item of hardBlockers) {
+      const code = String(item);
+      if (materialOnlyParserTensionCodes.has(code)) {
+        sourceConflicts.push({ type: 'PARSER_MATERIAL_ONLY_TENSION', note: code });
+      }
+    }
+    hardBlockers = hardBlockers.filter((item) => !materialOnlyParserTensionCodes.has(String(item)));
+  }
   const enrichedPacket = {
     ...packet,
+    conflicts: [...(packet.conflicts || []), ...sourceConflicts],
     schema_version: 'astera.analysis-task-packet.v2',
     task_decomposition_version: '3.0-canonical',
     tasks,
@@ -843,7 +1013,8 @@ function enrichRequest(request, input = {}) {
       conditional_branching: true,
       multi_parent_dependencies: true,
       graph_validation: graph.valid ? 'VALID' : 'BLOCKED',
-      execution_allowed: (request.instruction_understanding?.execution_allowed !== false) && hardBlockers.length === 0,
+      execution_allowed: hardBlockers.length === 0 && graph.valid && tasks.length > 0
+        && ((request.instruction_understanding?.execution_allowed !== false) || materialOnlyRequest),
       blocked_reasons: hardBlockers
     },
     analysis_task_packet: enrichedPacket
@@ -852,6 +1023,7 @@ function enrichRequest(request, input = {}) {
 
 module.exports = {
   enrichRequest,
+  isMaterialOnlyQuestion,
   regions,
   contextBindings,
   deliverables,

@@ -22,6 +22,7 @@ const join=(items,fallback='-')=>(items||[]).map(line).filter((item)=>item&&item
 function notRequiredEvidence(taskId){return{schema_version:'astera.evidence-search.result.v1',status:'NOT_REQUIRED',search_state:'NOT_REQUIRED',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'NOT_REQUIRED'},quality:{final:{status:'NOT_REQUIRED',score_bp:null}},provider_execution:{initial:[],reinforcement:[]},query_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};}
 function notProvidedEvidence(taskId){return{schema_version:'astera.evidence-search.result.v1',status:'REJECTED_SEARCH_NOT_EXECUTED',search_state:'NOT_EXECUTED',task_id:taskId,evidence:[],coverage:{discovery_scope_state:'NOT_EXECUTED'},quality:{final:{status:'REJECTED_SEARCH_NOT_EXECUTED',score_bp:0,blocking_reasons:['SEARCH_NOT_EXECUTED']}},provider_execution:{initial:[],reinforcement:[]},query_execution:{initial:[],reinforcement:[]},ai_used:false,payment_executed:false};}
 function taskText(task,claims=[]){return unique([...(claims||[]).map((claim)=>claim.raw_text),task.target||'',...(task.premises||[]),task.source_span?.text||'']).join('\n');}
+function routePollutedRouteText(routeText){const value=String(routeText||'').trim();return !value||value.length<16||/採用決定|を登録|検証する。?$/.test(value);}
 function claimStatus(canonical){const total=canonical?.records?.length||0,confirmed=canonical?.confirmed_count||0,undetermined=canonical?.undetermined_count||0;return{status:total&&undetermined===0?'CONFIRMED':'UNDETERMINED',total,confirmed,undetermined};}
 function evidenceBindingRefs(records=[]){const refs=[];for(const record of records)for(const binding of record.confirmation?.bindings||[])if(binding.evidence_source==='EXTERNAL_RETRIEVED_EVIDENCE')refs.push(binding);return[...new Map(refs.map((item)=>[item.candidate_id||item.url||JSON.stringify(item),item])).values()];}
 
@@ -281,13 +282,22 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
     const request=await this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
-    if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     const packet=request.analysis_task_packet;
-    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
 
     const tasks=packet.tasks.map((baseTask)=>{
       const preliminary=buildCanonicalTaskPlan(baseTask,{});
-      const domain=routeDomainTemplates({question:taskText(baseTask,preliminary.claims),context});
+      const routeText=taskText(baseTask,preliminary.claims);
+      const spanText=String(baseTask.source_span?.text||'').trim();
+      const targetText=String(baseTask.target||'').trim();
+      const routeParts=[];
+      if (targetText && targetText.length>=4 && !/^UNRESOLVED|判断対象$/i.test(targetText)) routeParts.push(targetText);
+      if (spanText.length>=8) routeParts.push(spanText);
+      else if (routePollutedRouteText(routeText)) routeParts.push(...unique([question,context,routeText]));
+      else routeParts.push(...unique([routeText,context].filter(Boolean)));
+      const routeQuestion=unique(routeParts).join('\n')||question;
+      const domain=routeDomainTemplates({question:routeQuestion,context});
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,evidence_need:evidenceNeed,domain};
       const canonicalPlan=buildCanonicalTaskPlan(task,domain);
