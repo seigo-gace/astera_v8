@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const AsteraEngine = require('../src/astera-engine');
-const EvidenceSearchClient = require('../src/evidence-search/api/client');
+const { bootstrapRuntimeEnv } = require('../src/evidence-search/api/runtime-client');
 const { JapaneseParserMCPClient, isJapaneseParserConfigured, DEFAULT_DJPMCP } = require('../src/japanese-parser-mcp-client');
 const { createMockJapaneseParserClient } = require('../test/helpers/japanese-parser-mcp-mock');
 const { buildCorpus, FIXTURE } = require('./judgment-materials-stories-v1-corpus');
@@ -46,12 +46,13 @@ const silentLogger = { write() {} };
 const tenant = { id: 'judgment-materials-stories-v1', is_global: true, plan: 'admin' };
 
 function parseArgs(argv) {
-  const out = { phase: 'first', mockMcp: false, mockRegression: false };
+  const out = { phase: 'first', mockMcp: false, mockRegression: false, storyId: null };
   for (const arg of argv.slice(2)) {
     if (arg === '--phase=final' || arg === '--final') out.phase = 'final';
     if (arg === '--phase=first' || arg === '--first') out.phase = 'first';
     if (arg === '--mock-mcp') out.mockMcp = true;
     if (arg === '--mock-regression') out.mockRegression = true;
+    if (arg.startsWith('--story-id=')) out.storyId = arg.slice('--story-id='.length).trim() || null;
   }
   return out;
 }
@@ -300,15 +301,8 @@ function isLiveEvidenceStory(story) {
   return /^G(0[1-9]|1[0-9]|2[0-9]|3[0-8])-01$/.test(String(story.story_id || ''));
 }
 
-function createEvidenceClientOrNull() {
-  try {
-    return new EvidenceSearchClient({});
-  } catch {
-    return null;
-  }
-}
-
 function createEngine({ mockMcp, liveEvidence }) {
+  bootstrapRuntimeEnv();
   const parserClient = resolveParserClient(mockMcp);
   const base = {
     poolSize: 2,
@@ -317,10 +311,12 @@ function createEngine({ mockMcp, liveEvidence }) {
     japaneseParserOptions: { command: process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP }
   };
   if (liveEvidence && !mockMcp) {
-    const evidenceSearchClient = createEvidenceClientOrNull();
-    if (!evidenceSearchClient) return { engine: new CanonicalAsteraEngine(base), liveEvidenceMode: 'UNAVAILABLE' };
+    const engine = new AsteraEngine({ ...base });
+    if (!engine.evidenceSearchClient) {
+      return { engine: new CanonicalAsteraEngine(base), liveEvidenceMode: 'UNAVAILABLE' };
+    }
     return {
-      engine: new AsteraEngine({ ...base, evidenceSearchClient }),
+      engine,
       liveEvidenceMode: 'LIVE_FREE_PROJECTION'
     };
   }
@@ -334,7 +330,15 @@ async function main() {
     process.exit(1);
   }
 
-  const stories = buildCorpus();
+  bootstrapRuntimeEnv();
+  let stories = buildCorpus();
+  if (args.storyId) {
+    stories = stories.filter((story) => String(story.story_id) === args.storyId);
+    if (!stories.length) {
+      console.error(`Unknown story_id ${args.storyId}`);
+      process.exit(1);
+    }
+  }
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
   const realMcpAttempted = !args.mockMcp;

@@ -7,9 +7,47 @@ const SEARCH_STATES = Object.freeze({
   NOT_EXECUTED: 'NOT_EXECUTED',
   EXECUTED_NO_EVIDENCE: 'EXECUTED_NO_EVIDENCE',
   EXECUTED_WITH_EVIDENCE: 'EXECUTED_WITH_EVIDENCE',
+  FOUND: 'FOUND',
+  EXTERNAL: 'EXTERNAL',
   PARTIAL: 'PARTIAL',
   FAILED: 'FAILED'
 });
+
+function collectProviderErrorCodes(packet = {}) {
+  const codes = [];
+  const providerRuns = [
+    ...(Array.isArray(packet.provider_execution?.initial) ? packet.provider_execution.initial : []),
+    ...(Array.isArray(packet.provider_execution?.reinforcement) ? packet.provider_execution.reinforcement : [])
+  ];
+  for (const run of providerRuns) {
+    if (run?.error_code) codes.push(String(run.error_code));
+    for (const query of run?.query_results || []) {
+      if (query?.error_code) codes.push(String(query.error_code));
+    }
+  }
+  const queryRuns = [
+    ...(Array.isArray(packet.query_execution?.initial) ? packet.query_execution.initial : []),
+    ...(Array.isArray(packet.query_execution?.reinforcement) ? packet.query_execution.reinforcement : [])
+  ];
+  for (const query of queryRuns) {
+    if (query?.error_code) codes.push(String(query.error_code));
+    for (const record of query?.provider_records || []) {
+      if (record?.error_code) codes.push(String(record.error_code));
+    }
+  }
+  return codes.map((code) => code.toUpperCase());
+}
+
+function isExternalAccessFailure(packet = {}) {
+  const codes = collectProviderErrorCodes(packet);
+  if (!codes.length) return false;
+  return codes.every((code) => (
+    code === 'SOURCE_HTTP_403'
+    || code.endsWith('_HTTP_403')
+    || code.includes('HTTP_403')
+    || code === 'SOURCE_ACCESS_FORBIDDEN'
+  ));
+}
 
 function executionSummary(packet = {}) {
   const providerRuns = [
@@ -42,11 +80,11 @@ function deriveSearchState(packet = {}) {
   if (String(packet.status || '').toUpperCase() === 'NOT_REQUIRED') return SEARCH_STATES.NOT_REQUIRED;
   const summary = executionSummary(packet);
   if (summary.provider_attempt_count === 0) return SEARCH_STATES.NOT_EXECUTED;
+  if (isExternalAccessFailure(packet)) return SEARCH_STATES.EXTERNAL;
   if (summary.provider_fulfilled_count === 0) return SEARCH_STATES.FAILED;
   if (summary.evidence_count > 0) {
-    return summary.provider_failed_count || summary.query_failed_count
-      ? SEARCH_STATES.PARTIAL
-      : SEARCH_STATES.EXECUTED_WITH_EVIDENCE;
+    if (summary.provider_failed_count || summary.query_failed_count) return SEARCH_STATES.PARTIAL;
+    return summary.query_found_count > 0 ? SEARCH_STATES.FOUND : SEARCH_STATES.EXECUTED_WITH_EVIDENCE;
   }
   if (summary.query_count > 0 && summary.query_not_found_count === summary.query_count) {
     return SEARCH_STATES.EXECUTED_NO_EVIDENCE;
@@ -222,6 +260,7 @@ module.exports = {
   SEARCH_STATES,
   deriveSearchState,
   executionSummary,
+  isExternalAccessFailure,
   resolveTaskEvidence,
   searchRequestFor,
   failedEvidence,

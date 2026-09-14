@@ -2,7 +2,7 @@
 
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
 const inputUnderstanding = require('./input-understanding');
-const { enrichRequest } = require('./deterministic-task-decomposer');
+const { enrichRequest, isMaterialOnlyQuestion } = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
@@ -32,6 +32,21 @@ function normalizedHardBlockers(request = {}) {
     if (item && typeof item === 'object') return item.code || item.type || JSON.stringify(item);
     return String(item || '');
   }));
+}
+
+function isStructuralHardBlocker(code) {
+  const value = String(code || '');
+  return value.startsWith('TASK_GRAPH_CYCLE');
+}
+
+function shouldBlockBeforePipeline(question, request, hardBlockers) {
+  const materialOnly = isMaterialOnlyQuestion(question);
+  const tasks = request.analysis_task_packet?.tasks?.length || 0;
+  const graphValid = request.analysis_task_packet?.task_graph_validation?.valid !== false;
+  const structural = hardBlockers.filter(isStructuralHardBlocker);
+  if (materialOnly && tasks > 0 && graphValid && !structural.length) return false;
+  if (request.instruction_understanding?.execution_allowed === false) return true;
+  return hardBlockers.length > 0;
 }
 
 function blockedMaterial({ request, hardBlockers, lang }) {
@@ -165,7 +180,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
 
     if (question && request.analysis_task_packet?.tasks?.length) {
       const hardBlockers = normalizedHardBlockers(request);
-      if (request.instruction_understanding?.execution_allowed === false || hardBlockers.length) {
+      if (shouldBlockBeforePipeline(question, request, hardBlockers)) {
         const requestedOutput = String(request.output_language || request.language || input.output_language || input.language || 'und');
         const renderLang = requestedOutput.split('-')[0] === 'ja' ? 'ja' : 'en';
         return {
@@ -204,7 +219,9 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
         };
       }
 
-      const clarification = clarificationQuestions(request, context);
+      const clarification = isMaterialOnlyQuestion(question) && (request.analysis_task_packet?.tasks?.length || 0) >= 1
+        ? []
+        : clarificationQuestions(request, context);
       if (clarification.length) {
         const requestedOutput = String(request.output_language || request.language || input.output_language || input.language || 'und');
         const renderLang = requestedOutput.split('-')[0] === 'ja' ? 'ja' : 'en';

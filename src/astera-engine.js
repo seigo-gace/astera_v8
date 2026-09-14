@@ -2,6 +2,7 @@
 
 const CanonicalAsteraEngine = require('./canonical-astera-engine');
 const { resolveTaskEvidence } = require('./canonical-evidence-resolver');
+const { createEvidenceSearchClient } = require('./evidence-search/api/runtime-client');
 
 // Public decision-material runtime.
 // It does not implement a second processing pipeline. The Canonical base owns
@@ -10,7 +11,12 @@ const { resolveTaskEvidence } = require('./canonical-evidence-resolver');
 class AsteraEngine extends CanonicalAsteraEngine {
   constructor(options = {}) {
     super(options);
-    this.evidenceSearchClient = options.evidenceSearchClient || null;
+    const explicitClient = Object.prototype.hasOwnProperty.call(options, 'evidenceSearchClient')
+      ? options.evidenceSearchClient
+      : undefined;
+    this.evidenceSearchClient = explicitClient === undefined
+      ? createEvidenceSearchClient({ logger: options.logger })
+      : (explicitClient || null);
   }
 
   setEvidenceSearchClient(client) {

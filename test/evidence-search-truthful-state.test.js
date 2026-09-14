@@ -37,6 +37,22 @@ test('search not executed is distinct from a completed search with zero evidence
   assert.equal(deriveSearchState(searchedNothing), SEARCH_STATES.EXECUTED_NO_EVIDENCE);
 });
 
+test('external HTTP 403 is recorded as EXTERNAL after providers were attempted', () => {
+  const external = {
+    status: 'REJECTED_PROVIDER_FAILURE',
+    evidence: [],
+    provider_execution: {
+      initial: [{ provider_id: 'official', status: 'REJECTED', error_code: 'SOURCE_HTTP_403' }],
+      reinforcement: []
+    },
+    query_execution: {
+      initial: [{ query_id: 'q1', status: 'RETRIEVAL_FAILED', error_code: 'SOURCE_HTTP_403' }],
+      reinforcement: []
+    }
+  };
+  assert.equal(deriveSearchState(external), SEARCH_STATES.EXTERNAL);
+});
+
 test('provider/network failure is distinct from no-evidence search result', () => {
   const failed = {
     status: 'REJECTED_PROVIDER_FAILURE',
@@ -53,7 +69,7 @@ test('completed retrieval with evidence is explicit and partial failure stays pa
     provider_execution: { initial: [{ provider_id: 'official', status: 'FULFILLED' }], reinforcement: [] },
     query_execution: { initial: [{ query_id: 'q1', status: 'FOUND' }], reinforcement: [] }
   };
-  assert.equal(deriveSearchState(complete), SEARCH_STATES.EXECUTED_WITH_EVIDENCE);
+  assert.equal(deriveSearchState(complete), SEARCH_STATES.FOUND);
 
   const partial = {
     evidence: [{ candidate_id: 'ev1' }],

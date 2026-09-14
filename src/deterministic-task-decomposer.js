@@ -675,7 +675,7 @@ function buildGraph(tasks, baseDependencies = []) {
 function isMaterialOnlyQuestion(question) {
   const q = String(question || '');
   if (/(?:API|api)[^。！？\n]{0,32}変更するな|変更するな[^。！？\n]{0,32}(?:API|api)/i.test(q)) return false;
-  return /判断材料|材料整理|材料だけ|材料のみ|比較軸|最終結論|最終判断は外部|勝者|採用案|断定せず|材料を|構造化|分類と材料/i.test(q);
+  return /判断材料|材料整理|材料だけ|材料のみ|材料化|比較材料|比較軸|最終結論|最終判断は外部|外部AIに委ね|勝者|採用案|断定せず|材料を|構造化|分類と材料/i.test(q);
 }
 
 function synthesizeFallbackTasks(question) {
@@ -801,10 +801,11 @@ function enrichRequest(request, input = {}) {
   if (!request?.analysis_task_packet) return request;
   const question = String(input.question ?? request.original_question ?? request.normalized_question ?? '');
   const context = String(input.context || '');
+  const materialOnlyRequest = isMaterialOnlyQuestion(question);
   const sourceRegions = regions(question);
   const packet = request.analysis_task_packet;
   let kept = (packet.tasks || []).filter((task) => isolatedRole(task.source_span || { start: 0, end: 0 }, sourceRegions) === 'DIRECT_INPUT');
-  if (!kept.length && isMaterialOnlyQuestion(question)) {
+  if (!kept.length && materialOnlyRequest) {
     kept = synthesizeFallbackTasks(question);
   }
   const removed = (packet.tasks || []).filter((task) => !kept.includes(task));
@@ -817,6 +818,7 @@ function enrichRequest(request, input = {}) {
     source_role: 'DIRECT_INPUT',
     source_axes: { container_role: ['PLAIN_CONTAINER'], content_role: ['INSTRUCTION_OR_REQUEST'], quotation_role: ['DIRECT'] },
     purpose: explicitPurpose(task.raw_text || task.source_span?.text || '', task.purpose || task.objective || taskPurpose(task.action, task.target)),
+    material_only: materialOnlyRequest,
     branches: [],
     conditional_branch: null,
     execution_gate: 'ALWAYS',
@@ -941,7 +943,6 @@ function enrichRequest(request, input = {}) {
   if (/矛盾|食い違|逆の指示|一次情報矛盾/i.test(question)) {
     sourceConflicts.push({ type: 'SOURCE_GUIDANCE_CONFLICT', note: 'CONFLICTING_PRIMARY_SOURCES_PRESERVED' });
   }
-  const materialOnlyRequest = isMaterialOnlyQuestion(question);
   let prohibitionBlockers = [...prohibitionReplaceBlockers];
   if (materialOnlyRequest && prohibitionBlockers.length) {
     sourceConflicts.push({ type: 'PROHIBITION_REPLACE_TENSION', note: prohibitionBlockers.join('|') });
@@ -960,7 +961,12 @@ function enrichRequest(request, input = {}) {
         sourceConflicts.push({ type: 'PARSER_MATERIAL_ONLY_TENSION', note: code });
       }
     }
-    hardBlockers = hardBlockers.filter((item) => !materialOnlyParserTensionCodes.has(String(item)));
+    hardBlockers = hardBlockers.filter((item) => {
+      const code = String(item);
+      if (materialOnlyParserTensionCodes.has(code)) return false;
+      if (code.startsWith('JAPANESE_PARSER_FAIL_CLOSED') || code === 'PARSER_TOOL_ERROR' || code === 'PARSER_UNAVAILABLE' || code === 'PARSER_CLIENT_NOT_CONFIGURED') return false;
+      return true;
+    });
   }
   const enrichedPacket = {
     ...packet,
@@ -1013,7 +1019,9 @@ function enrichRequest(request, input = {}) {
       conditional_branching: true,
       multi_parent_dependencies: true,
       graph_validation: graph.valid ? 'VALID' : 'BLOCKED',
-      execution_allowed: hardBlockers.length === 0 && graph.valid && tasks.length > 0
+      execution_allowed: graph.valid && tasks.length > 0
+        && !hardBlockers.some((item) => String(item).startsWith('TASK_GRAPH_CYCLE') || String(item) === 'JAPANESE_PARSER_FAIL_CLOSED')
+        && (hardBlockers.length === 0 || materialOnlyRequest)
         && ((request.instruction_understanding?.execution_allowed !== false) || materialOnlyRequest),
       blocked_reasons: hardBlockers
     },
