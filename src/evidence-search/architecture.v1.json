@@ -145,7 +145,7 @@
     {
       "id": "feature.signed-evaluator-call",
       "level": "FEATURE",
-      "responsibility": "7375から7374へ署名付きで情報品質判定を依頼する",
+      "responsibility": "Astera Process API から7374へ署名付きで情報品質判定を依頼する",
       "inputs": ["quality_request", "internal_identity"],
       "outputs": ["quality_response"],
       "capabilities": ["call_isolated_quality_evaluator"],

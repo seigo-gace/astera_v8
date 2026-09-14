@@ -26,7 +26,29 @@ function known(value) {
     && String(value).trim().toUpperCase() !== 'UNKNOWN';
 }
 
+const LOCAL_INPUT_ONLY_POLICY = (claimPolicyId, predicateFamily) => deepFreeze({
+  claim_policy_id: claimPolicyId,
+  external_search_required: false,
+  planned_query_roles: [],
+  required_scope_fields: ['subject', 'predicate'],
+  verifiable_modalities: [Modality.OBSERVED],
+  verification_line: 'NATURAL_LANGUAGE_LINE',
+  independence_requirement: 'LOCAL_INPUT_ONLY',
+  allowed_evidence_sources: ['LOCAL_INPUT_EVIDENCE'],
+  confirmable_origin_scope: predicateFamily
+});
+
 function policyForClaim(claim) {
+  const predicate = String(claim.predicate || '').toUpperCase();
+  if (predicate === 'OUTPUT_POLICY') {
+    return LOCAL_INPUT_ONLY_POLICY('POLICY_OUTPUT_POLICY', 'OUTPUT_POLICY_ONLY');
+  }
+  if (predicate === 'USER_GOAL' || predicate === 'USER_WISH') {
+    return LOCAL_INPUT_ONLY_POLICY('POLICY_USER_GOAL', 'USER_GOAL_ONLY');
+  }
+  if (predicate === 'USER_CONSTRAINT' || predicate === 'USER_DEADLINE' || predicate === 'PRESERVE') {
+    return LOCAL_INPUT_ONLY_POLICY(`POLICY_${predicate}`, `${predicate}_ONLY`);
+  }
   if (claim.claim_origin === ClaimOrigin.ATTRIBUTED_ASSERTION) {
     return deepFreeze({ claim_policy_id: 'POLICY_ATTRIBUTION', external_search_required: false, planned_query_roles: [], required_scope_fields: ['subject', 'predicate'], verifiable_modalities: [Modality.OBSERVED], verification_line: 'ATTRIBUTED_ASSERTION_LINE', independence_requirement: 'LOCAL_INPUT_ONLY', allowed_evidence_sources: ['LOCAL_INPUT_EVIDENCE'], confirmable_origin_scope: 'ATTRIBUTION_ONLY' });
   }

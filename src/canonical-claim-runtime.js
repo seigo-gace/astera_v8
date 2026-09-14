@@ -283,7 +283,12 @@ function deterministicPerspectiveExpansion({ task, canonical, domain = {} }) {
   const missingEvidence = unresolvedRefs(records);
   const queries = canonical?.search_plan?.queries || [];
   const queryRoles = canonical?.search_plan?.planned_query_roles || unique(queries.map((query) => query.role)).sort();
-  const counterQueries = queries.filter((query) => query.role === QUERY_ROLES.COUNTER);
+  const counterQueries = queries.filter((query) => {
+    if (query.role !== QUERY_ROLES.COUNTER) return false;
+    const claim = records.find((record) => record.claim?.claim_id === query.claim_id)?.claim;
+    const predicate = String(claim?.predicate || '').toUpperCase();
+    return !['OUTPUT_POLICY', 'USER_GOAL', 'USER_CONSTRAINT', 'USER_DEADLINE', 'PRESERVE', 'USER_WISH'].includes(predicate);
+  });
   const constraints = uniqueStrings([...(task.constraints || []), ...(task.prohibitions || []), ...(task.preserve || [])]);
   const success = uniqueStrings([...(task.completion_criteria || []), ...(task.success_criteria || [])]);
   const domainRisks = lensPlanValues(domain, 'risk');

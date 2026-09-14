@@ -215,14 +215,118 @@ function taskPurpose(action, target, fallback = '') {
   return map[action] || map.analyze;
 }
 
-function explicitPurpose(text, fallback = '') {
+const USER_GOAL_WISH_RE = /(.{2,120}?(?:を|の)[^。！？\n]{0,48}?(?:改善したい|を改善したい|を実現したい|にしたい|してほしい|が欲しい|を欲しい|したい))/u;
+
+function explicitPurposeSpan(text) {
   const value = norm(text);
+  const wish = USER_GOAL_WISH_RE.exec(value);
+  if (wish) {
+    const start = wish.index;
+    const end = start + wish[0].length;
+    const phrase = norm(wish[1] || wish[0]).replace(/(?:が|を)?(?:欲しい|ほしい)$/u, '').replace(/したい$/u, 'する');
+    return { phrase: phrase || norm(wish[0]), span: { start, end, text: value.slice(start, end) } };
+  }
   const named = /(?:目的|狙い)(?:は|:|=)\s*([^。！？!?]{2,160})/i.exec(value);
-  if (named) return norm(named[1]);
+  if (named) {
+    const start = named.index;
+    const end = start + named[0].length;
+    return { phrase: norm(named[1]), span: { start, end, text: value.slice(start, end) } };
+  }
+  return null;
+}
+
+function explicitPurpose(text, fallback = '') {
+  const extracted = explicitPurposeSpan(text);
+  if (extracted?.phrase) return extracted.phrase;
+  const value = norm(text);
   const ja = /^(.{2,120}?)(?:ために|ため、|ため、?)(?=.{1,120}(?:検証|確認|改善|修正|実装|作成|移行|統合|削除))/u.exec(value);
   if (ja) return norm(ja[1]);
   const en = /(?:in order to|so that)\s+([^.;!?]{2,160})/i.exec(value);
   return en ? norm(en[1]) : fallback;
+}
+
+function extractDesiredEffect(text) {
+  const value = norm(text);
+  if (!/(?:%|％|\d+\s*(?:秒|ms|ミリ秒|倍|件\/|req\/))/u.test(value)) return { status: '未指定', text: '未指定' };
+  const match = value.match(/(?:期待効果|効果|KPI|指標)(?:は|:|=)\s*([^。！？\n]{2,160})/u);
+  if (match) return { status: '指定あり', text: norm(match[1]) };
+  return { status: '未指定', text: '未指定' };
+}
+
+function extractOutputPolicy(text) {
+  const value = norm(text);
+  const policies = [];
+  if (/(?:最終結論|最終判断)(?:は|を)?(?:出さ|しない|禁止)/u.test(value)) policies.push('FINAL_DECISION_PROHIBITED');
+  if (/判断材料(?:だけ|のみ|のみを)?(?:欲しい|ほしい|が欲しい)|材料(?:だけ|のみ)(?:欲しい|ほしい|が欲しい|で)/u.test(value)) policies.push('MATERIAL_ONLY_REQUIRED');
+  return Object.freeze({
+    ids: policies,
+    natural_ja: policies.length
+      ? '最終判断は行わず、利用者が判断できる材料のみを整理する。'
+      : ''
+  });
+}
+
+function extractInstructionUnderstandingFields(question) {
+  const q = norm(question);
+  const goalSpan = explicitPurposeSpan(q);
+  const desired = extractDesiredEffect(q);
+  const outputPolicy = extractOutputPolicy(q);
+  return {
+    user_goal: goalSpan?.phrase || '',
+    user_goal_span: goalSpan?.span || null,
+    desired_effect: desired.text,
+    effect_status: desired.status,
+    output_policy: outputPolicy
+  };
+}
+
+function mergeConstraintCarrierIntoPrimary(primary, carrier) {
+  const merged = { ...primary };
+  merged.constraints = unique([...(merged.constraints || []), ...(carrier.constraints || []), ...(carrier.raw_text ? [carrier.raw_text] : [])]);
+  merged.prohibitions = unique([...(merged.prohibitions || []), ...(carrier.prohibitions || [])]);
+  merged.preserve = unique([...(merged.preserve || []), ...(carrier.preserve || []), ...(carrier.clause_type === 'preserve' && carrier.raw_text ? [carrier.raw_text] : [])]);
+  merged.deadlines = unique([...(merged.deadlines || []), ...(carrier.deadlines || [])]);
+  merged.constraint_records = [
+    ...(merged.constraint_records || []),
+    ...(carrier.constraint_records || [])
+  ];
+  merged.conditions = unique([...(merged.conditions || []), ...(carrier.conditions || [])]);
+  merged.exceptions = unique([...(merged.exceptions || []), ...(carrier.exceptions || [])]);
+  if (carrier.source_span?.text && carrier.source_span.text !== merged.source_span?.text) {
+    appendSource(merged.field_sources || (merged.field_sources = {}), 'constraints', { source: 'merged_clause', source_span: carrier.source_span });
+  }
+  return merged;
+}
+
+function isConstraintCarrierTask(task) {
+  const text = norm(task.raw_text || task.source_span?.text || '');
+  if (task.clause_type === 'preserve' || task.clause_type === 'prohibition') return true;
+  if (task.action === 'preserve') return true;
+  if (/(?:予算|納期|期限|締切|デッドライン|操作は変えない|変えない|維持)/u.test(text)) return true;
+  if (/(?:最終結論|判断材料)/u.test(text)) return true;
+  if (task.action === 'analyze' && /UNRESOLVED/i.test(String(task.target || ''))) return true;
+  return false;
+}
+
+function consolidateMaterialOnlyConsultTasks(question, tasks) {
+  if (tasks.length <= 1) return tasks;
+  const q = norm(question);
+  if (!isMaterialOnlyQuestion(q)) return tasks;
+  let primary = tasks.find((task) => ['improve', 'implement', 'compare', 'migrate', 'integrate'].includes(task.action))
+    || tasks.find((task) => /改善したい|したい/u.test(task.raw_text || task.source_span?.text || ''))
+    || tasks[0];
+  const carriers = tasks.filter((task) => task.id !== primary.id && isConstraintCarrierTask(task));
+  if (!carriers.length) return tasks;
+  for (const carrier of carriers) primary = mergeConstraintCarrierIntoPrimary(primary, carrier);
+  const instruction = extractInstructionUnderstandingFields(q);
+  primary.user_goal = instruction.user_goal || explicitPurpose(primary.raw_text || q, primary.purpose || primary.objective);
+  primary.purpose = primary.user_goal || primary.purpose;
+  primary.objective = primary.user_goal || primary.objective;
+  primary.desired_effect = instruction.desired_effect;
+  primary.effect_status = instruction.effect_status;
+  primary.output_policy = instruction.output_policy;
+  primary.material_only = true;
+  return [primary];
 }
 
 function inferTarget(text, actionMatch, fallback = '') {
@@ -814,67 +918,23 @@ function synthesizeFallbackTasks(question) {
 
 function supplementMaterialOnlyTasks(question, tasks) {
   const q = norm(question);
-  const materialCue = isMaterialOnlyQuestion(q);
-  if (!materialCue) return tasks;
-
-  const working = tasks.map((task) => ({ ...task }));
-  for (const task of working) {
-    if (task.action === 'decide') task.action = 'analyze';
-    if (/採用決定|を登録|勝者を|選定結果/i.test(String(task.objective || '')) && /出さず|しない|禁止|材料/i.test(q)) {
-      const action = task.action === 'decide' ? 'analyze' : task.action;
-      task.action = action;
-      task.objective = taskPurpose(action, task.target || inferTarget(q, actionOccurrences(q)[0], '判断対象'));
-      task.purpose = explicitPurpose(q, task.objective);
+  if (!isMaterialOnlyQuestion(q)) return tasks;
+  const instruction = extractInstructionUnderstandingFields(q);
+  return tasks.map((task) => {
+    const copy = { ...task, material_only: true };
+    if (copy.action === 'decide') copy.action = 'analyze';
+    const goal = instruction.user_goal || explicitPurpose(copy.raw_text || copy.source_span?.text || q, copy.purpose || copy.objective);
+    if (goal) {
+      copy.user_goal = goal;
+      if (!/^(?:analyze|verify)$/u.test(copy.action) || /改善/u.test(goal)) {
+        copy.purpose = goal;
+      }
     }
-    if (/^検証する。?$/.test(String(task.objective || '').trim()) || String(task.objective || '').length < 8) {
-      task.objective = taskPurpose(task.action, task.target || inferTarget(q, actionOccurrences(q)[0], '判断対象'));
-      task.purpose = explicitPurpose(q, task.objective);
-    }
-    task.source_span = { start: 0, end: q.length, text: q };
-    task.raw_text = q;
-  }
-  if (working.length >= 2) return working;
-  if (working.length === 1) {
-    const only = working[0];
-    const explicitComparePair = only.action === 'compare'
-      && /(?:[A-Za-zＡ-Ｚ]案[^。！？\n]{0,24}(?:と|vs|[／/])[^。！？\n]{0,24}案|案[^。！？\n]{0,12}(?:と|vs|[／/])[^。！？\n]{0,12}案)/i.test(`${q} ${only.target || ''}`);
-    if (explicitComparePair) return working;
-  }
-
-  const target = inferTarget(q, actionOccurrences(q)[0], '判断対象');
-  const secondAction = /比較|対立|案|vs|トレードオフ/i.test(q) ? 'compare' : 'verify';
-  const first = working[0] || {
-    id: 'T01',
-    order: 1,
-    actionable: true,
-    target,
-    unresolved: [],
-    deliverables: [],
-    depends_on: []
-  };
-  const t1 = {
-    ...first,
-    id: 'T01',
-    order: 1,
-    actionable: true,
-    target,
-    action: 'analyze',
-    objective: taskPurpose('analyze', target),
-    purpose: explicitPurpose(q, taskPurpose('analyze', target)),
-    source_span: { start: 0, end: q.length, text: q },
-    raw_text: q,
-    depends_on: []
-  };
-  const t2 = {
-    ...t1,
-    id: 'T02',
-    order: 2,
-    action: secondAction,
-    objective: taskPurpose(secondAction, target),
-    purpose: explicitPurpose(q, taskPurpose(secondAction, target)),
-    depends_on: []
-  };
-  return [t1, t2];
+    copy.desired_effect = instruction.desired_effect;
+    copy.effect_status = instruction.effect_status;
+    copy.output_policy = instruction.output_policy;
+    return copy;
+  });
 }
 
 function expandNaturalConsultTasks(question, tasks) {
@@ -945,7 +1005,9 @@ function enrichRequest(request, input = {}) {
     superseded_by: []
   }));
   tasks = supplementMaterialOnlyTasks(question, tasks);
-  if (!mcpDeepPath && (!parserFailClosedRequest(request) || parserActionGuardOnly(request))) {
+  if (materialOnlyRequest) {
+    tasks = consolidateMaterialOnlyConsultTasks(question, tasks);
+  } else if (!mcpDeepPath && (!parserFailClosedRequest(request) || parserActionGuardOnly(request))) {
     tasks = expandNaturalConsultTasks(question, tasks);
   }
 
@@ -1021,7 +1083,7 @@ function enrichRequest(request, input = {}) {
     if ((task.unresolved || []).length) appendSource(task.field_sources, 'unresolved', { source: 'task_graph', values: task.unresolved });
   }
 
-  if (usedSynthesizedFallback && isNaturalUserConsult(question)) {
+  if (usedSynthesizedFallback && isNaturalUserConsult(question) && !materialOnlyRequest) {
     for (const task of tasks) {
       if (task.action === 'improve') {
         task.action = 'analyze';
@@ -1100,8 +1162,13 @@ function enrichRequest(request, input = {}) {
       }
     }
   }
+  const instructionFields = extractInstructionUnderstandingFields(question);
   const enrichedPacket = {
     ...packet,
+    user_goal: instructionFields.user_goal,
+    desired_effect: instructionFields.desired_effect,
+    effect_status: instructionFields.effect_status,
+    output_policy: instructionFields.output_policy,
     conflicts: [...(packet.conflicts || []), ...sourceConflicts],
     schema_version: 'astera.analysis-task-packet.v2',
     task_decomposition_version: '3.0-canonical',
@@ -1149,6 +1216,10 @@ function enrichRequest(request, input = {}) {
     schema_version: 'astera.request-model.v3',
     target: tasks[0]?.target || request.target || '',
     objective: tasks[0]?.purpose || tasks[0]?.objective || request.objective || '',
+    user_goal: instructionFields.user_goal || tasks[0]?.user_goal || '',
+    desired_effect: instructionFields.desired_effect,
+    effect_status: instructionFields.effect_status,
+    output_policy: instructionFields.output_policy,
     instruction_understanding: {
       ...(request.instruction_understanding || {}),
       task_decomposition: 'DETERMINISTIC_CANONICAL_V3',
@@ -1177,6 +1248,8 @@ function enrichRequest(request, input = {}) {
 
 module.exports = {
   enrichRequest,
+  extractInstructionUnderstandingFields,
+  explicitPurposeSpan,
   isMaterialOnlyQuestion,
   isNaturalUserConsult,
   isMcpDeepPathRequest,

@@ -7,7 +7,7 @@ services:
       - .env
     environment:
       ASTERA_HOST: 127.0.0.1
-      ASTERA_PORT: 7375
+      ASTERA_PORT: ${ASTERA_PORT:?Set ASTERA_PORT}
       ASTERA_DB: /data/astera.db
       ASTERA_LOG_CACHE_DIR: /cache/outbox
       ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-stdio}
@@ -33,7 +33,7 @@ services:
         target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
         read_only: true
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7375/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "const p=process.env.ASTERA_PORT;if(!p)process.exit(1);fetch('http://127.0.0.1:'+p+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

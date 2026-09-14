@@ -257,16 +257,18 @@ function formatSection06Pass(section) {
   ].join('\n'));
   const supportedBlocks = (section.supported_scope || []).map((entry) => formatMaterialBulletField('supported_scope', formatSupportedScopeEntry(entry)));
   const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => formatMaterialBulletField('unsupported_scope', formatUnsupportedScopeEntry(entry)));
-  const emptyCandidateMaterial = [
-    formatMaterialBulletField('candidate_id', '-'),
-    formatMaterialBulletField('label', '-'),
-    formatMaterialBulletField('material_state', '-'),
-    formatMaterialBulletField('observations', '-'),
-    formatMaterialBulletField('confirmed_claim_ids', '-'),
-    formatMaterialBulletField('undetermined_claim_ids', '-'),
-    formatMaterialBulletField('supported_scopes', '-'),
-    formatMaterialBulletField('evidence_refs', '-')
-  ].join('\n');
+  const emptyCandidateMaterial = candidates.length
+    ? [
+      formatMaterialBulletField('candidate_id', '-'),
+      formatMaterialBulletField('label', '-'),
+      formatMaterialBulletField('material_state', '-'),
+      formatMaterialBulletField('observations', '-'),
+      formatMaterialBulletField('confirmed_claim_ids', '-'),
+      formatMaterialBulletField('undetermined_claim_ids', '-'),
+      formatMaterialBulletField('supported_scopes', '-'),
+      formatMaterialBulletField('evidence_refs', '-')
+    ].join('\n')
+    : '- 比較候補は入力されていない';
   const emptyTradeOffDiff = [
     formatMaterialBulletField('dimension', '-'),
     formatMaterialBulletField('comparison_state', '-'),

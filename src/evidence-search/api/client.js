@@ -15,7 +15,7 @@ class EvidenceSearchClient {
     this.baseUrl = String(
       options.baseUrl
       || process.env.ASTERA_EVIDENCE_URL
-      || `http://${process.env.ASTERA_EVIDENCE_HOST || '127.0.0.1'}:${process.env.ASTERA_EVIDENCE_PORT || 7375}`
+      || `http://${process.env.ASTERA_EVIDENCE_HOST || '127.0.0.1'}:${process.env.ASTERA_EVIDENCE_PORT || 7376}`
     ).replace(/\/+$/, '');
     this.timeoutMs = positiveInteger(
       options.timeoutMs || process.env.ASTERA_EVIDENCE_CLIENT_TIMEOUT_MS,

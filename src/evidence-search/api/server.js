@@ -44,7 +44,7 @@ class EvidenceSearchApiServer {
   constructor(options = {}) {
     this.port = options.port === 0
       ? 0
-      : positiveInteger(options.port || process.env.ASTERA_EVIDENCE_PORT, 7375);
+      : positiveInteger(options.port || process.env.ASTERA_EVIDENCE_PORT, 7376);
     this.host = options.host || process.env.ASTERA_EVIDENCE_HOST || '127.0.0.1';
     this.logger = options.logger || new Logger();
     this.secret = loadInternalServiceSecret({

@@ -64,6 +64,15 @@ function extractClaimsFromFragment(fragment,context={}){
     output.push(buildClaim({fragment:innerFragment,structure:innerStructure,origin:ClaimOrigin.DIRECT_ASSERTION,modality:detectModality(innerText),polarity:innerPolarity,timeScope:innerTime.time_scope,jurisdiction,versionScope:extractVersion(innerText,context.versionScope),policy:innerPolicy,sourceAxes:innerFragment.source_axes,verificationLine:innerVerification,diagnostics:innerStructure.unresolved?[innerStructure.diagnostic]:[]}));
     return deepFreeze({claims:output,unmapped:false,assertion_type:assertionType,identifiers});
   }
+  if(assertionType===AssertionType.WISH){
+    const structure=parseNaturalStructure(time.text);
+    if(structure.predicate==='OUTPUT_POLICY'||structure.predicate==='USER_GOAL'||structure.predicate==='USER_CONSTRAINT'||structure.predicate==='USER_DEADLINE'||structure.predicate==='PRESERVE'){
+      const policy=policyFor({origin:ClaimOrigin.DIRECT_ASSERTION,structure,timeScope:time.time_scope,explicitPolicyId:structure.predicate==='OUTPUT_POLICY'?'POLICY_OUTPUT_POLICY':null,explicitPredicateFamily:structure.predicate});
+      const verificationLine=verification(VerificationLine.NATURAL_LANGUAGE_LINE,{ASSERTION:false,SPECIFIC:true,POLARITY_RESOLVED:polarity!==Polarity.UNKNOWN});
+      output.push(buildClaim({fragment,structure,origin:ClaimOrigin.DIRECT_ASSERTION,modality,polarity,timeScope:time.time_scope,jurisdiction,versionScope,policy,sourceAxes:fragment.source_axes,verificationLine,diagnostics:structure.unresolved?[structure.diagnostic]:[]}));
+      return deepFreeze({claims:output,unmapped:false,assertion_type:assertionType,identifiers});
+    }
+  }
   if(assertionType!==AssertionType.ASSERTION)return deepFreeze({claims:[],unmapped:true,assertion_type:assertionType,identifiers});
   const structure=parseNaturalStructure(time.text),policy=policyFor({origin:ClaimOrigin.DIRECT_ASSERTION,structure,timeScope:time.time_scope,explicitPolicyId:context.claimPolicyId,explicitPredicateFamily:context.predicateFamily}),verificationLine=verification(VerificationLine.NATURAL_LANGUAGE_LINE,{ASSERTION:true,SPECIFIC:!structure.unresolved&&(structure.subject!=='UNKNOWN'||identifiers.length>0),POLARITY_RESOLVED:polarity!==Polarity.UNKNOWN});
   output.push(buildClaim({fragment,structure,origin:ClaimOrigin.DIRECT_ASSERTION,modality,polarity,timeScope:time.time_scope,jurisdiction,versionScope,policy,sourceAxes:fragment.source_axes,verificationLine,diagnostics:structure.unresolved?[structure.diagnostic]:[]}));

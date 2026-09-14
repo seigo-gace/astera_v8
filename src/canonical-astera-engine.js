@@ -2,7 +2,7 @@
 
 const CanonicalAsteraEngineBase = require('./canonical-astera-engine-base');
 const inputUnderstanding = require('./input-understanding');
-const { enrichRequest, isMaterialOnlyQuestion, isNaturalUserConsult } = require('./deterministic-task-decomposer');
+const { enrichRequest, extractInstructionUnderstandingFields, isMaterialOnlyQuestion, isNaturalUserConsult } = require('./deterministic-task-decomposer');
 const { readHumanState } = require('./human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
@@ -144,9 +144,17 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       return String(item || '');
     }));
 
-    const purposeItems = (args.taskResults || []).map((result) =>
-      `${result.task.id}[${result.task.action}] ${result.task.purpose || result.task.objective}`
-    );
+    const instruction = extractInstructionUnderstandingFields(String(args.request?.original_question || args.request?.normalized_question || ''));
+    const userGoal = packet.user_goal || instruction.user_goal
+      || (args.taskResults || []).map((result) => result.task.user_goal || result.task.purpose).find((item) => item && !/判断材料へ構造化|UNRESOLVED/i.test(String(item)))
+      || '-';
+    const desiredEffect = packet.desired_effect || instruction.desired_effect || '未指定';
+    const effectStatus = packet.effect_status || instruction.effect_status || '未指定';
+    const purposeItems = [
+      `目的: ${userGoal}`,
+      `期待効果: ${desiredEffect}`,
+      `効果判定基準: ${effectStatus}`
+    ];
     if (judgment['01_purpose']) {
       judgment['01_purpose'].items = purposeItems;
       judgment['01_purpose'].summary = purposeItems.join(' / ') || '-';
@@ -156,6 +164,40 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
           derivation: 'Task DecompositionのPurposeを優先し、Action/Target/Source Spanと分離した目的を保持する。'
         };
       }
+    }
+
+    const constraintLines = [];
+    for (const record of (packet.constraint_records || [])) {
+      if (record.type === 'BUDGET' || /予算|%|％/u.test(String(record.value || ''))) constraintLines.push(`予算上限: ${record.value}`);
+      else constraintLines.push(`${record.type}: ${record.value}`);
+    }
+    for (const deadline of (packet.deadlines || [])) constraintLines.push(`期限: ${deadline}`);
+    for (const item of (packet.preserve || [])) constraintLines.push(`維持条件: ${item}`);
+    if (/予算/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('予算上限'))) {
+      const budget = String(args.request?.original_question || '').match(/予算[^。！？\n]{0,24}/u)?.[0];
+      if (budget) constraintLines.push(`予算上限: ${budget.replace(/^予算(?:は|:)?/u, '').trim()}`);
+    }
+    if (/来週金曜|納期/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('期限'))) {
+      const deadline = String(args.request?.original_question || '').match(/(?:納期|期限)[^。！？\n]{0,24}/u)?.[0];
+      if (deadline) constraintLines.push(`期限: ${deadline.replace(/^(?:納期|期限)(?:は|:)?/u, '').trim()}`);
+    }
+    if (/操作/u.test(String(args.request?.original_question || '')) && !constraintLines.some((line) => line.startsWith('維持条件'))) {
+      const preserve = String(args.request?.original_question || '').match(/既存[^。！？\n]{0,32}/u)?.[0];
+      if (preserve) constraintLines.push(`維持条件: ${preserve}`);
+    }
+    if (judgment['02_premise'] && constraintLines.length) {
+      judgment['02_premise'].items = unique([...(judgment['02_premise'].items || []), ...constraintLines]);
+      judgment['02_premise'].summary = judgment['02_premise'].items.join(' / ');
+    }
+
+    const outputPolicy = packet.output_policy || instruction.output_policy;
+    if (judgment['08_reinstruction'] && outputPolicy?.natural_ja) {
+      const reinstructionItems = unique([
+        ...(judgment['08_reinstruction'].items || []),
+        `Output Policy: ${outputPolicy.natural_ja}`
+      ]);
+      judgment['08_reinstruction'].items = reinstructionItems;
+      judgment['08_reinstruction'].summary = reinstructionItems.join(' / ');
     }
 
     judgment.task_graph = {
@@ -194,6 +236,22 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       };
     }
     return judgment;
+  }
+
+  material(judgment) {
+    const base = super.material(judgment);
+    const scrub = (text) => String(text || '')
+      .replace(/\bHAS_STATE\b/g, '')
+      .replace(/\bPARSER_ACTION_GUARD_BLOCKED\b/g, '')
+      .replace(/\bNEGATED_ACTION\b/g, '')
+      .replace(/\bFINAL_DECISION_PROHIBITED\b/g, '')
+      .replace(/\bMATERIAL_ONLY_REQUIRED\b/g, '')
+      .replace(/最終結論 HAS_STATE[^\n]*/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    const text = scrub(base.text);
+    const compact_text = scrub(base.compact_text);
+    return { ...base, text, compact_text };
   }
 
   clarify(questions, lang, request = null) {
