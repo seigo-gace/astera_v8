@@ -1,7 +1,6 @@
 'use strict';
 
 const http = require('node:http');
-const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const KaguraEngine = require('./kagura-engine');
@@ -294,12 +293,6 @@ class KaguraServer {
       }
 
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-
-      if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-        const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-        res.writeHead(200, this._headers(req, { 'Content-Type': 'text/html; charset=utf-8' }));
-        return res.end(html);
-      }
 
       if (req.method === 'GET' && url.pathname === '/healthz') {
         const logging = this.logger.status?.() || {
