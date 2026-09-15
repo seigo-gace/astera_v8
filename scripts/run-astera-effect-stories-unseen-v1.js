@@ -10,17 +10,22 @@ const { loadCorpus, FIXTURE } = require('./astera-effect-stories-unseen-v1-corpu
 const { evaluateStory, RUBRIC } = require('../src/astera-effect-rubric');
 
 const ROOT = path.resolve(__dirname, '..');
-const ARTIFACTS_ROOT = path.join(ROOT, 'artifacts', 'astera-effect-stories-unseen-v1');
+function getArtifactsRoot() {
+  return process.env.ASTERA_EFFECT_UNSEEN_ARTIFACTS_ROOT
+    ? path.resolve(process.env.ASTERA_EFFECT_UNSEEN_ARTIFACTS_ROOT)
+    : path.join(ROOT, 'artifacts', 'astera-effect-stories-unseen-v1');
+}
 
 const silentLogger = { write() {} };
 const tenant = { id: 'astera-effect-stories-unseen-v1', is_global: true, plan: 'admin' };
 
 function parseArgs(argv) {
-  const out = { phase: 'first', mockMcp: false, storyId: null };
+  const out = { phase: 'first', mockMcp: false, storyId: null, artifactsRoot: null };
   for (const arg of argv.slice(2)) {
     if (arg === '--phase=final' || arg === '--final') out.phase = 'final';
     if (arg === '--phase=first' || arg === '--first') out.phase = 'first';
     if (arg === '--mock-mcp') out.mockMcp = true;
+    if (arg.startsWith('--artifacts-root=')) out.artifactsRoot = arg.slice('--artifacts-root='.length).trim() || null;
     if (arg.startsWith('--story-id=')) out.storyId = arg.slice('--story-id='.length).trim() || null;
   }
   return out;
@@ -47,7 +52,7 @@ function createEngine(mockMcp) {
 }
 
 function artifactsDir(phase) {
-  return path.join(ARTIFACTS_ROOT, phase === 'final' ? 'final-run' : 'first-run');
+  return path.join(getArtifactsRoot(), phase === 'final' ? 'final-run' : 'first-run');
 }
 
 function emptyAggregate() {
@@ -72,6 +77,9 @@ function emptyAggregate() {
 
 async function main() {
   const args = parseArgs(process.argv);
+  if (args.artifactsRoot) {
+    process.env.ASTERA_EFFECT_UNSEEN_ARTIFACTS_ROOT = path.resolve(args.artifactsRoot);
+  }
   if (!fs.existsSync(FIXTURE)) {
     console.error(`Missing fixture ${FIXTURE}`);
     process.exit(1);
@@ -211,7 +219,7 @@ async function main() {
 
   const reportName = args.phase === 'final' ? 'summary-final-run.json' : 'summary-first-run.json';
   fs.writeFileSync(path.join(outDir, reportName), JSON.stringify(summary, null, 2));
-  fs.writeFileSync(path.join(ARTIFACTS_ROOT, reportName), JSON.stringify(summary, null, 2));
+  fs.writeFileSync(path.join(getArtifactsRoot(), reportName), JSON.stringify(summary, null, 2));
 
   console.log('RESULT:');
   console.log(`PHASE: ${summary.phase}`);
