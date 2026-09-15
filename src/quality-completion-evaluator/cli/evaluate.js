@@ -3,7 +3,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { evaluate, evaluateAndPublish, createHttpKbSystemAdapter } = require("..");
+const { evaluate } = require("..");
 
 async function readInput() {
   const fileArg = process.argv.find((arg) => !arg.startsWith("--") && arg !== process.argv[0] && arg !== process.argv[1]);
@@ -22,12 +22,9 @@ async function readInput() {
     const raw = await readInput();
     if (!raw.trim()) throw new Error("JSON input is required via STDIN or file path");
     const request = JSON.parse(raw);
-    const publish = process.argv.includes("--publish-http");
-    const result = publish
-      ? await evaluateAndPublish(request, createHttpKbSystemAdapter())
-      : await evaluate(request);
+    const result = await evaluate(request);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    process.exitCode = ["INVALID_INPUT", "EVALUATION_FAILED"].includes(result.status) ? 2 : result.judgment?.kb_eligible ? 0 : 1;
+    process.exitCode = ["INVALID_INPUT", "EVALUATION_FAILED"].includes(result.status) ? 2 : result.judgment?.passed ? 0 : 1;
   } catch (error) {
     process.stderr.write(`${JSON.stringify({ status: "CLI_FAILED", message: error.message }, null, 2)}\n`);
     process.exitCode = 2;

@@ -22,7 +22,7 @@
 | Quality Completion Evaluator | 成果物の品質・完成度・Blockingを固定Rule評価する独立Module |
 | Artifact Profile | 設計、実装、Test、運用等の成果物種別 |
 | Blocking | 点数に関係なく合格候補化を止める条件 |
-| KB_ELIGIBLE | KB掲載可能判定。保存済みではない |
+| PASSED (QCE) | 品質・完成度採点合格。KB保存済みではない |
 | Astera App | UI、Account、認証、Plan、Square、Creditを所有する別System |
 | Webhook Gateway | 外部Webhookの受信・検証・保存・配送・再送を行う別System |
 | ASTERA-KB | Knowledge保存・検索を行う別System |

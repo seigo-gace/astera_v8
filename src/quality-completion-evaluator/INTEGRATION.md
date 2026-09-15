@@ -2,13 +2,13 @@
 
 ## 呼出位置
 
-ASTERAが成果物と既存解析結果を確定した後、KB登録前に呼び出します。
+ASTERAが成果物と既存解析結果を確定した後、品質・完成度採点として呼び出します。
 
 ```text
 ASTERA処理結果確定
 → Evaluation Packet生成
 → QualityCompletionEvaluator.evaluate
-→ KB_ELIGIBLE時だけKB System Adapterへ渡す
+→ 採点結果（scores / blocking / judgment）を返す
 ```
 
 ## 共有Lens接続
@@ -87,7 +87,7 @@ G01〜G38
 - `passed`にはEvidence参照が必要
 - Evidence参照はEvaluatorが`VALID`と確認済みでなければならない
 - 任意文字列のEvidence IDでは合格しない
-- 未確認・失敗時は`KB-HB-016`
+- 未確認・失敗時も QCE は Domain Lens 事後Blockingしない
 - `enforce=false`時は結果へLensを付与するが、Lens項目不足だけではBlockingしない
 
 ## 既存ASTERA解析から渡す値
@@ -104,28 +104,10 @@ G01〜G38
 
 これらは外部AIに新しく判断させる値ではなく、ASTERAのScriptが取得・検証した結果を構造化して渡す入力です。
 
-## KB Record
-
-KB掲載候補Recordへ次を追加します。
-
-```json
-{
-  "taxonomy": {
-    "specialized_genre_id": "G29",
-    "specialized_genre": "IT・Computer・System・Application開発",
-    "path_key": "G29/G29-L03/G29-L03-M03/G29-L03-M03-S04",
-    "taxonomy_version": "1.0.0"
-  }
-}
-```
-
-Idempotency KeyにもGenre ID、Path、Taxonomy Versionを含めます。
-
 ## 禁止
 
 - EvaluatorがASTERAの成果物を修正する
 - EvaluatorがRepositoryへ書き込む
-- EvaluatorがKB DBへ直接接続する
 - 平均点で合格させる
 - 未確認情報を`fulfilled`へ補完する
 - 通常版と判定ModuleでLens定義を複製する
@@ -137,5 +119,4 @@ Idempotency KeyにもGenre ID、Path、Taxonomy Versionを含めます。
 - 配置先は`src/quality-completion-evaluator`です。
 - `src/server.js`の既存`/process`契約は変更しません。
 - `src/kagura-engine.js`の処理へ自動挿入しません。
-- 現行ASTERAではKB接続が未実装のため、`evaluateAndPublish`は正式なKB System Adapterが接続された処理からだけ使用します。
-- 本Module追加だけでKBへ自動掲載された状態とは扱いません。
+- Astera canonical 外の KB admission / publish 入口は本 Module に含めません。

@@ -54,28 +54,28 @@ test("存在しないGenre IDはINVALID_INPUTにする", async () => {
   assert.ok(result.errors.some((item) => item.code === "UNSUPPORTED_DOMAIN_LENS"));
 });
 
-test("Enforce時にLens固有確認がない場合はBlockingする", async () => {
-  const result = await evaluate(g29Request({ enforce: true }));
+test("Enforce時にLens固有確認がなくてもQCEはDomain LensでBlockingしない", async () => {
+  const result = await evaluate(g29Request({ enforce: true, includeTg: true }));
   assert.equal(result.domain_lens.assessment.status, "FAILED");
-  assert.ok(result.blocking.some((item) => item.block_id === "KB-HB-016"));
-  assert.equal(result.judgment.kb_eligible, false);
+  assert.equal(result.blocking.length, 0);
+  assert.equal(result.judgment.passed, true);
 });
 
-test("任意文字列のEvidence参照ではLens確認を通さない", async () => {
-  const request = g29Request({ enforce: true });
+test("任意文字列のEvidence参照ではLens assessmentは未充足のままBlockingしない", async () => {
+  const request = g29Request({ enforce: true, includeTg: true });
   request.analysis.domain_checks = completeChecks(request, "fake_evidence");
   const result = await evaluate(request);
   assert.equal(result.domain_lens.assessment.status, "FAILED");
   assert.ok(result.domain_lens.assessment.missing.every((item) => item.reason === "verified_evidence_ref_required"));
-  assert.ok(result.blocking.some((item) => item.block_id === "KB-HB-016"));
+  assert.equal(result.blocking.length, 0);
 });
 
-test("VALID Evidenceへ全Lens確認を接続した場合だけDomain Blockingを解除する", async () => {
+test("VALID Evidenceへ全Lens確認を接続するとLens assessmentはPASSEDになる", async () => {
   const request = g29Request({ enforce: true, includeTg: true });
   request.analysis.domain_checks = completeChecks(request, "snap_01");
   const result = await evaluate(request);
   assert.equal(result.domain_lens.assessment.status, "PASSED");
   assert.equal(result.domain_lens.assessment.complete, true);
   assert.ok(result.domain_lens.assessment.valid_evidence_ids.includes("snap_01"));
-  assert.equal(result.blocking.some((item) => item.block_id === "KB-HB-016"), false);
+  assert.equal(result.blocking.length, 0);
 });

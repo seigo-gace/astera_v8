@@ -75,7 +75,7 @@ Input
 - Factは入力内の確認候補を分類し、外部情報を検証済みにしない
 - Current Overlayは最新情報を取得せず、確認が必要な条件を追加する
 - Human Readerは固定Signal処理であり心理診断ではない
-- `KB_ELIGIBLE`はKB保存完了ではない
+- QCE `PASSED` はKB保存完了ではない
 - Test Sourceの存在だけで現行SHAを検証済みにしない
 
 ## Boundaries

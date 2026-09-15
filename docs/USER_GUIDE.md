@@ -75,7 +75,7 @@ Repository内のSkill / Tenant / Stripe EndpointはLegacy compatibilityであり
 - 03の未確認事項を確定事実に変える
 - 04を無視して07だけ採用する
 - 06の比較軸を変えて都合よく比較する
-- `KB_ELIGIBLE`を保存済みと誤認する
+- QCE `PASSED` を保存済みと誤認する
 - Account / Square / CreditをRuntimeへ直接実装する
 
 ## 8. High-risk fields

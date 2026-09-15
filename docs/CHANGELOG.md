@@ -10,7 +10,7 @@
 - Tenant、Skill Key、Stripe、Storeを現行Code上のMigration Debtとして明記
 - Human Reader / Dialectic資料から旧KAGURA製品説明と未実装LLM多重競争表現を除去
 - API ReferenceをCore / Evaluator / Legacy Endpointへ再分類
-- 当時は `KB-HB-016` と Registry の整合を監査対象として記録（後続Commitで Registry 同期済み。現況は `docs/ARCHITECTURE.md` / `blocking-rules.v1.json`）
+- 当時は Domain Lens 事後Blocking Rule と Registry の整合を監査対象として記録（後続で canonical 外として QCE から削除。現況は `docs/ARCHITECTURE.md`）
 - Fact Workerが外部検索・一次Source検証を行わないことを明記
 - Current Overlayが最新情報を取得しないことを明記
 - Human Readerが固定Signal処理であり心理診断ではないことを明記

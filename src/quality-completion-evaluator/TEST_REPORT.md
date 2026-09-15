@@ -38,10 +38,10 @@
 | 通常版と判定Moduleの同一Catalog参照 | 合格 |
 | Lens未指定時の同一Router補完 | 合格 |
 | 不正Genre ID拒否 | 合格 |
-| `enforce=true`で確認不足時の`KB-HB-016` Blocking | 合格 |
+| `enforce=true`で確認不足時も QCE Domain Lens 事後Blockingしない | 合格 |
 | 偽Evidence参照の拒否 | 合格 |
 | `VALID` Evidence接続時のBlocking解除 | 合格 |
-| KB RecordへのTaxonomy保持 | 合格 |
+| Domain Lens Taxonomy が評価結果へ保持される | 合格 |
 | 同一入力の採点再現性 | 合格 |
 
 ## 実例をLensへ通した判定検証
@@ -62,8 +62,8 @@
 2. 該当時はOverlayを追加する。
 3. 同じTaxonomy VersionとAnchor Pathを判定Moduleへ渡す。
 4. Lens固有RiskまたはEvidence項目が評価Resultへ残る。
-5. 評価対象が通常の品質・完成度条件を満たす場合は`KB_ELIGIBLE`になる。
-6. Lensを強制した状態で確認が不足する場合は`KB-HB-016`で掲載を止める。
+5. 評価対象が通常の品質・完成度条件を満たす場合は`PASSED`になる。
+6. Lensを強制した状態で確認が不足しても QCE は Domain Lens 事後Blockingしない。
 
 ## デバッグ記録
 

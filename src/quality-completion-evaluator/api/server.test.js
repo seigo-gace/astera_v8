@@ -54,7 +54,7 @@ test('standalone evaluator public API accepts Astera tenant key and meters usage
       body: JSON.stringify(baseDesignRequest())
     });
     assert.equal(response.status, 200);
-    assert.equal(response.json.status, 'KB_ELIGIBLE');
+    assert.equal(response.json.status, 'PASSED');
     assert.equal(response.json.publication, undefined);
     assert.equal(store.countUsageSince(tenant.id, '/v1/evaluate', '1970-01-01T00:00:00.000Z'), 1);
   });
@@ -83,7 +83,7 @@ test('standalone evaluator Skill API is private, unlimited, and never publishes'
         body: JSON.stringify(baseDesignRequest())
       });
       assert.equal(response.status, 200);
-      assert.equal(response.json.status, 'KB_ELIGIBLE');
+      assert.equal(response.json.status, 'PASSED');
       assert.equal(response.json.publication, undefined);
       assert.equal(store.data?.usage?.length || 0, 0);
     }, { limiter });

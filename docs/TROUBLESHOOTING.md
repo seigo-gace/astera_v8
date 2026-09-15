@@ -53,9 +53,9 @@ Evaluatorは本体と別Processです。
 - Same Taxonomy Version
 - Pillarが同じLensを参照しているか
 
-## 7. Unexpected `KB-HB-016` blocking
+## 7. Domain Lens と QCE Blocking
 
-`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みです。想定外の Blocking が出る場合は Domain Lens 確認不足、Engine 出力、Registry の三者を照合し、文書だけで回避せず Rule Registry、Test、Result Schema、Docs を同時修正します。
+QCE は Evidence 取得後に Domain Lens 充足で Blocking しません。Lens 解決結果は `domain_lens.assessment` にメタデータとして残ります。Lens 確認不足は Evidence Search / Information Quality 側で扱います。
 
 ## 8. 401 / 429 / Stripe error
 

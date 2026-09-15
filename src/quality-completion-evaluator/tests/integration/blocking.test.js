@@ -1,6 +1,22 @@
 "use strict";
-const test=require("node:test");const assert=require("node:assert/strict");const fs=require("node:fs");const path=require("node:path");const{evaluate}=require("../../index");const{baseDesignRequest}=require("../fixtures/factory");const{sha256Text}=require("../../utils/hash");
-const blockingRules=JSON.parse(fs.readFileSync(path.join(__dirname,"../../blocking/blocking-rules.v1.json"),"utf8"));
-test("blocking rule registry includes KB-HB-016 domain_lens_check_incomplete",()=>{const rule=blockingRules.rules.find((item)=>item.block_id==="KB-HB-016");assert.ok(rule);assert.equal(rule.name,"domain_lens_check_incomplete");});
-test("secret blocks KB publication",async()=>{const request=baseDesignRequest();request.target.content+="\napi_key=abcdefghijklmnopqrstuvwxyz123456";request.target.content_hash=sha256Text(request.target.content);const result=await evaluate(request);assert.equal(result.status,"BLOCKED");assert.ok(result.blocking.some(item=>item.block_id==="KB-HB-006"));});
-test("mandatory requirement failure blocks",async()=>{const request=baseDesignRequest();request.requirements[0].fulfillment.status="unfulfilled";const result=await evaluate(request);assert.equal(result.status,"BLOCKED");assert.ok(result.blocking.some(item=>item.block_id==="KB-HB-001"));});
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { evaluate } = require("../../index");
+const { baseDesignRequest } = require("../fixtures/factory");
+const { sha256Text } = require("../../utils/hash");
+
+test("secret blocks evaluation", async () => {
+  const request = baseDesignRequest();
+  request.target.content += "\napi_key=abcdefghijklmnopqrstuvwxyz123456";
+  request.target.content_hash = sha256Text(request.target.content);
+  const result = await evaluate(request);
+  assert.equal(result.status, "BLOCKED");
+  assert.ok(result.blocking.some((item) => item.block_id === "KB-HB-006"));
+});
+test("mandatory requirement failure blocks", async () => {
+  const request = baseDesignRequest();
+  request.requirements[0].fulfillment.status = "unfulfilled";
+  const result = await evaluate(request);
+  assert.equal(result.status, "BLOCKED");
+  assert.ok(result.blocking.some((item) => item.block_id === "KB-HB-001"));
+});

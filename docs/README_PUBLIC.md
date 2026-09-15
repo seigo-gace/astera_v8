@@ -40,7 +40,7 @@ Astera v8はAIではありません。
 - AIがなければ使えないと説明する
 - 外部情報の真偽や最新性を保証すると説明する
 - Account、Square、Credit、Stripe Legacy CodeをAstera Core機能として混在させる
-- `KB_ELIGIBLE`をKB保存済みと説明する
+- QCE `PASSED` をKB保存済みと説明する
 - 未実装・未検証・将来構想を提供中機能として書く
 - 医療、法律、投資等の専門判断を代替すると説明する
 - Repository内DraftをNotion公開正本より優先する

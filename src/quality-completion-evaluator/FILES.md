@@ -16,12 +16,6 @@ README.md
 
 TEST_REPORT.md
 
-adapters/http-kb-system-adapter.js
-
-adapters/in-memory-kb-adapter.js
-
-adapters/kb-system-adapter.js
-
 blocking/blocking-rule-engine.js
 
 blocking/blocking-rules.v1.json
@@ -58,11 +52,9 @@ index.js
 
 input-validator.js
 
-integration/astera-kb-admission-hook.js
-
 integration/create-evaluation-packet.js
 
-kb-admission-gate.js
+evaluation-judgment.js
 
 module.manifest.json
 

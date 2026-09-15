@@ -57,9 +57,9 @@ Asteraへ渡すのは判断に必要な範囲だけにします。
 
 Tenant / Stripe / Store CodeはCore外へ移管する対象です。移管前に削除して認証やWebhookを破壊せず、代替Contract、Migration、Testを用意します。
 
-## 7. Blocking rule registry
+## 7. Domain Lens と QCE
 
-`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みです。Engine 出力との不一致が再発した場合は Security / Quality 上の回帰として扱い、Registry・Test・Docs を同時に修正します。
+QCE は Evidence 取得後に Domain Lens 充足で Blocking しません。Lens 確認不足は Evidence Search / Information Quality の責務です。
 
 ## 8. Incident evidence
 

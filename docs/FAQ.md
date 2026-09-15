@@ -40,9 +40,9 @@ Astera Coreは検索エンジンではありません。外部検索ToolやServi
 
 いいえ。Runtime本体と独立して明示的に呼び出します。
 
-## `KB_ELIGIBLE`はKB保存済みですか
+## QCE の `PASSED` はKB保存済みですか
 
-違います。掲載条件を満たした判定であり、保存完了ではありません。
+違います。品質・完成度の採点合格であり、Astera canonical 外のKB保存完了ではありません。
 
 ## Account、Login、Square、CreditはAstera v8の機能ですか
 
@@ -66,7 +66,7 @@ Adapterを呼べることと、Astera自身がAIであることは別です。Co
 
 ## 現在の既知Defectはありますか
 
-`KB-HB-016` は Blocking Rule Registry（`blocking-rules.v1.json`）へ同期済みです。Domain Lens 統合テストで Blocking / 非 Blocking を継続確認してください。
+README の Open Items を参照してください。Domain Lens 事後Blockingは canonical 外として QCE から削除済みです。
 
 ## 料金はどこで確認しますか
 

@@ -81,8 +81,8 @@ Evaluator Processの状態を確認します。
 - 本体`/process`へ自動挿入しない
 - 成果物を自動修正しない
 - KBへ自動保存しない
-- `KB_ELIGIBLE`は保存完了ではない
-- `KB-HB-016` は Blocking Rule Registry（`blocking-rules.v1.json`）へ登録済み
+- `PASSED` はKB保存完了ではない
+- Domain Lens 事後Blockingは canonical 外（QCE は `domain_lens.assessment` メタデータのみ返す）
 
 Schema:
 

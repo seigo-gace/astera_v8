@@ -7,7 +7,7 @@ Updated: 2026-08-03
 - 外部情報の最新性・正確性
 - 医療、法律、税務、投資等の専門判断
 - 主役AIや外部Modelが作る最終回答の完全性
-- `KB_ELIGIBLE`後のKB保存
+- QCE `PASSED` 後の外部KB自動保存
 - 外部Search、翻訳、MCP、KB、Gatewayの可用性
 - Account、Square、Credit、法務契約
 
@@ -28,13 +28,7 @@ Updated: 2026-08-03
 - これらは実装事実だが、完成責務や公開Core機能ではない
 - Account、Square、CreditはAstera App / Commerce側へ移管する
 
-## 4. Confirmed defect
-
-### `KB-HB-016` Registry mismatch
-
-`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みであり、Engine出力との不一致は解消済みです。
-
-## 5. API compatibility limitations
+## 4. API compatibility limitations
 
 - Legacy Tenant Keyの失効・再発行・Rotation専用Endpointがない
 - Rate LimiterはProcess内MemoryでReplica間共有ではない

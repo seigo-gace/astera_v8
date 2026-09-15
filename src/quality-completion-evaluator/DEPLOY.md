@@ -32,19 +32,7 @@ const { evaluate } = require("./src/quality-completion-evaluator");
 
 const result = await evaluate(packet);
 
-## 4\. KB System連携
-
-既存KB Systemの正式APIへ接続する場合だけ、環境変数を設定します。
-
-export KB_SYSTEM_URL="http://kb-system:8080"
-
-export KB_SYSTEM_ENDPOINT="/v1/kb/records"
-
-export KB_SYSTEM_TOKEN="<secret managerから注入>"
-
-SecretをファイルやKB本文へ書き込みません。
-
-## 5\. 本番反映前Gate
+## 4\. 本番反映前Gate
 
 次をすべて確認します。
 
@@ -58,7 +46,7 @@ Integration Test 合格
 
 Regression Test 合格
 
-Sampleが KB_ELIGIBLE
+Sampleが PASSED
 
 95未満が REVISION_REQUIRED
 

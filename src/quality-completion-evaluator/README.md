@@ -111,27 +111,15 @@ ASTERA-KBや前段処理で4階層Pathが確定している場合は、Evaluatio
 - 検証失敗したRepository・Test・Artifact
 - 別CandidateのEvidence
 
-未確認・失敗時は`KB-HB-016`でBlockingします。
+未確認・失敗時も QCE は Domain Lens 事後Blockingしません。`domain_lens.assessment` にメタデータとして残します。
 
 ## 使用例
 
 ```javascript
-const {
-  evaluate,
-  evaluateAndPublish,
-  createHttpKbSystemAdapter
-} = require("./src/quality-completion-evaluator");
+const { evaluate } = require("./src/quality-completion-evaluator");
 
 const result = await evaluate(evaluationPacket);
-
-if (result.judgment.kb_eligible) {
-  const adapter = createHttpKbSystemAdapter({
-    baseUrl: process.env.KB_SYSTEM_URL,
-    token: process.env.KB_SYSTEM_TOKEN
-  });
-  const published = await evaluateAndPublish(evaluationPacket, adapter);
-  console.log(published.status);
-}
+console.log(result.status, result.scores, result.blocking);
 ```
 
 ## 検証
@@ -198,18 +186,10 @@ node examples/create-sample-request.js | node cli/evaluate.js
 node cli/evaluate.js /path/to/evaluation-request.json
 ```
 
-HTTP KB Systemへ掲載:
-
-```bash
-KB_SYSTEM_URL=http://kb-system:8080 \
-KB_SYSTEM_TOKEN='***' \
-node cli/evaluate.js /path/to/request.json --publish-http
-```
-
 ## Exit Code
 
-- `0`: KB掲載条件合格
-- `1`: 評価完了だが掲載条件未達またはBlocking
+- `0`: 採点合格（`judgment.passed`）
+- `1`: 評価完了だが閾値未達またはBlocking
 - `2`: 入力不正、評価処理失敗、CLI失敗
 
 ## 安全境界

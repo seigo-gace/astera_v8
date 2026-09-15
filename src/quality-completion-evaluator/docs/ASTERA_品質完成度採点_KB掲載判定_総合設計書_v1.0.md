@@ -64,11 +64,10 @@ astera_v8/
 成果物・Requirement・Evidence確定
   → createEvaluationPacket
   → QualityCompletionEvaluator.evaluate
-  → KB_ELIGIBLE
-  → 正式KB System Adapterへ明示的に引渡し
+  → PASSED / REVISION_REQUIRED / BLOCKED 等の採点結果
 ```
 
-現行ASTERAではKB連携が未実装であるため、本Module追加だけでKB自動掲載済みとは扱わない。
+KB admission / publish は Astera canonical 外のため、本 Module からは削除済み（`docs/ARCHITECTURE.md` 参照）。
 
 ## 5. 内部構成
 
@@ -81,7 +80,7 @@ quality-completion-evaluator/
 ├─ completion/completion-rule-engine.js
 ├─ blocking/blocking-rule-engine.js
 ├─ score-calculator.js
-├─ kb-admission-gate.js
+├─ evaluation-judgment.js
 ├─ evaluation-result-builder.js
 ├─ adapters/
 ├─ contracts/
@@ -169,19 +168,10 @@ Artifact TypeごとにProfileを切り替えるが、最終スコアは品質と
 - Requirement集計
 - Evidence集計
 - Blocking一覧
-- `judgment.kb_eligible`
+- `judgment.passed`
 - 修正理由
-- 合格時のみKB Record候補
 
-## 11. KB System連携
-
-KB保存はAdapterだけが担当する。Evaluator本体はKB DBへ接続しない。
-
-- `createInMemoryKbAdapter`: Test用
-- `createHttpKbSystemAdapter`: 正式KB API接続用
-- Idempotency Keyにより重複登録を防止
-
-## 12. 検証結果
+## 11. 検証結果
 
 現行 `astera_v8` 構造へ加工後、次を確認済み。
 
@@ -195,9 +185,8 @@ KB保存はAdapterだけが担当する。Evaluator本体はKB DBへ接続しな
 - Blocking優先: 合格
 - Content Hash不一致: `INVALID_INPUT`
 - Local Git Commit / Path / Hash実在確認: 合格
-- KB Adapter・Idempotency: 合格
 - 同一入力の再現性: 合格
 - 仮ASTERA Rootへの `src/quality-completion-evaluator` 配置: 合格
-- Smoke: `KB_ELIGIBLE`、品質100、完成度100
+- Smoke: `PASSED`、品質100、完成度100
 
 Docker Engineが検証環境に存在しないため、単体Docker Buildだけは未実施である。ASTERA本体のDockerfileは `src/` をコピーするため、配置包含は成立している。

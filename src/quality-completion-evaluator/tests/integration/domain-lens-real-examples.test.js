@@ -71,8 +71,8 @@ for (const [index, item] of CASES.entries()) {
     const serializedLens = JSON.stringify(result.domain_lens);
 
     assert.equal(result.evaluation_complete, true);
-    assert.equal(result.status, "KB_ELIGIBLE");
-    assert.equal(result.judgment.kb_eligible, true);
+    assert.equal(result.status, "PASSED");
+    assert.equal(result.judgment.passed, true);
     assert.equal(result.domain_lens.id, item.expectedId);
     assert.equal(result.domain_lens.source, "request");
     assert.equal(result.domain_lens.taxonomy_version, "1.0.0");

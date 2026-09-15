@@ -128,9 +128,9 @@ Primary Lens総数: **38**
 
 - Lens未指定時は通常版と同じRouterで補完する
 - `enforce=false`時は評価結果へLensを付与する
-- `enforce=true`時はLens固有Risk・Evidence・Safety確認をKB掲載条件へ加える
-- `passed`はEvaluatorが`VALID`と確認したEvidenceへ接続されている場合だけ有効
-- 未確認・失敗時は`KB-HB-016`
+- `enforce=true`時はLens固有Risk・Evidence・Safety確認を `domain_lens.assessment` に記録する（QCE Blocking には使わない）
+- `passed`はEvaluatorが`VALID`と確認したEvidenceへ接続されている場合だけ assessment 上で有効
+- 未確認・失敗時も QCE は Domain Lens 事後Blockingしない
 
 ## 8. 更新規則
 

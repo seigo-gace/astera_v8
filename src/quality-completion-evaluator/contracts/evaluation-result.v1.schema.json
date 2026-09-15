@@ -5,7 +5,7 @@
   "required": ["schema_version", "status", "evaluation_complete", "judgment"],
   "properties": {
     "schema_version": {"const": "astera.quality-completion.result.v1"},
-    "status": {"enum": ["KB_ELIGIBLE", "KB_PUBLISHED", "REVISION_REQUIRED", "BLOCKED", "EVALUATION_FAILED", "INVALID_INPUT"]},
+    "status": {"enum": ["PASSED", "REVISION_REQUIRED", "BLOCKED", "EVALUATION_FAILED", "INVALID_INPUT"]},
     "evaluation_complete": {"type": "boolean"},
     "scores": {"type": "object"},
     "criteria": {"type": "object"},

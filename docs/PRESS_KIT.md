@@ -75,7 +75,7 @@ Tenant、Rate Limit、Usage Meter、Stripe、所有者Skill API、Application St
 - AI専用Toolと表現しない
 - Repositoryに残るTenant / Stripe Codeを現在のCore責務として説明しない
 - 外部情報の正しさを保証すると表現しない
-- `KB_ELIGIBLE`を保存済みと表現しない
+- QCE `PASSED` を保存済みと表現しない
 - 料金、Credit、法務はAstera App側の最新正本を参照する
 - Test未実行や既知Defectを完成済みと表現しない
 - 本DraftをNotion公開正本より優先しない

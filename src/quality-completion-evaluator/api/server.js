@@ -161,7 +161,7 @@ class EvaluatorApiServer {
         if (!isSkillRoute) this.meter.record({ tenant, route: '/v1/evaluate', units: 1, status: result.status, meta: { candidate_id: result.candidate_id || null } });
         this.logger.write({
           tenantId: tenant.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
-          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'tenant', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, kb_eligible: result.judgment?.kb_eligible === true }
+          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'tenant', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
         });
         return this._json(req, res, 200, result);
       }

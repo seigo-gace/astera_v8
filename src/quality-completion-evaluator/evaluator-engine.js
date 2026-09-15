@@ -8,7 +8,7 @@ const { evaluateQuality } = require("./quality/quality-rule-engine");
 const { evaluateCompletion } = require("./completion/completion-rule-engine");
 const { calculateScores } = require("./score-calculator");
 const { evaluateBlocking } = require("./blocking/blocking-rule-engine");
-const { decideAdmission } = require("./kb-admission-gate");
+const { decideEvaluationJudgment } = require("./evaluation-judgment");
 const { buildResult, buildInvalidResult, buildFailureResult } = require("./evaluation-result-builder");
 
 async function evaluate(request) {
@@ -25,23 +25,11 @@ async function evaluate(request) {
     const completionResult = evaluateCompletion(context);
     const scores = calculateScores(qualityResult, completionResult);
     const blocking = evaluateBlocking(context, qualityResult, completionResult);
-    const judgment = decideAdmission({ evaluationComplete: true, scores, blocking, requirements, evidence });
+    const judgment = decideEvaluationJudgment({ evaluationComplete: true, scores, blocking, requirements, evidence });
     return buildResult(request, context, qualityResult, completionResult, scores, blocking, judgment);
   } catch (error) {
     return buildFailureResult(request, error);
   }
 }
 
-async function evaluateAndPublish(request, kbAdapter) {
-  const result = await evaluate(request);
-  if (!result.judgment?.kb_eligible) return result;
-  if (!kbAdapter || typeof kbAdapter.publish !== "function") return { ...result, status: "KB_ELIGIBLE", publication: { status: "not_requested" } };
-  try {
-    const publication = await kbAdapter.publish(result.kb_record, { idempotencyKey: result.kb_record.idempotency_key });
-    return { ...result, status: "KB_PUBLISHED", publication };
-  } catch (error) {
-    return { ...result, status: "KB_ELIGIBLE", publication: { status: "failed", code: error.code || "KB_PUBLISH_FAILED", message: error.message } };
-  }
-}
-
-module.exports = { evaluate, evaluateAndPublish };
+module.exports = { evaluate };
