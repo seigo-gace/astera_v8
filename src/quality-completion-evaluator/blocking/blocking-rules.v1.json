@@ -15,6 +15,7 @@
     {"block_id":"KB-HB-012","name":"criterion_not_evaluated"},
     {"block_id":"KB-HB-013","name":"rubric_version_unknown"},
     {"block_id":"KB-HB-014","name":"content_hash_mismatch"},
-    {"block_id":"KB-HB-015","name":"kb_prohibited_information"}
+    {"block_id":"KB-HB-015","name":"kb_prohibited_information"},
+    {"block_id":"KB-HB-016","name":"domain_lens_check_incomplete"}
   ]
 }
