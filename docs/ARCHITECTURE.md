@@ -93,9 +93,11 @@ The current repository still contains compatibility code for:
 - Billing endpoints
 - Legacy skill endpoints
 
-`start.js` currently constructs `SQLiteStore`, `StripeClient`, and `SubscriptionSync`, and injects them into `src/server.js`.
+`start.js` is the **App composition root**. It alone constructs `SQLiteStore`, `StripeClient`, and `SubscriptionSync`, injects them with the Core engine into `src/server.js`, and starts the HTTP listener.
 
-This is **current implementation fact**, not target Core ownership. It must remain explicitly classified as migration debt until moved to the appropriate App / Account / Commerce / Gateway boundary.
+`src/server.js` is the **compatibility HTTP adapter** (signup, billing, tenant auth, `/process`, `/healthz`). It must receive an injected Core engine; commerce dependencies are optional at adapter construction time so `/healthz` and `engine.process` remain available without SQLite or Stripe.
+
+Canonical Core files (`src/canonical-*.js`, `src/astera-engine.js`, `src/kagura-engine.js`) must not import `auth/`, `billing/`, `guard/`, or `store/`. Account / Commerce code in the adapter is migration debt relative to a future App boundary, not Core ownership.
 
 ---
 
@@ -129,37 +131,37 @@ This is **current implementation fact**, not target Core ownership. It must rema
 
 ## 4. Runtime composition
 
-The current Core composition is:
+App startup and Core cognition are wired as follows:
 
 ```text
-start.js
-  │
-  ├─ src/server.js
-  │
-  └─ src/kagura-engine.js        legacy compatibility alias
+start.js                         App composition root
+  ├─ SQLiteStore / StripeClient / SubscriptionSync   (Commerce; optional for Core-only dev)
+  ├─ src/astera-engine.js (injected into adapter)
+  └─ src/server.js                 HTTP compatibility adapter (auth / billing / process / healthz)
           │
-          ▼
-     src/astera-engine.js
-          │
-          ▼
-     src/canonical-astera-engine.js
-          │
-          ▼
-     src/canonical-astera-engine-base.js
-          │
-          ├─ deterministic request / task processing
-          ├─ lens routing
-          ├─ canonical claim runtime
-          ├─ evidence boundary
-          ├─ wave execution
-          ├─ five lanes
-          ├─ framing
-          └─ Main8 public material
+          └─ src/kagura-engine.js  legacy compatibility alias → astera-engine.js
+                    │
+                    ▼
+               src/canonical-astera-engine.js
+                    │
+                    ▼
+               src/canonical-astera-engine-base.js
+                    │
+                    ├─ deterministic request / task processing
+                    ├─ lens routing
+                    ├─ canonical claim runtime
+                    ├─ evidence boundary
+                    ├─ wave execution
+                    ├─ five lanes
+                    ├─ framing
+                    └─ Main8 public material
 ```
 
 `src/kagura-engine.js` is a compatibility entry point only. It must not be treated as a second cognition pipeline.
 
 `src/astera-engine.js` extends the canonical engine and injects the Evidence Search client at the canonical evidence boundary. It must not implement an alternate reasoning path.
+
+Historical one-off documentation audit memos (for example 2026-08-03) are retained in **git history** only; they are not separate runtime design sources.
 
 ---
 
@@ -681,7 +683,7 @@ QCE rules:
 - blocking rules are explicit registry entries
 - runtime and evaluator completion evidence must identify the same commit when used for release proof
 
-Current known defect: the canonical requirement for `KB-HB-016` is not present in the current main blocking registry and must be integrated and tested before completion.
+`KB-HB-016` (`domain_lens_check_incomplete`) is registered in `blocking-rules.v1.json` and aligned with `blocking-rule-engine.js` output.
 
 ---
 
@@ -841,11 +843,11 @@ A previous artifact from another SHA is historical evidence, not proof for the c
 
 As of the design rewrite date, the current main implementation must still resolve these items before “complete” may be claimed:
 
-1. **Japanese preparation may run twice** across wrapper/base processing; one-pass preparation is the target invariant.
-2. **Parser failure can collapse into clarification-like behavior** in the current integrated smoke path; parser failure must remain an infrastructure/parser state.
+1. ~~**Japanese preparation may run twice**~~ — wrapper passes `preparedRequest`; one-pass preparation is enforced in the canonical path.
+2. ~~**Parser failure can collapse into clarification-like behavior**~~ — parser failures return `task_graph_blocked` with normalized parser error codes, not user clarification.
 3. **Standard `npm run verify` and the real Japanese Parser MCP gate are not yet one coherent release gate.**
-4. **`KB-HB-016` is absent from the current main QCE blocking registry.**
-5. **Account / Tenant / SQLite / Stripe / Billing compatibility code remains wired into the runtime composition root.**
+4. ~~**`KB-HB-016` is absent from the current main QCE blocking registry.**~~ — registered as `domain_lens_check_incomplete`.
+5. **Account / Tenant / SQLite / Stripe / Billing compatibility code remains in `src/server.js`; Commerce is wired only from `start.js`, not from Canonical Core modules. Full App-boundary extraction is still open.**
 6. **Historical docs, generated artifacts and archive material are over-retained and require a reference-safe cleanup pass.**
 7. **Story / live evidence from older SHAs cannot be used as final proof for a newer main SHA without rerun.**
 

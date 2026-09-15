@@ -99,7 +99,7 @@ curl http://127.0.0.1:7374/healthz
 - Runtime本体へ自動挿入しない
 - `KB_ELIGIBLE`はKB保存完了ではない
 - Root Docker ComposeはEvaluatorを自動起動しない
-- `KB-HB-016` Registry mismatchが解消・再検証されるまでは完全Verifiedと扱わない
+- Domain Lens 統合で `KB-HB-016` の Blocking / 非 Blocking を確認する（Registry は `blocking-rules.v1.json` と同期済み）
 
 Evaluator APIの現行Tenant／Skill認証依存はMigration Debtです。正式公開認証はAstera App API Gate側の実装を使用します。
 

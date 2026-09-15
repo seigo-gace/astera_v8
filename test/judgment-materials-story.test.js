@@ -324,9 +324,9 @@ test('Story 10: MCP unavailable fails closed and never uses builtin Japanese ana
       question: 'APIを改善する。成功条件は互換性である。',
       language: 'ja'
     }, tenant);
-    assert.equal(out.result.type, 'clarification_needed');
-    assert.equal(out.result.request_model.instruction_understanding.mode, 'FAIL_CLOSED');
-    assert.ok(out.result.request_model.analysis_task_packet.unresolved.some((item) => /JAPANESE_PARSER_FAIL_CLOSED/.test(item)));
+    assert.equal(out.result.type, 'task_graph_blocked');
+    assert.equal(out.result.instruction_understanding.mode, 'FAIL_CLOSED');
+    assert.ok(out.result.analysis_task_packet.unresolved.some((item) => /JAPANESE_PARSER_FAIL_CLOSED/.test(item)));
     assert.equal(out.result.judgment, undefined);
   });
   await withEngine({
@@ -335,7 +335,7 @@ test('Story 10: MCP unavailable fails closed and never uses builtin Japanese ana
     })
   }, async (engine) => {
     const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, tenant);
-    assert.equal(out.result.type, 'clarification_needed');
+    assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.request_model.instruction_understanding.mode, 'FAIL_CLOSED');
     assert.ok(out.result.request_model.analysis_task_packet.hard_blockers.some((item) => /PARSER_OVERALL_FAILED|JAPANESE_PARSER_FAIL_CLOSED/.test(String(item))));
   });

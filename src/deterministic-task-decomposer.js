@@ -924,7 +924,7 @@ function parserFailClosedRequest(request = {}) {
     ...((request.instruction_understanding?.blocked_reasons) || [])
   ].map((item) => String(item));
   if (request.instruction_understanding?.mode === 'FAIL_CLOSED') return true;
-  return markers.some((item) => /JAPANESE_PARSER_FAIL_CLOSED|PARSER_OVERALL_FAILED|PARSER_CLIENT_NOT_CONFIGURED|PARSER_ERROR/i.test(item));
+  return markers.some((item) => /JAPANESE_PARSER_FAIL_CLOSED|PARSER_OVERALL_FAILED|PARSER_CLIENT_NOT_CONFIGURED|PARSER_ERROR|PARSER_NOT_CONFIGURED|PARSER_TIMEOUT|PARSER_PROTOCOL_ERROR|PARSER_EXECUTION_FAILED/i.test(item));
 }
 
 function isMcpDeepPathRequest(request = {}) {

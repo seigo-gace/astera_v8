@@ -11,11 +11,16 @@ npm-debug.log*
 .DS_Store
 coverage/
 
+# Generated story-evaluator runs (fixtures live under test/fixtures)
+artifacts/astera-effect-stories-v1/
+artifacts/astera-effect-stories-unseen-v1/
+artifacts/judgment-materials-100/
+artifacts/judgment-materials-stories-v1/
+
 # Local secrets
 .env
 .env.*
 !.env.example
-!.env.gpg
 
 # Dependencies
 node_modules/

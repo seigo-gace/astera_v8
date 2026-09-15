@@ -32,13 +32,7 @@ Updated: 2026-08-03
 
 ### `KB-HB-016` Registry mismatch
 
-`blocking-rule-engine.js`はLens固有Blockingに`KB-HB-016`を使用しますが、`blocking-rules.v1.json`は`KB-HB-015`までしか登録していません。
-
-影響:
-
-- Rule Registryと実行結果が一致しない
-- 文書だけでVerified扱いできない
-- Code修正、Unit / Integration / Regression Test、Workflow成功が必要
+`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みであり、Engine出力との不一致は解消済みです。
 
 ## 5. API compatibility limitations
 

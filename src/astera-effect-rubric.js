@@ -131,12 +131,18 @@ function scoreRubric15(materialText, { userInput = '', result = null, mode = 'ba
 
   scores.R14_no_hallucination = 2;
 
-  const winner = /winner|採用案|勝者|recommended|you should choose|A案採用|ranking/i.test(text);
-  const normDec = result?.comparison?.selected_candidate != null
-    || (Array.isArray(result?.comparison?.candidate_ranking) && result.comparison.candidate_ranking.length > 0);
-  scores.R15_no_final_decision = winner || normDec ? 0 : 2;
+  if (mode === 'astera' && result) {
+    scores.R15_no_final_decision = normativeViolation(result) ? 0 : 2;
+  } else {
+    scores.R15_no_final_decision = 2;
+  }
 
   return scores;
+}
+
+/** Diagnostic only — must not drive rubric score or violation counts. */
+function detectFinalDecisionKeywordDiagnostic(materialText) {
+  return /winner|採用案|勝者|recommended|you should choose|A案採用|ranking/i.test(String(materialText || ''));
 }
 
 function totalScore(scores) {
@@ -297,6 +303,7 @@ function evaluateStory(story, out) {
   const constraint_loss = detectConstraintLoss(userInput, asteraText, result);
   const false_confirmation = hasFalseConfirmation(result);
   const final_decision = normativeViolation(result);
+  const final_decision_keyword_diagnostic = detectFinalDecisionKeywordDiagnostic(asteraText);
   const task_decomposition_failure = result.type === 'cognitive_map'
     && (result.analysis_task_packet?.tasks?.length ?? 0) === 0;
   const uncertainty_loss = detectUncertaintyLoss(userInput, result);
@@ -327,6 +334,7 @@ function evaluateStory(story, out) {
       constraint_loss,
       false_confirmation,
       final_decision_violation: final_decision,
+      final_decision_keyword_diagnostic,
       task_decomposition_failure,
       uncertainty_loss
     },
@@ -342,5 +350,7 @@ module.exports = {
   scoreRubric15,
   evaluateStory,
   totalScore,
-  tokenOverlap
+  tokenOverlap,
+  normativeViolation,
+  detectFinalDecisionKeywordDiagnostic
 };

@@ -58,5 +58,5 @@ Brand表現だけで実装状態を判定しません。
 
 - 現行CoreとMigration Debt: `README.md`
 - 現行構造: `STRUCTURE.md`
-- Code・掲載資料監査: `docs/DOCUMENTATION_AUDIT_2026-08-03.md`
+- Code・掲載資料監査: 2026-08-03 時点の記録は git history を参照（設計正本は `docs/ARCHITECTURE.md`）
 - 制限と未実装: `docs/LIMITATIONS.md`

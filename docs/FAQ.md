@@ -66,7 +66,7 @@ Adapterを呼べることと、Astera自身がAIであることは別です。Co
 
 ## 現在の既知Defectはありますか
 
-`KB-HB-016`をEngineが使用する一方、Blocking Rule Registryが`KB-HB-015`までしか持たない不一致が確認されています。修正・再検証前に完成扱いしません。
+`KB-HB-016` は Blocking Rule Registry（`blocking-rules.v1.json`）へ同期済みです。Domain Lens 統合テストで Blocking / 非 Blocking を継続確認してください。
 
 ## 料金はどこで確認しますか
 

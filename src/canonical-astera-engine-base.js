@@ -8,6 +8,7 @@ const { buildCanonicalTaskPlan } = require('./canonical-claim-runtime');
 const { projectCanonicalFailure } = require('./canonical-task-projection');
 const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 const { UndeterminedReason } = require('./v4-canonical/confirmation');
+const { parserFailClosedRequest } = require('./deterministic-task-decomposer');
 
 const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
 const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
@@ -308,11 +309,21 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
 
   async process(input={},tenant={id:'unknown'},executionContext={}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
-    const request=await this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
+    const request=input.preparedRequest?.analysis_task_packet?input.preparedRequest:await this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
-    if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!question)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',questions:[renderLang==='ja'?'質問本文を入力してください。':'Please provide the request body.'],clarification_code:'USER_CLARIFICATION_REQUIRED'},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     const packet=request.analysis_task_packet;
-    if(!packet?.tasks?.length)return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions:[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted.']},material:{...this.clarify([],renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    if(!packet?.tasks?.length){
+      if(parserFailClosedRequest(request)){
+        const hardBlockers=unique([...(packet?.hard_blockers||[]),...(request.instruction_understanding?.blocked_reasons||[])].map((item)=>typeof item==='string'?item:String(item||'')));
+        const errorCode=request.instruction_understanding?.error_code||null;
+        const blockedTitle=renderLang==='ja'?'Task Graphを安全に実行できないため、後続処理を停止しました。':'Task Graph execution is blocked by a hard invariant.';
+        const blockedText=[blockedTitle,`${renderLang==='ja'?'Hard Blocker':'Hard Blocker'}: ${hardBlockers.join(' / ')||'-'}`,renderLang==='ja'?'推測で補完せず、Task/Claim/Evidence処理へ進めていません。':'No Task/Claim/Evidence processing was performed by guessing through the blocker.'].join('\n');
+        return{result:{type:'task_graph_blocked',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:packet,hard_blockers:hardBlockers,error_code:errorCode,task_processing_started:false,evidence_processing_started:false},material:{text:blockedText,compact_text:blockedText.replace(/\n/g,' / '),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',blocked:true,hard_blockers:hardBlockers,parser_error_code:errorCode}};
+      }
+      const questions=[renderLang==='ja'?'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。':'No analysis task could be extracted. Specify the target, action, and completion condition.'];
+      return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions,clarification_code:'USER_CLARIFICATION_REQUIRED'},material:{...this.clarify(questions,renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
+    }
 
     const tasks=packet.tasks.map((baseTask)=>{
       const preliminary=buildCanonicalTaskPlan(baseTask,{});

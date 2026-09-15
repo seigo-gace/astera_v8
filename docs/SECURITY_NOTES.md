@@ -57,9 +57,9 @@ Asteraへ渡すのは判断に必要な範囲だけにします。
 
 Tenant / Stripe / Store CodeはCore外へ移管する対象です。移管前に削除して認証やWebhookを破壊せず、代替Contract、Migration、Testを用意します。
 
-## 7. Known defect
+## 7. Blocking rule registry
 
-`KB-HB-016`とBlocking Rule Registryの不一致は、評価Integrityに影響するためSecurity / Quality上の未解消事項として扱います。
+`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みです。Engine 出力との不一致が再発した場合は Security / Quality 上の回帰として扱い、Registry・Test・Docs を同時に修正します。
 
 ## 8. Incident evidence
 

@@ -14,7 +14,7 @@
 - [ ] `bash scripts/smoke.sh`が成功した
 - [ ] `npm run verify`が成功した
 - [ ] GitHub Actionsが対象SHAで成功した
-- [ ] `KB-HB-016` Registry mismatchを解消し、再検証した
+- [ ] `KB-HB-016`（`domain_lens_check_incomplete`）が `blocking-rules.v1.json` に登録され、Domain Lens 統合テストで Blocking / 非 Blocking を確認した
 - [ ] 01〜08の順序と内容をStory inputで確認した
 - [ ] clarification pathを確認した
 - [ ] Optional LLMなしでもCoreが動作した

@@ -29,11 +29,10 @@ Astera v8はAIではありません。
 - `BRAND_PHILOSOPHY.md`: 名称、思想、タグラインのDraft
 - `PRESS_KIT.md`: 紹介文、掲載用要約、表現境界のDraft
 - `LP_COPY.md`: Landing Page向け本文構成のDraft
-- `FULL_DOCUMENT.md`: 一般・技術をつなぐ開発説明
 - `USER_GUIDE.md`: 利用手順
 - `FAQ.md`: 誤解しやすい点
 - `LIMITATIONS.md`: 保証外、既知Defect、未検証
-- `DOCUMENTATION_AUDIT_2026-08-03.md`: Code・掲載資料の全面同期記録
+- `GLOSSARY.md`: 公開向け用語集
 
 ## 公開時の禁止表現
 
@@ -51,7 +50,7 @@ Astera v8はAIではありません。
 1. Notion `Astera公式HP｜公開本文・参照Source正本`
 2. Notionの料金・Account・法務・提供範囲の各専用正本
 3. `README.md`の開発Statusと責務境界
-4. `docs/DOCUMENTATION_AUDIT_2026-08-03.md`
+4. `docs/ARCHITECTURE.md`
 5. 現行Code / Schema / Test
 
 公開文書と実装が矛盾する場合は、宣伝文で実装事実を上書きしません。Notion確定責務と現行Codeの差分はMigration Debtとして明示します。

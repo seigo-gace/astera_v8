@@ -9,7 +9,6 @@ docs/README_PUBLIC.md
 docs/BRAND_PHILOSOPHY.md
 docs/PRESS_KIT.md
 docs/LP_COPY.md
-docs/FULL_DOCUMENT.md
 docs/USER_GUIDE.md
 docs/FAQ.md
 docs/GLOSSARY.md
@@ -21,7 +20,6 @@ docs/LIMITATIONS.md
 ```text
 README.md
 STRUCTURE.md
-docs/DOCUMENTATION_INDEX.md
 docs/ARCHITECTURE.md
 docs/API_REFERENCE.md
 docs/LENS_GENRE_INDEX.md
@@ -36,11 +34,11 @@ docs/TROUBLESHOOTING.md
 ## Audit and history
 
 ```text
-docs/DOCUMENTATION_AUDIT_2026-08-03.md
 docs/CHANGELOG.md
-RELEASE_MANIFEST.txt
 archive/
 ```
+
+One-off documentation audit memos, release manifests, and removed index snapshots (for example 2026-08-03) live in git history only.
 
 ## Current public feature summary
 

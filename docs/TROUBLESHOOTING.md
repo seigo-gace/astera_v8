@@ -53,9 +53,9 @@ Evaluatorは本体と別Processです。
 - Same Taxonomy Version
 - Pillarが同じLensを参照しているか
 
-## 7. Missing or inconsistent `KB-HB-016`
+## 7. Unexpected `KB-HB-016` blocking
 
-現行CodeではEngineとRegistryが不一致です。文書や設定だけで回避せず、Rule Registry、Test、Result Schema、Docsを同時修正します。
+`KB-HB-016`（`domain_lens_check_incomplete`）は `blocking-rules.v1.json` に登録済みです。想定外の Blocking が出る場合は Domain Lens 確認不足、Engine 出力、Registry の三者を照合し、文書だけで回避せず Rule Registry、Test、Result Schema、Docs を同時修正します。
 
 ## 8. 401 / 429 / Stripe error
 

@@ -17,6 +17,7 @@ function assertDockerProductionResidency(serviceName, allowEnvVar) {
 
 assertDockerProductionResidency('Astera v8', 'ASTERA_ALLOW_HOST_START');
 
+// App composition root: Core engine + HTTP compatibility adapter + Commerce wiring only here.
 const KaguraServer = require('./src/server');
 const KaguraEngine = require('./src/kagura-engine');
 const { createEvidenceSearchClient } = require('./src/evidence-search/api/runtime-client');

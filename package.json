@@ -46,8 +46,11 @@
     "validate:evidence-architecture": "node scripts/validate-evidence-modular-architecture.js",
     "verify:evidence": "npm run check:evidence && npm run validate:evidence-architecture && npm run test:evidence && npm run test:evidence-user && npm run test:evidence-api && npm run test:evidence-main && npm run test:evidence-provider-adapter && npm run test:evidence-specialist-expansion && npm run test:evidence-evaluator && npm run test:evidence-recovery && npm run test:evidence-projection && npm run test:evidence-architecture && npm run test:information-quality",
     "smoke": "bash scripts/smoke.sh",
+    "verify:http-e2e": "bash scripts/smoke.sh",
+    "verify:real-mcp": "node scripts/run-real-mcp-gate.js",
     "verify:source": "npm run check:syntax && npm run check:json && npm run check:shell && npm test && npm run validate:evidence-architecture",
-    "verify": "npm run verify:source && bash scripts/smoke.sh",
+    "verify": "npm run verify:source && npm run verify:http-e2e",
+    "verify:release": "npm run verify:source && npm run verify:real-mcp && npm run verify:http-e2e",
     "test:evidence-provider-adapter": "node --test test/evidence-search-provider-adapter.test.js test/evidence-search-live-query-template.test.js test/evidence-search-bsdd-live-provider.test.js test/evidence-search-cisa-kev-provider.test.js test/evidence-search-nih-reporter-provider.test.js",
     "test:evidence-specialist-expansion": "node --test test/evidence-search-specialist-expansion.test.js"
   },

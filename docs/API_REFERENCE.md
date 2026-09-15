@@ -82,7 +82,7 @@ Evaluator Processの状態を確認します。
 - 成果物を自動修正しない
 - KBへ自動保存しない
 - `KB_ELIGIBLE`は保存完了ではない
-- `KB-HB-016` Registry mismatchは既知Defect
+- `KB-HB-016` は Blocking Rule Registry（`blocking-rules.v1.json`）へ登録済み
 
 Schema:
 

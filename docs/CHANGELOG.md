@@ -10,13 +10,13 @@
 - Tenant、Skill Key、Stripe、Storeを現行Code上のMigration Debtとして明記
 - Human Reader / Dialectic資料から旧KAGURA製品説明と未実装LLM多重競争表現を除去
 - API ReferenceをCore / Evaluator / Legacy Endpointへ再分類
-- `KB-HB-016`とBlocking Rule Registryの不一致を既知Defectとして明記
+- 当時は `KB-HB-016` と Registry の整合を監査対象として記録（後続Commitで Registry 同期済み。現況は `docs/ARCHITECTURE.md` / `blocking-rules.v1.json`）
 - Fact Workerが外部検索・一次Source検証を行わないことを明記
 - Current Overlayが最新情報を取得しないことを明記
 - Human Readerが固定Signal処理であり心理診断ではないことを明記
 - Quick Start、User Guide、FAQ、Glossary、Limitations、Security、Deployment、Production Checklist、Troubleshootingを同期
 - Repository内Public文書をInternal Draft / Referenceへ分類
-- `docs/DOCUMENTATION_AUDIT_2026-08-03.md`を追加・最終化
+- 2026-08-03 documentation audit memo（当時追加。現行Treeからは除去済み。内容は git history を参照）
 - `.env.example`のTenant／Skill Key／Stripe変数を互換性維持のMigration Debtとして注記
 - Notion議事録、README参照、Docs Module、実装正本、親Project、GitHub反映ページ、公開本文正本を同期
 - Notion全Code正本をHistorical Snapshot／再生成必要へ訂正

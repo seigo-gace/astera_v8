@@ -345,6 +345,42 @@ test('HTTP flow: checkout rejects a client-selected Stripe price', async () => {
   }
 });
 
+test('HTTP flow: healthz and process work without commerce store when local no-auth', async () => {
+  const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
+  process.env.ASTERA_LOCAL_NO_AUTH = '1';
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-core-only-'));
+  const logger = new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
+  const engine = new KaguraEngine({
+    poolSize: 1,
+    logger,
+    japaneseParserClient: defaultMockJapaneseParserClient()
+  });
+  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
+  server.start();
+  await new Promise((resolve) => server.server.once('listening', resolve));
+  const port = server.server.address().port;
+  try {
+    const health = await request({ port, method: 'GET', path: '/healthz' });
+    assert.equal(health.status, 200);
+    assert.equal(health.json.store, 'unconfigured');
+
+    const processRes = await request({
+      port,
+      method: 'POST',
+      path: '/process',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: '対象はAstera Core。成功条件はCommerce無しでprocessが動くこと。', llm: { chain: ['null'] } })
+    });
+    assert.equal(processRes.status, 200);
+    assert.match(processRes.headers['content-type'], /text\/plain/);
+  } finally {
+    await server.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
+    else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
+  }
+});
+
 test('HTTP flow: checkout rejects a non-object JSON body', async () => {
   await withServer(async (port) => {
     const signup = await request({ port, method: 'POST', path: '/signup' });

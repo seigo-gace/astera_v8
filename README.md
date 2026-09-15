@@ -43,7 +43,7 @@ READMEは入口・概要です。Architectureを独自に再定義しません�
 1. Japanese Parser preparationの一回化
 2. Parser障害と「前提不足」の状態分離
 3. 標準`npm run verify`とREAL Japanese Parser MCP Gateの統合
-4. QCE `KB-HB-016` のmain統合
+4. ~~QCE `KB-HB-016` のmain統合~~（Registry同期済み）
 5. Tenant / SQLite / Stripe / Billing等のCore外への責務分離
 6. 現行HEADと同一SHAでのLive Evidence / Story / Main8 E2E再証明
 7. Archive / generated artifacts /旧文書の整理
@@ -276,7 +276,7 @@ QCEは:
 - `KB_ELIGIBLE`を保存完了扱いしない
 - `/process`へ暗黙挿入しない
 
-現在`KB-HB-016`のmain統合が未完です。
+`KB-HB-016` は `blocking-rules.v1.json` へ登録済みです（Engine と Registry の不一致は解消済み）。
 
 ---
 

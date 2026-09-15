@@ -140,6 +140,11 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
 
   async prepareRequest(input = {}) {
     const question = String(input.question || '');
+    const existingPacket = input.analysis_task_packet;
+    const parserPending = (existingPacket?.unresolved || []).includes('japanese_parser_pending');
+    if (existingPacket && input.instruction_understanding && !parserPending) {
+      return enrichRequest(input, input);
+    }
     if (needsJapaneseParser(question)) {
       const prepared = await prepareJapaneseRequestViaMcp({
         ...input,
@@ -306,6 +311,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
     const request = await this.prepareRequest({
+      ...(input.preparedRequest || {}),
       question,
       context,
       language: input.language,
@@ -403,7 +409,8 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       language: input.language,
       locale: input.locale,
       output_language: input.output_language,
-      moodAnswers: input.moodAnswers
+      moodAnswers: input.moodAnswers,
+      preparedRequest: request
     }, tenant, executionContext);
     if (out?.result?.type === 'cognitive_map') {
       out.result.human_reader = request.human_reader;

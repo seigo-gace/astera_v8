@@ -13,6 +13,7 @@ const {
   createSearchPlan,
   confirmClaim
 } = require('./canonical-v4-core');
+const { parserFailClosedRequest } = require('./deterministic-task-decomposer');
 
 const FIVE_LANES = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare']);
 const ORDER = Object.freeze(['01_purpose', '02_premise', '03_facts', '04_crisis', '05_opposition', '06_comparison', '07_evidence', '08_reinstruction']);
@@ -467,9 +468,36 @@ function requestFromParser(fastRequest, parserResult, originalText) {
   };
 }
 
+function normalizeParserErrorCode(code) {
+  const legacy = String(code || 'PARSER_UNAVAILABLE');
+  const map = {
+    PARSER_CLIENT_NOT_CONFIGURED: 'PARSER_NOT_CONFIGURED',
+    PARSER_MCP_TIMEOUT: 'PARSER_TIMEOUT',
+    PARSER_MCP_MALFORMED_JSON: 'PARSER_PROTOCOL_ERROR',
+    PARSER_MCP_INVALID_RESULT: 'PARSER_PROTOCOL_ERROR',
+    PARSER_MCP_RPC_ERROR: 'PARSER_PROTOCOL_ERROR',
+    PARSER_PROTOCOL_UNSUPPORTED: 'PARSER_PROTOCOL_ERROR',
+    PARSER_TOOL_ERROR: 'PARSER_PROTOCOL_ERROR',
+    PARSER_SCHEMA_INVALID: 'PARSER_EXECUTION_FAILED',
+    PARSER_ORIGINAL_MISMATCH: 'PARSER_EXECUTION_FAILED',
+    PARSER_PROCESS_START_FAILED: 'PARSER_EXECUTION_FAILED',
+    PARSER_PROCESS_ERROR: 'PARSER_EXECUTION_FAILED',
+    PARSER_PROCESS_EXITED: 'PARSER_EXECUTION_FAILED',
+    PARSER_MCP_TRANSPORT_ERROR: 'PARSER_EXECUTION_FAILED',
+    PARSER_OVERALL_FAILED: 'PARSER_EXECUTION_FAILED',
+    PARSER_ERROR: 'PARSER_EXECUTION_FAILED',
+    PARSER_UNAVAILABLE: 'PARSER_EXECUTION_FAILED',
+    PARSER_INPUT_EMPTY: 'PARSER_EXECUTION_FAILED'
+  };
+  if (map[legacy]) return map[legacy];
+  if (['PARSER_NOT_CONFIGURED', 'PARSER_TIMEOUT', 'PARSER_PROTOCOL_ERROR', 'PARSER_EXECUTION_FAILED'].includes(legacy)) return legacy;
+  return 'PARSER_EXECUTION_FAILED';
+}
+
 function failClosedRequest(fastRequest, error) {
-  const code = String(error?.code || 'PARSER_UNAVAILABLE');
-  const message = String(error?.message || code);
+  const legacyCode = String(error?.code || 'PARSER_UNAVAILABLE');
+  const code = normalizeParserErrorCode(legacyCode);
+  const message = String(error?.message || legacyCode);
   return {
     ...fastRequest,
     analysis_task_packet: {
@@ -484,17 +512,18 @@ function failClosedRequest(fastRequest, error) {
       replace: [],
       verification: [],
       completion_criteria: [],
-      unresolved: unique([`JAPANESE_PARSER_FAIL_CLOSED:${code}`]),
-      conflicts: [{ type: 'JAPANESE_PARSER_FAIL_CLOSED', note: message }],
-      hard_blockers: unique(['JAPANESE_PARSER_FAIL_CLOSED', code]),
+      unresolved: unique([`JAPANESE_PARSER_FAIL_CLOSED:${code}`, legacyCode !== code ? `JAPANESE_PARSER_FAIL_CLOSED:${legacyCode}` : null].filter(Boolean)),
+      conflicts: [{ type: 'JAPANESE_PARSER_FAIL_CLOSED', note: message, legacy_code: legacyCode, code }],
+      hard_blockers: unique(['JAPANESE_PARSER_FAIL_CLOSED', code, legacyCode]),
       source_spans: []
     },
     instruction_understanding: {
       mode: 'FAIL_CLOSED',
       parser: 'deterministic-japanese-parser',
       execution_allowed: false,
-      blocked_reasons: unique(['JAPANESE_PARSER_FAIL_CLOSED', code]),
+      blocked_reasons: unique(['JAPANESE_PARSER_FAIL_CLOSED', code, legacyCode]),
       error_code: code,
+      error_code_legacy: legacyCode,
       transport: error?.transport || null
     }
   };
@@ -644,6 +673,11 @@ class CanonicalV4Engine {
   async prepareRequest(input = {}) {
     const question = String(input.question || '');
     const context = String(input.context || '');
+    const existingPacket = input.analysis_task_packet;
+    const parserPending = (existingPacket?.unresolved || []).includes('japanese_parser_pending');
+    if (existingPacket && input.instruction_understanding && !parserPending) {
+      return input;
+    }
     if (!needsJapaneseParser(question)) {
       const fast = analyzeRequest({ question, context });
       fast.instruction_understanding = { mode: 'FAST_PATH', parser: null, execution_allowed: true, blocked_reasons: [] };
@@ -660,12 +694,46 @@ class CanonicalV4Engine {
 
     const baseRequest = input.preparedRequest?.analysis_task_packet ? input.preparedRequest : await this.prepareRequest({ question, context, language: input.language, output_language: input.output_language });
     if (!(baseRequest.analysis_task_packet?.tasks || []).length) {
-      const questions = [lang === 'ja' ? '確認が必要です。対象・目的・完了条件を具体化してください。' : 'Clarification is required. Specify the target, objective, and completion condition.'];
-      return { result: { type: 'clarification_needed', request_model: baseRequest, questions }, material: this.clarify(questions, lang), prompt: '', runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: baseRequest.instruction_understanding?.mode || 'UNKNOWN' } };
-    }
-    if (baseRequest.instruction_understanding?.mode === 'FAIL_CLOSED' && Array.from(question).length <= 4) {
-      const questions = [lang === 'ja' ? '確認が必要です。判断対象・目的・完了条件を具体化してください。' : 'Clarification is required. Specify the target, objective, and completion condition.'];
-      return { result: { type: 'clarification_needed', request_model: baseRequest, questions }, material: this.clarify(questions, lang), prompt: '', runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: 'FAIL_CLOSED' } };
+      if (parserFailClosedRequest(baseRequest)) {
+        const blockers = unique([...(baseRequest.analysis_task_packet?.hard_blockers || []), ...(baseRequest.instruction_understanding?.blocked_reasons || [])]);
+        const errorCode = baseRequest.instruction_understanding?.error_code || null;
+        return {
+          result: {
+            type: 'task_graph_blocked',
+            request_model: baseRequest,
+            analysis_task_packet: baseRequest.analysis_task_packet,
+            non_ai: true,
+            error_code: errorCode,
+            hard_blockers: blockers
+          },
+          material: this.blocked(blockers.length ? blockers : [errorCode || 'JAPANESE_PARSER_FAIL_CLOSED'], lang),
+          prompt: '',
+          runtime: {
+            ai_used: false,
+            llm_called: false,
+            engine: 'v8_canonical_v4_rules',
+            instruction_mode: 'FAIL_CLOSED',
+            parser_error_code: errorCode
+          }
+        };
+      }
+      const questions = [lang === 'ja' ? 'Analysis Taskを抽出できませんでした。対象・行為・完了条件を確認してください。' : 'No analysis task could be extracted. Specify the target, action, and completion condition.'];
+      return {
+        result: {
+          type: 'clarification_needed',
+          request_model: baseRequest,
+          questions,
+          clarification_code: 'USER_CLARIFICATION_REQUIRED'
+        },
+        material: this.clarify(questions, lang),
+        prompt: '',
+        runtime: {
+          ai_used: false,
+          llm_called: false,
+          engine: 'v8_canonical_v4_rules',
+          instruction_mode: baseRequest.instruction_understanding?.mode || 'UNKNOWN'
+        }
+      };
     }
 
     const enrichedTasks = enrichTasks(baseRequest.analysis_task_packet?.tasks || [], { question, context });
@@ -842,3 +910,4 @@ module.exports.requestFromParser = requestFromParser;
 module.exports.failClosedRequest = failClosedRequest;
 module.exports.japaneseFastSkeleton = japaneseFastSkeleton;
 module.exports.prepareJapaneseRequestViaMcp = prepareJapaneseRequestViaMcp;
+module.exports.normalizeParserErrorCode = normalizeParserErrorCode;
