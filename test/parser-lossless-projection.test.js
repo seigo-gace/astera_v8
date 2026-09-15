@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { requestFromParser, failClosedRequest } = require('../src/canonical-v4-engine');
 const { enrichRequest, isMcpDeepPathRequest, parserFailClosedRequest } = require('../src/deterministic-task-decomposer');
-const { readHumanState } = require('../src/human-reader');
+const { readHumanState } = require('../src/hyperion-human-reader');
 
 function baseFastRequest(question) {
   return {

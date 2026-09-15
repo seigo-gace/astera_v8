@@ -303,9 +303,9 @@ Evidence Search APIも独立起動Scriptを持ちます。
 npm run start:evidence-api
 ```
 
-### Legacy compatibility
+### HTTP authentication (Core)
 
-`/signup`、Skill Key、Billing / Stripe等のEndpointは現行互換Codeとして残っていますが、Canonical Core責務ではありません。
+`/process` は `ASTERA_LOCAL_NO_AUTH=1`（loopback 開発）または `ASTERA_API_KEY` / `X-API-Key` で保護します。`/v1/skill/process` は `ASTERA_SKILL_API_KEY` を維持します。Tenant SQLite・`/signup`・Stripe Billing は Core HTTP から除去済みです（Commerce は Astera App 側。詳細は `docs/ARCHITECTURE.md`）。
 
 ---
 
@@ -412,7 +412,7 @@ astera_v8/
 │  ├─ quality-completion-evaluator/
 │  ├─ runtime/
 │  ├─ pillars/
-│  └─ auth/ billing/ guard/ store/   # migration debt
+│  └─ auth/skill-api-key.js guard/ llm-request.js
 ├─ test/
 ├─ scripts/
 ├─ .github/workflows/

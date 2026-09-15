@@ -7,8 +7,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const EvaluatorApiServer = require('./server');
-const SQLiteStore = require('../../store/sqlite-store');
-const TenantManager = require('../../auth/tenant');
 const { baseDesignRequest } = require('../tests/fixtures/factory');
 
 function request({ port, path: requestPath, headers = {}, body = '' }) {
@@ -30,41 +28,40 @@ function request({ port, path: requestPath, headers = {}, body = '' }) {
 
 async function withEvaluatorApi(fn, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-evaluator-api-'));
-  const store = new SQLiteStore(path.join(dir, 'test.db'));
   const rows = [];
   const logger = { write(row) { rows.push(row); return row; }, async flush() {} };
-  const api = new EvaluatorApiServer({ port: 0, host: '127.0.0.1', store, logger, limiter: options.limiter });
+  const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
+  process.env.ASTERA_LOCAL_NO_AUTH = '1';
+  const api = new EvaluatorApiServer({ port: 0, host: '127.0.0.1', logger, limiter: options.limiter });
   api.start();
   await new Promise((resolve) => api.server.once('listening', resolve));
   try {
-    await fn({ port: api.server.address().port, store, rows });
+    await fn({ port: api.server.address().port, rows });
   } finally {
     await api.stop();
     fs.rmSync(dir, { recursive: true, force: true });
+    if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
+    else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
   }
 }
 
-test('standalone evaluator public API accepts Astera tenant key and meters usage', async () => {
-  await withEvaluatorApi(async ({ port, store }) => {
-    const manager = new TenantManager(store);
-    const { apiKey, tenant } = manager.issueKey({ plan: 'free' });
+test('standalone evaluator public API accepts local no-auth evaluate', async () => {
+  await withEvaluatorApi(async ({ port }) => {
     const response = await request({
       port, path: '/v1/evaluate',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(baseDesignRequest())
     });
     assert.equal(response.status, 200);
     assert.equal(response.json.status, 'PASSED');
     assert.equal(response.json.publication, undefined);
-    assert.equal(store.countUsageSince(tenant.id, '/v1/evaluate', '1970-01-01T00:00:00.000Z'), 1);
   });
 });
 
-test('standalone evaluator public API applies the tenant plan rate limit', async () => {
+test('standalone evaluator public API applies transport rate limit', async () => {
   const limiter = { check() { return { allowed: false, remaining: 0, limit: 5, resetAt: new Date().toISOString() }; } };
-  await withEvaluatorApi(async ({ port, store }) => {
-    const { apiKey } = new TenantManager(store).issueKey({ plan: 'free' });
-    const response = await request({ port, path: '/v1/evaluate', headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey }, body: JSON.stringify(baseDesignRequest()) });
+  await withEvaluatorApi(async ({ port }) => {
+    const response = await request({ port, path: '/v1/evaluate', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(baseDesignRequest()) });
     assert.equal(response.status, 429);
   }, { limiter });
 });
@@ -72,9 +69,9 @@ test('standalone evaluator public API applies the tenant plan rate limit', async
 test('standalone evaluator Skill API is private, unlimited, and never publishes', async () => {
   const previous = process.env.ASTERA_SKILL_API_KEY;
   process.env.ASTERA_SKILL_API_KEY = 'skill_test_key_abcdefghijklmnopqrstuvwxyz';
-  const limiter = { check() { throw new Error('Skill API must not call tenant rate limiter'); } };
+  const limiter = { check() { throw new Error('Skill API must not call transport rate limiter'); } };
   try {
-    await withEvaluatorApi(async ({ port, store }) => {
+    await withEvaluatorApi(async ({ port }) => {
       const missing = await request({ port, path: '/v1/skill/evaluate', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       assert.equal(missing.status, 401);
       const response = await request({
@@ -85,7 +82,6 @@ test('standalone evaluator Skill API is private, unlimited, and never publishes'
       assert.equal(response.status, 200);
       assert.equal(response.json.status, 'PASSED');
       assert.equal(response.json.publication, undefined);
-      assert.equal(store.data?.usage?.length || 0, 0);
     }, { limiter });
   } finally {
     if (previous === undefined) delete process.env.ASTERA_SKILL_API_KEY;
@@ -94,9 +90,8 @@ test('standalone evaluator Skill API is private, unlimited, and never publishes'
 });
 
 test('standalone evaluator rejects oversized payloads', async () => {
-  await withEvaluatorApi(async ({ port, store }) => {
-    const { apiKey } = new TenantManager(store).issueKey({ plan: 'free' });
-    const response = await request({ port, path: '/v1/evaluate', headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey }, body: JSON.stringify({ value: 'x'.repeat(1024 * 1024) }) });
+  await withEvaluatorApi(async ({ port }) => {
+    const response = await request({ port, path: '/v1/evaluate', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: 'x'.repeat(1024 * 1024) }) });
     assert.equal(response.status, 413);
   });
 });

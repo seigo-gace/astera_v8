@@ -17,22 +17,12 @@ function assertDockerProductionResidency(serviceName, allowEnvVar) {
 
 assertDockerProductionResidency('Astera v8', 'ASTERA_ALLOW_HOST_START');
 
-// App composition root: Core engine + HTTP compatibility adapter + Commerce wiring only here.
 const KaguraServer = require('./src/server');
 const KaguraEngine = require('./src/astera-engine');
 const { createEvidenceSearchClient } = require('./src/evidence-search/api/runtime-client');
-const SQLiteStore = require('./src/store/sqlite-store');
-const StripeClient = require('./src/billing/stripe-client');
-const SubscriptionSync = require('./src/billing/subscription-sync');
 const Logger = require('./src/logger');
 
-const store = new SQLiteStore(process.env.ASTERA_DB || process.env.KAGURA_DB || 'astera.db');
 const logger = new Logger();
-const stripe = new StripeClient({
-  secretKey: process.env.STRIPE_SECRET_KEY || '',
-  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || ''
-});
-const subSync = new SubscriptionSync(store, stripe);
 const evidenceSearchClient = createEvidenceSearchClient({ logger });
 const engine = new KaguraEngine({
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
@@ -44,9 +34,6 @@ const server = new KaguraServer({
   port: Number(process.env.ASTERA_PORT || process.env.KAGURA_PORT || 7373),
   host: process.env.ASTERA_HOST || process.env.KAGURA_HOST || '127.0.0.1',
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
-  store,
-  stripe,
-  subSync,
   logger,
   engine
 });
@@ -57,8 +44,6 @@ logger.write({
   type: 'runtime_initialized',
   text: 'Astera v8 — Multi-Perspective Cognition Runtime initialized',
   payload: {
-    store: store.mode,
-    sqlite_error: store.sqliteError || null,
     tgserver_logging: logger.tgsEnabled,
     tgserver_project: logger.projectId,
     evidence_search_client: Boolean(evidenceSearchClient)

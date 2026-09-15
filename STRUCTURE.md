@@ -41,20 +41,15 @@ src/
 - `src/quality-completion-evaluator/`: independent evaluator
 - Astera App / Account / Commerce / Webhook Gateway / ASTERA-KB / TGserver: external ownership
 
-## Migration debt currently present
+## HTTP transport (Core repo)
 
 ```text
-src/auth/
-src/billing/
-src/guard/
-src/store/
-Tenant / API-key compatibility
-SQLite application state
-Stripe / subscription wiring
-legacy billing / skill endpoints
+src/auth/skill-api-key.js
+src/guard/rate-limiter.js
+src/llm-request.js
 ```
 
-Their presence in current code does not make them canonical Astera Core responsibilities.
+Tenant SQLite and Stripe billing were removed from Core HTTP; Commerce belongs to Astera App.
 
 ## Repository support areas
 

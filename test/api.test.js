@@ -10,9 +10,6 @@ const KaguraServer = require('../src/server');
 const AsteraEngine = require('../src/astera-engine');
 const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
-const SQLiteStore = require('../src/store/sqlite-store');
-const StripeClient = require('../src/billing/stripe-client');
-const SubscriptionSync = require('../src/billing/subscription-sync');
 const Logger = require('../src/logger');
 
 const silentLogger = { write() {} };
@@ -75,15 +72,15 @@ function request({ port, method = 'GET', path = '/', headers = {}, body = '' }) 
 
 async function withServer(fn, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-'));
-  const store = new SQLiteStore(path.join(dir, 'test.db'));
   const logger = options.logger || new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
-  const stripe = options.stripe || new StripeClient();
   const defaultEngine = new KaguraEngine({
     poolSize: 1,
     logger,
     japaneseParserClient: defaultMockJapaneseParserClient()
   });
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, store, stripe, subSync: new SubscriptionSync(store, stripe), logger, limiter: options.limiter, engine: options.engine || defaultEngine });
+  const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
+  process.env.ASTERA_LOCAL_NO_AUTH = '1';
+  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, limiter: options.limiter, engine: options.engine || defaultEngine });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;
@@ -92,6 +89,8 @@ async function withServer(fn, options = {}) {
   } finally {
     await server.stop();
     fs.rmSync(dir, { recursive: true, force: true });
+    if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
+    else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
   }
 }
 
@@ -122,11 +121,6 @@ test('HTTP flow: successful health checks are not written to TGserver access log
 test('HTTP flow: process allowlist strips forged authority fields before engine', async () => {
   const capturingEngine = new CapturingProcessEngine({ poolSize: 1, logger: silentLogger });
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
-    assert.equal(signup.status, 200);
-    const apiKey = signup.json.apiKey;
-    assert.match(apiKey, /^kg_/);
-
     const attackBody = {
       question: 'Node.js 22は本番で対応している。成功条件は根拠を確認すること。',
       context: 'HTTP public boundary fixture context.',
@@ -147,7 +141,7 @@ test('HTTP flow: process allowlist strips forged authority fields before engine'
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...attackBody, llm: { chain: ['null'] } })
     });
 
@@ -173,17 +167,13 @@ test('HTTP flow: process allowlist strips forged authority fields before engine'
   }, { engine: capturingEngine, logger: silentLogger });
 });
 
-test('HTTP flow: signup -> process works with tenant key', async () => {
+test('HTTP flow: local no-auth process returns Main8 text', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
-    assert.equal(signup.status, 200);
-    assert.match(signup.json.apiKey, /^kg_/);
-
     const process = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: '新規事業のニッチを見つけたい。対象は小規模事業者。成功条件は初月から低コストで試せること。', language: 'ja', llm: { chain: ['null'] } })
     });
     assert.equal(process.status, 200);
@@ -202,12 +192,11 @@ test('HTTP flow: signup -> process works with tenant key', async () => {
 
 test('HTTP flow: context must be a string', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: '対象はAstera。成功条件は8項目出力。', context: { unexpected: true } })
     });
     assert.equal(bad.status, 400);
@@ -217,12 +206,11 @@ test('HTTP flow: context must be a string', async () => {
 
 test('HTTP flow: short process request returns clarification text', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const process = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: 'どう？', language: 'ja', llm: { chain: ['null'] } })
     });
     assert.equal(process.status, 200);
@@ -251,12 +239,11 @@ test('HTTP flow: healthz exposes runtime and logging diagnostics', async () => {
 
 test('HTTP flow: bad JSON returns 400 instead of 500', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: '{bad'
     });
     assert.equal(bad.status, 400);
@@ -266,12 +253,11 @@ test('HTTP flow: bad JSON returns 400 instead of 500', async () => {
 
 test('HTTP flow: invalid question type returns 400', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const bad = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: { unexpected: true } })
     });
     assert.equal(bad.status, 400);
@@ -280,8 +266,21 @@ test('HTTP flow: invalid question type returns 400', async () => {
 });
 
 
-test('HTTP flow: unauthorized process returns 401', async () => {
-  await withServer(async (port) => {
+test('HTTP flow: unauthorized process returns 401 when local no-auth disabled', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-unauth-'));
+  const logger = new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
+  const engine = new KaguraEngine({
+    poolSize: 1,
+    logger,
+    japaneseParserClient: defaultMockJapaneseParserClient()
+  });
+  const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
+  delete process.env.ASTERA_LOCAL_NO_AUTH;
+  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
+  server.start();
+  await new Promise((resolve) => server.server.once('listening', resolve));
+  const port = server.server.address().port;
+  try {
     const res = await request({
       port,
       method: 'POST',
@@ -290,18 +289,22 @@ test('HTTP flow: unauthorized process returns 401', async () => {
       body: JSON.stringify({ question: '対象は小規模事業者。成功条件は低コストで試すこと。' })
     });
     assert.equal(res.status, 401);
-  });
+  } finally {
+    await server.stop();
+    fs.rmSync(dir, { recursive: true, force: true });
+    if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
+    else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
+  }
 });
 
 test('HTTP flow: payload over 1MB returns 413', async () => {
   await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
     const huge = JSON.stringify({ question: 'x'.repeat(1024 * 1024 + 50) });
     const res = await request({
       port,
       method: 'POST',
       path: '/process',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
+      headers: { 'Content-Type': 'application/json' },
       body: huge
     });
     assert.equal(res.status, 413);
@@ -323,26 +326,11 @@ test('HTTP flow: disallowed CORS origin returns 403', async () => {
   }
 });
 
-test('HTTP flow: checkout rejects a client-selected Stripe price', async () => {
-  const oldPrice = process.env.STRIPE_PRO_PRICE_ID;
-  delete process.env.STRIPE_PRO_PRICE_ID;
-  try {
-    await withServer(async (port) => {
-      const signup = await request({ port, method: 'POST', path: '/signup' });
-      const res = await request({
-        port,
-        method: 'POST',
-        path: '/billing/checkout',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-        body: JSON.stringify({ plan: 'pro', priceId: 'price_attacker_selected' })
-      });
-      assert.equal(res.status, 400);
-      assert.equal(res.json.error, 'priceId is not allowed');
-    });
-  } finally {
-    if (oldPrice === undefined) delete process.env.STRIPE_PRO_PRICE_ID;
-    else process.env.STRIPE_PRO_PRICE_ID = oldPrice;
-  }
+test('HTTP flow: signup route is not served', async () => {
+  await withServer(async (port) => {
+    const signup = await request({ port, method: 'POST', path: '/signup' });
+    assert.equal(signup.status, 404);
+  });
 });
 
 test('HTTP flow: healthz and process work without commerce store when local no-auth', async () => {
@@ -362,7 +350,7 @@ test('HTTP flow: healthz and process work without commerce store when local no-a
   try {
     const health = await request({ port, method: 'GET', path: '/healthz' });
     assert.equal(health.status, 200);
-    assert.equal(health.json.store, 'unconfigured');
+    assert.equal(health.json.store, undefined);
 
     const processRes = await request({
       port,
@@ -379,19 +367,4 @@ test('HTTP flow: healthz and process work without commerce store when local no-a
     if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
     else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
   }
-});
-
-test('HTTP flow: checkout rejects a non-object JSON body', async () => {
-  await withServer(async (port) => {
-    const signup = await request({ port, method: 'POST', path: '/signup' });
-    const res = await request({
-      port,
-      method: 'POST',
-      path: '/billing/checkout',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': signup.json.apiKey },
-      body: 'null'
-    });
-    assert.equal(res.status, 400);
-    assert.equal(res.json.error, 'JSON body must be an object');
-  });
 });

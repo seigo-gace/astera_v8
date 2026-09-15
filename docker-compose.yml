@@ -8,7 +8,6 @@ services:
     environment:
       ASTERA_HOST: 127.0.0.1
       ASTERA_PORT: ${ASTERA_PORT:?Set ASTERA_PORT}
-      ASTERA_DB: /data/astera.db
       ASTERA_LOG_CACHE_DIR: /cache/outbox
       ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-stdio}
       ASTERA_JAPANESE_PARSER_COMMAND: /home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp
@@ -22,7 +21,6 @@ services:
     # and lets Astera deliver structured logs directly to it.
     network_mode: host
     volumes:
-      - astera-data:/data
       - /home/admin1/logs/astera-v8:/cache
       - type: bind
         source: /home/admin1/projects/Deterministic-Japanese-Parser-MCP
@@ -50,11 +48,9 @@ services:
     environment:
       ASTERA_EVALUATOR_API_HOST: 0.0.0.0
       ASTERA_EVALUATOR_API_PORT: 7374
-      ASTERA_DB: /data/astera.db
       ASTERA_LOG_CACHE_DIR: /cache/outbox
     network_mode: host
     volumes:
-      - astera-data:/data
       - /home/admin1/logs/astera-v8:/cache
     read_only: true
     security_opt:

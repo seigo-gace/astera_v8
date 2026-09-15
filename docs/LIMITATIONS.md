@@ -22,7 +22,7 @@ Updated: 2026-08-03
 
 ## 3. 現行Repositoryの構造Debt
 
-- `src/auth`、`src/billing`、`src/store`がCore Repositoryへ混在する
+- Account / Commerce（Tenant DB、signup、Stripe）は Astera App 側。Core HTTP は skill key と transport rate limit のみ
 - Tenant / Rate Limit / Stripe Endpointが現行Serverに残る
 - これらは実装事実だが、完成責務や公開Core機能ではない
 - Account、Square、CreditはAstera App / Commerce側へ移管する

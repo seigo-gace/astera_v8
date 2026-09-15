@@ -5,10 +5,11 @@ export ASTERA_HOST=127.0.0.1
 export KAGURA_HOST=127.0.0.1
 export ASTERA_PORT=${ASTERA_PORT:-${KAGURA_PORT:-17373}}
 export KAGURA_PORT=${ASTERA_PORT}
-export ASTERA_DB=${ASTERA_DB:-astera-smoke-${ASTERA_PORT}.db}
-export KAGURA_DB=${ASTERA_DB}
 export ASTERA_TGS_ENABLED=0
 export ASTERA_ALLOW_HOST_START=1
+export ASTERA_LOCAL_NO_AUTH=1
+export ASTERA_JAPANESE_PARSER_MODE=${ASTERA_JAPANESE_PARSER_MODE:-stdio}
+export ASTERA_JAPANESE_PARSER_COMMAND=${ASTERA_JAPANESE_PARSER_COMMAND:-/home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp}
 
 smoke_fail() {
   local reason="$1"
@@ -49,6 +50,4 @@ if [[ "${ready}" -ne 1 ]]; then
   smoke_fail "/healthz did not become ready within bounded wait"
 fi
 
-key=$(node -e "const port=process.env.ASTERA_PORT; fetch('http://127.0.0.1:'+port+'/signup',{method:'POST'}).then(async r=>{const j=await r.json(); if(!r.ok||!j.apiKey) process.exit(1); console.log(j.apiKey);}).catch(()=>process.exit(1));") || smoke_fail "signup failed"
-
-SMOKE_API_KEY="${key}" node -e "const port=process.env.ASTERA_PORT; const key=process.env.SMOKE_API_KEY; const body={question:'マーケティング施策を決めたい。対象は小規模SaaSの見込み客。CVは無料登録。広告コピーとLP訴求を比較したい。',language:'ja',llm:{chain:['null']}}; fetch('http://127.0.0.1:'+port+'/process',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify(body)}).then(async r=>{const s=await r.text(); if(!r.ok) { console.error(s); process.exit(1); } const mustHave=[['Main8 start',/01 本当の目的/],['Main8 evidence',/07 根拠成立状態/],['Main8 end',/08 主役AI／利用者への再指示/]]; for (const [name,re] of mustHave) { if(!re.test(s)) { console.error('smoke missing: '+name+'\\n'+s); process.exit(1); } } const mustNotHave=[['no fixed derivation header',/導出根拠/],['no External Consumer block',/External Consumer/],['no rules= envelope',/^- rules=/m],['no derivation= envelope',/^- derivation=/m]]; for (const [name,re] of mustNotHave) { if(re.test(s)) { console.error('smoke forbidden in default text: '+name+'\\n'+s); process.exit(1); } } if((s.match(/^---$/gm)||[]).length!==7){console.error('smoke invalid Main8 separators\\n'+s);process.exit(1);} console.log('smoke ok: canonical 8-section judgment output');}).catch((err)=>{console.error(err.message); process.exit(1);});" || smoke_fail "process smoke request failed"
+node -e "const port=process.env.ASTERA_PORT; const body={question:'マーケティング施策を決めたい。対象は小規模SaaSの見込み客。CVは無料登録。広告コピーとLP訴求を比較したい。',language:'ja',llm:{chain:['null']}}; fetch('http://127.0.0.1:'+port+'/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async r=>{const s=await r.text(); if(!r.ok) { console.error(s); process.exit(1); } const mustHave=[['Main8 start',/01 本当の目的/],['Main8 evidence',/07 根拠成立状態/],['Main8 end',/08 主役AI／利用者への再指示/]]; for (const [name,re] of mustHave) { if(!re.test(s)) { console.error('smoke missing: '+name+'\\n'+s); process.exit(1); } } const mustNotHave=[['no fixed derivation header',/導出根拠/],['no External Consumer block',/External Consumer/],['no rules= envelope',/^- rules=/m],['no derivation= envelope',/^- derivation=/m]]; for (const [name,re] of mustNotHave) { if(re.test(s)) { console.error('smoke forbidden in default text: '+name+'\\n'+s); process.exit(1); } } if((s.match(/^---$/gm)||[]).length!==7){console.error('smoke invalid Main8 separators\\n'+s);process.exit(1);} console.log('smoke ok: canonical 8-section judgment output');}).catch((err)=>{console.error(err.message); process.exit(1);});" || smoke_fail "process smoke request failed"

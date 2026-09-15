@@ -19,10 +19,8 @@ function assertDockerProductionResidency(serviceName, allowEnvVar) {
 assertDockerProductionResidency('Astera Evaluator API', 'ASTERA_ALLOW_HOST_START');
 
 const EvaluatorApiServer = require('./server');
-const SQLiteStore = require('../../store/sqlite-store');
 
-const store = new SQLiteStore(process.env.ASTERA_DB || process.env.KAGURA_DB || 'astera.db');
-const api = new EvaluatorApiServer({ store });
+const api = new EvaluatorApiServer();
 api.start();
 
 async function shutdown() {

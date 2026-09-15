@@ -3,7 +3,6 @@ FROM ubuntu:24.04
 ENV NODE_ENV=production \
     ASTERA_HOST=127.0.0.1 \
     ASTERA_PORT=7373 \
-    ASTERA_DB=/data/astera.db \
     ASTERA_LOG_CACHE_DIR=/cache/outbox \
     LLM_CHAIN=null
 

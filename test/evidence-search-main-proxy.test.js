@@ -9,9 +9,7 @@ const { once } = require('node:events');
 const KaguraServer = require('../src/server');
 const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
-const SQLiteStore = require('../src/store/sqlite-store');
-
-process.env.ASTERA_KEY_PEPPER = 'astera-test-key-pepper-32-bytes-minimum-value';
+const TEST_TENANT = Object.freeze({ id: 'main-evidence-proxy-test', is_global: true, plan: 'admin' });
 
 function createLogger(events = []) {
   return {
@@ -103,37 +101,40 @@ function mockEvidenceClient(onSearch) {
   };
 }
 
-async function startMain({ evidenceSearchClient, engine, events = [] }) {
+async function startMain({ evidenceSearchClient, engine, events = [], localNoAuth = false }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-main-evidence-'));
-  const store = new SQLiteStore(path.join(root, 'astera.db'));
   const logger = createLogger(events);
   const resolvedEngine = engine || new KaguraEngine({ logger, evidenceSearchClient, japaneseParserClient: defaultMockJapaneseParserClient() });
+  const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
+  if (localNoAuth) process.env.ASTERA_LOCAL_NO_AUTH = '1';
+  else delete process.env.ASTERA_LOCAL_NO_AUTH;
   const server = new KaguraServer({
     port: 0,
     host: '127.0.0.1',
-    store,
     logger,
     engine: resolvedEngine
   });
-  const issued = server.tenants.issueKey({ plan: 'free' });
   server.start();
   await once(server.server, 'listening');
   const address = server.server.address();
   return {
     root,
-    store,
     server,
     engine: resolvedEngine,
-    apiKey: issued.apiKey,
-    tenant: issued.tenant,
+    tenant: TEST_TENANT,
     baseUrl: `http://127.0.0.1:${address.port}`,
-    events
+    events,
+    restoreEnv() {
+      if (oldLocal === undefined) delete process.env.ASTERA_LOCAL_NO_AUTH;
+      else process.env.ASTERA_LOCAL_NO_AUTH = oldLocal;
+    }
   };
 }
 
 async function stopMain(runtime) {
   await runtime.engine.destroy?.();
   await runtime.server.stop();
+  runtime.restoreEnv?.();
   await fs.rm(runtime.root, { recursive: true, force: true });
 }
 

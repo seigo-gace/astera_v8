@@ -1,24 +1,26 @@
 'use strict';
 
 const http = require('node:http');
-const path = require('node:path');
 const crypto = require('node:crypto');
 const KaguraEngine = require('./astera-engine');
 const Logger = require('./logger');
-const TenantManager = require('./auth/tenant');
-const { UsageMeter } = require('./billing/meter');
 const RateLimiter = require('./guard/rate-limiter');
-const KeyVault = require('./billing/key-vault');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
-const { authenticateSkillApiKey, isSkillApiConfigured } = require('./auth/skill-api-key');
+const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('./auth/skill-api-key');
+const { resolveRequestLLM } = require('./llm-request');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
+const DEFAULT_PROCESS_RATE_LIMIT_PER_MINUTE = 60;
 
 const ALLOWED_MOOD_KEYS = new Set([
   'good', 'confident', 'calm', 'deepThink', 'urgent', 'angry', 'tired', 'bad', 'confused', 'anxious'
 ]);
 const MAX_MOOD_ANSWER_KEYS = 8;
+
+function transportProcessRateLimit() {
+  return positiveInteger(process.env.ASTERA_PROCESS_RATE_LIMIT_PER_MINUTE, DEFAULT_PROCESS_RATE_LIMIT_PER_MINUTE);
+}
 
 function sanitizeMoodAnswers(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
@@ -63,19 +65,21 @@ function positiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+function resolveGlobalApiKeyTenant(apiKey) {
+  const key = String(apiKey || '').trim();
+  if (!key || key.length > 256) return null;
+  const globalKey = process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '';
+  if (!globalKey || !timingSafeStringEqual(key, globalKey)) return null;
+  return { id: 'admin', plan: 'admin', status: 'active', key_prefix: 'admin', is_global: true };
+}
+
 class KaguraServer {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port, 7373);
     this.host = options.host || '127.0.0.1';
-    this.store = options.store || null;
-    this.stripe = options.stripe || null;
-    this.subSync = options.subSync || null;
     this.logger = options.logger || new Logger();
     this.engine = options.engine || new KaguraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
-    this.tenants = this.store ? new TenantManager(this.store) : null;
-    this.meter = this.store ? new UsageMeter(this.store) : null;
     this.limiter = options.limiter || new RateLimiter();
-    this.vault = new KeyVault();
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
       const startedAt = Date.now();
@@ -127,7 +131,7 @@ class KaguraServer {
     this.server.listen(this.port, this.host, () => {
       const address = this.server.address();
       const actualPort = typeof address === 'object' && address ? address.port : this.port;
-      this.logger.write({ type: 'server_started', text: `Astera v8 listening at http://${this.host}:${actualPort}`, payload: { host: this.host, port: actualPort, store: this.store?.mode ?? 'unconfigured' } });
+      this.logger.write({ type: 'server_started', text: `Astera v8 listening at http://${this.host}:${actualPort}`, payload: { host: this.host, port: actualPort } });
     });
     return this.server;
   }
@@ -136,7 +140,6 @@ class KaguraServer {
     if (this.server.listening) await new Promise((resolve) => this.server.close(resolve));
     await this.engine.destroy();
     this.logger.write({ type: 'server_stopped', text: 'Astera v8 stopped' });
-    this.store?.close?.();
     await this.logger.flush?.();
   }
 
@@ -152,7 +155,7 @@ class KaguraServer {
   _headers(req, extra = {}) {
     const origin = this._corsOriginFor(req);
     const headers = {
-      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Stripe-Signature',
+      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key',
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
       'Vary': 'Origin',
       'X-Content-Type-Options': 'nosniff',
@@ -232,8 +235,11 @@ class KaguraServer {
     const key = req.headers['x-api-key'];
     const localNoAuth = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1' && ['127.0.0.1', 'localhost', '::1'].includes(this.host);
     if (!key && localNoAuth) return { id: 'local-dev', plan: 'admin', status: 'active', is_global: true };
-    if (!this.tenants) return null;
-    return this.tenants.resolve(key);
+    if (key) {
+      const globalTenant = resolveGlobalApiKeyTenant(key);
+      if (globalTenant) return globalTenant;
+    }
+    return null;
   }
 
   async _authenticateSkill(req) {
@@ -243,10 +249,7 @@ class KaguraServer {
   async _processRequest(req, res, context, tenant, { unlimited = false, route = '/process' } = {}) {
     context.tenantId = tenant.id;
     if (!unlimited) {
-      const limits = this.tenants
-        ? this.tenants.limitsFor(tenant)
-        : (TenantManager.PLAN_LIMITS[tenant?.plan] || TenantManager.PLAN_LIMITS.free);
-      const rl = this.limiter.check({ key: `process:${tenant.id}`, limit: limits.perMinute, windowMs: 60_000 });
+      const rl = this.limiter.check({ key: `process:${tenant.id}`, limit: transportProcessRateLimit(), windowMs: 60_000 });
       if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
     }
 
@@ -274,11 +277,8 @@ class KaguraServer {
       throw error;
     }
     const allowlist = buildProcessAllowlist(body);
-    allowlist.llm = this.vault.resolveRequestLLM(allowlist);
+    allowlist.llm = resolveRequestLLM(allowlist);
     const out = await this.engine.process(allowlist, tenant);
-    if (!unlimited && this.meter) {
-      this.meter.record({ tenant, route, units: 1, status: 'ok', meta: { answerProvider: out.answer?.provider || null } });
-    }
     return this._text(req, res, 200, out.material?.text || '');
   }
 
@@ -310,8 +310,6 @@ class KaguraServer {
           ok: true,
           service: 'astera-v8',
           version: pkg.version,
-          store: this.store?.mode ?? 'unconfigured',
-          sqlite_error: this.store?.sqliteError ?? null,
           tgserver_logging: this.logger.tgsEnabled,
           skill_api: {
             enabled: isSkillApiConfigured(),
@@ -327,84 +325,14 @@ class KaguraServer {
         });
       }
 
-      if (req.method === 'POST' && url.pathname === '/signup') {
-        if (!this.tenants) return this._json(req, res, 503, { error: 'store_not_configured' });
-        const ip = req.socket.remoteAddress || 'unknown';
-        const rl = this.limiter.check({ key: `signup:${ip}`, limit: 10, windowMs: 60_000 });
-        if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
-        const { apiKey, tenant } = this.tenants.issueKey({ plan: 'free' });
-        context.tenantId = tenant.id;
-        this.logger.write({ tenantId: tenant.id, type: 'tenant_created', text: 'Free tenant API key issued', payload: { tenant_id: tenant.id, plan: tenant.plan } });
-        return this._json(req, res, 200, {
-          apiKey,
-          tenantId: tenant.id,
-          plan: tenant.plan,
-          note: 'このAPIキーは二度と表示されません。安全な場所に保存してください。'
-        }, { mask: false });
-      }
-
-      if (req.method === 'POST' && url.pathname === '/billing/webhook') {
-        if (!this.stripe || !this.subSync) {
-          const error = new Error('billing_not_configured');
-          error.status = 503;
-          throw error;
-        }
-        const raw = await this._readRawBody(req, ONE_MB);
-        const event = this.stripe.verifyWebhook(raw, req.headers['stripe-signature']);
-        const result = await this.subSync.handleEvent(event);
-        context.tenantId = result.tenantId || 'stripe';
-        this.logger.write({ tenantId: context.tenantId, type: 'stripe_webhook', text: `Stripe webhook ${event.type}`, payload: { event_id: event.id, event_type: event.type, result } });
-        return this._json(req, res, 200, { received: true, result });
-      }
-
-      if (req.method === 'POST' && url.pathname === '/billing/checkout') {
-        if (!this.stripe) {
-          const error = new Error('billing_not_configured');
-          error.status = 503;
-          throw error;
-        }
-        const tenant = await this._authenticate(req);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
-        context.tenantId = tenant.id;
-        const body = await this._readJsonObject(req);
-        const rl = this.limiter.check({ key: `checkout:${tenant.id}`, limit: 10, windowMs: 60_000 });
-        if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
-        const requestedPlan = String(body.plan || 'pro').toLowerCase();
-        if (!['pro', 'business'].includes(requestedPlan)) {
-          const error = new Error('plan must be pro or business');
-          error.status = 400;
-          throw error;
-        }
-        const configuredPrice = requestedPlan === 'business'
-          ? process.env.STRIPE_BUSINESS_PRICE_ID
-          : process.env.STRIPE_PRO_PRICE_ID;
-        const allowCustomPrice = process.env.ASTERA_ALLOW_CUSTOM_STRIPE_PRICE === '1';
-        if (body.priceId && !allowCustomPrice && body.priceId !== configuredPrice) {
-          const error = new Error('priceId is not allowed');
-          error.status = 400;
-          throw error;
-        }
-        const priceId = configuredPrice || (allowCustomPrice ? body.priceId : '');
-        if (!priceId) {
-          const error = new Error(`Stripe price is not configured for ${requestedPlan}`);
-          error.status = 503;
-          throw error;
-        }
-        const publicBaseUrl = process.env.ASTERA_PUBLIC_BASE_URL || process.env.KAGURA_PUBLIC_BASE_URL || 'http://127.0.0.1:7373';
-        const session = await this.stripe.createCheckoutSession({
-          tenant,
-          priceId,
-          plan: requestedPlan,
-          successUrl: body.successUrl || `${publicBaseUrl}/?success=1`,
-          cancelUrl: body.cancelUrl || `${publicBaseUrl}/?cancel=1`
-        });
-        this.logger.write({ tenantId: tenant.id, type: 'checkout_created', text: 'Stripe checkout session created', payload: { session_id: session.id, price_id: priceId, plan: requestedPlan } });
-        return this._json(req, res, 200, { checkoutUrl: session.url, sessionId: session.id });
-      }
-
       if (req.method === 'POST' && url.pathname === '/process') {
         const tenant = await this._authenticate(req);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized', hint: 'X-API-Key header is required. Use /signup first.' });
+        if (!tenant) {
+          return this._json(req, res, 401, {
+            error: 'unauthorized',
+            hint: 'Set X-API-Key (ASTERA_API_KEY) or enable ASTERA_LOCAL_NO_AUTH=1 on loopback.'
+          });
+        }
         return await this._processRequest(req, res, context, tenant);
       }
 
@@ -418,9 +346,7 @@ class KaguraServer {
       return this._json(req, res, 404, { error: 'not_found' });
     } catch (error) {
       const requestedStatus = Number(error?.status);
-      const status = requestedStatus >= 400 && requestedStatus <= 599
-        ? requestedStatus
-        : (error?.message && error.message.includes('Stripe signature') ? 400 : 500);
+      const status = requestedStatus >= 400 && requestedStatus <= 599 ? requestedStatus : 500;
       this.logger.write({
         tenantId: context.tenantId,
         type: 'request_failed',
@@ -436,3 +362,5 @@ class KaguraServer {
 
 module.exports = KaguraServer;
 module.exports.parseAllowedOrigins = parseAllowedOrigins;
+module.exports.resolveGlobalApiKeyTenant = resolveGlobalApiKeyTenant;
+module.exports.transportProcessRateLimit = transportProcessRateLimit;

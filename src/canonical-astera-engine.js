@@ -9,7 +9,7 @@ const {
   isMaterialOnlyQuestion,
   isNaturalUserConsult
 } = require('./deterministic-task-decomposer');
-const { readHumanState } = require('./human-reader');
+const { readHumanState } = require('./hyperion-human-reader');
 const { unique } = require('./judgment-materials-analyzer');
 const { JapaneseParserMCPClient, needsJapaneseParser, isJapaneseParserConfigured } = require('./japanese-parser-mcp-client');
 const { prepareJapaneseRequestViaMcp } = require('./canonical-v4-engine');

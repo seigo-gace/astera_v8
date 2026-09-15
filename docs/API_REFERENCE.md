@@ -89,28 +89,20 @@ Schema:
 - `src/quality-completion-evaluator/contracts/evaluation-request.v1.schema.json`
 - `src/quality-completion-evaluator/contracts/evaluation-result.v1.schema.json`
 
-## 6. Legacy compatibility endpoints
+## 6. Skill / gateway endpoints (Core HTTP)
 
-次は現行Codeに存在しますが、Astera v8 Coreの完成責務ではありません。
-
-| Endpoint | Current implementation | Target ownership |
+| Endpoint | Auth | Notes |
 |---|---|---|
-| `POST /signup` | Tenant Key発行 | Account / Gateway |
-| `POST /v1/skill/process` | Skill KeyでCore処理 | Internal Gateway |
-| `POST /v1/skill/evaluate` | Skill KeyでEvaluator | Internal Gateway |
-| `POST /billing/checkout` | Stripe Checkout | Astera App / Commerce with Square |
-| `POST /billing/webhook` | Stripe Webhook | Commerce / Webhook Gateway |
+| `POST /v1/skill/process` | `ASTERA_SKILL_API_KEY` | Unlimited transport; Core engine |
+| `POST /v1/skill/evaluate` | `ASTERA_SKILL_API_KEY` | QCE evaluate |
 
-移行完了までは、Code互換性を壊さず、公開Core説明から分離します。
+Tenant SQLite・`POST /signup`・Stripe Billing routes は Core repo から除去済み。Account / Commerce は Astera App 側（`docs/ARCHITECTURE.md`）。
 
 ## 7. Current authentication behavior
 
-現行Codeには次が存在します。
-
-- Tenant Key
-- Global Key
-- Skill Key
-- Local no-auth development mode
+- `ASTERA_API_KEY` / `X-API-Key` on `/process` and `/v1/evaluate`
+- `ASTERA_SKILL_API_KEY` on skill routes
+- `ASTERA_LOCAL_NO_AUTH=1` on loopback hosts (development only)
 
 これらは現行実装検証には必要ですが、Account、認証、Plan、Creditの正本ではありません。新しい公開ClientはAstera App / Gateway側の確定Contractへ接続します。
 

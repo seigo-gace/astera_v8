@@ -3,19 +3,22 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 const Logger = require('../../logger');
-const TenantManager = require('../../auth/tenant');
 const RateLimiter = require('../../guard/rate-limiter');
-const { UsageMeter } = require('../../billing/meter');
 const { parseJsonStrict, maskSecrets } = require('../../safe-json');
-const { authenticateSkillApiKey, isSkillApiConfigured } = require('../../auth/skill-api-key');
+const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('../../auth/skill-api-key');
 const { evaluate } = require('..');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
+const DEFAULT_EVALUATE_RATE_LIMIT_PER_MINUTE = 60;
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function transportEvaluateRateLimit() {
+  return positiveInteger(process.env.ASTERA_EVALUATE_RATE_LIMIT_PER_MINUTE, DEFAULT_EVALUATE_RATE_LIMIT_PER_MINUTE);
 }
 
 function allowedOrigins() {
@@ -27,16 +30,31 @@ function isLoopbackAddress(address = '') {
   return /^(127(?:\.\d{1,3}){3}|::1|::ffff:127(?:\.\d{1,3}){3})$/i.test(String(address || ''));
 }
 
+function resolveGlobalApiKeyTenant(apiKey) {
+  const key = String(apiKey || '').trim();
+  if (!key || key.length > 256) return null;
+  const globalKey = process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '';
+  if (!globalKey || !timingSafeStringEqual(key, globalKey)) return null;
+  return { id: 'admin', plan: 'admin', status: 'active', key_prefix: 'admin', is_global: true };
+}
+
+function authenticateEvaluateRequest(req, host) {
+  const key = req.headers['x-api-key'];
+  const localNoAuth = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1' && ['127.0.0.1', 'localhost', '::1'].includes(host);
+  if (!key && localNoAuth) return { id: 'local-dev', plan: 'admin', status: 'active', is_global: true };
+  if (key) {
+    const globalTenant = resolveGlobalApiKeyTenant(key);
+    if (globalTenant) return globalTenant;
+  }
+  return null;
+}
+
 class EvaluatorApiServer {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port || process.env.ASTERA_EVALUATOR_API_PORT, 7374);
     this.host = options.host || process.env.ASTERA_EVALUATOR_API_HOST || '127.0.0.1';
     this.logger = options.logger || new Logger();
-    if (!options.store) throw new Error('EvaluatorApiServer requires store');
-    this.store = options.store;
-    this.tenants = new TenantManager(this.store);
     this.limiter = options.limiter || new RateLimiter();
-    this.meter = new UsageMeter(this.store);
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
       const startedAt = Date.now();
@@ -70,7 +88,6 @@ class EvaluatorApiServer {
   async stop() {
     if (this.server.listening) await new Promise((resolve) => this.server.close(resolve));
     this.logger.write({ type: 'evaluator_api_stopped', text: 'Astera evaluator API stopped' });
-    this.store.close?.();
     await this.logger.flush?.();
   }
 
@@ -143,25 +160,32 @@ class EvaluatorApiServer {
       }
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/healthz') {
-        return this._json(req, res, 200, { ok: true, service: 'astera-quality-completion-evaluator-api', version: pkg.version, public_endpoint: '/v1/evaluate', skill_endpoint: '/v1/skill/evaluate', skill_api_enabled: isSkillApiConfigured(), publication_enabled: false, store: this.store.mode, time: new Date().toISOString() });
+        return this._json(req, res, 200, {
+          ok: true,
+          service: 'astera-quality-completion-evaluator-api',
+          version: pkg.version,
+          public_endpoint: '/v1/evaluate',
+          skill_endpoint: '/v1/skill/evaluate',
+          skill_api_enabled: isSkillApiConfigured(),
+          publication_enabled: false,
+          time: new Date().toISOString()
+        });
       }
       if (req.method === 'POST' && (url.pathname === '/v1/evaluate' || url.pathname === '/v1/skill/evaluate')) {
         const isSkillRoute = url.pathname === '/v1/skill/evaluate';
         if (isSkillRoute && !isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
         const tenant = isSkillRoute
           ? authenticateSkillApiKey(req.headers['x-api-key'])
-          : this.tenants.resolve(req.headers['x-api-key']);
+          : authenticateEvaluateRequest(req, this.host);
         if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
         if (!isSkillRoute) {
-          const limits = this.tenants.limitsFor(tenant);
-          const rate = this.limiter.check({ key: `evaluate:${tenant.id}`, limit: limits.perMinute, windowMs: 60_000 });
+          const rate = this.limiter.check({ key: `evaluate:${tenant.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
           if (!rate.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate });
         }
         const result = await evaluate(await this._readJsonObject(req));
-        if (!isSkillRoute) this.meter.record({ tenant, route: '/v1/evaluate', units: 1, status: result.status, meta: { candidate_id: result.candidate_id || null } });
         this.logger.write({
           tenantId: tenant.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
-          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'tenant', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
+          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
         });
         return this._json(req, res, 200, result);
       }
