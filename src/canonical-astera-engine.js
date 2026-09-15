@@ -5,7 +5,7 @@ const inputUnderstanding = require('./input-understanding');
 const {
   enrichRequest,
   extractInstructionUnderstandingFields,
-  extractPublicConstraintLines,
+  extractPublicConstraintLinesFromPacket,
   isMaterialOnlyQuestion,
   isNaturalUserConsult
 } = require('./deterministic-task-decomposer');
@@ -80,8 +80,6 @@ function packetMaterialSummary(request = {}, lang = 'ja') {
   return lines;
 }
 
-const MAIN8_SEPARATOR = '---';
-
 function sanitizePublicMaterialText(text) {
   return String(text || '')
     .replace(/\b[0-9a-f]{64}\b/gi, '')
@@ -105,21 +103,6 @@ function sanitizePublicMaterialText(text) {
     .replace(/hard_constraint=[^\n]+最終結論[^\n]*/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
-}
-
-function buildMaterialOnlyPublicText(judgment) {
-  const blocks = [];
-  for (const key of judgment.order || []) {
-    const section = judgment[key];
-    if (!section) continue;
-    blocks.push(section.label);
-    const lines = judgment._public_section_lines?.[key]
-      || (section.items || []).map((item) => (String(item).startsWith('- ') ? item : `- ${item}`));
-    blocks.push(...(lines.length ? lines : [`- ${section.summary || '-'}`]));
-    blocks.push(MAIN8_SEPARATOR);
-  }
-  if (blocks.length && blocks[blocks.length - 1] === MAIN8_SEPARATOR) blocks.pop();
-  return blocks.join('\n');
 }
 
 function blockedMaterial({ request, hardBlockers, lang }) {
@@ -217,38 +200,42 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       }
     }
 
-    const publicConstraints = extractPublicConstraintLines(questionText);
+    const constraintProjection = extractPublicConstraintLinesFromPacket(packet, questionText);
+    const publicConstraints = constraintProjection.lines;
     const outputPolicy = packet.output_policy || instruction.output_policy;
+    const lang = args.lang || judgment.output_language || 'ja';
 
     if (materialOnly) {
       judgment.presentation_mode = 'PUBLIC_MATERIAL_ONLY';
-      if (judgment['02_premise']) {
-        judgment['02_premise'].items = publicConstraints;
-        judgment['02_premise'].summary = publicConstraints.join(' / ') || '-';
+      if (constraintProjection.used_fallback) {
+        judgment._internal_public_projection = {
+          constraint_source: constraintProjection.source,
+          used_fallback: true,
+          fallback_reason: constraintProjection.fallback_reason,
+          source_span: constraintProjection.source_span
+        };
       }
-      judgment._public_section_lines = {
-        '01_purpose': purposeItems.map((item) => `- ${item}`),
-        '02_premise': publicConstraints.map((item) => `- ${item}`),
-        '03_facts': ['- ユーザー入力の目的と制約は01・02に整理済み。ドメイン事実Claimの追加検証は不要。'],
-        '04_crisis': ['- 入力記述のみでは確定できない実行リスクは、この段階では断定しない。'],
-        '05_opposition': ['- 慎重視点: 予算・納期・既存操作の維持と改善効果のトレードオフを材料として整理する。'],
-        '06_comparison': ['- 比較候補は入力されていない'],
-        '07_evidence_status': [
-          '- 外部Evidence検索: 不要（NOT_REQUIRED）',
-          '- Claim確認: 入力整理のみ（ドメインClaim未指定）'
-        ],
-        '08_reinstruction': unique([
-          '- 01の目的と02の制約を後続判断で保持する',
-          outputPolicy?.natural_ja ? `- Output Policy: ${outputPolicy.natural_ja}` : null,
-          '- Astera自身は採用・棄却・Ranking・Recommendation・最終Decisionを行わない。'
-        ].filter(Boolean))
-      };
+      if (judgment['02_premise']) {
+        const fallbackSummary = lang === 'en'
+          ? 'Explicit constraint/deadline/unresolved carry-forward not available from current materials.'
+          : '制約・期限・未確定のcarry-forward材料は現在列挙できていない。';
+        judgment['02_premise'].items = publicConstraints.length ? publicConstraints : [fallbackSummary];
+        judgment['02_premise'].summary = publicConstraints.join(' / ') || fallbackSummary;
+        if (judgment['02_premise'].decision_basis) {
+          judgment['02_premise'].decision_basis = {
+            ...judgment['02_premise'].decision_basis,
+            public_constraint_projection: constraintProjection.used_fallback
+              ? { source: 'raw_question_regex', used_fallback: true }
+              : { source: 'packet', used_fallback: false }
+          };
+        }
+      }
     } else if (judgment['02_premise'] && publicConstraints.length) {
       judgment['02_premise'].items = unique([...(judgment['02_premise'].items || []), ...publicConstraints]);
       judgment['02_premise'].summary = judgment['02_premise'].items.join(' / ');
     }
 
-    if (!materialOnly && judgment['08_reinstruction'] && outputPolicy?.natural_ja) {
+    if (judgment['08_reinstruction'] && outputPolicy?.natural_ja) {
       const reinstructionItems = unique([
         ...(judgment['08_reinstruction'].items || []),
         `Output Policy: ${outputPolicy.natural_ja}`
@@ -297,17 +284,6 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
 
   material(judgment) {
     const base = super.material(judgment);
-    if (judgment.presentation_mode === 'PUBLIC_MATERIAL_ONLY') {
-      const text = buildMaterialOnlyPublicText(judgment);
-      const compact_text = (judgment.order || [])
-        .map((key) => {
-          const section = judgment[key];
-          return section ? `${section.label}: ${section.summary || '-'}` : null;
-        })
-        .filter(Boolean)
-        .join('\n');
-      return { ...base, text, compact_text };
-    }
     const text = sanitizePublicMaterialText(base.text);
     const compact_text = sanitizePublicMaterialText(base.compact_text);
     return { ...base, text, compact_text };

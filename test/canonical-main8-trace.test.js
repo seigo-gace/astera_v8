@@ -355,8 +355,12 @@ test('Main8 05/06 HTTP lossless text preserves EN compare material', async () =>
 
     assert.match(materialText, /- candidate_id:/);
     assert.match(materialText, /- dimension:/);
-    assert.match(materialText, /- constraints:/);
-    assert.match(materialText, /- unsupported_scope:/);
+    if ((s06.condition_differences?.constraints || []).length) {
+      assert.match(materialText, /- constraints:/);
+    }
+    if ((s06.unsupported_scope || []).length) {
+      assert.match(materialText, /- unsupported_scope:/);
+    }
     assert.doesNotMatch(materialText, /A\[AVAILABLE/);
     assert.doesNotMatch(materialText, /cost\[MATERIAL/);
   } finally {

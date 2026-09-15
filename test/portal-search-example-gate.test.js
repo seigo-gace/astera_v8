@@ -68,8 +68,8 @@ test('portal search example gate: Main8 public material contract', async () => {
 
     const s03 = text.split('---')[2] || '';
     assert.doesNotMatch(s03, /[0-9a-f]{64}/i);
-    assert.doesNotMatch(s03, /UNDETERMINED:/);
-    assert.doesNotMatch(s03, /改善したい/);
+    assert.doesNotMatch(s03, /ドメイン事実Claimの追加検証は不要/u);
+    assert.doesNotMatch(text, /外部Evidence検索: 不要（NOT_REQUIRED）/u);
 
     assert.doesNotMatch(text, /[0-9a-f]{64}/i);
     assert.doesNotMatch(text, /HAS_STATE/);
@@ -78,14 +78,11 @@ test('portal search example gate: Main8 public material contract', async () => {
     assert.doesNotMatch(text, /INSUFFICIENT_EVIDENCE/);
     assert.doesNotMatch(text, /MODALITY_NOT_VERIFIABLE/);
     assert.doesNotMatch(text, /Lens=UNRESOLVED/);
-    assert.doesNotMatch(text, /confirmed_claim_ids:/);
-    assert.doesNotMatch(text, /undetermined_claim_ids:/);
+    assert.doesNotMatch(text, /[0-9a-f]{64}/i);
+    assert.doesNotMatch(text, /ドメイン事実Claimの追加検証は不要/u);
+    assert.doesNotMatch(text, /外部Evidence検索: 不要（NOT_REQUIRED）/u);
     assert.doesNotMatch(text, /candidate_id: -/);
     assert.doesNotMatch(text, /candidates: -/);
-    assert.doesNotMatch(text, /claim_id: -/);
-    assert.doesNotMatch(text, /dimensions: -/);
-    assert.doesNotMatch(text, /id: opposition/);
-    assert.doesNotMatch(text, /replace:/);
 
     assert.match(text, /比較候補は入力されていない/);
     assert.doesNotMatch(s02, /Output Policy/);

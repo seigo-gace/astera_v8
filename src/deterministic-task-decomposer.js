@@ -351,6 +351,64 @@ function extractPublicConstraintLines(question) {
   return unique(lines);
 }
 
+function publicLineForConstraintRecord(record = {}) {
+  const type = String(record.type || '').toUpperCase();
+  const value = norm(record.value);
+  if (!value) return null;
+  if (type === 'DEADLINE') return `期限: ${value}`;
+  if (type === 'PRESERVE') return `維持条件: ${value}`;
+  if (type === 'PROHIBITION') return `禁止条件: ${value}`;
+  if (type === 'CONDITION') return `条件: ${value}`;
+  if (/予算/u.test(value)) {
+    const trimmed = value.replace(/^予算(?:は|:)?\s*/u, '').split(/[、,]/u)[0].trim();
+    return trimmed ? `予算上限: ${trimmed}` : `予算上限: ${value}`;
+  }
+  if (type === 'LIMIT' || type === 'USER_CONSTRAINT') return `予算上限: ${value}`;
+  return `制約: ${value}`;
+}
+
+function extractPublicConstraintLinesFromPacket(packet = {}, question = '') {
+  const lines = [];
+  for (const record of packet.constraint_records || []) {
+    const mapped = publicLineForConstraintRecord(record);
+    if (mapped) lines.push(mapped);
+  }
+  for (const deadline of packet.deadlines || []) {
+    const value = norm(deadline);
+    if (value) lines.push(`期限: ${value}`);
+  }
+  for (const preserve of packet.preserve || []) {
+    const value = norm(preserve);
+    if (value) lines.push(`維持条件: ${value}`);
+  }
+  for (const prohibition of packet.prohibitions || []) {
+    const value = norm(prohibition);
+    if (value) lines.push(`禁止条件: ${value}`);
+  }
+  for (const condition of packet.conditions || []) {
+    const value = norm(condition);
+    if (value) lines.push(`条件: ${value}`);
+  }
+  const deduped = unique(lines);
+  if (deduped.length) {
+    return {
+      lines: deduped,
+      used_fallback: false,
+      source: 'packet',
+      fallback_reason: null,
+      source_span: null
+    };
+  }
+  const fallbackLines = extractPublicConstraintLines(question);
+  return {
+    lines: fallbackLines,
+    used_fallback: fallbackLines.length > 0,
+    source: fallbackLines.length ? 'raw_question_regex' : 'none',
+    fallback_reason: fallbackLines.length ? 'packet_constraint_fields_empty' : null,
+    source_span: fallbackLines.length ? { start: 0, end: String(question || '').length, text: String(question || '') } : null
+  };
+}
+
 function inferTarget(text, actionMatch, fallback = '') {
   const value = norm(text);
   if (!value) return fallback;
@@ -1272,6 +1330,7 @@ module.exports = {
   enrichRequest,
   extractInstructionUnderstandingFields,
   extractPublicConstraintLines,
+  extractPublicConstraintLinesFromPacket,
   explicitPurposeSpan,
   isMaterialOnlyQuestion,
   isNaturalUserConsult,

@@ -6,7 +6,6 @@ const {
   normalizeText,resolveRelativeTime,parseVersionScheme,createClaimId,createFragmentId,COMPLEX_NEGATION_PATTERNS,deepFreeze
 }=require('./core');
 const {parseSupportedCode}=require('./code-structure-parser');
-const {isMaterialOnlyQuestion}=require('../deterministic-task-decomposer');
 
 function policyFor({origin,structure,timeScope,explicitPolicyId=null,explicitPredicateFamily=null}){
   if(explicitPolicyId||explicitPredicateFamily)return{claim_policy_id:explicitPolicyId,predicate_family:explicitPredicateFamily};
@@ -86,7 +85,6 @@ function extractClaimsForTask(task,{executionAt=new Date().toISOString(),documen
   const {fragmentInput}=require('./fragmenter'),inputDocumentId=`task:${task.id}`,sourceText=String(task.source_span?.text||task.raw_text||''),baseOffset=Number.isInteger(task.source_span?.start)?task.source_span.start:0,fragmentedLocal=fragmentInput({inputDocumentId,text:sourceText,sourceAxes:{task_id:task.id},maxFragments:256}),fragments=fragmentedLocal.fragments.map((fragment)=>absoluteFragment(fragment,baseOffset,inputDocumentId)),claims=[],unmapped=[];
   for(const fragment of fragments){const result=extractClaimsFromFragment(fragment,{sourceRole:task.source_role||'DIRECT_INPUT',executionAt,documentReferenceDate,knownNames});claims.push(...result.claims);if(result.unmapped)unmapped.push({fragment_id:fragment.fragment_id,assertion_type:result.assertion_type});}
   if(!claims.some((claim)=>claim.claim_origin===ClaimOrigin.DIRECT_ASSERTION)&&task.evidence_need?.required)claims.push(buildVerificationTargetClaim({task,inputDocumentId,executionAt}));
-  else if(!claims.length&&(task.material_only===true||isMaterialOnlyQuestion(String(task.raw_text||task.source_span?.text||task.objective||''))))claims.push(buildVerificationTargetClaim({task,inputDocumentId,executionAt}));
   return deepFreeze({claims:[...new Map(claims.map((claim)=>[claim.claim_id,claim])).values()].sort((a,b)=>a.claim_id.localeCompare(b.claim_id)),fragments,unmapped,resource_limited:fragmentedLocal.resource_limited,diagnostics:[...fragmentedLocal.diagnostics]});
 }
 

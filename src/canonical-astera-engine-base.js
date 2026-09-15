@@ -249,14 +249,7 @@ function formatSection06Pass(section) {
   ).filter((candidate) => candidate && candidate !== '-');
   const candidateMaterialBlocks = (section.candidate_materials || []).map((entry) => formatCandidateMaterialBlock(entry));
   if (!candidates.length && !candidateMaterialBlocks.length) {
-    const conditionDiff = section.condition_differences || {};
-    const constraintLines = unique([
-      ...(conditionDiff.constraints || []),
-      ...(conditionDiff.preserve || [])
-    ]).filter((item) => item && !/UNRESOLVED/i.test(String(item)) && !/最終結論|判断材料だけ/u.test(String(item)));
-    const lines = ['- 比較候補は入力されていない'];
-    for (const constraint of constraintLines) lines.push(`- 制約: ${line(constraint)}`);
-    return lines.join('\n');
+    return '- 比較候補は入力されていない';
   }
   const tradeOffDiffBlocks = (section.trade_off_differences || []).map((entry) => formatTradeOffDifferenceBlock(entry));
   const conditionDiff = section.condition_differences || {};
@@ -267,44 +260,24 @@ function formatSection06Pass(section) {
   ].join('\n'));
   const supportedBlocks = (section.supported_scope || []).map((entry) => formatMaterialBulletField('supported_scope', formatSupportedScopeEntry(entry)));
   const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => formatMaterialBulletField('unsupported_scope', formatUnsupportedScopeEntry(entry)));
-  const emptyCandidateMaterial = candidates.length
-    ? [
-      formatMaterialBulletField('candidate_id', '-'),
-      formatMaterialBulletField('label', '-'),
-      formatMaterialBulletField('material_state', '-'),
-      formatMaterialBulletField('observations', '-'),
-      formatMaterialBulletField('confirmed_claim_ids', '-'),
-      formatMaterialBulletField('undetermined_claim_ids', '-'),
-      formatMaterialBulletField('supported_scopes', '-'),
-      formatMaterialBulletField('evidence_refs', '-')
-    ].join('\n')
-    : '- 比較候補は入力されていない';
-  const emptyTradeOffDiff = [
-    formatMaterialBulletField('dimension', '-'),
-    formatMaterialBulletField('comparison_state', '-'),
-    formatMaterialBulletField('conditions', '-')
-  ].join('\n');
-  const emptyContradiction = [
-    formatMaterialBulletField('type', '-'),
-    formatMaterialBulletField('claim_id', '-'),
-    formatMaterialBulletField('reasons', '-')
-  ].join('\n');
-  return [
-    formatMaterialBulletField('candidates', join(candidates)),
-    formatMaterialBulletField('dimensions', join(section.dimensions)),
-    ...(candidateMaterialBlocks.length ? candidateMaterialBlocks : [emptyCandidateMaterial]),
-    ...(tradeOffDiffBlocks.length ? tradeOffDiffBlocks : [emptyTradeOffDiff]),
-    formatMaterialBulletField('constraints', join(conditionDiff.constraints)),
-    formatMaterialBulletField('prohibitions', join(conditionDiff.prohibitions)),
-    formatMaterialBulletField('preserve', join(conditionDiff.preserve)),
-    formatMaterialBulletField('replace', join(conditionDiff.replace)),
-    formatMaterialBulletField('conditions_diff', join(conditionDiff.conditions)),
-    formatMaterialBulletField('exceptions', join(conditionDiff.exceptions)),
-    formatMaterialBulletField('dependencies', join(conditionDiff.dependencies)),
-    ...(contradictionBlocks.length ? contradictionBlocks : [emptyContradiction]),
-    ...(supportedBlocks.length ? supportedBlocks : [formatMaterialBulletField('supported_scope', 'claim_id=-')]),
-    ...(unsupportedBlocks.length ? unsupportedBlocks : [formatMaterialBulletField('unsupported_scope', 'claim_id=-')])
-  ].join('\n');
+  const lines = [];
+  if (candidates.length) lines.push(formatMaterialBulletField('candidates', join(candidates)));
+  if (section.dimensions?.length) lines.push(formatMaterialBulletField('dimensions', join(section.dimensions)));
+  lines.push(...candidateMaterialBlocks, ...tradeOffDiffBlocks);
+  const conditionFields = [
+    ['constraints', conditionDiff.constraints],
+    ['prohibitions', conditionDiff.prohibitions],
+    ['preserve', conditionDiff.preserve],
+    ['replace', conditionDiff.replace],
+    ['conditions_diff', conditionDiff.conditions],
+    ['exceptions', conditionDiff.exceptions],
+    ['dependencies', conditionDiff.dependencies]
+  ];
+  for (const [key, values] of conditionFields) {
+    if (values?.length) lines.push(formatMaterialBulletField(key, join(values)));
+  }
+  lines.push(...contradictionBlocks, ...supportedBlocks, ...unsupportedBlocks);
+  return lines.filter(Boolean).join('\n') || '- 比較候補は入力されていない';
 }
 
 function aggregateTaskResults(taskResults){
