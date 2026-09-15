@@ -1,0 +1,62 @@
+name: Verify replaced Astera runtime
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: astera-v8-runtime-final-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.head_ref == 'agent/runtime-replacement-hf' && github.repository == 'seigo-gace/astera_v8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Verify replacement contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./package.json').version")" = "4.2.2-evidence-v8.2"
+          test -f src/runtime/node-v8-runtime.js
+          test -f src/evidence-search/core/search-orchestrator.js
+          test -f src/quality-completion-evaluator/runtime-layer.js
+          test -f src/application-system/internal-api-application-system.ts
+          test ! -e .env.gpg
+          test ! -e archive
+          test ! -e src/public/index.html
+          test ! -e src/billing/stripe-client.js
+          test ! -e IMPLEMENTATION_STATUS.md
+          test ! -e TEST_REPORT.md
+          test ! -e RELEASE_MANIFEST.txt
+          test ! -e MANIFEST.sha256
+      - name: Clean install and complete verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org
+          npm run check
+          npm audit --audit-level=high --registry=https://registry.npmjs.org
+      - name: Mark verified main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git tag -f astera-v4.2.2-evidence-v8.2-verified origin/main
+          git push --force origin refs/tags/astera-v4.2.2-evidence-v8.2-verified
