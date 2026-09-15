@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const KaguraEngine = require('../src/kagura-engine');
+const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 
 const tenant = { id: 'test', is_global: true, plan: 'admin' };

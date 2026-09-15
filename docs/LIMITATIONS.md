@@ -22,7 +22,6 @@ Updated: 2026-08-03
 
 ## 3. 現行Repositoryの構造Debt
 
-- `src/kagura-engine.js`等に旧内部名称が残る
 - `src/auth`、`src/billing`、`src/store`がCore Repositoryへ混在する
 - Tenant / Rate Limit / Stripe Endpointが現行Serverに残る
 - これらは実装事実だが、完成責務や公開Core機能ではない

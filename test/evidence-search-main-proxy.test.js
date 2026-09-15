@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { once } = require('node:events');
 const KaguraServer = require('../src/server');
-const KaguraEngine = require('../src/kagura-engine');
+const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const SQLiteStore = require('../src/store/sqlite-store');
 

@@ -1,7 +1,7 @@
 {
   "name": "@astera/quality-completion-evaluator",
   "version": "1.0.0",
-  "description": "ASTERA internal deterministic quality/completion scorer with shared 38-genre lenses and KB admission gate",
+  "description": "ASTERA internal deterministic quality/completion scorer with shared 38-genre lenses",
   "main": "index.js",
   "type": "commonjs",
   "bin": {
@@ -14,7 +14,7 @@
     "test:boundary": "node --test tests/boundary/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "test:regression": "node --test tests/regression/*.test.js",
-    "smoke": "node examples/create-sample-request.js | node cli/evaluate.js",
+    "smoke": "node -e \"const{baseDesignRequest}=require('./tests/fixtures/factory');process.stdout.write(JSON.stringify(baseDesignRequest())+'\\n');\" | node cli/evaluate.js",
     "verify": "node --check index.js && node --check evaluator-engine.js && node --check domain-lens-resolver.js && npm test && npm run smoke"
   },
   "engines": {

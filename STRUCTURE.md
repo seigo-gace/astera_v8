@@ -9,13 +9,10 @@ This file is only a directory and responsibility map. It does not redefine the a
 ```text
 start.js
   -> src/server.js
-  -> src/kagura-engine.js
   -> src/astera-engine.js
   -> src/canonical-astera-engine.js
   -> src/canonical-astera-engine-base.js
 ```
-
-`src/kagura-engine.js` is a compatibility alias, not a second cognition pipeline.
 
 ## Core implementation
 

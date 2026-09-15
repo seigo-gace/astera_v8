@@ -62,6 +62,6 @@ Hash不一致が INVALID_INPUT
 
 docker build \-t astera-quality-completion-evaluator:1.0.0 .
 
-node examples/create-sample-request.js | docker run --rm \-i astera-quality-completion-evaluator:1.0.0
+node -e 'const{baseDesignRequest}=require("./tests/fixtures/factory");process.stdout.write(`${JSON.stringify(baseDesignRequest())}\n`);' | docker run --rm \-i astera-quality-completion-evaluator:1.0.0
 
 Docker版はSTDIN評価専用です。ASTERA本体では `src/quality-completion-evaluator` に配置し、既存Dockerfileの `COPY src ./src` で本番コンテナへ含めます。  

@@ -19,7 +19,7 @@ assertDockerProductionResidency('Astera v8', 'ASTERA_ALLOW_HOST_START');
 
 // App composition root: Core engine + HTTP compatibility adapter + Commerce wiring only here.
 const KaguraServer = require('./src/server');
-const KaguraEngine = require('./src/kagura-engine');
+const KaguraEngine = require('./src/astera-engine');
 const { createEvidenceSearchClient } = require('./src/evidence-search/api/runtime-client');
 const SQLiteStore = require('./src/store/sqlite-store');
 const StripeClient = require('./src/billing/stripe-client');

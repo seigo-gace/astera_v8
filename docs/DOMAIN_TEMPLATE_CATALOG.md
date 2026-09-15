@@ -33,7 +33,7 @@ Artifact + Requirement + Evidence
   → 指定Lensまたは同一RouterによるLens決定
   → Lens固有Risk・Evidence・Safety確認
   → 品質・完成度固定Rule採点
-  → Blocking / KB掲載候補判定
+  → Blocking / 合格判定
 ```
 
 現在のRuntimeは38専門ジャンルLensを選択します。ASTERA-KB完成後は、KBが返す完全4階層Pathを対応する`Gxx` Lensへ接続します。

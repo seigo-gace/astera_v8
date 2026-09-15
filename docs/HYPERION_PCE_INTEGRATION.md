@@ -73,7 +73,7 @@ Inquiry preflight
 - `src/pillars/inquiry-worker.js`
 - `src/pillars/compare-worker.js`
 - `src/pillars/pool-runner.js`
-- `src/kagura-engine.js`
+- `src/astera-engine.js`
 - `test/engine.test.js`
 - `test/security.test.js`
 

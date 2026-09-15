@@ -3,7 +3,7 @@
 const http = require('node:http');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const KaguraEngine = require('./kagura-engine');
+const KaguraEngine = require('./astera-engine');
 const Logger = require('./logger');
 const TenantManager = require('./auth/tenant');
 const { UsageMeter } = require('./billing/meter');

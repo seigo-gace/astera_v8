@@ -92,8 +92,6 @@ start.js
   ↓
 src/server.js
   ↓
-src/kagura-engine.js
-  ↓  legacy compatibility alias
 src/astera-engine.js
   ↓
 src/canonical-astera-engine.js
@@ -102,8 +100,6 @@ src/canonical-astera-engine-base.js
   ↓
 Task / Claim / Evidence / Five Lanes / Main8
 ```
-
-`src/kagura-engine.js`は別Engineではありません。現在は`src/astera-engine.js`への互換Entry Pointです。
 
 Evidence Searchは`src/astera-engine.js`からCanonical Evidence Boundaryへ注入されます。
 
@@ -405,7 +401,6 @@ astera_v8/
 ├─ start.js
 ├─ src/
 │  ├─ server.js
-│  ├─ kagura-engine.js
 │  ├─ astera-engine.js
 │  ├─ canonical-astera-engine.js
 │  ├─ canonical-astera-engine-base.js

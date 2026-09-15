@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const KaguraEngine = require('../src/kagura-engine');
+const KaguraEngine = require('../src/astera-engine');
 const { analyzeRequest } = require('../src/judgment-materials-analyzer');
 const { routeDomainTemplates } = require('../src/domain-template-router');
 const {
