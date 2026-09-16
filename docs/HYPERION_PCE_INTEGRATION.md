@@ -4,9 +4,9 @@ Updated: 2026-08-03
 
 ## 1. Current position
 
-この文書は、旧KAGURA / Hyperion Maxの製品説明ではありません。
+この文書は、現行 Human Reader と Dialectic の責務を説明する技術資料です。
 
-現行Astera v8に残る次の2機能を、現在の責務へ整理した技術資料です。
+次の2機能を対象とします。
 
 - `src/hyperion-human-reader.js`
 - `src/pillars/dialectic-worker.js`
@@ -79,4 +79,4 @@ Inquiry preflight
 
 ## 7. Naming
 
-Hyperion / PCEは歴史的な機能由来名として残ります。公開製品名はAstera v8であり、旧KAGURAを現行名称として使用しません。
+実装ファイルは `src/hyperion-human-reader.js`。Architecture上の責務名は Human Reader。
