@@ -42,6 +42,30 @@ test('scoreAnswer without explicit constraints does not favor B on R02-equivalen
   }));
   assert.equal(a.constraint_preservation, b.constraint_preservation);
   assert.equal(a.prohibition_preservation, b.prohibition_preservation);
+  assert.equal(a.factual_grounding, b.factual_grounding);
+  assert.equal(a.unsupported_assertion_reduction, b.unsupported_assertion_reduction);
+  assert.equal(a.irrelevant_information_increase, b.irrelevant_information_increase);
+  assert.equal(b.factual_grounding, 1);
+  assert.equal(b.unsupported_assertion_reduction, 1);
+  assert.equal(b.irrelevant_information_increase, 0);
+});
+
+test('minimal structured B without novel material does not get free pair WIN', () => {
+  const out = {
+    material: { text: 'structured memo line one\nline two' },
+    result: {
+      type: 'cognitive_map',
+      decision_authority: 'EXTERNAL_ONLY',
+      no_normative_decision_generated: true,
+      analysis_task_packet: { user_goal: storyNoConstraints.user_input, tasks: [] },
+      judgment: { order: ['01_purpose'], '01_purpose': { summary: '会議論点', items: [] } }
+    }
+  };
+  const pair = pairedStoryResult(storyNoConstraints, out);
+  assert.notEqual(pair.pair_outcome, 'WIN');
+  assert.equal(pair.dimension_scores.factual_grounding, 0);
+  assert.equal(pair.dimension_scores.unsupported_assertion_reduction, 0);
+  assert.equal(pair.dimension_scores.final_decision_overreach_prevention, 0);
 });
 
 test('raw ablation baseline_only yields TIE pair outcome', () => {

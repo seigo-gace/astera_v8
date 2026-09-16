@@ -208,6 +208,12 @@ function consume(story, material) {
   const claims = claimTexts(result);
   const unknowns = (pkt.unresolved || []).map(String);
   if ((result?.canonical_claims?.undetermined_count ?? 0) > 0) unknowns.push('未確定クレームあり');
+  if (
+    /未確定|UNDETERMINED|未確認/i.test(body)
+    || /CONFIRMED\s*\d+件\s*\/\s*UNDETERMINED/i.test(body)
+  ) {
+    unknowns.push('structured_unknown_status_in_material');
+  }
 
   const constraintLines = [];
   for (const rec of pkt.constraint_records || []) {
@@ -237,6 +243,19 @@ function consume(story, material) {
   };
 }
 
+function memoMainAiActionability(memo, story) {
+  const user = story.user_input || '';
+  const blob = memo.text || '';
+  const intentOk = tokenOverlap(blob, user) >= 0.12;
+  const ic = memo.input_constraints || extractInputConstraints(story);
+  const allInputPhrases = [...ic.prohibitions, ...ic.constraints, ...ic.deadlines];
+  const constraintsOk = !ic.hasExplicit || memoKeepsPhrases(blob, allInputPhrases);
+  const claimsOrUnknown = memo.claims.length > 0 || memo.unknowns.length > 0
+    || /CONFIRMED\s*\d+件\s*\/\s*UNDETERMINED|未確定|未確認/i.test(blob);
+  const valueMaterial = memo.risks.length > 0 || memo.comparison.length > 0 || memo.evidence_needs.length > 0;
+  return intentOk && constraintsOk && claimsOrUnknown && valueMaterial;
+}
+
 function scoreAnswer(story, memo) {
   const user = story.user_input || '';
   const blob = norm(memo.text || '');
@@ -248,6 +267,11 @@ function scoreAnswer(story, memo) {
 
   const intentA = tokenOverlap(blob, user);
   scores.user_intent_preservation = intentA >= 0.22 ? 2 : (intentA >= 0.12 ? 1 : 0);
+
+  if (memo.side === 'B' && scores.user_intent_preservation === 0) {
+    const goal = String(packetOf(memo.result || {}).user_goal || '');
+    if (goal && tokenOverlap(user, goal) >= 0.15) scores.user_intent_preservation = 1;
+  }
 
   if (!ic.hasExplicit) {
     scores.constraint_preservation = 1;
@@ -284,21 +308,23 @@ function scoreAnswer(story, memo) {
   scores.missing_information_discovery = (packetOf(result).unresolved || []).length > 0
     || (result?.inquiry?.gaps || []).length > 0 ? 2 : 0;
 
-  scores.factual_grounding = 2;
+  scores.factual_grounding = 1;
   scores.uncertainty_calibration = hasUnknown ? 2 : 1;
   scores.risk_discovery = memo.risks.length >= 2 ? 2 : (memo.risks.length === 1 ? 1 : 0);
   scores.opposing_view_coverage = memo.opposing.length >= 1 ? 2 : 0;
   scores.comparison_completeness = memo.comparison.length >= 2 ? 2 : (memo.comparison.length === 1 ? 1 : 0);
   scores.contradiction_preservation = (packetOf(result).conflicts || []).length > 0 ? 2 : 0;
   scores.evidence_traceability = memo.evidence_needs.length >= 1 ? 2 : 0;
-  scores.unsupported_assertion_reduction = 2;
+  scores.unsupported_assertion_reduction = 1;
   scores.final_decision_overreach_prevention = normativeViolation(result) ? 0 : 2;
-  scores.main_ai_actionability = memo.has_structured_sections && blob.length > 40 ? 2 : (blob.length > 20 ? 1 : 0);
+  scores.main_ai_actionability = memoMainAiActionability(memo, story) ? 2 : 0;
 
-  const baseLen = norm(baselineMaterial(story)).split(/\s+/).length;
+  const baseNorm = norm(baselineMaterial(story));
+  const baseLen = baseNorm.split(/\s+/).length;
   const memoLen = blob.split(/\s+/).length;
   const extra = memoLen - baseLen;
-  scores.irrelevant_information_increase = extra > 120 && tokenOverlap(blob, user) < tokenOverlap(norm(baselineMaterial(story)), user) ? 0 : 2;
+  const noisy = extra > 120 && tokenOverlap(blob, user) < tokenOverlap(baseNorm, user);
+  scores.irrelevant_information_increase = noisy ? 2 : 0;
 
   return scores;
 }
@@ -325,6 +351,12 @@ function dimensionDelta(dim, story, memoA, memoB, aScore, bScore, bViolations) {
   if (dim === 'constraint_preservation' && bViolations?.constraint_loss) return -2;
   if (dim === 'prohibition_preservation' && bViolations?.constraint_loss) return -2;
   if (dim === 'uncertainty_calibration' && bViolations?.uncertainty_loss) return -2;
+
+  if (dim === 'irrelevant_information_increase') {
+    if (bScore > aScore) return -1;
+    if (bScore < aScore) return 1;
+    return 0;
+  }
 
   if (bScore > aScore) return 1;
   if (bScore < aScore) return -1;

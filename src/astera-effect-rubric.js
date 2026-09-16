@@ -128,7 +128,7 @@ function scoreConstraints(mode, materialText, userInput, context, result) {
   const packet = packetOf(result);
   const { entries, inputHasExplicitConstraints } = constraintEntries(packet, userInput, context);
   if (mode === 'baseline') {
-    return inputHasExplicitConstraints ? 1 : 1;
+    return 1;
   }
   if (!inputHasExplicitConstraints) return 1;
   if (!entries.length) return 1;
