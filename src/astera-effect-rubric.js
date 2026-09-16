@@ -130,7 +130,7 @@ function scoreConstraints(mode, materialText, userInput, context, result) {
   if (mode === 'baseline') {
     return inputHasExplicitConstraints ? 1 : 1;
   }
-  if (!inputHasExplicitConstraints) return 2;
+  if (!inputHasExplicitConstraints) return 1;
   if (!entries.length) return 1;
   const blob = constraintMaterialBlob(materialText, result);
   let kept = 0;
@@ -312,7 +312,7 @@ function scoreAiStructure(mode, materialText, result) {
   const covered = dims.filter(Boolean).length;
   if (sections.length >= 4 && covered >= 3) return 2;
   if (sections.length >= 2 && covered >= 2) return 1;
-  return text.length > 180 ? 1 : 0;
+  return 0;
 }
 
 function collectBindings(result) {

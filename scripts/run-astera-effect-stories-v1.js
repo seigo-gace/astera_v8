@@ -211,10 +211,12 @@ async function main() {
         story_id: story.story_id,
         outcome: evaluation.story_outcome,
         pair_outcome: pair.pair_outcome,
+        paired_delta: pair.paired_delta,
         IMPROVEMENT_DELTA: evaluation.IMPROVEMENT_DELTA,
         ASTERA_TOTAL: evaluation.ASTERA_TOTAL,
         BASELINE_TOTAL: evaluation.BASELINE_TOTAL,
         violations: v,
+        evaluation,
         rubric_delta: evaluation.delta
       });
     }

@@ -44,11 +44,17 @@ function main() {
     process.exit(1);
   }
 
-  const pairSummary = summary.pair_summary || summarizePairs((summary.results || []).map((r) => ({
+  const results = summary.results || [];
+  const missingPair = results.filter((r) => r.pair_outcome == null || r.paired_delta == null);
+  if (missingPair.length > 0) {
+    console.error(`verify:effect-unseen pair_outcome missing for ${missingPair.length} stories (fail closed)`);
+    process.exit(1);
+  }
+  const pairSummary = summary.pair_summary || summarizePairs(results.map((r) => ({
     story_id: r.story_id,
-    pair_outcome: r.pair_outcome || (r.IMPROVEMENT_DELTA > 0 ? 'WIN' : (r.IMPROVEMENT_DELTA < 0 ? 'LOSS' : 'TIE')),
-    paired_delta: r.IMPROVEMENT_DELTA || 0,
-    evaluation: { violations: r.violations || {} }
+    pair_outcome: r.pair_outcome,
+    paired_delta: r.paired_delta,
+    evaluation: r.evaluation || { violations: r.violations || {} }
   })));
 
   const winRate = pairSummary.count ? pairSummary.WIN / pairSummary.count : 0;

@@ -87,9 +87,9 @@ async function main() {
       summary[evaluation.story_outcome.toUpperCase()] = (summary[evaluation.story_outcome.toUpperCase()] || 0) + 1;
       const row = {
         story_id: story.story_id,
-        holdout_source: story.holdout_source,
         outcome: evaluation.story_outcome,
         pair_outcome: pair.pair_outcome,
+        paired_delta: pair.paired_delta,
         IMPROVEMENT_DELTA: evaluation.IMPROVEMENT_DELTA,
         violations: evaluation.violations,
         delta: evaluation.delta
