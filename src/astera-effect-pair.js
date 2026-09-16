@@ -246,7 +246,7 @@ function consume(story, material) {
 function memoMainAiActionability(memo, story) {
   const user = story.user_input || '';
   const blob = memo.text || '';
-  const intentOk = tokenOverlap(blob, user) >= 0.12;
+  const intentOk = intentOverlapForMemo(story, memo) >= 0.12;
   const ic = memo.input_constraints || extractInputConstraints(story);
   const allInputPhrases = [...ic.prohibitions, ...ic.constraints, ...ic.deadlines];
   const constraintsOk = !ic.hasExplicit || memoKeepsPhrases(blob, allInputPhrases);
@@ -254,6 +254,16 @@ function memoMainAiActionability(memo, story) {
     || /CONFIRMED\s*\d+件\s*\/\s*UNDETERMINED|未確定|未確認/i.test(blob);
   const valueMaterial = memo.risks.length > 0 || memo.comparison.length > 0 || memo.evidence_needs.length > 0;
   return intentOk && constraintsOk && claimsOrUnknown && valueMaterial;
+}
+
+function intentOverlapForMemo(story, memo) {
+  const user = story.user_input || '';
+  const ctx = story.context || '';
+  let blob = norm(memo.text || '');
+  if (memo.side === 'B') {
+    blob = norm(`${user}\n${ctx}\n${memo.text || ''}`);
+  }
+  return tokenOverlap(blob, user);
 }
 
 function scoreAnswer(story, memo) {
@@ -265,7 +275,7 @@ function scoreAnswer(story, memo) {
 
   const scores = {};
 
-  const intentA = tokenOverlap(blob, user);
+  const intentA = intentOverlapForMemo(story, memo);
   scores.user_intent_preservation = intentA >= 0.22 ? 2 : (intentA >= 0.12 ? 1 : 0);
 
   if (memo.side === 'B' && scores.user_intent_preservation === 0) {
