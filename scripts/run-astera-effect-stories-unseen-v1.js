@@ -8,6 +8,7 @@ const { JapaneseParserMCPClient, isJapaneseParserConfigured, DEFAULT_DJPMCP } = 
 const { createMockJapaneseParserClient } = require('../test/helpers/japanese-parser-mcp-mock');
 const { loadCorpus, FIXTURE } = require('./astera-effect-stories-unseen-v1-corpus');
 const { evaluateStory, RUBRIC } = require('../src/astera-effect-rubric');
+const { pairedStoryResult, summarizePairs } = require('../src/astera-effect-pair');
 
 const ROOT = path.resolve(__dirname, '..');
 function getArtifactsRoot() {
@@ -69,6 +70,10 @@ function emptyAggregate() {
     FINAL_DECISION_VIOLATION_COUNT: 0,
     TASK_DECOMPOSITION_FAILURE_COUNT: 0,
     UNCERTAINTY_LOSS_COUNT: 0,
+    UNSUPPORTED_CONFIRMED_COUNT: 0,
+    WIN: 0,
+    TIE: 0,
+    LOSS: 0,
     rubric_baseline: Object.fromEntries(RUBRIC.map((r) => [r.id, 0])),
     rubric_astera: Object.fromEntries(RUBRIC.map((r) => [r.id, 0])),
     rubric_delta: Object.fromEntries(RUBRIC.map((r) => [r.id, 0]))
@@ -108,7 +113,8 @@ async function main() {
     evidence_need_created: 0,
     ...emptyAggregate(),
     examples_improved: [],
-    results: []
+    results: [],
+    pair_rows: []
   };
 
   try {
@@ -153,6 +159,8 @@ async function main() {
             process_error: { message: processError.message, code: processError.code }
           }
         : evaluateStory(story, out);
+      const pair = processError ? { pair_outcome: 'LOSS', paired_delta: -1 } : pairedStoryResult(story, out);
+      summary.pair_rows.push(pair);
 
       summary.BASELINE_TOTAL += evaluation.BASELINE_TOTAL ?? 0;
       summary.ASTERA_TOTAL += evaluation.ASTERA_TOTAL ?? 0;
@@ -169,6 +177,8 @@ async function main() {
       if (v.final_decision_violation) summary.FINAL_DECISION_VIOLATION_COUNT += 1;
       if (v.task_decomposition_failure) summary.TASK_DECOMPOSITION_FAILURE_COUNT += 1;
       if (v.uncertainty_loss) summary.UNCERTAINTY_LOSS_COUNT += 1;
+      if (v.unsupported_confirmed) summary.UNSUPPORTED_CONFIRMED_COUNT += 1;
+      summary[pair.pair_outcome] = (summary[pair.pair_outcome] || 0) + 1;
 
       if (evaluation.baseline_scores && evaluation.astera_scores && evaluation.delta) {
         for (const r of RUBRIC) {
@@ -208,14 +218,20 @@ async function main() {
       summary.results.push({
         story_id: story.story_id,
         outcome: evaluation.story_outcome,
+        pair_outcome: pair.pair_outcome,
         IMPROVEMENT_DELTA: evaluation.IMPROVEMENT_DELTA,
         ASTERA_TOTAL: evaluation.ASTERA_TOTAL,
-        BASELINE_TOTAL: evaluation.BASELINE_TOTAL
+        BASELINE_TOTAL: evaluation.BASELINE_TOTAL,
+        violations: v,
+        rubric_delta: evaluation.delta
       });
     }
   } finally {
     await engine.destroy();
   }
+
+  summary.pair_summary = summarizePairs(summary.pair_rows);
+  delete summary.pair_rows;
 
   const reportName = args.phase === 'final' ? 'summary-final-run.json' : 'summary-first-run.json';
   fs.writeFileSync(path.join(outDir, reportName), JSON.stringify(summary, null, 2));
@@ -228,9 +244,10 @@ async function main() {
   console.log(`ASTERA_TOTAL: ${summary.ASTERA_TOTAL}`);
   console.log(`IMPROVEMENT_DELTA: ${summary.IMPROVEMENT_DELTA}`);
   console.log(`IMPROVED: ${summary.IMPROVED_STORIES} UNCHANGED: ${summary.UNCHANGED_STORIES} DEGRADED: ${summary.DEGRADED_STORIES}`);
+  console.log(`WIN: ${summary.WIN} TIE: ${summary.TIE} LOSS: ${summary.LOSS}`);
   console.log(`EVIDENCE_NEED_CREATED: ${summary.evidence_need_created}`);
   console.log(`HALLUCINATION: ${summary.HALLUCINATION_COUNT} CONSTRAINT_LOSS: ${summary.CONSTRAINT_LOSS_COUNT}`);
-  console.log(`FALSE_CONFIRMATION: ${summary.FALSE_CONFIRMATION_COUNT} FINAL_DECISION_VIOLATION: ${summary.FINAL_DECISION_VIOLATION_COUNT} UNCERTAINTY_LOSS: ${summary.UNCERTAINTY_LOSS_COUNT}`);
+  console.log(`FALSE_CONFIRMATION: ${summary.FALSE_CONFIRMATION_COUNT} FINAL_DECISION_VIOLATION: ${summary.FINAL_DECISION_VIOLATION_COUNT} UNCERTAINTY_LOSS: ${summary.UNCERTAINTY_LOSS_COUNT} UNSUPPORTED_CONFIRMED: ${summary.UNSUPPORTED_CONFIRMED_COUNT}`);
   console.log(`ARTIFACTS: ${outDir}`);
 
   const criticalFail = summary.HALLUCINATION_COUNT > 0

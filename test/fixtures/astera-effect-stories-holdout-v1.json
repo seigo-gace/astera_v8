@@ -1,0 +1,273 @@
+{
+  "schema_version": "astera.effect.holdout.v1",
+  "frozen": true,
+  "stories": [
+    {
+      "story_id": "EF-001",
+      "user_input": "市立図書館の貸出通知メール、どこから手を付ければいい？",
+      "coverage_domain": "G01",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-004",
+      "user_input": "小売店の在庫アラートでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G04",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-007",
+      "user_input": "自治体の窓口混雑の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G07",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-010",
+      "user_input": "新規事業の参入判断を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G10",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-013",
+      "user_input": "副業と本業の時間配分、どこから手を付ければいい？",
+      "coverage_domain": "G13",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-016",
+      "user_input": "両家の費用分担でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G16",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-019",
+      "user_input": "動物病院の通院頻度の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G19",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-022",
+      "user_input": "家賃値上げへの対応を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G22",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-025",
+      "user_input": "家庭菜園の害虫、どこから手を付ければいい？",
+      "coverage_domain": "G25",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-028",
+      "user_input": "車の買い替えでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G28",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-031",
+      "user_input": "データベースのバックアップの精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G31",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-034",
+      "user_input": "店舗のレジ不整合を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G34",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-037",
+      "user_input": "著作権の確認方法、どこから手を付ければいい？",
+      "coverage_domain": "G37",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-040",
+      "user_input": "企画展の音声ガイドでコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G02",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-043",
+      "user_input": "部品サプライヤーの納期の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G05",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-046",
+      "user_input": "診療科間の紹介フローを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G08",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-049",
+      "user_input": "広告予算の配分、どこから手を付ければいい？",
+      "coverage_domain": "G11",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-052",
+      "user_input": "高校生の進路でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G14",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-055",
+      "user_input": "高齢の親の介護の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G17",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-058",
+      "user_input": "旅行先の天候リスクを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G20",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-061",
+      "user_input": "市販薬と受診の判断、どこから手を付ければいい？",
+      "coverage_domain": "G23",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-064",
+      "user_input": "管理組合への相談でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G26",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-067",
+      "user_input": "段階的リリース計画の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G29",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-070",
+      "user_input": "古い手順書の扱いを変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G32",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-073",
+      "user_input": "災害時の避難経路、どこから手を付ければいい？",
+      "coverage_domain": "G35",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-076",
+      "user_input": "宇宙関連ニュースの信頼性でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G38",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-079",
+      "user_input": "大学研究室の論文管理の精度を上げたい。ただし今動いている運用は止めたくない。",
+      "coverage_domain": "G03",
+      "scenario_kind": "improve",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-082",
+      "user_input": "SaaSの解約率を変えた方がいい気はする。根拠は薄いけど、リスクだけ先に洗い出したい。",
+      "coverage_domain": "G06",
+      "scenario_kind": "insufficient_premise",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-085",
+      "user_input": "配送遅延のクレーム、どこから手を付ければいい？",
+      "coverage_domain": "G09",
+      "scenario_kind": "short",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "EF-088",
+      "user_input": "固定金利と変動金利の選択でコストを抑える案と品質を優先する案がある。どちらも一長一短で、今は決めきれない。",
+      "coverage_domain": "G12",
+      "scenario_kind": "compare",
+      "holdout_source": "v1"
+    },
+    {
+      "story_id": "US-001",
+      "user_input": "来週の面接、緊張で眠れない。短く落ち着くための準備の順番だけ教えて。",
+      "coverage_domain": "G13",
+      "scenario_kind": "short_natural",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-004",
+      "user_input": "社内FAQを更新してほしい。ただし公開済みの返金ポリシー条文は変えず、新しい問い合わせ例だけ追記して。",
+      "coverage_domain": "G32",
+      "scenario_kind": "condition_exception",
+      "context": "法務確認=未",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-007",
+      "user_input": "まず在庫棚卸し、その結果を見てから発注数を決め、最後に倉庫へ連絡する順で進めたい。手順の抜けがないか確認して。",
+      "coverage_domain": "G09",
+      "scenario_kind": "task_order",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-010",
+      "user_input": "メールに「至急対応」と書いてある一方、同じスレッドで「様子見で」とも書いてあった。実際に今やるべきことを切り分けて。",
+      "coverage_domain": "G34",
+      "scenario_kind": "quote_mixed_command",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-013",
+      "user_input": "新しい会計ソフトに乗り換えたいが、候補はまだ1社しか見ていない。比較のために足りない観点を教えて。",
+      "coverage_domain": "G21",
+      "scenario_kind": "compare_insufficient_candidates",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-016",
+      "user_input": "チーム解散の噂でモチベーションが下がっている。事実関係は未確認だが、落ち込まずに次の行動を考えたい。",
+      "coverage_domain": "G10",
+      "scenario_kind": "emotional_consult",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-019",
+      "user_input": "契約書レビュー、価格表の更新、サポートFAQ改訂を並行したい。リソースは一人分。どれから着手すべきか。",
+      "coverage_domain": "G06",
+      "scenario_kind": "multi_task",
+      "holdout_source": "unseen"
+    },
+    {
+      "story_id": "US-022",
+      "user_input": "先にユーザー通知を出してからメンテ画面を公開し、最後に監視アラート閾値を戻す。順序を入れ替えないで。",
+      "coverage_domain": "G31",
+      "scenario_kind": "task_order",
+      "holdout_source": "unseen"
+    }
+  ]
+}

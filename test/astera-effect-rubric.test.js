@@ -33,6 +33,36 @@ test('structural final_decision_violation aligns R15 score with violation', () =
   assert.equal(evaluation.astera_scores.R15_no_final_decision, 0);
 });
 
+test('critical violation forces degraded even when rubric delta is positive', () => {
+  const out = {
+    material: { text: 'structured judgment material without main8 labels\nline two\nline three' },
+    result: {
+      type: 'cognitive_map',
+      decision_authority: 'EXTERNAL_ONLY',
+      no_normative_decision_generated: true,
+      comparison: {},
+      judgment: { order: ['01_purpose'], '01_purpose': { summary: 'compare options', items: ['axis A', 'axis B'] } },
+      analysis_task_packet: {
+        user_goal: '比較したいだけ。最終決定はこちらでする。',
+        tasks: [{ id: 'T01', purpose: '比較したいだけ', source_span: { text: '比較したいだけ' } }],
+        constraint_records: [{ value: '最終決定はこちら', source_span: { text: '最終決定はこちらでする' } }]
+      },
+      canonical_claims: {
+        undetermined_count: 0,
+        records: [{
+          claim_id: 'HALL-C1',
+          claim: { claim_id: 'HALL-C1', raw_text: '2029年に設立された架空株式会社', claim_origin: 'DIRECT_ASSERTION' },
+          confirmation: { status: 'CONFIRMED', bindings: [], gates: { G1: true, G2: true, G3: true, G4: true, G5: true, G6: true, G7: true } }
+        }]
+      }
+    }
+  };
+  const evaluation = evaluateStory(story, out);
+  assert.ok(evaluation.violations.hallucination || evaluation.violations.false_confirmation);
+  assert.equal(evaluation.story_outcome, 'degraded');
+  assert.notEqual(evaluation.story_outcome, 'improved');
+});
+
 test('keyword-only material text does not reduce R15 without structural violation', () => {
   const out = {
     material: {
