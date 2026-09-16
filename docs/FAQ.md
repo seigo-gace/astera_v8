@@ -48,13 +48,13 @@ Astera Coreは検索エンジンではありません。外部検索ToolやServi
 
 Astera全体には必要ですが、Astera v8 Coreの責務ではありません。Astera App / Commerce側が所有します。
 
-## RepositoryにStripe Codeがあるのはなぜですか
+## Commerce（決済・課金）はこのRepositoryにありますか
 
-旧実装の互換Code・移行負債として残っています。現行Codeの事実ですが、現在のCommerce正本やCore機能として宣伝しません。
+いいえ。Commerce は Astera App が所有します。Core HTTP は account、billing、subscription、signup を提供しません。
 
-## Tenant KeyやSkill Keyは現行APIにありますか
+## API key と Skill key は誰が所有しますか
 
-現行Codeにはあります。ただし、完成責務ではAccount / Gateway側へ移管する対象です。一般向けの製品価値説明には使用しません。
+`/process` は `ASTERA_API_KEY`（または loopback 開発の `ASTERA_LOCAL_NO_AUTH`）。Skill 経路は `ASTERA_SKILL_API_KEY` です。これらは Core HTTP の transport 認証であり、Account lifecycle や Plan の正本は Astera App / Gateway です。
 
 ## 外部LLM AdapterがあるならAIではないのですか
 
@@ -66,7 +66,7 @@ Adapterを呼べることと、Astera自身がAIであることは別です。Co
 
 ## 現在の既知Defectはありますか
 
-README の Open Items を参照してください。Domain Lens 事後Blockingは canonical 外として QCE から削除済みです。
+README の Open Items を参照してください。Domain Lens completeness is not a QCE blocking stage です。
 
 ## 料金はどこで確認しますか
 

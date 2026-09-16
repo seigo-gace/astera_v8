@@ -19,24 +19,17 @@ Updated: 2026-08-03
 - 汎用Webhook受信はWebhook Gatewayの責務
 - `clarification`は現行HTTPで専用JSON ContractではなくText Response
 - Optional LLM Adapterの品質・料金・可用性はProvider依存
+- Core HTTP does not own account, billing, subscription, signup, or commerce routes
 
-## 3. 現行Repositoryの構造Debt
+## 3. Transport and skill API
 
-- Account / Commerce（Tenant DB、signup、Stripe）は Astera App 側。Core HTTP は skill key と transport rate limit のみ
-- Tenant / Rate Limit / Stripe Endpointが現行Serverに残る
-- これらは実装事実だが、完成責務や公開Core機能ではない
-- Account、Square、CreditはAstera App / Commerce側へ移管する
-
-## 4. API compatibility limitations
-
-- Legacy Tenant Keyの失効・再発行・Rotation専用Endpointがない
-- Rate LimiterはProcess内MemoryでReplica間共有ではない
+- Transport rate limit は Process 内 Memory で Replica 間共有ではない
 - 429で`Retry-After` Headerを返さずBodyの`rate.resetAt`に依存する
 - Evaluator APIは本体と別Process
 - Root ComposeはEvaluatorを自動起動しない
-- Skill Key / Tenant Keyは移行完了まで公開しない
+- Skill API key は Core HTTP の transport 認証。Account lifecycle は Astera App
 
-## 6. Operation limitations
+## 4. Operation limitations
 
 - 本番常駐はDocker Compose
 - HTTPS、CORS、Secret注入、Backup、監視は運用側で設定
@@ -44,10 +37,10 @@ Updated: 2026-08-03
 - 外部Serviceの実CredentialなしではE2E検証できない
 - GitHub Actionsの過去成功は最新Commitの成功を意味しない
 
-## 7. Commercial boundary
+## 5. Commercial boundary
 
 本Repositoryは、価格、Credit付与、減算、解約、返金、利用規約、Privacy、特商法の正本ではありません。Astera App側の最新正本だけを参照します。
 
-## 8. Completion rule
+## 6. Completion rule
 
 制限やDefectを解消した場合は、Code、Test、`STRUCTURE.md`、API Reference、Limitations、Notion議事録・正本を同じ作業Blockで同期します。

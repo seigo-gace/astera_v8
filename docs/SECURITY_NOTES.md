@@ -10,14 +10,11 @@ Coreへ不要な個人情報や決済情報を渡さないことが第一の防�
 
 ## 2. Secrets currently present in repository configuration
 
-- Runtime API secrets
-- Key pepper
+- Runtime API secrets (`ASTERA_API_KEY`, `ASTERA_SKILL_API_KEY`)
+- Internal service secrets
+- Evidence spool / recovery keys
 - Optional external LLM keys
 - TGserver connection secrets
-- Legacy Tenant / Skill keys
-- Legacy Stripe secrets
-
-Legacy Secretも、移行完了までは保護対象です。
 
 ## 3. Implemented protections
 
@@ -30,8 +27,7 @@ Legacy Secretも、移行完了までは保護対象です。
 - HTTPS / HSTS option
 - Structured logging
 - Failed log delivery outbox
-- Legacy Stripe webhook signature verification
-- Legacy API key hashing
+- Skill API key authentication
 
 ## 4. Required production controls
 
@@ -53,9 +49,9 @@ Asteraへ渡すのは判断に必要な範囲だけにします。
 - High-risk dataは識別子を置換する
 - Logには原文を無条件保存しない
 
-## 6. Legacy compatibility warning
+## 6. Responsibility boundary warning
 
-Tenant / Stripe / Store CodeはCore外へ移管する対象です。移管前に削除して認証やWebhookを破壊せず、代替Contract、Migration、Testを用意します。
+Core HTTP does not own account, billing, subscription, signup, or commerce state. Do not embed App-owned credentials in Core deployment or treat Core as the account or payment system of record.
 
 ## 7. Domain Lens と QCE
 

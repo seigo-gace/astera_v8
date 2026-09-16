@@ -6,9 +6,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const KaguraServer = require('../src/server');
+const AsteraServer = require('../src/server');
 const AsteraEngine = require('../src/astera-engine');
-const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const Logger = require('../src/logger');
 
@@ -71,16 +70,16 @@ function request({ port, method = 'GET', path = '/', headers = {}, body = '' }) 
 }
 
 async function withServer(fn, options = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-api-'));
   const logger = options.logger || new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
-  const defaultEngine = new KaguraEngine({
+  const defaultEngine = new AsteraEngine({
     poolSize: 1,
     logger,
     japaneseParserClient: defaultMockJapaneseParserClient()
   });
   const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
   process.env.ASTERA_LOCAL_NO_AUTH = '1';
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, limiter: options.limiter, engine: options.engine || defaultEngine });
+  const server = new AsteraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, limiter: options.limiter, engine: options.engine || defaultEngine });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;
@@ -267,16 +266,16 @@ test('HTTP flow: invalid question type returns 400', async () => {
 
 
 test('HTTP flow: unauthorized process returns 401 when local no-auth disabled', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-unauth-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-api-unauth-'));
   const logger = new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
-  const engine = new KaguraEngine({
+  const engine = new AsteraEngine({
     poolSize: 1,
     logger,
     japaneseParserClient: defaultMockJapaneseParserClient()
   });
   const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
   delete process.env.ASTERA_LOCAL_NO_AUTH;
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
+  const server = new AsteraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;
@@ -326,7 +325,7 @@ test('HTTP flow: disallowed CORS origin returns 403', async () => {
   }
 });
 
-test('HTTP flow: signup route is not served', async () => {
+test('HTTP flow: account/commerce route is not served', async () => {
   await withServer(async (port) => {
     const signup = await request({ port, method: 'POST', path: '/signup' });
     assert.equal(signup.status, 404);
@@ -336,14 +335,14 @@ test('HTTP flow: signup route is not served', async () => {
 test('HTTP flow: healthz and process work without commerce store when local no-auth', async () => {
   const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
   process.env.ASTERA_LOCAL_NO_AUTH = '1';
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kagura-api-core-only-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-api-core-only-'));
   const logger = new Logger({ cacheDir: path.join(dir, 'outbox'), tgsEnabled: false });
-  const engine = new KaguraEngine({
+  const engine = new AsteraEngine({
     poolSize: 1,
     logger,
     japaneseParserClient: defaultMockJapaneseParserClient()
   });
-  const server = new KaguraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
+  const server = new AsteraServer({ port: 0, host: '127.0.0.1', poolSize: 1, logger, engine });
   server.start();
   await new Promise((resolve) => server.server.once('listening', resolve));
   const port = server.server.address().port;

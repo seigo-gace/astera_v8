@@ -82,7 +82,7 @@ Input
 
 Astera v8 Coreは、Account、Login、決済、Credit、財務DB、Webhook Gateway、KB保存を所有しません。
 
-それらはAstera App、Commerce、Webhook Gateway、ASTERA-KB等の別Systemへ分離します。Repositoryに残るTenant / Stripe / Skill API Codeは移行対象であり、Core機能として掲載しません。
+それらはAstera App、Commerce、Webhook Gateway、ASTERA-KB等の別Systemが所有します。Core HTTP は skill transport と判断材料生成に限定し、account / billing / commerce を Core 機能として掲載しません。
 
 ## CTA
 

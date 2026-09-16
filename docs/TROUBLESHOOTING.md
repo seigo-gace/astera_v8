@@ -9,7 +9,7 @@
 5. Input / config / ingress
 6. TGserver / outbox
 7. Test / workflow
-8. Core issueかExternal / Legacy issueかを分類
+8. Core issueかExternal / App-owned issueかを分類
 
 ## 2. Classification
 
@@ -21,7 +21,7 @@
 | Webhook input | Webhook Gateway |
 | Knowledge save | ASTERA-KB |
 | Log transport | TGserver |
-| Tenant / Stripe endpoint | Legacy compatibility |
+| Account / billing / commerce HTTP | Astera App（Core HTTP では提供しない） |
 
 ## 3. Runtime unavailable
 
@@ -57,14 +57,11 @@ Evaluatorは本体と別Processです。
 
 QCE は Evidence 取得後に Domain Lens 充足で Blocking しません。Lens 解決結果は `domain_lens.assessment` にメタデータとして残ります。Lens 確認不足は Evidence Search / Information Quality 側で扱います。
 
-## 8. 401 / 429 / Stripe error
+## 8. 401 / 429
 
-これらは現行Legacy compatibility layerに由来する可能性があります。
-
-- 新規製品Contractの問題と混同しない
-- App / Gateway側の代替経路を確認
-- Legacy設定を変更する場合は互換Testを行う
-- StripeをSquare正本へ置き換えたと誤認しない
+- 401: `ASTERA_API_KEY` / `ASTERA_SKILL_API_KEY` / Origin / HTTPS 設定を確認
+- 429: Transport rate limit（`ASTERA_PROCESS_RATE_LIMIT_PER_MINUTE` 等）
+- Account / billing / commerce の 401 は Astera App / Gateway 側を確認（Core `/signup` 等は提供しない）
 
 ## 9. CORS / HTTPS
 
@@ -105,4 +102,4 @@ npm run verify
 - Secret除去済みError
 - Minimal input
 - Expected / actual
-- Core / External / Legacy classification
+- Core / External / App-owned classification

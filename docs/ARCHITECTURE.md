@@ -253,17 +253,9 @@ That does **not** give the evaluator ownership over Domain Lens itself or over M
 
 Within Evidence Search, `KB` means an **external searchable knowledge source used to retrieve evidence**.
 
-Astera v8 does not own a knowledge base into which Judgment Material outputs are admitted or published as part of the canonical runtime.
+Astera Core does not own a knowledge base into which Judgment Material outputs are admitted or published.
 
-Therefore the following concepts are not part of canonical Astera Judgment Material responsibility:
-
-- KB publication approval
-- KB admission approval
-- `KB_ELIGIBLE` as Judgment Material completion status
-- `KB_PUBLISHED` as Judgment Material completion status
-- publishing Judgment Material through `kbAdapter.publish()`
-
-Legacy code that implements those concepts must be reviewed as migration / removal debt rather than treated as canonical architecture.
+KB publication approval, KB admission approval, and publishing Judgment Material through a KB adapter are not part of the canonical runtime.
 
 ---
 
@@ -296,13 +288,13 @@ Each responsibility must be classified according to the current architecture:
 KEEP_AS_INFORMATION_QUALITY
 MOVE_TO_EVIDENCE_SEARCH
 RENAME_FOR_INFORMATION_QUALITY
-REMOVE_LEGACY_KB_ADMISSION
+NOT_CANONICAL_KB_OWNERSHIP
 KEEP_GENERIC_INFRA
 REMOVE_DUPLICATE
 REVIEW_REQUIRED
 ```
 
-In particular, legacy KB-admission / publication concepts require review.
+KB admission and publication are not Information Quality or Judgment Material responsibilities.
 
 Existing `KB-HB-001` through `KB-HB-015` are not automatically canonical. Each rule must be evaluated by responsibility and necessity. Do not keep a rule only to preserve numbering.
 

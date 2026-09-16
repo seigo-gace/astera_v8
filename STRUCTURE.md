@@ -49,7 +49,7 @@ src/guard/rate-limiter.js
 src/llm-request.js
 ```
 
-Tenant SQLite and Stripe billing were removed from Core HTTP; Commerce belongs to Astera App.
+Core HTTP does not own account, billing, subscription, or commerce state; those belong to Astera App.
 
 ## Repository support areas
 

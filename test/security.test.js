@@ -43,7 +43,7 @@ test('resolveRequestLLM drops unknown LLM providers and falls back to null', () 
 
 const { readHumanState } = require('../src/hyperion-human-reader');
 
-test('Hyperion human reader detects high pressure build mode', () => {
+test('Human Reader detects high pressure build mode', () => {
   const state = readHumanState('全部完璧にしてDL式で今すぐ出してくれ', { score: -1 });
   assert.equal(state.mode, 'high_pressure');
   assert.ok(state.likely_needs.includes('実行ファイル'));

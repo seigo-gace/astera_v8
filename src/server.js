@@ -2,7 +2,7 @@
 
 const http = require('node:http');
 const crypto = require('node:crypto');
-const KaguraEngine = require('./astera-engine');
+const AsteraEngine = require('./astera-engine');
 const Logger = require('./logger');
 const RateLimiter = require('./guard/rate-limiter');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
@@ -73,12 +73,12 @@ function resolveGlobalApiKeyCaller(apiKey) {
   return { id: 'admin', plan: 'admin', status: 'active', key_prefix: 'admin', is_global: true };
 }
 
-class KaguraServer {
+class AsteraServer {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port, 7373);
     this.host = options.host || '127.0.0.1';
     this.logger = options.logger || new Logger();
-    this.engine = options.engine || new KaguraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
+    this.engine = options.engine || new AsteraEngine({ poolSize: Number(options.poolSize || 4), logger: this.logger });
     this.limiter = options.limiter || new RateLimiter();
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
@@ -360,7 +360,7 @@ class KaguraServer {
   }
 }
 
-module.exports = KaguraServer;
+module.exports = AsteraServer;
 module.exports.parseAllowedOrigins = parseAllowedOrigins;
 module.exports.resolveGlobalApiKeyCaller = resolveGlobalApiKeyCaller;
 module.exports.transportProcessRateLimit = transportProcessRateLimit;

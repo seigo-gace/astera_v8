@@ -28,8 +28,7 @@
 | ASTERA-KB | Knowledge保存・検索を行う別System |
 | TGserver | Secret除去済みSystem Logの送信先 |
 | Outbox | TGserver未送信Eventだけを一時保持する領域 |
-| Legacy compatibility | 現行Codeに残るがCore完成責務ではない互換機能 |
-| Migration debt | Tenant、Stripe、旧名称等、分離・整理が必要な残存実装 |
-| `kagura-*` | 内部に残る旧名称。Public InterfaceはAstera v8 |
+| App-owned boundary | Account、billing、commerce、application-user state。Astera App が所有し Core HTTP は提供しない |
+| AsteraServer / AsteraEngine | Core HTTP と Engine の現行内部名。`KAGURA_*` 環境変数は対応する `ASTERA_*` のエイリアス |
 | Google V8 | Node.jsが利用するJavaScript Engine |
 | Worker Threads | 独立処理を別Workerで実行するNode.js機構 |

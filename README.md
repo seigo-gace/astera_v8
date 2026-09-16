@@ -43,10 +43,8 @@ READMEは入口・概要です。Architectureを独自に再定義しません�
 1. Japanese Parser preparationの一回化
 2. Parser障害と「前提不足」の状態分離
 3. 標準`npm run verify`とREAL Japanese Parser MCP Gateの統合
-4. ~~QCE Domain Lens 事後Blocking~~（canonical外・削除済み）
-5. Tenant / SQLite / Stripe / Billing等のCore外への責務分離
-6. 現行HEADと同一SHAでのLive Evidence / Story / Main8 E2E再証明
-7. Archive / generated artifacts /旧文書の整理
+4. 現行HEADと同一SHAでのLive Evidence / Story / Main8 E2E再証明
+5. Archive / generated artifacts /旧文書の整理
 
 **過去SHAで成功したTestやArtifactを、現在SHAの完成証拠とは扱いません。**
 
@@ -80,8 +78,7 @@ READMEは入口・概要です。Architectureを独自に再定義しません�
 - 個人情報DBの所有
 - ASTERA-KBの保存主体
 - 外部Web情報の真実性そのものの保証
-
-現在Codeに残るTenant / SQLite / Stripe / Billing機能は**Legacy compatibility / migration debt**です。
+- Account、Billing、Subscription、Application-user state（Astera App が所有）
 
 ---
 
@@ -305,7 +302,7 @@ npm run start:evidence-api
 
 ### HTTP authentication (Core)
 
-`/process` は `ASTERA_LOCAL_NO_AUTH=1`（loopback 開発）または `ASTERA_API_KEY` / `X-API-Key` で保護します。`/v1/skill/process` は `ASTERA_SKILL_API_KEY` を維持します。Tenant SQLite・`/signup`・Stripe Billing は Core HTTP から除去済みです（Commerce は Astera App 側。詳細は `docs/ARCHITECTURE.md`）。
+`/process` は `ASTERA_LOCAL_NO_AUTH=1`（loopback 開発）または `ASTERA_API_KEY` / `X-API-Key` で保護します。`/v1/skill/process` は `ASTERA_SKILL_API_KEY` を維持します。Astera Core HTTP does not own account, billing, subscription, signup, or application-user state. Those belong to Astera App（詳細は `docs/ARCHITECTURE.md`）。
 
 ---
 
@@ -444,7 +441,7 @@ Archive、過去Story Artifact、古いREADME記述から現在仕様を逆生�
 ## 17. 関連文書
 
 - **Canonical design:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- API surface / migration boundary: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
+- API surface / responsibility boundary: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 - Lens index: [`docs/LENS_GENRE_INDEX.md`](docs/LENS_GENRE_INDEX.md)
 - Domain template catalog: [`docs/DOMAIN_TEMPLATE_CATALOG.md`](docs/DOMAIN_TEMPLATE_CATALOG.md)
 

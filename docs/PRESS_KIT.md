@@ -67,13 +67,13 @@ AIと接続する場合は、主役AIを置き換えず、その外側で判断�
 
 ## 現行Repositoryに残る移行対象
 
-Tenant、Rate Limit、Usage Meter、Stripe、所有者Skill API、Application Store等のCodeが残っています。これらは現行実装事実ですが、Astera v8 Coreの正式機能として掲載しません。
+Core HTTP は transport rate limit と skill API 認証を提供します。Account、billing、commerce、Application Store は Astera App が所有し、Astera v8 Coreの正式機能として掲載しません。
 
 ## 掲載時の注意
 
 - AsteraをAI本体と表現しない
 - AI専用Toolと表現しない
-- Repositoryに残るTenant / Stripe Codeを現在のCore責務として説明しない
+- Account / billing / commerce を Core HTTP の責務として説明しない
 - 外部情報の正しさを保証すると表現しない
 - QCE `PASSED` を保存済みと表現しない
 - 料金、Credit、法務はAstera App側の最新正本を参照する

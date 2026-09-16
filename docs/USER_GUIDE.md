@@ -65,7 +65,7 @@ Example:
 | Webhook | Event input | Webhook Gateway responsibility |
 | Account / Payment | Registration and commerce | Astera App / Commerce |
 
-Repository内のSkill / Tenant / Stripe EndpointはLegacy compatibilityであり、新規一般利用の中心にしません。
+Core HTTP は skill process/evaluate と transport 認証を提供します。Account、billing、commerce は Astera App が所有し、新規一般利用の中心は App / Gateway Contract です。
 
 ## 7. Common mistakes
 

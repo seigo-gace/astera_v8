@@ -1,17 +1,18 @@
-# Astera v8 — API Reference and Migration Boundary
+# Astera v8 — API Reference and Responsibility Boundary
 
 Updated: 2026-08-03  
 Runtime: Node.js 22+
 
 ## 1. How to read this document
 
-現行RepositoryのHTTP Surfaceには、次の3種類が混在します。
+現行RepositoryのHTTP Surfaceは、次の分類で読みます。
 
 | Classification | Meaning |
 |---|---|
 | Core | Astera v8の判断材料生成に直接必要 |
 | Independent module | Quality Completion Evaluator |
-| Legacy compatibility | Tenant、Skill Key、Stripe等。Core外へ移管する対象 |
+| App-owned boundary | account, billing, commerce, skill-key ownership. Not Core HTTP. |
+| External | 外部Provider、MCP、TGserver等 |
 
 EndpointがCodeに存在することを、完成責務や一般向け製品機能と同一視しません。
 
@@ -82,7 +83,7 @@ Evaluator Processの状態を確認します。
 - 成果物を自動修正しない
 - KBへ自動保存しない
 - `PASSED` はKB保存完了ではない
-- Domain Lens 事後Blockingは canonical 外（QCE は `domain_lens.assessment` メタデータのみ返す）
+- Domain Lens completeness is not a QCE blocking stage（QCE は `domain_lens.assessment` メタデータのみ返す）
 
 Schema:
 
@@ -96,7 +97,7 @@ Schema:
 | `POST /v1/skill/process` | `ASTERA_SKILL_API_KEY` | Unlimited transport; Core engine |
 | `POST /v1/skill/evaluate` | `ASTERA_SKILL_API_KEY` | QCE evaluate |
 
-Tenant SQLite・`POST /signup`・Stripe Billing routes は Core repo から除去済み。Account / Commerce は Astera App 側（`docs/ARCHITECTURE.md`）。
+Core HTTP does not serve account, signup, or billing routes; those belong to Astera App（`docs/ARCHITECTURE.md`）。
 
 ## 7. Current authentication behavior
 
@@ -127,14 +128,13 @@ Tenant SQLite・`POST /signup`・Stripe Billing routes は Core repo から除�
 | 404 | Endpointなし |
 | 413 | Payload超過 |
 | 426 | HTTPS必須 |
-| 429 | Legacy rate limit |
+| 429 | Transport rate limit |
 | 500 | Internal error |
-| 503 | Required legacy integration config missing |
+| 503 | Required external integration config missing |
 
-## 10. Migration rules
+## 10. API classification
 
 1. Public interfaceを無断で破壊しない。
-2. Legacy Endpointを削除する前に、App / Gatewayの代替Contractと移行Testを用意する。
-3. Square、Credit、Account仕様をRuntimeへ再実装しない。
-4. API文書ではImplemented / Legacy / Externalを必ず区別する。
-5. 変更時はGitHub Code、Test、Docs、Notion正本を同時更新する。
+2. Square、Credit、Account仕様をRuntimeへ再実装しない。
+3. API文書では Implemented / App-owned / External を必ず区別する。
+4. 変更時はGitHub Code、Test、Docs、Notion正本を同時更新する。

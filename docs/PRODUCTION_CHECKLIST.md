@@ -4,8 +4,8 @@
 
 - [ ] Astera v8 CoreとApp / Account / Commerce / Gateway / KBの責務を分離した
 - [ ] Account、Square、Credit、個人情報DBをRuntimeへ持ち込んでいない
-- [ ] Legacy Tenant / Stripe経路の移行計画とRollbackを用意した
-- [ ] Public docsがLegacy Codeを現行Core機能として宣伝していない
+- [ ] Core HTTP が account / billing / commerce state を所有していないことを確認した
+- [ ] Public docsが App-owned 境界を Core 機能として宣伝していない
 
 ## B. Verification
 

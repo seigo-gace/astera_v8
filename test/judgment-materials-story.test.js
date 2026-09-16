@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const KaguraEngine = require('../src/astera-engine');
+const AsteraEngine = require('../src/astera-engine');
 const { analyzeRequest } = require('../src/judgment-materials-analyzer');
 const { routeDomainTemplates } = require('../src/domain-template-router');
 const {
@@ -429,7 +429,7 @@ test('Story 16: evidence search boundary invokes external search client once per
       return validEvidence('verified official API compatibility', payload.preplanned_queries || []);
     }
   };
-  const engine = new KaguraEngine({
+  const engine = new AsteraEngine({
     poolSize: 2,
     logger: silentLogger,
     evidenceSearchClient,

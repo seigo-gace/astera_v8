@@ -6,8 +6,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { once } = require('node:events');
-const KaguraServer = require('../src/server');
-const KaguraEngine = require('../src/astera-engine');
+const AsteraServer = require('../src/server');
+const AsteraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const TEST_CALLER = Object.freeze({ id: 'main-evidence-proxy-test', is_global: true, plan: 'admin' });
 
@@ -104,11 +104,11 @@ function mockEvidenceClient(onSearch) {
 async function startMain({ evidenceSearchClient, engine, events = [], localNoAuth = false }) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-main-evidence-'));
   const logger = createLogger(events);
-  const resolvedEngine = engine || new KaguraEngine({ logger, evidenceSearchClient, japaneseParserClient: defaultMockJapaneseParserClient() });
+  const resolvedEngine = engine || new AsteraEngine({ logger, evidenceSearchClient, japaneseParserClient: defaultMockJapaneseParserClient() });
   const oldLocal = process.env.ASTERA_LOCAL_NO_AUTH;
   if (localNoAuth) process.env.ASTERA_LOCAL_NO_AUTH = '1';
   else delete process.env.ASTERA_LOCAL_NO_AUTH;
-  const server = new KaguraServer({
+  const server = new AsteraServer({
     port: 0,
     host: '127.0.0.1',
     logger,

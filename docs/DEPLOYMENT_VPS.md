@@ -37,7 +37,7 @@ ASTERA_LOG_CACHE_DIR
 LLM_CHAIN
 ```
 
-Tenant / Skill / Stripe variableは現行Legacy互換Codeが必要な間だけ設定します。新しいAccount / Commerce正本として使用しません。
+`KAGURA_*` は対応する `ASTERA_*` のエイリアスとして受理されます。新しい account / commerce の正本ではありません。Skill / API key は Core transport 用のみ設定します。
 
 ## 4. Validate before deployment
 
@@ -87,7 +87,7 @@ Evaluator APIを使用する場合は別Process / Serviceとして配備しま�
 - Deploy前Commit SHAを記録
 - Image / configの戻し先を用意
 - DB / state schema変更は別Migrationとして扱う
-- Legacy Tenant / Stripe removalは代替Contract稼働後に行う
+- App-owned account / commerce Contract が稼働していることを確認してから Core を更新する
 - Rollback後にhealth、smoke、主要Storyを再確認
 
 ## 10. Prohibited

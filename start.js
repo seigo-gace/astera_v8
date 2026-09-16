@@ -17,20 +17,20 @@ function assertDockerProductionResidency(serviceName, allowEnvVar) {
 
 assertDockerProductionResidency('Astera v8', 'ASTERA_ALLOW_HOST_START');
 
-const KaguraServer = require('./src/server');
-const KaguraEngine = require('./src/astera-engine');
+const AsteraServer = require('./src/server');
+const AsteraEngine = require('./src/astera-engine');
 const { createEvidenceSearchClient } = require('./src/evidence-search/api/runtime-client');
 const Logger = require('./src/logger');
 
 const logger = new Logger();
 const evidenceSearchClient = createEvidenceSearchClient({ logger });
-const engine = new KaguraEngine({
+const engine = new AsteraEngine({
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),
   logger,
   evidenceSearchClient
 });
 
-const server = new KaguraServer({
+const server = new AsteraServer({
   port: Number(process.env.ASTERA_PORT || process.env.KAGURA_PORT || 7373),
   host: process.env.ASTERA_HOST || process.env.KAGURA_HOST || '127.0.0.1',
   poolSize: Number(process.env.ASTERA_POOL || process.env.KAGURA_POOL || 4),

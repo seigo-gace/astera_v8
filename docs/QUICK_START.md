@@ -15,7 +15,7 @@
 
 npm Packageの追加Installは不要です。
 
-外部LLMなし、TGserverなし、Legacy Tenant認証なしで短時間のCore確認を行います。
+外部LLMなし、TGserverなし、Astera App account 認証なしで短時間のCore確認を行います。
 
 Bash:
 
@@ -45,7 +45,7 @@ curl http://127.0.0.1:7373/healthz
 
 ## 3. Generate judgment material
 
-Local no-auth開発ではTenant Keyを発行しません。
+Local no-auth開発では Astera App の account API key を発行しません（Core は loopback のみ no-auth）。
 
 ```bash
 curl -X POST http://127.0.0.1:7373/process \
@@ -101,17 +101,17 @@ curl http://127.0.0.1:7374/healthz
 - Root Docker ComposeはEvaluatorを自動起動しない
 - Domain Lens 統合で QCE が Lens 事後Blockingしないことを確認する
 
-Evaluator APIの現行Tenant／Skill認証依存はMigration Debtです。正式公開認証はAstera App API Gate側の実装を使用します。
+Evaluator API の transport 認証は Core 設定に従います。公開 Account 認証の正本は Astera App API Gate です。
 
 ## 7. Docker
 
 ```bash
 cp .env.example .env
-# Secret、接続先、Legacy互換変数を環境に合わせて確認する
+# Secret、接続先、KAGURA_* エイリアス（任意）を環境に合わせて確認する
 docker compose up -d --build
 docker compose ps
 ```
 
-`.env.example`には現行Code互換のTenant／Skill Key／Stripe変数も残ります。これらをAstera v8 Coreの完成責務として新規構築しません。
+`.env.example` には Core transport 用の API key と skill key、および `KAGURA_*` エイリアス例があります。Account / commerce の正本として新規構築しません。
 
 本番前に`docs/PRODUCTION_CHECKLIST.md`を使用します。
