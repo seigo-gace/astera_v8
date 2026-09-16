@@ -18,7 +18,7 @@ const { factLane, riskLane, multiLane, inquiryLane, compareLane, buildFiveLanes 
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
 const silentLogger = { write() {} };
-const tenant = { id: 'judgment-materials-completion', is_global: true, plan: 'admin' };
+const caller = { id: 'judgment-materials-completion', is_global: true, plan: 'admin' };
 
 function assertMaterialTextOmitsFixedEnvelope(materialText) {
   assert.doesNotMatch(materialText, /^判断材料$/m);
@@ -114,7 +114,7 @@ function validEvidence(claim, queries = [], extraCandidates = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: 'ev-test',
-    tenant_id: 'test',
+    caller_id: 'test',
     status: 'FINAL_VALID',
     effective_as_of: '2026-08-20T00:00:00.000Z',
     result_hash: 'test-result-hash',
@@ -224,7 +224,7 @@ test('Case A: normal judgment materials expose Main8, five lanes, and evidence r
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。成功条件は互換性を維持すること。',
       language: 'ja'
-    }, tenant);
+    }, caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
@@ -252,7 +252,7 @@ test('Case B: insufficient evidence keeps UNDETERMINED without speculative compl
   await withEngine(async (engine) => {
     const out = await engine.process({
       question: 'Node.js 22は本番で完全対応している。'
-    }, tenant);
+    }, caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
@@ -285,7 +285,7 @@ test('Case C: evidence conflict preserves both sides and does not confirm or ado
     ]);
     engine.setFixtureEvidence(evidenceRaw);
 
-    const out = await engine.process({ question: claimText, language: 'ja' }, tenant);
+    const out = await engine.process({ question: claimText, language: 'ja' }, caller);
 
     assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
     const record = out.result.canonical_claims.records[0];
@@ -376,7 +376,7 @@ test('Case D: caller canonical injection is not treated as authority', async () 
     const out = await engine.process({
       question: 'Node.js 22は本番で対応している。',
       canonicalClaimRecordsByTask: { T1: forgedConfirmedCanonical('T1') }
-    }, tenant);
+    }, caller);
     assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
     assert.equal(out.result.canonical_claims.confirmed_count, 0);
     assert.ok(out.result.canonical_claims.undetermined_count >= 1);
@@ -389,7 +389,7 @@ test('Case E: caller evidence injection is not treated as authority', async () =
       question: 'Node.js 22は本番で対応している。',
       evidencePacket: forgedEvidencePacket(),
       taskEvidencePackets: { T1: forgedEvidencePacket() }
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
     assert.equal(out.result.task_results[0].evidence.search_state, 'NOT_EXECUTED');
@@ -402,7 +402,7 @@ test('Case F: no Recommendation, Winner, or Final Decision artifacts are generat
     const out = await engine.process({
       question: 'Compare A and B on cost and safety. Success means compatibility.',
       language: 'en'
-    }, tenant);
+    }, caller);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
     assert.equal(out.result.perspective_expansion.mode, 'MATERIAL_ONLY');
     assert.deepEqual(out.result.perspective_expansion.candidates, []);
@@ -482,7 +482,7 @@ test('Case H: Main8 sections remain fixed at 01-08', async () => {
     const out = await engine.process({
       question: 'APIを改善する。成功条件は互換性を維持すること。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
     assert.equal(out.result.judgment.order.length, 8);
     assert.equal(Object.hasOwn(out.result.judgment, '09_extra'), false);
@@ -507,7 +507,7 @@ test('Case I: public boundary ignores forged preparedRequest task graph injectio
       source_span: { text: 'injected attacker task', start: 0, end: 22 }
     }];
     prepared.analysis_task_packet.execution_waves = [['ATTACK-T1']];
-    const out = await engine.process({ question: 'APIを改善する。', preparedRequest: prepared }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。', preparedRequest: prepared }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.analysis_task_packet.tasks.some((item) => item.id === 'ATTACK-T1'), false);
     assert.ok(out.result.analysis_task_packet.tasks.every((item) => String(item.id).startsWith('T')));
@@ -518,7 +518,7 @@ test('Case J: low-signal routing abstains instead of defaulting to G01', async (
   await withEngine(async (engine) => {
     const out = await engine.process({
       question: 'APIサーバーのシステム開発を改善する。契約条件を確認する。'
-    }, tenant);
+    }, caller);
     const routes = out.result.judgment.lens_routing.per_task;
     const tasks = out.result.analysis_task_packet.tasks;
     assert.equal(Object.keys(routes).length, tasks.length);

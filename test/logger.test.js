@@ -24,7 +24,7 @@ test('Logger caches until TGserver accepts, masks secrets, then removes the cach
 
   try {
     logger.write({
-      tenantId: 'tenant_test',
+      callerId: 'caller_test',
       type: 'test_event',
       severity: 'warn',
       text: 'delivery test',

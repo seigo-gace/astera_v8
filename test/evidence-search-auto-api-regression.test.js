@@ -11,7 +11,7 @@ function evidenceResult(payload, context) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: context.requestId,
-    tenant_id: context.tenantId,
+    caller_id: context.callerId,
     status: 'FINAL_VALID',
     result_hash: `result-${context.requestId}`,
     evidence: [
@@ -95,7 +95,7 @@ test('decision-materials calls Evidence Search API at the canonical search bound
       const payload = JSON.parse(options.body);
       const context = {
         requestId: options.headers['x-astera-request-id'],
-        tenantId: options.headers['x-astera-tenant-id']
+        callerId: options.headers['x-astera-caller-id']
       };
       apiCalls.push({ url, options, payload, context });
       return {
@@ -111,7 +111,7 @@ test('decision-materials calls Evidence Search API at the canonical search bound
     const out = await engine.process({
       question: 'Verify the current API compatibility using official evidence. Migrate the API in stages. Verify regression tests before completion. Success requires rollback capability.',
       language: 'en'
-    }, { id: 'tenant-auto-api' });
+    }, { id: 'caller-auto-api' });
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.non_ai, true);
@@ -120,7 +120,7 @@ test('decision-materials calls Evidence Search API at the canonical search bound
     assert.ok(apiCalls.length >= 1);
     for (const call of apiCalls) {
       assert.equal(call.url, 'http://evidence.test/internal/v1/evidence/search');
-      assert.equal(call.context.tenantId, 'tenant-auto-api');
+      assert.equal(call.context.callerId, 'caller-auto-api');
       assert.equal(call.payload.search.free_projection, true);
       assert.equal(call.payload.search.free_current, true);
       assert.equal(call.payload.paid_search.enabled, false);
@@ -145,7 +145,7 @@ test('missing Evidence Search API client fails closed instead of silently contin
     const out = await engine.process({
       question: 'Verify the current API compatibility using official evidence.',
       language: 'en'
-    }, { id: 'tenant-no-evidence-api' });
+    }, { id: 'caller-no-evidence-api' });
 
     const searched = out.result.task_results.filter((result) =>
       Array.isArray(result.task?.canonical_plan?.search_plan?.queries)

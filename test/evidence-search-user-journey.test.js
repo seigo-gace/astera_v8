@@ -70,13 +70,13 @@ test('user can search local specialist projections and receive final verified ev
       operation: 'SEARCH_EVIDENCE',
       context: {
         request_id: 'user-journey-001',
-        tenant_id: 'user-tenant',
+        caller_id: 'user-caller',
         execution_time: EXECUTION_TIME,
         effective_as_of: EXECUTION_TIME
       },
       payload: {
         request_id: 'user-journey-001',
-        tenant_id: 'user-tenant',
+        caller_id: 'user-caller',
         question: 'ASTERA evidence search uses Node.js 22',
         domain_lens: { id: 'G29', taxonomy_version: '1.0.0' },
         conditions: [{ condition_id: 'runtime', class: 'CORE', field: 'fields.claim', operator: 'EQ', expected_value: 'ASTERA uses Node.js 22', required: true }],
@@ -110,7 +110,7 @@ test('user receives a deterministic rejection instead of an empty success', asyn
     const response = await module.execute({
       schema_version: 'astera.evidence-search.module-request.v1',
       operation: 'SEARCH_EVIDENCE',
-      context: { request_id: 'user-journey-empty', tenant_id: 'user-tenant', execution_time: EXECUTION_TIME, effective_as_of: EXECUTION_TIME },
+      context: { request_id: 'user-journey-empty', caller_id: 'user-caller', execution_time: EXECUTION_TIME, effective_as_of: EXECUTION_TIME },
       payload: {
         question: 'information that does not exist',
         domain_lens: { id: 'G29' },

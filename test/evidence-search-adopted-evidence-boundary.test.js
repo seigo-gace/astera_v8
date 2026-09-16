@@ -71,13 +71,13 @@ test('rejected general-web candidates remain diagnostic candidates and are not p
     operation: 'SEARCH_EVIDENCE',
     context: {
       request_id: 'general-web-adoption-boundary-1',
-      tenant_id: 'tenant-test',
+      caller_id: 'caller-test',
       execution_time: EXECUTION_TIME,
       effective_as_of: EXECUTION_TIME
     },
     payload: {
       request_id: 'general-web-adoption-boundary-1',
-      tenant_id: 'tenant-test',
+      caller_id: 'caller-test',
       question: 'general web evidence candidate',
       search: {
         free_projection: false,

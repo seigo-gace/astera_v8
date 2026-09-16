@@ -47,9 +47,9 @@ class CapturingProcessEngine extends AsteraEngine {
     this.capturedInputs = [];
   }
 
-  async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
+  async process(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
     this.capturedInputs.push(structuredClone(input));
-    return super.process(input, tenant, executionContext);
+    return super.process(input, caller, executionContext);
   }
 }
 

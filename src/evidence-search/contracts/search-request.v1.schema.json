@@ -27,7 +27,7 @@
   },
   "properties": {
     "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "caller_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "question": { "type": "string", "minLength": 1, "maxLength": 16384 },
     "context": { "type": "string", "maxLength": 32768 },
     "domain_lens": {

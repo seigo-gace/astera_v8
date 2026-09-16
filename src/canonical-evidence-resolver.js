@@ -165,7 +165,7 @@ function isUnresolvedDomainId(domainId) {
   return normalized === '' || normalized === 'none';
 }
 
-function searchRequestFor(task, input, tenant, requestId) {
+function searchRequestFor(task, input, caller, requestId) {
   const upstreamPlan = task.canonical_plan?.search_plan;
   if (!upstreamPlan || !Array.isArray(upstreamPlan.queries) || !upstreamPlan.queries.length) return null;
 
@@ -190,7 +190,7 @@ function searchRequestFor(task, input, tenant, requestId) {
     ...(Number.isInteger(input.evidence_search?.maximum_results) ? { maximum_results: input.evidence_search.maximum_results } : {}),
     ...(Number.isInteger(input.evidence_search?.deadline_ms) ? { deadline_ms: input.evidence_search.deadline_ms } : {}),
     request_id: requestId,
-    tenant_id: tenant.id
+    caller_id: caller.id
   };
 
   if (isResolvedDomainId(domainId)) {
@@ -210,12 +210,12 @@ function cancellationError() {
   return error;
 }
 
-async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'unknown' }, signal = null }) {
+async function resolveTaskEvidence({ client, task, input = {}, caller = { id: 'unknown' }, signal = null }) {
   const upstreamPlan = task.canonical_plan?.search_plan;
   if (!upstreamPlan?.queries?.length) return null;
   if (signal?.aborted) throw cancellationError();
 
-  const requestId = `auto-evidence:${tenant.id}:${task.id}:${crypto.randomUUID()}`;
+  const requestId = `auto-evidence:${caller.id}:${task.id}:${crypto.randomUUID()}`;
   if (!client || typeof client.search !== 'function') {
     const error = new Error('Evidence Search API client is not configured');
     error.code = 'EVIDENCE_SEARCH_NOT_CONFIGURED';
@@ -228,9 +228,9 @@ async function resolveTaskEvidence({ client, task, input = {}, tenant = { id: 'u
 
   let searchAttempted = false;
   try {
-    const payload = searchRequestFor(task, input, tenant, requestId);
+    const payload = searchRequestFor(task, input, caller, requestId);
     searchAttempted = true;
-    const packet = await client.search(payload, { requestId, tenantId: tenant.id, signal });
+    const packet = await client.search(payload, { requestId, callerId: caller.id, signal });
     const searchState = deriveSearchState(packet);
     const summary = executionSummary(packet);
     return {

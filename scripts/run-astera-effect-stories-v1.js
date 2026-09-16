@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ARTIFACTS_ROOT = path.join(ROOT, 'artifacts', 'astera-effect-stories-v1');
 
 const silentLogger = { write() {} };
-const tenant = { id: 'astera-effect-stories-v1', is_global: true, plan: 'admin' };
+const caller = { id: 'astera-effect-stories-v1', is_global: true, plan: 'admin' };
 
 function parseArgs(argv) {
   const out = { phase: 'first', mockMcp: false, storyId: null };
@@ -116,7 +116,7 @@ async function main() {
       let out = null;
       let processError = null;
       try {
-        out = await engine.process(input, tenant);
+        out = await engine.process(input, caller);
       } catch (error) {
         processError = error;
         summary.process_errors += 1;

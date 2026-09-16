@@ -10,7 +10,7 @@ const { GENRE_LENSES } = require('../src/all-domain-lens-catalog');
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'judgment-materials-100-stories.json');
 const silentLogger = { write() {} };
-const tenant = { id: 'judgment-materials-100-contract', is_global: true, plan: 'admin' };
+const caller = { id: 'judgment-materials-100-contract', is_global: true, plan: 'admin' };
 
 const MAIN8_ORDER = Object.freeze([
   '01_purpose',
@@ -48,7 +48,7 @@ test('corpus sample: cognitive_map keeps EXTERNAL_ONLY and Main8 without selecte
     japaneseParserClient: createMockJapaneseParserClient()
   });
   try {
-    const out = await engine.process({ question: sample.question, language: sample.language }, tenant);
+    const out = await engine.process({ question: sample.question, language: sample.language }, caller);
     if (out.result.type === 'cognitive_map') {
       assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
       assert.equal(out.result.no_normative_decision_generated, true);
@@ -73,7 +73,7 @@ test('corpus sample: hard blocker story fails closed without Main8', async () =>
     japaneseParserClient: createMockJapaneseParserClient()
   });
   try {
-    const out = await engine.process({ question: sample.question, language: 'ja' }, tenant);
+    const out = await engine.process({ question: sample.question, language: 'ja' }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.judgment, undefined);
   } finally {

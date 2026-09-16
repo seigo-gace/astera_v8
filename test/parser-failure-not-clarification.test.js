@@ -8,7 +8,7 @@ const { createMockJapaneseParserClient, mockJapaneseParserResult } = require('./
 const { failClosedRequest, japaneseFastSkeleton, normalizeParserErrorCode } = require('../src/canonical-v4-engine');
 
 const silentLogger = { write() {} };
-const tenant = { id: 'test', is_global: true, plan: 'admin' };
+const caller = { id: 'test', is_global: true, plan: 'admin' };
 
 async function withCanonicalEngine(options, fn) {
   const japaneseParserClient = Object.prototype.hasOwnProperty.call(options, 'japaneseParserClient')
@@ -35,7 +35,7 @@ test('normalizeParserErrorCode maps legacy parser client codes', () => {
 
 test('parser not configured is task_graph_blocked not clarification', async () => {
   await withCanonicalEngine({ japaneseParserClient: null }, async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.instruction_understanding?.mode, 'FAIL_CLOSED');
     assert.equal(out.result.error_code, 'PARSER_NOT_CONFIGURED');
@@ -51,7 +51,7 @@ test('parser timeout is task_graph_blocked not clarification', async () => {
       }
     })
   }, async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.error_code, 'PARSER_TIMEOUT');
   });
@@ -59,7 +59,7 @@ test('parser timeout is task_graph_blocked not clarification', async () => {
 
 test('unresolved target after successful parse remains clarification_needed', async () => {
   await withCanonicalEngine({}, async (engine) => {
-    const out = await engine.process({ question: 'どう？', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'どう？', language: 'ja' }, caller);
     assert.equal(out.result.type, 'clarification_needed');
     assert.equal(out.result.clarification_code, 'USER_CLARIFICATION_REQUIRED');
   });

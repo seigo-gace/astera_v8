@@ -26,9 +26,9 @@ class EvidenceJobManager {
     this.workerId = String(workerId);
   }
 
-  begin({ tenantId, requestId, idempotencyKey }) {
+  begin({ callerId, requestId, idempotencyKey }) {
     const job = this.store.createJob({
-      tenantId,
+      callerId,
       requestId,
       idempotencyKey: idempotencyKey || requestId
     });
@@ -59,7 +59,7 @@ class EvidenceJobManager {
     if (current.state === nextState) return current;
 
     const artifact = this.spool.write({
-      tenantId: current.tenant_id,
+      callerId: current.caller_id,
       jobId: current.job_id,
       stage: nextState,
       schemaVersion: CHECKPOINT_SCHEMA,
@@ -89,7 +89,7 @@ class EvidenceJobManager {
     }
     const terminalState = terminalStateFromResult(result.status);
     const artifact = this.spool.write({
-      tenantId: current.tenant_id,
+      callerId: current.caller_id,
       jobId: current.job_id,
       stage: terminalState,
       schemaVersion: CHECKPOINT_SCHEMA,
@@ -121,7 +121,7 @@ class EvidenceJobManager {
     let artifact = null;
     try {
       artifact = this.spool.write({
-        tenantId: current.tenant_id,
+        callerId: current.caller_id,
         jobId: current.job_id,
         stage: 'ERROR',
         schemaVersion: CHECKPOINT_SCHEMA,

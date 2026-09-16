@@ -54,7 +54,7 @@ class EvidenceSearchClient {
         body,
         secret: this.secret,
         service: 'astera-main',
-        tenantId: context.tenantId,
+        callerId: context.callerId,
         requestId: context.requestId,
         ttlMs: Math.min(this.timeoutMs + 5000, 60_000)
       });

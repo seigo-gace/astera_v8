@@ -43,7 +43,7 @@ const CRITERIA = Object.freeze([
 ]);
 
 const silentLogger = { write() {} };
-const tenant = { id: 'judgment-materials-stories-v1', is_global: true, plan: 'admin' };
+const caller = { id: 'judgment-materials-stories-v1', is_global: true, plan: 'admin' };
 
 function parseArgs(argv) {
   const out = { phase: 'first', mockMcp: false, mockRegression: false, storyId: null };
@@ -383,7 +383,7 @@ async function main() {
       let out;
       let processError = null;
       try {
-        out = await storyEngine.process(input, tenant);
+        out = await storyEngine.process(input, caller);
       } catch (error) {
         processError = error;
         if (realMcpAttempted && /PARSER|Japanese Parser/i.test(String(error.message))) {

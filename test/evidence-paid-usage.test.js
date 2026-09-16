@@ -10,7 +10,7 @@ const OPERATION = 'CALCULATE_PAID_USAGE';
 function basePayload() {
   return {
     request_id: 'req_001',
-    tenant_id: 'tenant_001',
+    caller_id: 'caller_001',
     provider_id: 'provider_a',
     mode: 'ACTUAL',
     usage: {

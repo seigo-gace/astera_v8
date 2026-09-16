@@ -45,7 +45,7 @@ class InformationQualityClient {
         body,
         secret: this.secret,
         service: 'astera-evidence-search',
-        tenantId: context.tenant_id || 'internal-evidence-search',
+        callerId: context.caller_id || 'internal-evidence-search',
         requestId: context.request_id || request.request_id || 'information-quality',
         ttlMs: Math.min(timeoutMs + 5000, 60_000)
       });

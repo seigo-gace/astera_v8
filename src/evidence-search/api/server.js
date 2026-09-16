@@ -61,7 +61,7 @@ class EvidenceSearchApiServer {
       res.once('finish', () => {
         if (req.method === 'GET' && req.url === '/healthz' && res.statusCode < 400) return;
         this.logger.write({
-          tenantId: req.verifiedTenantId || 'internal-unverified',
+          callerId: req.verifiedCallerId || 'internal-unverified',
           type: 'evidence_search_api_access',
           severity: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
           text: `${req.method} ${String(req.url || '').split('?')[0]} ${res.statusCode}`,
@@ -196,7 +196,7 @@ class EvidenceSearchApiServer {
         nonceGuard: this.nonceGuard,
         expectedService: 'astera-main'
       });
-      req.verifiedTenantId = identity.tenant_id;
+      req.verifiedCallerId = identity.caller_id;
       req.verifiedRequestId = identity.request_id;
 
       const payload = parseJsonStrict(rawBody);
@@ -214,7 +214,7 @@ class EvidenceSearchApiServer {
       let lifecycle;
       if (this.jobManager) {
         const started = this.jobManager.begin({
-          tenantId: identity.tenant_id,
+          callerId: identity.caller_id,
           requestId: identity.request_id,
           idempotencyKey: payload.idempotency_key || identity.request_id
         });
@@ -230,7 +230,7 @@ class EvidenceSearchApiServer {
           'AUTHENTICATED',
           {
             request_id: identity.request_id,
-            tenant_id: identity.tenant_id,
+            caller_id: identity.caller_id,
             body_sha256: sha256(rawBody),
             domain_lens: payload.domain_lens || null,
             free_projection: payload.search?.free_projection !== false,
@@ -244,14 +244,14 @@ class EvidenceSearchApiServer {
         schema_version: 'astera.evidence-search.module-request.v1',
         operation: 'SEARCH_EVIDENCE',
         context: {
-          tenant_id: identity.tenant_id,
+          caller_id: identity.caller_id,
           request_id: identity.request_id,
           execution_time: new Date().toISOString(),
           lifecycle
         },
         payload: {
           ...payload,
-          tenant_id: identity.tenant_id,
+          caller_id: identity.caller_id,
           request_id: identity.request_id,
           paid_search: { enabled: false }
         }
@@ -269,7 +269,7 @@ class EvidenceSearchApiServer {
       });
 
       this.logger.write({
-        tenantId: identity.tenant_id,
+        callerId: identity.caller_id,
         type: 'evidence_search_completed',
         text: `Evidence search returned ${result.status}`,
         payload: {
@@ -290,7 +290,7 @@ class EvidenceSearchApiServer {
           activeJob = this.jobManager.fail(activeJob, error);
         } catch (jobError) {
           this.logger.write({
-            tenantId: req.verifiedTenantId || 'internal-unverified',
+            callerId: req.verifiedCallerId || 'internal-unverified',
             type: 'evidence_job_failure_record_failed',
             severity: 'error',
             text: 'Failed to persist evidence job error state',
@@ -305,7 +305,7 @@ class EvidenceSearchApiServer {
 
       const status = statusForError(error);
       this.logger.write({
-        tenantId: req.verifiedTenantId || 'internal-unverified',
+        callerId: req.verifiedCallerId || 'internal-unverified',
         type: 'evidence_search_api_failed',
         severity: status >= 500 ? 'error' : 'warn',
         text: `${req.method} ${String(req.url || '').split('?')[0]} failed`,

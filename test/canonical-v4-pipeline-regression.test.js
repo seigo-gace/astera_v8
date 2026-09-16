@@ -18,7 +18,7 @@ const { planQueriesForClaim } = require('../src/v4-canonical/query-planner');
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
 const silentLogger={write(){}};
-const tenant={id:'test',is_global:true,plan:'admin'};
+const caller={id:'test',is_global:true,plan:'admin'};
 
 function evidenceCandidate({id,role,family,authority,claim,url}){
   return{candidate_id:id,canonical_record_id:`${id}-record`,content_hash:`${id}-hash`,source_role:role,source_family_id:family,source_id:`${id}-source`,provider_id:`${id}-provider`,authority_id:authority,canonical_locator:{url,replayable:true},updated_at:'2026-08-20T00:00:00.000Z',fields:{claim},excerpt:claim};
@@ -40,7 +40,7 @@ function queryExecution(queries=[]){
 }
 function validEvidence(claim,queries=[]){
   return{
-    schema_version:'astera.evidence-search.result.v1',request_id:'ev-test',tenant_id:'test',status:'FINAL_VALID',effective_as_of:'2026-08-20T00:00:00.000Z',result_hash:'test-result-hash',planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:Object.values(QUERY_ROLES),
+    schema_version:'astera.evidence-search.result.v1',request_id:'ev-test',caller_id:'test',status:'FINAL_VALID',effective_as_of:'2026-08-20T00:00:00.000Z',result_hash:'test-result-hash',planning_authority:'UPSTREAM_CANONICAL',planned_query_roles:Object.values(QUERY_ROLES),
     evidence:[
       evidenceCandidate({id:'ev-official',role:'OFFICIAL',family:'official-family',authority:'official-authority',claim,url:'https://official.test/evidence'}),
       evidenceCandidate({id:'ev-independent',role:'SECONDARY',family:'independent-family',authority:'independent-authority',claim,url:'https://independent.test/evidence'})
@@ -76,7 +76,7 @@ test('upstream Search Plan is authoritative and the production Evidence boundary
   const canonicalPlan=buildCanonicalTaskPlan(baseTask,{primary:{id:'G01'}});
   const upstream=canonicalPlan.search_plan;
   const task={...baseTask,canonical_plan:canonicalPlan,domain:{primary:{id:'G01'}}};
-  const request=searchRequestFor(task,{context:''},tenant,'ev-request');
+  const request=searchRequestFor(task,{context:''},caller,'ev-request');
   assert.equal(upstream.planning_authority,'ASTERA_DECISION_MATERIALS_V4');
   assert.ok(upstream.planned_query_roles.includes('COUNTER'));
   assert.deepEqual(request.upstream_search_plan,upstream);
@@ -223,7 +223,7 @@ test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/rec
     engine.setFixtureEvidence(evidence);
     const evaluated=evaluateCanonicalTaskPlan(plan,evidence);
     assert.ok(evaluated.confirmed_count>=1);
-    const out=await engine.process({question:claim},tenant);
+    const out=await engine.process({question:claim},caller);
     assert.equal(out.result.non_ai,true);
     assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
     assert.equal(out.runtime.engine,'v8_canonical_global_rules');
@@ -240,5 +240,5 @@ test('Canonical Engine exposes Evidence Status as Main8 #7 and never selects/rec
 });
 
 test('without G1-G7 evidence, direct assertion remains UNDETERMINED',async()=>{
-  await withEngine(async(engine)=>{const out=await engine.process({question:'Node.js 22は本番対応している。'},tenant);assert.equal(out.result.canonical_claims.confirmed_count,0);assert.ok(out.result.canonical_claims.undetermined_count>=1);assert.equal(out.result.facts.confirmed.length,0);});
+  await withEngine(async(engine)=>{const out=await engine.process({question:'Node.js 22は本番対応している。'},caller);assert.equal(out.result.canonical_claims.confirmed_count,0);assert.ok(out.result.canonical_claims.undetermined_count>=1);assert.equal(out.result.facts.confirmed.length,0);});
 });

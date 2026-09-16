@@ -44,7 +44,7 @@ function record({ id, authority, role, family, capability = 'projection_search' 
 function searchPayload(overrides = {}) {
   return {
     request_id: 'req_evidence_001',
-    tenant_id: 'tenant_001',
+    caller_id: 'caller_001',
     question: 'Node.js 22 support evidence',
     domain_lens: { id: 'G29', taxonomy_version: '1.0.0' },
     conditions: [
@@ -71,7 +71,7 @@ function request(payload = searchPayload()) {
     operation: 'SEARCH_EVIDENCE',
     context: {
       request_id: payload.request_id,
-      tenant_id: payload.tenant_id,
+      caller_id: payload.caller_id,
       execution_time: EXECUTION_TIME,
       effective_as_of: EXECUTION_TIME
     },
@@ -214,7 +214,7 @@ test('keeps future usage calculation isolated from provider execution and paymen
     operation: 'CALCULATE_PAID_USAGE',
     payload: {
       request_id: 'usage-only-001',
-      tenant_id: 'tenant-001',
+      caller_id: 'caller-001',
       provider_id: 'future-provider',
       mode: 'ESTIMATE',
       usage: { requests: 2 },

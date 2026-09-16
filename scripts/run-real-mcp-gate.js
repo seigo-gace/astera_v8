@@ -3,7 +3,7 @@
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { JapaneseParserMCPClient, isJapaneseParserConfigured, DEFAULT_DJPMCP } = require('../src/japanese-parser-mcp-client');
 
-const tenant = { id: 'real-mcp-gate', is_global: true, plan: 'admin' };
+const caller = { id: 'real-mcp-gate', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 
 const CASES = [
@@ -41,7 +41,7 @@ async function main() {
   });
   try {
     for (const testCase of CASES) {
-      const out = await engine.process({ question: testCase.question, language: 'ja' }, tenant);
+      const out = await engine.process({ question: testCase.question, language: 'ja' }, caller);
       testCase.assert(out);
       console.log(`REAL_MCP_CASE_${testCase.id}_PASS type=${out.result.type} main8_sections=${(out.material.text.match(/^---$/gm) || []).length + 1}`);
     }

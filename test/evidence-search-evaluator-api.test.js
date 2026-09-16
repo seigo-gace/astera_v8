@@ -143,14 +143,14 @@ function providers() {
 
 test('in-process information quality evaluator satisfies initial and final gates', async () => {
   const initial = await evaluateInformationQuality(qualityRequest(), {
-    tenant_id: 'tenant-evaluator-test',
+    caller_id: 'caller-evaluator-test',
     request_id: 'request-evaluator-initial'
   });
   assert.equal(initial.status, 'REINFORCEMENT_REQUIRED');
   assert.ok(initial.score_bp >= 8000);
 
   const final = await evaluateInformationQuality(qualityRequest('FINAL', 1, 1), {
-    tenant_id: 'tenant-evaluator-test',
+    caller_id: 'caller-evaluator-test',
     request_id: 'request-evaluator-final'
   });
   assert.equal(final.status, 'FINAL_VALID');
@@ -179,7 +179,7 @@ test('free evidence search uses the in-process evaluator for initial and final g
     schema_version: 'astera.evidence-search.module-request.v1',
     operation: 'SEARCH_EVIDENCE',
     context: {
-      tenant_id: 'tenant-remote-evaluator',
+      caller_id: 'caller-remote-evaluator',
       request_id: 'request-remote-evaluator',
       execution_time: EXECUTION_TIME,
       effective_as_of: EXECUTION_TIME

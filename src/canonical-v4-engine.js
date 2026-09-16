@@ -601,7 +601,7 @@ async function prepareJapaneseRequestViaMcp(input = {}, { client, logger = null 
   } catch (error) {
     if (logger && typeof logger.write === 'function') {
       logger.write({
-        tenantId: 'system',
+        callerId: 'system',
         type: 'japanese_parser_fail_closed',
         severity: 'warn',
         text: 'Deterministic Japanese Parser MCP unavailable or invalid; Japanese semantic analysis stopped.',
@@ -686,7 +686,7 @@ class CanonicalV4Engine {
     return prepareJapaneseRequestViaMcp({ question, context }, { client: this.japaneseParserClient, logger: this.logger });
   }
 
-  async process(input = {}, tenant = { id: 'unknown' }) {
+  async process(input = {}, caller = { id: 'unknown' }) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
     const lang = langOf(input, question);
@@ -817,7 +817,7 @@ class CanonicalV4Engine {
       hyperion: { engine: 'Astera Deterministic Perspective Expansion', mode: 'post_lane_expansion', dialectic: aggregate.perspectiveExpansion },
       judgment
     };
-    this.logger.write({ tenantId: tenant.id, type: 'process_completed', text: 'Canonical v4 claim graph completed', payload: { task_count: tasks.length, active_task_count: taskResults.length, claim_count: canonicalClaimRecords.length, confirmed_count: aggregate.comparison.counts.CONFIRMED, undetermined_count: aggregate.comparison.counts.UNDETERMINED, instruction_mode: request.instruction_understanding?.mode || 'UNKNOWN', non_ai: true } });
+    this.logger.write({ callerId: caller.id, type: 'process_completed', text: 'Canonical v4 claim graph completed', payload: { task_count: tasks.length, active_task_count: taskResults.length, claim_count: canonicalClaimRecords.length, confirmed_count: aggregate.comparison.counts.CONFIRMED, undetermined_count: aggregate.comparison.counts.UNDETERMINED, instruction_mode: request.instruction_understanding?.mode || 'UNKNOWN', non_ai: true } });
     return { result, material, prompt: this.externalBrief(judgment), runtime: { ai_used: false, llm_called: false, engine: 'v8_canonical_v4_rules', instruction_mode: request.instruction_understanding?.mode || 'UNKNOWN', task_count: tasks.length, active_task_count: taskResults.length, wave_count: executionWaves.length } };
   }
 

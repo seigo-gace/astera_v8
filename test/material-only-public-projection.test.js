@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
-const tenant = { id: 'material-only-projection', is_global: true, plan: 'admin' };
+const caller = { id: 'material-only-projection', is_global: true, plan: 'admin' };
 
 function createEngine() {
   return new CanonicalAsteraEngine({
@@ -30,7 +30,7 @@ const FORBIDDEN_FIXED = [
 async function runQuestion(question) {
   const engine = createEngine();
   try {
-    return await engine.process({ question, language: 'ja' }, tenant);
+    return await engine.process({ question, language: 'ja' }, caller);
   } finally {
     await engine.destroy();
   }

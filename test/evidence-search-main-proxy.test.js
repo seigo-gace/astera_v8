@@ -9,7 +9,7 @@ const { once } = require('node:events');
 const KaguraServer = require('../src/server');
 const KaguraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
-const TEST_TENANT = Object.freeze({ id: 'main-evidence-proxy-test', is_global: true, plan: 'admin' });
+const TEST_CALLER = Object.freeze({ id: 'main-evidence-proxy-test', is_global: true, plan: 'admin' });
 
 function createLogger(events = []) {
   return {
@@ -23,7 +23,7 @@ function evidenceResult(context, claim = 'API compatibility is preserved', queri
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: context.requestId,
-    tenant_id: context.tenantId,
+    caller_id: context.callerId,
     status: 'FINAL_VALID',
     result_hash: `result-${context.requestId}`,
     evidence: [
@@ -121,7 +121,7 @@ async function startMain({ evidenceSearchClient, engine, events = [], localNoAut
     root,
     server,
     engine: resolvedEngine,
-    tenant: TEST_TENANT,
+    caller: TEST_CALLER,
     baseUrl: `http://127.0.0.1:${address.port}`,
     events,
     restoreEnv() {
@@ -149,11 +149,11 @@ test('authenticated user reaches evidence search through the main runtime', asyn
     const out = await runtime.engine.process({
       question: 'Verify the current API compatibility using official evidence.',
       language: 'en'
-    }, runtime.tenant);
+    }, runtime.caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length >= 1);
-    assert.equal(calls[0].context.tenantId, runtime.tenant.id);
+    assert.equal(calls[0].context.callerId, runtime.caller.id);
     assert.equal(calls[0].payload.paid_search.enabled, false);
     assert.ok(out.result.task_results.some((result) => result.evidence?.source_status === 'FINAL_VALID'));
   } finally { await stopMain(runtime); }
@@ -171,7 +171,7 @@ test('main runtime rejects paid search before the isolated service is called', a
       question: 'Verify the current API compatibility using official evidence.',
       language: 'en',
       evidence_search: { paid_search: { enabled: true } }
-    }, runtime.tenant);
+    }, runtime.caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length >= 1);
@@ -205,7 +205,7 @@ test('integrated process is a JSON facade over the same single AsteraEngine pipe
     const out = await runtime.engine.process({
       question: 'Verify the current API compatibility using official evidence. Migrate the API in stages. Verify regression tests before completion. Success requires rollback capability.',
       language: 'en'
-    }, runtime.tenant);
+    }, runtime.caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.non_ai, true);
@@ -241,7 +241,7 @@ test('integrated boundary ignores caller domain_lens and uses internally resolve
       question: 'APIサーバーの現行仕様を公式根拠で検証する。',
       language: 'ja',
       domain_lens: { id: 'G01' }
-    }, runtime.tenant);
+    }, runtime.caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(evidenceCalls.length >= 1);
@@ -262,7 +262,7 @@ test('task evidence provider failure is isolated and remains UNDETERMINED', asyn
     const out = await runtime.engine.process({
       question: 'Verify the current API specification using an official source.',
       language: 'en'
-    }, runtime.tenant);
+    }, runtime.caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.task_results.some((result) =>

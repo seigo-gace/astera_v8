@@ -307,7 +307,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     };
   }
 
-  async process(input = {}, tenant = { id: 'unknown' }, executionContext = {}) {
+  async process(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
     const question = String(input.question || '').trim();
     const context = String(input.context || '').trim();
     const request = await this.prepareRequest({
@@ -411,7 +411,7 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       output_language: input.output_language,
       moodAnswers: input.moodAnswers,
       preparedRequest: request
-    }, tenant, executionContext);
+    }, caller, executionContext);
     if (out?.result?.type === 'cognitive_map') {
       out.result.human_reader = request.human_reader;
       if (out.result.facts && Array.isArray(out.result.task_results)) {

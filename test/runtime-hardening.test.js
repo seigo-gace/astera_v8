@@ -8,7 +8,7 @@ const WorkerPool = require('../src/worker-pool');
 test('RateLimiter enforces its bucket memory bound', () => {
   const limiter = new RateLimiter({ maxBuckets: 3 });
   for (let index = 0; index < 50; index += 1) {
-    limiter.check({ key: `tenant-${index}`, limit: 1, windowMs: 60_000 });
+    limiter.check({ key: `caller-${index}`, limit: 1, windowMs: 60_000 });
   }
   assert.ok(limiter.buckets.size <= 3);
 });

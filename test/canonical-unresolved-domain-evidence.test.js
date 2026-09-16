@@ -54,7 +54,7 @@ function loadRegistry() {
 
 test('A: unresolved upstream canonical plan forwards search without DOMAIN_LENS_UNRESOLVED', async () => {
   const task = unresolvedTask();
-  const request = searchRequestFor(task, { context: '' }, { id: 'tenant-test' }, 'req-a');
+  const request = searchRequestFor(task, { context: '' }, { id: 'caller-test' }, 'req-a');
   assert.ok(request);
   assert.equal(request.domain_lens, undefined);
   assert.ok(request.upstream_search_plan);
@@ -75,7 +75,7 @@ test('A: unresolved upstream canonical plan forwards search without DOMAIN_LENS_
     }
   };
 
-  const result = await resolveTaskEvidence({ client, task, tenant: { id: 'tenant-test' } });
+  const result = await resolveTaskEvidence({ client, task, caller: { id: 'caller-test' } });
   assert.equal(clientCalled, true);
   assert.notEqual(result.search_state, 'NOT_EXECUTED');
   assert.notEqual(result.search_execution?.error_code, 'DOMAIN_LENS_UNRESOLVED');

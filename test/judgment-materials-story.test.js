@@ -21,7 +21,7 @@ const {
 } = require('./helpers/japanese-parser-mcp-mock');
 
 const silentLogger = { write() {} };
-const tenant = { id: 'judgment-materials-story', is_global: true, plan: 'admin' };
+const caller = { id: 'judgment-materials-story', is_global: true, plan: 'admin' };
 
 const MAIN8_ORDER = Object.freeze([
   '01_purpose',
@@ -101,7 +101,7 @@ function validEvidence(claim, queries = [], extraCandidates = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: 'ev-story',
-    tenant_id: 'test',
+    caller_id: 'test',
     status: 'FINAL_VALID',
     effective_as_of: '2026-08-20T00:00:00.000Z',
     result_hash: 'test-result-hash',
@@ -158,7 +158,7 @@ test('Story 01: English single analyze yields cognitive_map, Main8, EXTERNAL_ONL
     const out = await engine.process({
       question: 'Compare two API migration options. Success means compatibility and rollback.',
       language: 'en'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
     assert.equal(out.result.judgment.order.length, 8);
@@ -174,7 +174,7 @@ test('Story 02: Japanese mock MCP uses DEEP_PATH, meaning projection, and Main8'
     const out = await engine.process({
       question: 'APIを検証する。成功条件は互換性を維持することである。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.instruction_understanding.mode, 'DEEP_PATH');
     assert.equal(out.result.instruction_understanding.parser, 'Deterministic-Japanese-Parser-MCP');
@@ -188,7 +188,7 @@ test('Story 03: sequential multi-task input uses multiple execution waves', asyn
   await withEngine({}, async (engine) => {
     const out = await engine.process({
       question: 'API仕様を公式根拠で検証する。その後、互換性を維持して段階移行する。最後にテストする。成功条件はRollback可能であること。'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.analysis_task_packet.tasks.length >= 2);
     assert.ok(out.result.analysis_task_packet.execution_waves.length >= 2);
@@ -198,7 +198,7 @@ test('Story 03: sequential multi-task input uses multiple execution waves', asyn
 
 test('Story 04: parallelizable tasks share one execution wave', async () => {
   await withEngine({}, async (engine) => {
-    const out = await engine.process({ question: 'Aを実装する。Bを実装する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'Aを実装する。Bを実装する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.analysis_task_packet.execution_waves[0].length >= 2);
     const waveIds = new Set(out.result.analysis_task_packet.execution_waves[0]);
@@ -215,7 +215,7 @@ test('Story 05: compare input keeps material-only comparison lanes', async () =>
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const s06 = out.result.judgment['06_comparison'];
     assert.deepEqual(s06.comparison_candidates.map((c) => c.label || c), ['A案', 'B案']);
@@ -231,7 +231,7 @@ test('Story 06: prohibitions and preserve remain on Task Graph constraints', asy
     const out = await engine.process({
       question: 'READMEは残す。APIを改善する。成功条件は互換性維持とRollback可能であること。mainは変更するな。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const packet = out.result.analysis_task_packet;
     assert.ok(packet.preserve.some((item) => /README/i.test(item)));
@@ -246,7 +246,7 @@ test('Story 07: conditional branches remain attached to tasks', async () => {
     const out = await engine.process({
       question: 'APIサーバーを検証する。検証が成功した場合に互換性を確認する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.analysis_task_packet.branches.length >= 1);
     assert.ok(out.result.judgment.task_graph.branches.length >= 1);
@@ -259,7 +259,7 @@ test('Story 08: hard_blockers stop Task/Claim/Evidence without fabricated Main8'
     const out = await engine.process({
       question: 'APIを変更する。APIを変更するな。成功条件は互換性を維持することである。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.task_processing_started, false);
     assert.equal(out.result.evidence_processing_started, false);
@@ -293,7 +293,7 @@ test('Story 09: evidence SUPPORT, COUNTER, and UNDETERMINED are all preserved', 
       })
     ]));
 
-    const out = await engine.process({ question: claimText, language: 'ja' }, tenant);
+    const out = await engine.process({ question: claimText, language: 'ja' }, caller);
     assert.equal(out.result.canonical_claims.status, 'UNDETERMINED');
     const record = out.result.canonical_claims.records[0];
     const relations = (record.confirmation.bindings || []).map((binding) => binding.relation);
@@ -323,7 +323,7 @@ test('Story 10: MCP unavailable fails closed and never uses builtin Japanese ana
     const out = await engine.process({
       question: 'APIを改善する。成功条件は互換性である。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.instruction_understanding.mode, 'FAIL_CLOSED');
     assert.ok(out.result.analysis_task_packet.unresolved.some((item) => /JAPANESE_PARSER_FAIL_CLOSED/.test(item)));
@@ -334,7 +334,7 @@ test('Story 10: MCP unavailable fails closed and never uses builtin Japanese ana
       resolveResult: () => mockJapaneseParserResult('APIを改善する。', { overall_status: 'FAILED', execution_allowed: false })
     })
   }, async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.request_model.instruction_understanding.mode, 'FAIL_CLOSED');
     assert.ok(out.result.request_model.analysis_task_packet.hard_blockers.some((item) => /PARSER_OVERALL_FAILED|JAPANESE_PARSER_FAIL_CLOSED/.test(String(item))));
@@ -343,7 +343,7 @@ test('Story 10: MCP unavailable fails closed and never uses builtin Japanese ana
 
 test('Story 11: MCP PARTIAL keeps ambiguity and still processes resolved tasks', async () => {
   await withEngine({ japaneseParserClient: partialMockClient() }, async (engine) => {
-    const out = await engine.process({ question: 'Aを実装する。Bを実装する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'Aを実装する。Bを実装する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.instruction_understanding.overall_status, 'PARTIAL');
     const unresolved = out.result.analysis_task_packet.unresolved || [];
@@ -362,7 +362,7 @@ test('Story 12: empty Task Graph returns clarification with parser_task_graph_em
       })
     })
   }, async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。', language: 'ja' }, caller);
     assert.equal(out.result.type, 'clarification_needed');
     const unresolved = out.result.request_model?.analysis_task_packet?.unresolved || [];
     assert.ok(unresolved.includes('parser_task_graph_empty'));
@@ -376,14 +376,14 @@ test('Story 13: repeated process stays deterministic on core material fields', a
     const input = {
       question: 'API仕様を公式根拠で検証する。その後、互換性を維持して段階移行する。最後にテストする。成功条件はRollback可能であること。'
     };
-    const first = await engine.process(input, tenant);
+    const first = await engine.process(input, caller);
     const fingerprint = JSON.stringify({
       task_graph: first.result.analysis_task_packet,
       judgment: first.result.judgment,
       comparison: first.result.comparison,
       material: first.material
     });
-    const second = await engine.process(input, tenant);
+    const second = await engine.process(input, caller);
     assert.equal(JSON.stringify({
       task_graph: second.result.analysis_task_packet,
       judgment: second.result.judgment,
@@ -398,7 +398,7 @@ test('Story 14: judgment material text exposes Main8 section headers', async () 
     const out = await engine.process({
       question: 'Compare API options on cost and safety.',
       language: 'en'
-    }, tenant);
+    }, caller);
     assert.match(out.material.text, /01 True Objective/);
     assert.match(out.material.text, /08 Re-instruction to Main AI/);
     assert.equal((out.material.text.match(/^---$/gm) || []).length, 7);
@@ -411,7 +411,7 @@ test('Story 15: resolved Lens and domain attach to each Task', async () => {
     const out = await engine.process({
       question: 'APIサーバーのシステム開発を改善する。契約条件を確認する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const tasks = out.result.analysis_task_packet.tasks;
     assert.ok(tasks.length >= 2);
@@ -439,7 +439,7 @@ test('Story 16: evidence search boundary invokes external search client once per
     const out = await engine.process({
       question: 'Verify the current API specification using official evidence.',
       language: 'en'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length >= 1);
     assert.ok(calls.every((call) => call.payload.paid_search.enabled === false));

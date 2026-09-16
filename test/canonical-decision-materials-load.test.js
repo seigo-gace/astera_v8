@@ -7,7 +7,7 @@ const { destroyGlobalCanonicalTaskAdmission } = require('../src/runtime/canonica
 
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
-const tenant = { id: 'decision-materials-load', is_global: true, plan: 'admin' };
+const caller = { id: 'decision-materials-load', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -137,7 +137,7 @@ for (const count of [8, 9, 20, 50, 100]) {
       const question = `${count} Task load fixture`;
       const preparedRequest = await buildPrepared(engine, count, `N${count}-`);
       engine.setFixturePrepared(preparedRequest, question);
-      const out = await engine.process({ question }, tenant);
+      const out = await engine.process({ question }, caller);
       assert.equal(out.result.type, 'cognitive_map');
       assert.equal(out.result.task_results.length, count);
       assert.equal(out.result.parallel_execution.pool_size, 4);
@@ -165,7 +165,7 @@ test('simultaneous decision-material requests share the same server-wide maximum
     const outputs = await Promise.all(requests.map((preparedRequest, index) => {
       const question = `simultaneous request ${index + 1}`;
       engine.setFixturePrepared(preparedRequest, question);
-      return engine.process({ question }, tenant);
+      return engine.process({ question }, caller);
     }));
 
     assert.equal(outputs.reduce((sum, out) => sum + out.result.task_results.length, 0), 60);

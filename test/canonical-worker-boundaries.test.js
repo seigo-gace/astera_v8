@@ -7,7 +7,7 @@ const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japa
 const {buildCanonicalTaskPlan,evaluateCanonicalTaskPlan,projectFiveLanes,deterministicPerspectiveExpansion}=require('../src/canonical-claim-runtime');
 
 const silentLogger={write(){}};
-const tenant={id:'worker-boundary',is_global:true,plan:'admin'};
+const caller={id:'worker-boundary',is_global:true,plan:'admin'};
 const baseTask={id:'T01',source_span:{start:0,end:25,text:'API compatibility is preserved.'},raw_text:'API compatibility is preserved.',target:'API compatibility',objective:'Verify API compatibility.',action:'verify',success_criteria:['preserve compatibility'],completion_criteria:[],constraints:['rollback'],prohibitions:[],preserve:[],premises:[],conditions:[],exceptions:[],depends_on:[],hard_blockers:[],evidence_need:{required:false}};
 
 function notRequiredEvidence(){
@@ -87,7 +87,7 @@ test('Deterministic Perspective Expansion restores fixed five material classes w
 test('Canonical Engine exposes no legacy scoring/selection aliases',async()=>{
   const engine=new CanonicalAsteraEngine({poolSize:2,logger:silentLogger,japaneseParserClient:defaultMockJapaneseParserClient()});
   try{
-    const out=await engine.process({question:'API互換性を比較する。'},tenant);
+    const out=await engine.process({question:'API互換性を比較する。'},caller);
     assert.equal(out.result.decision_authority,'EXTERNAL_ONLY');
     assert.equal(out.result.comparison.material_only,true);
     assert.equal(out.result.comparison.selected_candidate,null);

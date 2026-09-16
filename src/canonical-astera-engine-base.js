@@ -307,7 +307,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
   prepareRequest(input={}){return analyzeRequest(input);}
   async resolveEvidenceForTask(){return null;}
 
-  async process(input={},tenant={id:'unknown'},executionContext={}){
+  async process(input={},caller={id:'unknown'},executionContext={}){
     const question=String(input.question||'').trim(),context=String(input.context||'').trim();
     const request=input.preparedRequest?.analysis_task_packet?input.preparedRequest:await this.prepareRequest({question,context,language:input.language,locale:input.locale,output_language:input.output_language});
     const requestedOutput=String(request.output_language||request.language||input.output_language||input.language||'und'),renderLang=requestedOutput.split('-')[0]==='ja'?'ja':'en';
@@ -352,7 +352,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       runTask:async(task)=>{
         const searchRequired=task.canonical_plan.search_plan.queries.length>0;
         let evidenceRaw=searchRequired?null:notRequiredEvidence(task.id);
-        if(searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,tenant,request,signal});
+        if(searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,caller,request,signal});
         if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
         evidenceRawByTask.set(String(task.id),evidenceRaw);
         const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw},{signal});
@@ -376,7 +376,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     judgment.localization={requested_language:requestedOutput,rendered_language:renderLang,status:['ja','en'].includes(requestedOutput.split('-')[0])?'NATIVE_CANONICAL_RENDER':'EXTERNAL_LOCALIZATION_REQUIRED'};
     const material=this.material(judgment),fiveStage={schema_version:'astera.five-stage.v2',order:[...FIVE_STAGE],execution_waves:packet.execution_waves,execution:materialExecutionSummary,tasks:taskResults.map((result)=>({task_id:result.task.id,lens_id:result.task.domain.primary?.id||null,claim_status:claimStatus(result.canonical),evidence_state:result.evidence.state,evidence_search_state:result.evidence.search_state,fact:result.lanes.fact,risk:result.lanes.risk,multi:result.lanes.multi,inquiry:result.lanes.inquiry,compare:result.lanes.compare}))};
     const result={type:'cognitive_map',mode:'deterministic_multi_parallel_decision_materials',decision_authority:'EXTERNAL_ONLY',non_ai:true,no_normative_decision_generated:true,request_model:request,instruction_understanding:request.instruction_understanding||null,analysis_task_packet:request.analysis_task_packet,canonical_claims:aggregate.canonical,five_stage:fiveStage,task_results:taskResults.map((item)=>({task:item.task,evidence:item.evidence,canonical:item.canonical,facts:item.lanes.fact,risks:item.lanes.risk,multi:item.lanes.multi,inquiry:item.lanes.inquiry,comparison:item.lanes.compare,perspective_expansion:item.perspective_expansion})),facts:aggregate.facts,risks:aggregate.risks,multi:aggregate.multi,inquiry:aggregate.inquiry,perspective_expansion:aggregate.perspectiveExpansion,comparison:aggregate.comparison,parallel_execution:materialExecutionSummary,judgment};
-    this.logger.write({tenantId:tenant.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:execution.waves.length,task_failure_count:execution.failures.size,task_skipped_count:execution.skipped.size,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
+    this.logger.write({callerId:caller.id,type:'process_completed',text:`Canonical claim materials completed: claims=${aggregate.canonical.claim_count} confirmed=${aggregate.canonical.confirmed_count} undetermined=${aggregate.canonical.undetermined_count}`,payload:{task_count:tasks.length,wave_count:execution.waves.length,task_failure_count:execution.failures.size,task_skipped_count:execution.skipped.size,claim_count:aggregate.canonical.claim_count,confirmed_claim_count:aggregate.canonical.confirmed_count,undetermined_claim_count:aggregate.canonical.undetermined_count,non_ai:true,input_language:request.language,input_script:request.script}});
     return{result,material:{...material,no_normative_decision_generated:true},prompt:this.externalBrief(judgment),runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules',task_count:tasks.length,wave_count:execution.waves.length,parallel_execution:executionSummary,input_language:request.language,input_script:request.script,requested_output_language:requestedOutput,localization:judgment.localization}};
   }
 

@@ -30,13 +30,13 @@ class Logger {
     for (const entry of this.outbox.recover()) this._track(this._deliver(entry.row, entry.file));
   }
 
-  write({ tenantId = 'system', type = 'event', severity = 'info', payload = {}, text = '' }) {
-    const safeTenant = String(tenantId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  write({ callerId = 'system', type = 'event', severity = 'info', payload = {}, text = '' }) {
+    const safeCaller = String(callerId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const row = {
       at: new Date().toISOString(),
       source: 'astera-v8',
       severity: LEVELS.has(severity) ? severity : 'info',
-      tenant_id: safeTenant,
+      caller_id: safeCaller,
       type: String(type || 'event'),
       text: String(text || type || 'event'),
       payload: maskSecrets(payload)

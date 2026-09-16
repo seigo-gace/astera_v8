@@ -9,7 +9,7 @@ const { projectCanonicalTask } = require('../src/canonical-task-projection');
 
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
-const tenant = { id: 'trace-test', is_global: true, plan: 'admin' };
+const caller = { id: 'trace-test', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 
 function createEngine(options = {}) {
@@ -83,7 +83,7 @@ function validEvidence(claim, queries = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: 'ev-test',
-    tenant_id: 'test',
+    caller_id: 'test',
     status: 'FINAL_VALID',
     effective_as_of: '2026-08-20T00:00:00.000Z',
     result_hash: 'test-result-hash',
@@ -173,7 +173,7 @@ test('hard instruction contradiction stops before Task/Claim/Evidence and never 
     const out = await engine.process({
       question: 'APIを変更する。APIを変更するな。成功条件は互換性を維持することである。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.ok(out.result.hard_blockers.includes('PROHIBITION_REPLACE_OVERLAP'));
     assert.equal(out.result.task_processing_started, false);
@@ -193,7 +193,7 @@ test('all Main8 Decision Basis entries expose instruction understanding on an ex
     const out = await engine.process({
       question: 'APIを検証する。成功条件は互換性を維持することである。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.deepEqual(out.result.judgment.order, [
       '01_purpose',
@@ -222,7 +222,7 @@ test('all Main8 Decision Basis entries expose instruction understanding on an ex
 test('unresolved deictic short request returns clarification instead of guessed Main8', async () => {
   const engine = createEngine({ poolSize: 2 });
   try {
-    const out = await engine.process({ question: 'どう？', language: 'ja' }, tenant);
+    const out = await engine.process({ question: 'どう？', language: 'ja' }, caller);
     assert.equal(out.result.type, 'clarification_needed');
     assert.equal(out.runtime.ai_used, false);
     assert.equal(out.runtime.llm_called, false);
@@ -239,7 +239,7 @@ test('Main8 05/06 preserve multi and comparison material for golden compare inpu
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
 
@@ -334,7 +334,7 @@ test('Main8 05/06 HTTP lossless text preserves EN compare material', async () =>
     const out = await engine.process({
       question: 'Compare A and B on cost and safety.',
       language: 'en'
-    }, tenant);
+    }, caller);
     const s06 = out.result.judgment['06_comparison'];
     const materialText = out.material.text;
 

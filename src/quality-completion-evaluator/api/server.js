@@ -30,7 +30,7 @@ function isLoopbackAddress(address = '') {
   return /^(127(?:\.\d{1,3}){3}|::1|::ffff:127(?:\.\d{1,3}){3})$/i.test(String(address || ''));
 }
 
-function resolveGlobalApiKeyTenant(apiKey) {
+function resolveGlobalApiKeyCaller(apiKey) {
   const key = String(apiKey || '').trim();
   if (!key || key.length > 256) return null;
   const globalKey = process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '';
@@ -43,8 +43,8 @@ function authenticateEvaluateRequest(req, host) {
   const localNoAuth = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1' && ['127.0.0.1', 'localhost', '::1'].includes(host);
   if (!key && localNoAuth) return { id: 'local-dev', plan: 'admin', status: 'active', is_global: true };
   if (key) {
-    const globalTenant = resolveGlobalApiKeyTenant(key);
-    if (globalTenant) return globalTenant;
+    const globalCaller = resolveGlobalApiKeyCaller(key);
+    if (globalCaller) return globalCaller;
   }
   return null;
 }
@@ -61,7 +61,7 @@ class EvaluatorApiServer {
       res.once('finish', () => {
         if (req.method === 'GET' && req.url === '/healthz' && res.statusCode < 400) return;
         this.logger.write({
-          tenantId: 'owner-skill-private',
+          callerId: 'owner-skill-private',
           type: 'evaluator_api_access',
           severity: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
           text: `${req.method} ${String(req.url || '').split('?')[0]} ${res.statusCode}`,
@@ -174,17 +174,17 @@ class EvaluatorApiServer {
       if (req.method === 'POST' && (url.pathname === '/v1/evaluate' || url.pathname === '/v1/skill/evaluate')) {
         const isSkillRoute = url.pathname === '/v1/skill/evaluate';
         if (isSkillRoute && !isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
-        const tenant = isSkillRoute
+        const caller = isSkillRoute
           ? authenticateSkillApiKey(req.headers['x-api-key'])
           : authenticateEvaluateRequest(req, this.host);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
+        if (!caller) return this._json(req, res, 401, { error: 'unauthorized' });
         if (!isSkillRoute) {
-          const rate = this.limiter.check({ key: `evaluate:${tenant.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
+          const rate = this.limiter.check({ key: `evaluate:${caller.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
           if (!rate.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate });
         }
         const result = await evaluate(await this._readJsonObject(req));
         this.logger.write({
-          tenantId: tenant.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
+          callerId: caller.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
           payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
         });
         return this._json(req, res, 200, result);
@@ -193,7 +193,7 @@ class EvaluatorApiServer {
     } catch (error) {
       const requested = Number(error?.status);
       const status = requested >= 400 && requested <= 599 ? requested : 500;
-      this.logger.write({ tenantId: 'owner-skill-private', type: 'evaluator_api_failed', severity: status >= 500 ? 'error' : 'warn', text: `${req.method} ${String(req.url || '').split('?')[0]} failed`, payload: { request_id: req.requestId, status, error } });
+      this.logger.write({ callerId: 'owner-skill-private', type: 'evaluator_api_failed', severity: status >= 500 ? 'error' : 'warn', text: `${req.method} ${String(req.url || '').split('?')[0]} failed`, payload: { request_id: req.requestId, status, error } });
       return this._json(req, res, status, { error: status >= 500 ? 'internal_error' : error.message, status, requestId: req.requestId });
     }
   }

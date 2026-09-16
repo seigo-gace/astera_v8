@@ -55,8 +55,8 @@ function fsyncDirectory(directory) {
   try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
 }
 
-function tenantDirectoryName(tenantId) {
-  return crypto.createHash('sha256').update(String(tenantId)).digest('hex').slice(0, 32);
+function callerDirectoryName(callerId) {
+  return crypto.createHash('sha256').update(String(callerId)).digest('hex').slice(0, 32);
 }
 
 class DurableEvidenceSpool {
@@ -75,19 +75,19 @@ class DurableEvidenceSpool {
     fs.chmodSync(this.root, 0o700);
   }
 
-  jobDirectory(tenantId, jobId) {
-    const tenantHash = tenantDirectoryName(tenantId);
+  jobDirectory(callerId, jobId) {
+    const callerHash = callerDirectoryName(callerId);
     const job = safeSegment(jobId, 'jobId');
-    return path.join(this.root, tenantHash, job);
+    return path.join(this.root, callerHash, job);
   }
 
-  artifactPath(tenantId, jobId, stage) {
+  artifactPath(callerId, jobId, stage) {
     const safeStage = safeSegment(stage.toLowerCase().replace(/_/g, '-'), 'stage');
-    return path.join(this.jobDirectory(tenantId, jobId), `${safeStage}.json.gz.enc`);
+    return path.join(this.jobDirectory(callerId, jobId), `${safeStage}.json.gz.enc`);
   }
 
-  write({ tenantId, jobId, stage, schemaVersion, value }) {
-    const directory = this.jobDirectory(tenantId, jobId);
+  write({ callerId, jobId, stage, schemaVersion, value }) {
+    const directory = this.jobDirectory(callerId, jobId);
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     fs.chmodSync(directory, 0o700);
 
@@ -111,7 +111,7 @@ class DurableEvidenceSpool {
     const tag = cipher.getAuthTag();
     const envelope = Buffer.concat([MAGIC, iv, tag, ciphertext]);
 
-    const finalPath = this.artifactPath(tenantId, jobId, stage);
+    const finalPath = this.artifactPath(callerId, jobId, stage);
     const temporaryPath = `${finalPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
     const descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
     try {
@@ -222,8 +222,8 @@ class DurableEvidenceSpool {
     }
   }
 
-  removeJob(tenantId, jobId) {
-    const directory = this.jobDirectory(tenantId, jobId);
+  removeJob(callerId, jobId) {
+    const directory = this.jobDirectory(callerId, jobId);
     fs.rmSync(directory, { recursive: true, force: true });
   }
 }
@@ -233,5 +233,5 @@ module.exports = {
   MAX_ARTIFACT_BYTES,
   loadKey,
   normalizeKey,
-  tenantDirectoryName
+  callerDirectoryName
 };

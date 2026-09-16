@@ -36,14 +36,14 @@ test('job state, encrypted checkpoints, and terminal result survive reopen', asy
   const key = Buffer.from(value.spool.key);
   try {
     const started = value.manager.begin({
-      tenantId: 'tenant-recovery',
+      callerId: 'caller-recovery',
       requestId: 'request-recovery',
       idempotencyKey: 'idempotency-recovery'
     });
     let job = started.job;
     job = value.manager.checkpoint(job, 'AUTHENTICATED', {
       request_id: job.request_id,
-      tenant_id: job.tenant_id
+      caller_id: job.caller_id
     });
     job = value.manager.checkpoint(job, 'PLANNED', {
       query_plan_hash: 'a'.repeat(64)
@@ -117,7 +117,7 @@ test('idempotency reuses one job and lease prevents concurrent execution', async
   const value = await runtime();
   try {
     const first = value.manager.begin({
-      tenantId: 'tenant-idempotency',
+      callerId: 'caller-idempotency',
       requestId: 'request-first',
       idempotencyKey: 'same-operation'
     });
@@ -130,7 +130,7 @@ test('idempotency reuses one job and lease prevents concurrent execution', async
     });
     assert.throws(
       () => competingManager.begin({
-        tenantId: 'tenant-idempotency',
+        callerId: 'caller-idempotency',
         requestId: 'request-second',
         idempotencyKey: 'same-operation'
       }),
@@ -138,7 +138,7 @@ test('idempotency reuses one job and lease prevents concurrent execution', async
     );
 
     const same = value.store.createJob({
-      tenantId: 'tenant-idempotency',
+      callerId: 'caller-idempotency',
       requestId: 'request-third',
       idempotencyKey: 'same-operation'
     });
@@ -153,7 +153,7 @@ test('recovery skips a corrupted newest checkpoint and returns the previous vali
   const value = await runtime();
   try {
     const started = value.manager.begin({
-      tenantId: 'tenant-corruption',
+      callerId: 'caller-corruption',
       requestId: 'request-corruption',
       idempotencyKey: 'corruption-operation'
     });
@@ -179,7 +179,7 @@ test('job store rejects backward transitions and stale CAS versions', async () =
   const value = await runtime();
   try {
     const started = value.manager.begin({
-      tenantId: 'tenant-cas',
+      callerId: 'caller-cas',
       requestId: 'request-cas',
       idempotencyKey: 'cas-operation'
     });

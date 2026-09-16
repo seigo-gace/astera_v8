@@ -78,7 +78,7 @@ class EvidenceJobStore {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS evidence_jobs (
         job_id TEXT PRIMARY KEY,
-        tenant_id TEXT NOT NULL,
+        caller_id TEXT NOT NULL,
         request_id TEXT NOT NULL,
         idempotency_key TEXT NOT NULL,
         state TEXT NOT NULL,
@@ -94,11 +94,11 @@ class EvidenceJobStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         completed_at TEXT,
-        UNIQUE(tenant_id, idempotency_key)
+        UNIQUE(caller_id, idempotency_key)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_evidence_jobs_tenant_request
-        ON evidence_jobs(tenant_id, request_id);
+      CREATE INDEX IF NOT EXISTS idx_evidence_jobs_caller_request
+        ON evidence_jobs(caller_id, request_id);
       CREATE INDEX IF NOT EXISTS idx_evidence_jobs_state_lease
         ON evidence_jobs(state, lease_until);
 
@@ -118,13 +118,13 @@ class EvidenceJobStore {
     this.statements = {
       insertJob: this.db.prepare(`
         INSERT INTO evidence_jobs(
-          job_id, tenant_id, request_id, idempotency_key,
+          job_id, caller_id, request_id, idempotency_key,
           state, state_version, created_at, updated_at
         ) VALUES (?, ?, ?, ?, 'RECEIVED', 0, ?, ?)
       `),
       readJob: this.db.prepare('SELECT * FROM evidence_jobs WHERE job_id = ?'),
       readByIdempotency: this.db.prepare(
-        'SELECT * FROM evidence_jobs WHERE tenant_id = ? AND idempotency_key = ?'
+        'SELECT * FROM evidence_jobs WHERE caller_id = ? AND idempotency_key = ?'
       ),
       transition: this.db.prepare(`
         UPDATE evidence_jobs SET
@@ -191,19 +191,19 @@ class EvidenceJobStore {
     }
   }
 
-  createJob({ tenantId, requestId, idempotencyKey, jobId = `evj_${crypto.randomUUID()}` }) {
-    const tenant = safeString(tenantId, 'tenantId', 128);
+  createJob({ callerId, requestId, idempotencyKey, jobId = `evj_${crypto.randomUUID()}` }) {
+    const caller = safeString(callerId, 'callerId', 128);
     const request = safeString(requestId, 'requestId', 128);
     const idempotency = safeString(idempotencyKey || requestId, 'idempotencyKey', 256);
     const id = safeString(jobId, 'jobId', 128);
     const timestamp = nowIso();
 
     return this.transaction(() => {
-      const existing = this.statements.readByIdempotency.get(tenant, idempotency);
+      const existing = this.statements.readByIdempotency.get(caller, idempotency);
       if (existing) return Object.freeze({ ...existing, reused: true });
       this.statements.insertJob.run(
         id,
-        tenant,
+        caller,
         request,
         idempotency,
         timestamp,

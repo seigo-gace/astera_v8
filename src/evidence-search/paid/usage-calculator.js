@@ -246,11 +246,11 @@ function directPolicyJson(policy) {
 function calculateUsageReport(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('input must be an object');
   const requestId = String(input.request_id || '').trim();
-  const tenantId = String(input.tenant_id || '').trim();
+  const callerId = String(input.caller_id || '').trim();
   const providerId = String(input.provider_id || '').trim();
   const mode = String(input.mode || 'ACTUAL').trim().toUpperCase();
   if (!requestId) fail('request_id is required');
-  if (!tenantId) fail('tenant_id is required');
+  if (!callerId) fail('caller_id is required');
   if (!providerId) fail('provider_id is required');
   if (!['ESTIMATE', 'ACTUAL'].includes(mode)) fail('mode must be ESTIMATE or ACTUAL');
 
@@ -271,7 +271,7 @@ function calculateUsageReport(input) {
   const directVariablePolicyHash = sha256(directPolicyJson(directPolicy));
   const fingerprintPayload = {
     request_id: requestId,
-    tenant_id: tenantId,
+    caller_id: callerId,
     provider_id: providerId,
     mode,
     usage: usageJson,
@@ -284,7 +284,7 @@ function calculateUsageReport(input) {
     schema_version: REPORT_SCHEMA_VERSION,
     report_id: `psu_${usageFingerprint.slice(0, 32)}`,
     request_id: requestId,
-    tenant_id: tenantId,
+    caller_id: callerId,
     provider_id: providerId,
     mode,
     currency: providerPricing.currency,

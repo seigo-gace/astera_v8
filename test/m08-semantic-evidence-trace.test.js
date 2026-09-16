@@ -8,7 +8,7 @@ const { QUERY_ROLES, buildCanonicalTaskPlan } = require('../src/canonical-claim-
 const { routeDomainTemplates } = require('../src/domain-template-router');
 const { projectCanonicalTask } = require('../src/canonical-task-projection');
 
-const tenant = { id: 'm08-semantic-trace', is_global: true, plan: 'admin' };
+const caller = { id: 'm08-semantic-trace', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 
 const SOURCE_IDENTITY_FIELDS = Object.freeze([
@@ -120,7 +120,7 @@ function semanticValidEvidence(claim, queries = []) {
   return {
     schema_version: 'astera.evidence-search.result.v1',
     request_id: 'ev-semantic-test',
-    tenant_id: 'test',
+    caller_id: 'test',
     status: 'FINAL_VALID',
     effective_as_of: '2026-08-20T00:00:00.000Z',
     result_hash: 'semantic-test-hash',
@@ -331,7 +331,7 @@ test('M10 no_normative_decision_generated invariant on Public engine.process com
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
 
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.no_normative_decision_generated, true);

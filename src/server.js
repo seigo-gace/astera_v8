@@ -65,7 +65,7 @@ function positiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
-function resolveGlobalApiKeyTenant(apiKey) {
+function resolveGlobalApiKeyCaller(apiKey) {
   const key = String(apiKey || '').trim();
   if (!key || key.length > 256) return null;
   const globalKey = process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '';
@@ -83,7 +83,7 @@ class KaguraServer {
     this.server = http.createServer((req, res) => {
       req.requestId = crypto.randomUUID();
       const startedAt = Date.now();
-      const context = { tenantId: 'anonymous' };
+      const context = { callerId: 'anonymous' };
       const requestPath = String(req.url || '').split('?')[0];
       let accessLogged = false;
       const logAccess = (aborted = false) => {
@@ -98,7 +98,7 @@ class KaguraServer {
         if (isSuccessfulHealthCheck) return;
         const severity = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
         this.logger.write({
-          tenantId: context.tenantId,
+          callerId: context.callerId,
           type: 'http_access',
           severity,
           text: `${req.method} ${requestPath} ${status}`,
@@ -236,8 +236,8 @@ class KaguraServer {
     const localNoAuth = (process.env.ASTERA_LOCAL_NO_AUTH || process.env.KAGURA_LOCAL_NO_AUTH) === '1' && ['127.0.0.1', 'localhost', '::1'].includes(this.host);
     if (!key && localNoAuth) return { id: 'local-dev', plan: 'admin', status: 'active', is_global: true };
     if (key) {
-      const globalTenant = resolveGlobalApiKeyTenant(key);
-      if (globalTenant) return globalTenant;
+      const globalCaller = resolveGlobalApiKeyCaller(key);
+      if (globalCaller) return globalCaller;
     }
     return null;
   }
@@ -246,10 +246,10 @@ class KaguraServer {
     return authenticateSkillApiKey(req.headers['x-api-key']);
   }
 
-  async _processRequest(req, res, context, tenant, { unlimited = false, route = '/process' } = {}) {
-    context.tenantId = tenant.id;
+  async _processRequest(req, res, context, caller, { unlimited = false, route = '/process' } = {}) {
+    context.callerId = caller.id;
     if (!unlimited) {
-      const rl = this.limiter.check({ key: `process:${tenant.id}`, limit: transportProcessRateLimit(), windowMs: 60_000 });
+      const rl = this.limiter.check({ key: `process:${caller.id}`, limit: transportProcessRateLimit(), windowMs: 60_000 });
       if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
     }
 
@@ -278,11 +278,11 @@ class KaguraServer {
     }
     const allowlist = buildProcessAllowlist(body);
     allowlist.llm = resolveRequestLLM(allowlist);
-    const out = await this.engine.process(allowlist, tenant);
+    const out = await this.engine.process(allowlist, caller);
     return this._text(req, res, 200, out.material?.text || '');
   }
 
-  async _handle(req, res, context = { tenantId: 'anonymous' }) {
+  async _handle(req, res, context = { callerId: 'anonymous' }) {
     try {
       if (this._requiresHttps(req)) {
         return this._json(req, res, 426, { error: 'https_required', hint: 'Set HTTPS at the reverse proxy or send X-Forwarded-Proto: https.' });
@@ -326,21 +326,21 @@ class KaguraServer {
       }
 
       if (req.method === 'POST' && url.pathname === '/process') {
-        const tenant = await this._authenticate(req);
-        if (!tenant) {
+        const caller = await this._authenticate(req);
+        if (!caller) {
           return this._json(req, res, 401, {
             error: 'unauthorized',
             hint: 'Set X-API-Key (ASTERA_API_KEY) or enable ASTERA_LOCAL_NO_AUTH=1 on loopback.'
           });
         }
-        return await this._processRequest(req, res, context, tenant);
+        return await this._processRequest(req, res, context, caller);
       }
 
       if (req.method === 'POST' && url.pathname === '/v1/skill/process') {
         if (!isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
-        const tenant = await this._authenticateSkill(req);
-        if (!tenant) return this._json(req, res, 401, { error: 'unauthorized' });
-        return await this._processRequest(req, res, context, tenant, { unlimited: true, route: '/v1/skill/process' });
+        const caller = await this._authenticateSkill(req);
+        if (!caller) return this._json(req, res, 401, { error: 'unauthorized' });
+        return await this._processRequest(req, res, context, caller, { unlimited: true, route: '/v1/skill/process' });
       }
 
       return this._json(req, res, 404, { error: 'not_found' });
@@ -348,7 +348,7 @@ class KaguraServer {
       const requestedStatus = Number(error?.status);
       const status = requestedStatus >= 400 && requestedStatus <= 599 ? requestedStatus : 500;
       this.logger.write({
-        tenantId: context.tenantId,
+        callerId: context.callerId,
         type: 'request_failed',
         severity: status >= 500 ? 'error' : 'warn',
         text: `${req.method} ${String(req.url || '').split('?')[0]} failed`,
@@ -362,5 +362,5 @@ class KaguraServer {
 
 module.exports = KaguraServer;
 module.exports.parseAllowedOrigins = parseAllowedOrigins;
-module.exports.resolveGlobalApiKeyTenant = resolveGlobalApiKeyTenant;
+module.exports.resolveGlobalApiKeyCaller = resolveGlobalApiKeyCaller;
 module.exports.transportProcessRateLimit = transportProcessRateLimit;

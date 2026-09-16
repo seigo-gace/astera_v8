@@ -24,12 +24,12 @@ class AsteraEngine extends CanonicalAsteraEngine {
     return this;
   }
 
-  async resolveEvidenceForTask({ task, input, tenant, signal = null }) {
+  async resolveEvidenceForTask({ task, input, caller, signal = null }) {
     return resolveTaskEvidence({
       client: this.evidenceSearchClient,
       task,
       input,
-      tenant,
+      caller,
       signal
     });
   }

@@ -30,7 +30,7 @@ async function runProvider(provider, definition) {
     }, {
       signal: new AbortController().signal,
       deadline_at: Date.now() + 20_000,
-      tenant_id: 'live-smoke',
+      caller_id: 'live-smoke',
       request_id: `live-${provider.provider_id}`
     });
     const query = result.query_results?.[0];

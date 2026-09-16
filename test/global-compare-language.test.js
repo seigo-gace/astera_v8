@@ -10,7 +10,7 @@ const {
 } = require('../src/v4-canonical/lanes');
 
 const silentLogger = { write() {} };
-const tenant = { id: 'global-compare', is_global: true, plan: 'admin' };
+const caller = { id: 'global-compare', is_global: true, plan: 'admin' };
 
 async function withEngine(fn) {
   const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger, japaneseParserClient: defaultMockJapaneseParserClient() });
@@ -37,7 +37,7 @@ test('Japanese golden compare extracts candidates, dimensions and MATERIAL_ONLY 
     const out = await engine.process({
       question: 'A案とB案を費用と安全性で比較する。',
       language: 'ja'
-    }, tenant);
+    }, caller);
     const s06 = out.result.judgment['06_comparison'];
     assert.deepEqual(s06.comparison_candidates.map((c) => c.label || c), ['A案', 'B案']);
     assert.ok(s06.dimensions.includes('費用'));
@@ -57,7 +57,7 @@ test('English golden compare extracts candidates and dimensions without ranking'
     const out = await engine.process({
       question: 'Compare A and B on cost and safety.',
       language: 'en'
-    }, tenant);
+    }, caller);
     const s06 = out.result.judgment['06_comparison'];
     assert.deepEqual(s06.comparison_candidates.map((c) => c.label || c), ['A', 'B']);
     assert.ok(s06.dimensions.includes('cost'));
@@ -98,11 +98,11 @@ test('JA and EN compare inputs remain deterministic across five executions', asy
       { question: 'Compare A and B on cost and safety.', language: 'en' }
     ];
     for (const input of cases) {
-      const first = await engine.process(input, tenant);
+      const first = await engine.process(input, caller);
       const expected = deterministicSnapshot(first);
       assert.equal((first.result.five_stage.execution.timings || []).some((timing) => Object.hasOwn(timing, 'duration_ms')), false);
       for (let index = 0; index < 5; index += 1) {
-        const next = await engine.process(input, tenant);
+        const next = await engine.process(input, caller);
         assert.equal(deterministicSnapshot(next), expected);
       }
     }

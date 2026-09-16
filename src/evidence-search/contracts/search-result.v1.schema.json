@@ -34,7 +34,7 @@
   "required": [
     "schema_version",
     "request_id",
-    "tenant_id",
+    "caller_id",
     "status",
     "execution_time",
     "effective_as_of",
@@ -53,7 +53,7 @@
   "properties": {
     "schema_version": { "const": "astera.evidence-search.result.v1" },
     "request_id": { "type": "string", "minLength": 1 },
-    "tenant_id": { "type": "string", "minLength": 1 },
+    "caller_id": { "type": "string", "minLength": 1 },
     "status": { "type": "string", "minLength": 1 },
     "execution_time": { "type": "string", "format": "date-time" },
     "effective_as_of": { "type": "string" },

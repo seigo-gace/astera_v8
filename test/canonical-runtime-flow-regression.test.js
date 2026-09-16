@@ -6,7 +6,7 @@ const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 
 const silentLogger = { write() {}, async flush() {} };
-const tenant = { id: 'test', is_global: true, plan: 'admin' };
+const caller = { id: 'test', is_global: true, plan: 'admin' };
 
 async function withEngine(fn) {
   const engine = new CanonicalAsteraEngine({ poolSize: 2, logger: silentLogger, japaneseParserClient: defaultMockJapaneseParserClient() });
@@ -18,7 +18,7 @@ test('canonical engine uses the canonical Task Decomposition contract automatica
     const out = await engine.process({
       question: 'APIサーバーを検証する。それを改善する。',
       context: 'APIサーバーはmainを変更するな。'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.equal(out.result.analysis_task_packet.task_decomposition_version, '3.0-canonical');
     assert.equal(out.result.instruction_understanding.task_decomposition, 'DETERMINISTIC_CANONICAL_V3');
@@ -32,7 +32,7 @@ test('canonical engine uses the canonical Task Decomposition contract automatica
 
 test('Main8 section 01 uses Task purpose rather than silently falling back to the old objective-only path', async () => {
   await withEngine(async (engine) => {
-    const out = await engine.process({ question: 'APIを改善する。' }, tenant);
+    const out = await engine.process({ question: 'APIを改善する。' }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const task = out.result.analysis_task_packet.tasks[0];
     assert.ok(task.purpose);
@@ -42,7 +42,7 @@ test('Main8 section 01 uses Task purpose rather than silently falling back to th
 
 test('Human Reader remains presentation metadata and never gains decision or mutation authority', async () => {
   await withEngine(async (engine) => {
-    const out = await engine.process({ question: '正確にAPIを検証してCodeを実装する。' }, tenant);
+    const out = await engine.process({ question: '正確にAPIを検証してCodeを実装する。' }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(out.result.human_reader);
     assert.ok(out.result.judgment.human_reader);
@@ -60,7 +60,7 @@ test('hard Task Graph blocker stops canonical Task/Claim/Evidence processing bef
   await withEngine(async (engine) => {
     const out = await engine.process({
       question: 'APIを変更する。APIを変更するな。成功条件は互換性を維持することである。'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'task_graph_blocked');
     assert.equal(out.result.task_processing_started, false);
     assert.equal(out.result.evidence_processing_started, false);
@@ -74,7 +74,7 @@ test('Main8 Task Graph view preserves Canonical V3 branch/reference/context meta
     const out = await engine.process({
       question: 'APIサーバーを検証する。それを改善する。検証が成功した場合に互換性を確認する。',
       context: 'APIサーバーはmainを変更するな。'
-    }, tenant);
+    }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const packet = out.result.analysis_task_packet;
     const view = out.result.judgment.task_graph;

@@ -140,12 +140,12 @@ test('signed client reaches the isolated free evidence search API', async () => 
       timeoutMs: 8000
     });
     const result = await client.search(payload(), {
-      tenantId: 'tenant-api-test',
+      callerId: 'caller-api-test',
       requestId: 'request-api-test'
     });
 
     assert.equal(result.status, 'FINAL_VALID');
-    assert.equal(result.tenant_id, 'tenant-api-test');
+    assert.equal(result.caller_id, 'caller-api-test');
     assert.equal(result.request_id, 'request-api-test');
     assert.equal(result.evidence.length, 3);
     assert.equal(result.quality.reinforcement_attempt_count, 1);
@@ -166,7 +166,7 @@ test('internal request replay is rejected after the first accepted request', asy
       body,
       secret: SECRET,
       service: 'astera-main',
-      tenantId: 'tenant-replay-test',
+      callerId: 'caller-replay-test',
       requestId: 'request-replay-test',
       nonce: 'fixed-replay-nonce',
       now: Date.now(),
@@ -200,7 +200,7 @@ test('tampered body is rejected before the search module runs', async () => {
       body: signedBody,
       secret: SECRET,
       service: 'astera-main',
-      tenantId: 'tenant-tamper-test',
+      callerId: 'caller-tamper-test',
       requestId: 'request-tamper-test'
     });
     const tamperedBody = JSON.stringify({ ...payload(), question: 'tampered' });

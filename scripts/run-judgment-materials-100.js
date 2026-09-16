@@ -22,7 +22,7 @@ const MAIN8_ORDER = Object.freeze([
 ]);
 
 const silentLogger = { write() {} };
-const tenant = { id: 'judgment-materials-100', is_global: true, plan: 'admin' };
+const caller = { id: 'judgment-materials-100', is_global: true, plan: 'admin' };
 
 function genreNumber(id) {
   const m = /^G(\d+)$/i.exec(String(id || ''));
@@ -220,7 +220,7 @@ async function main() {
           question: story.question,
           context: story.context || '',
           language: story.language
-        }, tenant);
+        }, caller);
       } catch (error) {
         const scored = {
           status: 'FAIL',

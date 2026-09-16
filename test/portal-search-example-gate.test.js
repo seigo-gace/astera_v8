@@ -7,7 +7,7 @@ const { extractInstructionUnderstandingFields } = require('../src/deterministic-
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
 const PORTAL_QUESTION = '社内ポータルの検索を改善したい。予算は10%以内、納期は来週金曜。既存ユーザーの操作は変えない。最終結論は出さず判断材料だけ欲しい。';
-const tenant = { id: 'portal-gate', is_global: true, plan: 'admin' };
+const caller = { id: 'portal-gate', is_global: true, plan: 'admin' };
 
 function createEngine() {
   return new CanonicalAsteraEngine({
@@ -46,7 +46,7 @@ test('portal search example gate: instruction field trace', async () => {
 test('portal search example gate: Main8 public material contract', async () => {
   const engine = createEngine();
   try {
-    const out = await engine.process({ question: PORTAL_QUESTION, language: 'ja' }, tenant);
+    const out = await engine.process({ question: PORTAL_QUESTION, language: 'ja' }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     const text = out.material.text;
 

@@ -17,7 +17,7 @@ function getArtifactsRoot() {
 }
 
 const silentLogger = { write() {} };
-const tenant = { id: 'astera-effect-stories-unseen-v1', is_global: true, plan: 'admin' };
+const caller = { id: 'astera-effect-stories-unseen-v1', is_global: true, plan: 'admin' };
 
 function parseArgs(argv) {
   const out = { phase: 'first', mockMcp: false, storyId: null, artifactsRoot: null };
@@ -124,7 +124,7 @@ async function main() {
       let out = null;
       let processError = null;
       try {
-        out = await engine.process(input, tenant);
+        out = await engine.process(input, caller);
       } catch (error) {
         processError = error;
         summary.process_errors += 1;

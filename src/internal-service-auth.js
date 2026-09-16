@@ -6,7 +6,7 @@ const { stableStringify } = require('./quality-completion-evaluator/utils/stable
 
 const HEADER_NAMES = Object.freeze({
   service: 'x-astera-service',
-  tenantId: 'x-astera-tenant-id',
+  callerId: 'x-astera-caller-id',
   requestId: 'x-astera-request-id',
   issuedAt: 'x-astera-issued-at',
   expiresAt: 'x-astera-expires-at',
@@ -54,7 +54,7 @@ function hasInternalServiceSecret(options = {}) {
 function canonicalEnvelope(fields) {
   return stableStringify({
     service: String(fields.service),
-    tenant_id: String(fields.tenant_id),
+    caller_id: String(fields.caller_id),
     request_id: String(fields.request_id),
     issued_at: String(fields.issued_at),
     expires_at: String(fields.expires_at),
@@ -73,7 +73,7 @@ function createInternalHeaders({
   body,
   secret,
   service,
-  tenantId,
+  callerId,
   requestId,
   now = Date.now(),
   ttlMs = 60_000,
@@ -82,21 +82,21 @@ function createInternalHeaders({
   const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body || ''), 'utf8');
   const fields = {
     service: String(service || ''),
-    tenant_id: String(tenantId || ''),
+    caller_id: String(callerId || ''),
     request_id: String(requestId || ''),
     issued_at: new Date(now).toISOString(),
     expires_at: new Date(now + ttlMs).toISOString(),
     nonce,
     body_sha256: sha256(bodyBuffer)
   };
-  if (!fields.service || !fields.tenant_id || !fields.request_id) {
-    const error = new Error('service, tenantId and requestId are required for internal authentication');
+  if (!fields.service || !fields.caller_id || !fields.request_id) {
+    const error = new Error('service, callerId and requestId are required for internal authentication');
     error.code = 'INTERNAL_ENVELOPE_INVALID';
     throw error;
   }
   return Object.freeze({
     [HEADER_NAMES.service]: fields.service,
-    [HEADER_NAMES.tenantId]: fields.tenant_id,
+    [HEADER_NAMES.callerId]: fields.caller_id,
     [HEADER_NAMES.requestId]: fields.request_id,
     [HEADER_NAMES.issuedAt]: fields.issued_at,
     [HEADER_NAMES.expiresAt]: fields.expires_at,
@@ -143,7 +143,7 @@ function verifyInternalRequest({
 }) {
   const fields = {
     service: readHeader(headers, HEADER_NAMES.service),
-    tenant_id: readHeader(headers, HEADER_NAMES.tenantId),
+    caller_id: readHeader(headers, HEADER_NAMES.callerId),
     request_id: readHeader(headers, HEADER_NAMES.requestId),
     issued_at: readHeader(headers, HEADER_NAMES.issuedAt),
     expires_at: readHeader(headers, HEADER_NAMES.expiresAt),
@@ -196,7 +196,7 @@ function verifyInternalRequest({
 
   return Object.freeze({
     service: fields.service,
-    tenant_id: fields.tenant_id,
+    caller_id: fields.caller_id,
     request_id: fields.request_id,
     issued_at: fields.issued_at,
     expires_at: fields.expires_at,

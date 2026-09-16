@@ -13,7 +13,7 @@
       "additionalProperties": false,
       "properties": {
         "request_id": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "tenant_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "caller_id": { "type": "string", "minLength": 1, "maxLength": 128 },
         "execution_time": { "type": "string", "format": "date-time" },
         "effective_as_of": { "type": "string", "format": "date-time" }
       }
