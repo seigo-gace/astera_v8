@@ -3,7 +3,7 @@
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { pairedStoryResult, summarizePairs } = require('../src/astera-effect-pair');
+const { summarizePairs } = require('../src/astera-effect-pair');
 
 const ROOT = path.resolve(__dirname, '..');
 
