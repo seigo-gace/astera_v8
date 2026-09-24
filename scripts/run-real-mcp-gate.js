@@ -1,9 +1,14 @@
 'use strict';
 
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { JapaneseParserMCPClient, isJapaneseParserConfigured, DEFAULT_DJPMCP } = require('../src/japanese-parser-mcp-client');
+const {
+  JapaneseParserMCPClient,
+  isJapaneseParserConfigured,
+  resolveHttpUrl,
+  resolveHttpApiKey
+} = require('../src/japanese-parser-mcp-client');
 
-const caller = { id: 'real-mcp-gate', is_global: true, plan: 'admin' };
+const caller = { id: 'real-parser-http-gate', is_global: true, plan: 'admin' };
 const silentLogger = { write() {} };
 
 const CASES = [
@@ -26,32 +31,42 @@ const CASES = [
 ];
 
 async function main() {
-  const command = process.env.ASTERA_JAPANESE_PARSER_COMMAND || DEFAULT_DJPMCP;
-  const configured = isJapaneseParserConfigured({ mode: 'stdio', command });
-  console.log(`REAL_MCP configured=${configured}`);
-  if (!configured) {
-    console.error('REAL_MCP_FAIL: Japanese Parser MCP is not configured (mock substitute forbidden).');
+  const mode = String(process.env.ASTERA_JAPANESE_PARSER_MODE || '').trim().toLowerCase();
+  if (mode !== 'http') {
+    console.error(`REAL_PARSER_HTTP_FAIL: ASTERA_JAPANESE_PARSER_MODE must be http (got ${mode || '<missing>'}).`);
     process.exit(2);
   }
+
+  const url = resolveHttpUrl();
+  const apiKey = resolveHttpApiKey();
+  const configured = isJapaneseParserConfigured({ mode: 'http', url, apiKey });
+  console.log(`REAL_PARSER_HTTP configured=${configured}`);
+  if (!configured) {
+    console.error('REAL_PARSER_HTTP_FAIL: Japanese Parser HTTP is not configured (mock substitute forbidden).');
+    process.exit(2);
+  }
+
+  const parserClient = new JapaneseParserMCPClient({ mode: 'http', url, apiKey });
   const engine = new CanonicalAsteraEngine({
     poolSize: 2,
     logger: silentLogger,
-    japaneseParserClient: new JapaneseParserMCPClient({ mode: 'stdio', command }),
-    japaneseParserOptions: { command }
+    japaneseParserClient: parserClient,
+    japaneseParserOptions: { mode: 'http', url, apiKey }
   });
+
   try {
     for (const testCase of CASES) {
       const out = await engine.process({ question: testCase.question, language: 'ja' }, caller);
       testCase.assert(out);
-      console.log(`REAL_MCP_CASE_${testCase.id}_PASS type=${out.result.type} main8_sections=${(out.material.text.match(/^---$/gm) || []).length + 1}`);
+      console.log(`REAL_PARSER_HTTP_CASE_${testCase.id}_PASS type=${out.result.type} main8_sections=${(out.material.text.match(/^---$/gm) || []).length + 1}`);
     }
-    console.log('REAL_MCP_GATE_PASS');
+    console.log('REAL_PARSER_HTTP_GATE_PASS');
   } finally {
     await engine.destroy();
   }
 }
 
 main().catch((error) => {
-  console.error(`REAL_MCP_FAIL: ${error.message}`);
+  console.error(`REAL_PARSER_HTTP_FAIL: ${error.message}`);
   process.exit(1);
 });
