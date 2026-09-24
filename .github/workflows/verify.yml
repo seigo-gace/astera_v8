@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,5 +24,37 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run all tests and smoke verification
+      - name: Build real Japanese Parser HTTP runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/seigo-gace/Deterministic-Japanese-Parser-MCP.git /tmp/djpmcp-http-src
+          cd /tmp/djpmcp-http-src
+          git fetch --depth 1 origin 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          git checkout --detach 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          docker build -f Dockerfile.http -t djpmcp-http-ci .
+          docker run -d --rm \
+            --name djpmcp-http-ci \
+            -p 127.0.0.1:8765:8765 \
+            -e DJPMCP_HTTP_API_KEY=ci-only-key \
+            -e DJPMCP_HTTP_ALLOWED_HOSTS=127.0.0.1:8765,localhost:8765 \
+            djpmcp-http-ci
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8765/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs djpmcp-http-ci
+          exit 1
+
+      - name: Run all tests and real HTTP smoke verification
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
         run: npm run verify
+
+      - name: Stop Japanese Parser HTTP runtime
+        if: always()
+        run: docker rm -f djpmcp-http-ci >/dev/null 2>&1 || true
