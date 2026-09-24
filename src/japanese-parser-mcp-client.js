@@ -6,7 +6,9 @@ const MCP_PROTOCOL_VERSION = '2025-11-25';
 const SUPPORTED_PROTOCOL_VERSIONS = new Set(['2025-11-25', '2025-06-18', '2025-03-26']);
 const SERVER_NAME = 'deterministic-japanese-parser';
 const DEFAULT_DJPMCP = '/home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp';
-const DISABLED_MODES = new Set(['python-api', 'stdio-docker', 'http', 'streamable-http']);
+const DEFAULT_HTTP_URL = 'http://127.0.0.1:8765/v1/analyze';
+const DISABLED_MODES = new Set(['python-api', 'stdio-docker', 'streamable-http']);
+const SUPPORTED_MODES = new Set(['stdio', 'http']);
 
 function parserError(code, message, details = {}) {
   const error = new Error(message);
@@ -62,10 +64,10 @@ function resolveParserMode(options = {}) {
 
 function assertSupportedMode(mode) {
   if (DISABLED_MODES.has(mode)) {
-    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is disabled; use stdio with djpmcp.`);
+    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is disabled.`);
   }
-  if (mode !== 'stdio') {
-    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is unsupported; use stdio.`);
+  if (!SUPPORTED_MODES.has(mode)) {
+    throw parserError('PARSER_MODE_UNSUPPORTED', `Japanese Parser MCP mode "${mode}" is unsupported; use http or stdio.`);
   }
 }
 
@@ -73,20 +75,29 @@ function defaultDeadlineMs(options = {}) {
   return Number(options.deadlineMs || process.env.ASTERA_JAPANESE_PARSER_DEADLINE_MS || 5000);
 }
 
-function isJapaneseParserConfigured(options = {}) {
-  const mode = resolveParserMode(options);
-  if (DISABLED_MODES.has(mode)) return false;
-  if (mode !== 'stdio') return false;
-  const command = String(options.command || process.env.ASTERA_JAPANESE_PARSER_COMMAND || '').trim();
-  if (!command) return false;
-  return true;
+function resolveHttpUrl(options = {}) {
+  return String(options.url || process.env.ASTERA_JAPANESE_PARSER_URL || DEFAULT_HTTP_URL).trim();
 }
 
-function buildTransportTrace({ protocolVersion, serverVersion, structured, startedNs }) {
+function resolveHttpApiKey(options = {}) {
+  return String(options.apiKey || process.env.ASTERA_JAPANESE_PARSER_API_KEY || '').trim();
+}
+
+function isJapaneseParserConfigured(options = {}) {
+  const mode = resolveParserMode(options);
+  if (!SUPPORTED_MODES.has(mode)) return false;
+  if (mode === 'http') {
+    return Boolean(resolveHttpUrl(options) && resolveHttpApiKey(options));
+  }
+  const command = String(options.command || process.env.ASTERA_JAPANESE_PARSER_COMMAND || '').trim();
+  return Boolean(command);
+}
+
+function buildTransportTrace({ transport, protocolVersion, serverVersion, structured, startedNs }) {
   const elapsedMs = Number(process.hrtime.bigint() - startedNs) / 1e6;
   return {
     parser: SERVER_NAME,
-    transport: 'stdio',
+    transport,
     protocol_version: protocolVersion || null,
     server_version: serverVersion || structured?.versions?.parser || null,
     semantic_hash: structured?.meaning_graph?.semantic_hash || null,
@@ -95,6 +106,60 @@ function buildTransportTrace({ protocolVersion, serverVersion, structured, start
     latency_ms: Number(elapsedMs.toFixed(3)),
     tool: 'analyze_japanese'
   };
+}
+
+async function runHttpAnalyzeOnce({ url, apiKey, requestArguments, timeoutMs, fetchImpl = globalThis.fetch }) {
+  if (typeof fetchImpl !== 'function') {
+    throw parserError('PARSER_HTTP_FETCH_UNAVAILABLE', 'Japanese Parser HTTP transport requires fetch support.');
+  }
+  if (!url) throw parserError('PARSER_HTTP_URL_MISSING', 'ASTERA_JAPANESE_PARSER_URL is required for HTTP mode.');
+  if (!apiKey) throw parserError('PARSER_HTTP_API_KEY_MISSING', 'ASTERA_JAPANESE_PARSER_API_KEY is required for HTTP mode.');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+        accept: 'application/json'
+      },
+      body: JSON.stringify(requestArguments),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError' || controller.signal.aborted) {
+      throw parserError('PARSER_HTTP_TIMEOUT', `Japanese Parser HTTP exceeded ${timeoutMs}ms.`);
+    }
+    throw parserError('PARSER_HTTP_TRANSPORT_ERROR', `Japanese Parser HTTP request failed: ${error?.message || 'unknown error'}`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const status = Number(response?.status || 0);
+  let raw = '';
+  try {
+    raw = await response.text();
+  } catch (error) {
+    throw parserError('PARSER_HTTP_BODY_READ_FAILED', `Japanese Parser HTTP response body could not be read: ${error?.message || 'unknown error'}`, { http_status: status });
+  }
+
+  if (status === 401 || status === 403) {
+    throw parserError('PARSER_HTTP_UNAUTHORIZED', `Japanese Parser HTTP authentication failed with status ${status}.`, { http_status: status });
+  }
+  if (status < 200 || status >= 300) {
+    throw parserError('PARSER_HTTP_STATUS', `Japanese Parser HTTP returned status ${status || '<unknown>'}.`, { http_status: status });
+  }
+
+  let structured;
+  try {
+    structured = JSON.parse(raw);
+  } catch {
+    throw parserError('PARSER_HTTP_INVALID_JSON', 'Japanese Parser HTTP returned invalid JSON.', { http_status: status });
+  }
+  return structured;
 }
 
 async function runStdioAnalyzeOnce({ command, args, cwd, env, requestArguments, timeoutMs, spawnImpl = spawn }) {
@@ -239,9 +304,12 @@ class JapaneseParserMCPClient {
     this.args = options.args || [];
     this.cwd = options.cwd || process.env.ASTERA_JAPANESE_PARSER_CWD || undefined;
     this.env = { ...process.env, ...(options.env || {}) };
+    this.url = resolveHttpUrl(options);
+    this.apiKey = resolveHttpApiKey(options);
     this.deadlineMs = defaultDeadlineMs(options);
     this.timeoutMs = Number(options.timeoutMs || process.env.ASTERA_JAPANESE_PARSER_TIMEOUT_MS || this.deadlineMs + 5000);
     this.spawnImpl = options.spawnImpl || spawn;
+    this.fetchImpl = options.fetchImpl || globalThis.fetch;
   }
 
   async initialize() {}
@@ -269,6 +337,26 @@ class JapaneseParserMCPClient {
     };
     const callTimeout = Math.max(this.timeoutMs, requestArguments.deadline_ms + 5000);
 
+    if (this.mode === 'http') {
+      const structured = validateParserResult(await runHttpAnalyzeOnce({
+        url: this.url,
+        apiKey: this.apiKey,
+        requestArguments,
+        timeoutMs: callTimeout,
+        fetchImpl: this.fetchImpl
+      }), original);
+      return {
+        ...structured,
+        astera_mcp_transport: buildTransportTrace({
+          transport: 'http',
+          protocolVersion: null,
+          serverVersion: structured?.versions?.parser || null,
+          structured,
+          startedNs: started
+        })
+      };
+    }
+
     const { result, negotiatedProtocolVersion, serverVersion } = await runStdioAnalyzeOnce({
       command: this.command,
       args: [...this.args],
@@ -282,6 +370,7 @@ class JapaneseParserMCPClient {
     return {
       ...structured,
       astera_mcp_transport: buildTransportTrace({
+        transport: 'stdio',
         protocolVersion: negotiatedProtocolVersion,
         serverVersion,
         structured,
@@ -304,5 +393,9 @@ module.exports = {
   isJapaneseParserConfigured,
   resolveParserMode,
   defaultDeadlineMs,
-  DEFAULT_DJPMCP
+  resolveHttpUrl,
+  resolveHttpApiKey,
+  runHttpAnalyzeOnce,
+  DEFAULT_DJPMCP,
+  DEFAULT_HTTP_URL
 };
