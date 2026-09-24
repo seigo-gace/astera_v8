@@ -9,23 +9,19 @@ services:
       ASTERA_HOST: 127.0.0.1
       ASTERA_PORT: ${ASTERA_PORT:?Set ASTERA_PORT}
       ASTERA_LOG_CACHE_DIR: /cache/outbox
-      ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-stdio}
-      ASTERA_JAPANESE_PARSER_COMMAND: /home/admin1/projects/Deterministic-Japanese-Parser-MCP/.venv/bin/djpmcp
+      ASTERA_JAPANESE_PARSER_MODE: ${ASTERA_JAPANESE_PARSER_MODE:-http}
+      ASTERA_JAPANESE_PARSER_URL: ${ASTERA_JAPANESE_PARSER_URL:-http://127.0.0.1:8765/v1/analyze}
+      ASTERA_JAPANESE_PARSER_API_KEY: ${ASTERA_JAPANESE_PARSER_API_KEY:?Set ASTERA_JAPANESE_PARSER_API_KEY}
       ASTERA_JAPANESE_PARSER_DEADLINE_MS: ${ASTERA_JAPANESE_PARSER_DEADLINE_MS:-5000}
-      DJPMCP_LOG_PATH: /tmp/djpmcp-parser.jsonl
       ASTERA_EVIDENCE_URL: http://127.0.0.1:7376
       ASTERA_INTERNAL_SERVICE_SECRET_FILE: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
       ASTERA_TGS_URL: http://127.0.0.1:3000/ingest
       ASTERA_TGS_PROJECT_ID: P002
-    # TGserver binds only to host loopback. Host networking keeps both private
-    # and lets Astera deliver structured logs directly to it.
+    # TGserver and the Japanese Parser HTTP runtime bind only to host loopback.
+    # Host networking keeps both private while allowing direct service-to-service HTTP.
     network_mode: host
     volumes:
       - /home/admin1/logs/astera-v8:/cache
-      - type: bind
-        source: /home/admin1/projects/Deterministic-Japanese-Parser-MCP
-        target: /home/admin1/projects/Deterministic-Japanese-Parser-MCP
-        read_only: true
       - type: bind
         source: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
         target: ${ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST:?Set ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST}
