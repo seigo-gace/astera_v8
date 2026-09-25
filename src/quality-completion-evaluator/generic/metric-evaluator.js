@@ -1,6 +1,12 @@
- "use strict";
+"use strict";
 
+const crypto = require("node:crypto");
+const { stableStringify } = require("../utils/stable-json");
 const { validReference } = require("./evidence-registry-verifier");
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex");
+}
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -27,40 +33,105 @@ function normalizeMetricScore(definition, value) {
   return clamp(((ceiling - n) / (ceiling - target)) * 100);
 }
 
-function metricInputMap(metrics = []) {
-  const map = new Map();
-  for (const item of Array.isArray(metrics) ? metrics : []) {
-    const id = String(item?.metric_id || "").trim();
-    if (id && !map.has(id)) map.set(id, item);
-  }
-  return map;
+function declaredMetricIds(profile) {
+  const ids = new Set();
+  for (const dimension of profile.dimensions || []) for (const metric of dimension.metrics || []) ids.add(String(metric.metric_id));
+  for (const rule of profile.hard_blocks || []) ids.add(String(rule.metric_id));
+  return ids;
 }
 
-function evaluateMetrics(profile, metrics, evidenceVerification) {
-  const inputMap = metricInputMap(metrics);
-  const dimensions = [];
+function verifyMeasurements(profile, measurements, evidenceVerification) {
+  const inputMap = new Map();
+  const measurementIds = new Set();
+  const invalidMetricIds = new Set();
   const issues = [];
+  const allowed = declaredMetricIds(profile);
+
+  for (const [index, item] of (Array.isArray(measurements) ? measurements : []).entries()) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      issues.push({ code: "MEASUREMENT_INVALID", index });
+      continue;
+    }
+    const measurementId = String(item.measurement_id || "").trim();
+    const metricId = String(item.metric_id || "").trim();
+    if (!measurementId) issues.push({ code: "MEASUREMENT_ID_REQUIRED", index });
+    else if (measurementIds.has(measurementId)) issues.push({ code: "MEASUREMENT_ID_DUPLICATE", measurement_id: measurementId });
+    else measurementIds.add(measurementId);
+
+    if (!metricId) {
+      issues.push({ code: "MEASUREMENT_METRIC_ID_REQUIRED", index });
+      continue;
+    }
+    if (!allowed.has(metricId)) {
+      issues.push({ code: "UNDECLARED_METRIC", metric_id: metricId });
+      invalidMetricIds.add(metricId);
+    }
+    if (inputMap.has(metricId)) {
+      issues.push({ code: "MEASUREMENT_METRIC_DUPLICATE", metric_id: metricId });
+      invalidMetricIds.add(metricId);
+      continue;
+    }
+
+    if (!(["number", "boolean"].includes(typeof item.value)) || (typeof item.value === "number" && !Number.isFinite(item.value))) {
+      issues.push({ code: "MEASUREMENT_VALUE_INVALID", metric_id: metricId });
+      invalidMetricIds.add(metricId);
+    }
+    if (!item.provenance || typeof item.provenance !== "object" || Array.isArray(item.provenance) || !String(item.provenance.collector_id || "").trim() || !Number.isFinite(Date.parse(item.provenance.collected_at || ""))) {
+      issues.push({ code: "MEASUREMENT_PROVENANCE_INVALID", metric_id: metricId });
+      invalidMetricIds.add(metricId);
+    }
+
+    const refs = Array.isArray(item.evidence_refs) ? item.evidence_refs.map(String).filter(Boolean) : [];
+    if (new Set(refs).size !== refs.length) {
+      issues.push({ code: "MEASUREMENT_EVIDENCE_REF_DUPLICATE", metric_id: metricId });
+      invalidMetricIds.add(metricId);
+    }
+    for (const ref of refs) {
+      if (!validReference(ref, evidenceVerification)) {
+        issues.push({ code: "METRIC_EVIDENCE_REF_INVALID", metric_id: metricId, evidence_ref: ref });
+        invalidMetricIds.add(metricId);
+      }
+    }
+
+    const { measurement_hash: expectedHash, ...base } = item;
+    if (!expectedHash || !/^[a-f0-9]{64}$/i.test(String(expectedHash)) || expectedHash !== sha256(base)) {
+      issues.push({ code: "MEASUREMENT_HASH_MISMATCH", metric_id: metricId, measurement_id: measurementId || null });
+      invalidMetricIds.add(metricId);
+    }
+    inputMap.set(metricId, item);
+  }
+
+  return { inputMap, measurementIds, invalidMetricIds, issues };
+}
+
+function evaluateMetrics(profile, measurements, evidenceVerification) {
+  const verified = verifyMeasurements(profile, measurements, evidenceVerification);
+  const inputMap = verified.inputMap;
+  const dimensions = [];
+  const issues = [...verified.issues];
 
   for (const dimension of profile.dimensions) {
     const evaluated = [];
     for (const definition of dimension.metrics) {
       const input = inputMap.get(definition.metric_id);
       const refs = Array.isArray(input?.evidence_refs) ? input.evidence_refs.map(String).filter(Boolean) : [];
-      const invalidRefs = refs.filter((ref) => !validReference(ref, evidenceVerification));
       const required = definition.required !== false;
       const evidenceRequired = definition.evidence_required !== false;
       const missing = !input;
       const missingEvidence = evidenceRequired && refs.length === 0;
-      const rawScore = missing || invalidRefs.length > 0 || missingEvidence ? 0 : normalizeMetricScore(definition, input.value);
+      const unitMismatch = Boolean(definition.unit) && String(input?.unit || "") !== String(definition.unit);
+      const invalidInput = verified.invalidMetricIds.has(definition.metric_id) || unitMismatch;
+      const rawScore = missing || missingEvidence || invalidInput ? 0 : normalizeMetricScore(definition, input.value);
       const score = Math.round(rawScore * 100) / 100;
       const weighted = score * (Number(definition.weight) / 100);
 
       if (missing && required) issues.push({ code: "REQUIRED_METRIC_MISSING", metric_id: definition.metric_id });
       if (missingEvidence) issues.push({ code: "METRIC_EVIDENCE_MISSING", metric_id: definition.metric_id });
-      for (const ref of invalidRefs) issues.push({ code: "METRIC_EVIDENCE_REF_INVALID", metric_id: definition.metric_id, evidence_ref: ref });
+      if (unitMismatch) issues.push({ code: "METRIC_UNIT_MISMATCH", metric_id: definition.metric_id, expected: definition.unit, actual: input?.unit ?? null });
 
       evaluated.push({
         metric_id: definition.metric_id,
+        measurement_id: input?.measurement_id || null,
         value: input?.value ?? null,
         unit: input?.unit || definition.unit || null,
         direction: definition.direction,
@@ -83,7 +154,14 @@ function evaluateMetrics(profile, metrics, evidenceVerification) {
   }
 
   const total = Math.round(dimensions.reduce((sum, dimension) => sum + dimension.score * (dimension.weight / 100), 0) * 100) / 100;
-  return { dimensions, total, issues, metric_input_map: inputMap };
+  return {
+    dimensions,
+    total,
+    issues,
+    measurement_input_map: inputMap,
+    measurement_count: verified.measurementIds.size,
+    invalid_metric_ids: verified.invalidMetricIds
+  };
 }
 
-module.exports = { normalizeMetricScore, evaluateMetrics };
+module.exports = { normalizeMetricScore, verifyMeasurements, evaluateMetrics };

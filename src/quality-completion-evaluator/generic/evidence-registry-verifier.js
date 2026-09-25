@@ -1,4 +1,4 @@
- "use strict";
+"use strict";
 
 const crypto = require("node:crypto");
 const { stableStringify } = require("../utils/stable-json");
@@ -12,10 +12,19 @@ function sha256(value) {
   return crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex");
 }
 
+function sortedStrings(value) {
+  return [...new Set((Array.isArray(value) ? value : []).map(String).filter(Boolean))].sort();
+}
+
+function sameStrings(left, right) {
+  return stableStringify(sortedStrings(left)) === stableStringify(sortedStrings(right));
+}
+
 function verifyEvidenceRegistry(registry, bindingSet) {
   const errors = [];
   const evidenceIds = new Set();
   const bindingIds = new Set();
+  const entryMap = new Map();
 
   if (!registry || typeof registry !== "object" || Array.isArray(registry)) {
     errors.push({ code: "EVIDENCE_REGISTRY_REQUIRED", path: "evidence_registry" });
@@ -43,14 +52,21 @@ function verifyEvidenceRegistry(registry, bindingSet) {
     const evidenceId = String(entry.evidence_id || "");
     if (!evidenceId) errors.push({ code: "EVIDENCE_ID_REQUIRED", path: `evidence_registry.entries[${index}].evidence_id` });
     else if (evidenceIds.has(evidenceId)) errors.push({ code: "EVIDENCE_ID_DUPLICATE", path: `evidence_registry.entries[${index}].evidence_id`, evidence_id: evidenceId });
-    else evidenceIds.add(evidenceId);
+    else {
+      evidenceIds.add(evidenceId);
+      entryMap.set(evidenceId, entry);
+    }
 
     const { integrity, ...base } = entry;
     if (!integrity || integrity.algorithm !== "sha256" || integrity.entry_hash !== sha256(base)) {
       errors.push({ code: "EVIDENCE_ENTRY_HASH_MISMATCH", path: `evidence_registry.entries[${index}].integrity`, evidence_id: evidenceId || null });
     }
+    if ((integrity?.content_hash ?? null) !== (entry.content?.content_hash ?? null)) {
+      errors.push({ code: "EVIDENCE_CONTENT_HASH_REFERENCE_MISMATCH", path: `evidence_registry.entries[${index}].integrity.content_hash`, evidence_id: evidenceId || null });
+    }
   }
 
+  const bindingsByEvidence = new Map();
   for (const [index, binding] of bindings.entries()) {
     if (!binding || typeof binding !== "object" || Array.isArray(binding)) {
       errors.push({ code: "EVIDENCE_BINDING_INVALID", path: `evidence_bindings.bindings[${index}]` });
@@ -64,7 +80,39 @@ function verifyEvidenceRegistry(registry, bindingSet) {
 
     const { binding_hash: expectedHash, ...base } = binding;
     if (!expectedHash || expectedHash !== sha256(base)) errors.push({ code: "EVIDENCE_BINDING_HASH_MISMATCH", path: `evidence_bindings.bindings[${index}].binding_hash`, binding_id: bindingId || null });
-    if (!evidenceIds.has(String(binding.evidence_id || ""))) errors.push({ code: "EVIDENCE_BINDING_TARGET_MISSING", path: `evidence_bindings.bindings[${index}].evidence_id`, binding_id: bindingId || null });
+
+    const evidenceId = String(binding.evidence_id || "");
+    const target = entryMap.get(evidenceId);
+    if (!target) {
+      errors.push({ code: "EVIDENCE_BINDING_TARGET_MISSING", path: `evidence_bindings.bindings[${index}].evidence_id`, binding_id: bindingId || null });
+      continue;
+    }
+    if (!bindingsByEvidence.has(evidenceId)) bindingsByEvidence.set(evidenceId, []);
+    bindingsByEvidence.get(evidenceId).push(binding);
+
+    const expectedPairs = [
+      ["candidate_id", target.candidate_id ?? null],
+      ["canonical_record_id", target.source?.canonical_record_id ?? null],
+      ["source_role", target.source?.source_role ?? null],
+      ["source_family_id", target.source?.source_family_id ?? null],
+      ["authority_id", target.source?.authority_id ?? null],
+      ["url", target.source?.canonical_locator?.url ?? null]
+    ];
+    for (const [field, expected] of expectedPairs) {
+      const actual = binding[field] ?? null;
+      if (actual !== expected) errors.push({ code: "EVIDENCE_BINDING_SOURCE_MISMATCH", path: `evidence_bindings.bindings[${index}].${field}`, binding_id: bindingId || null, field });
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || !entry.evidence_id) continue;
+    const related = bindingsByEvidence.get(String(entry.evidence_id)) || [];
+    const expectedBindingIds = related.map((item) => item.binding_id);
+    const expectedQueryIds = related.map((item) => item.query_id).filter(Boolean);
+    const expectedClaimIds = related.map((item) => item.claim_id).filter(Boolean);
+    if (!sameStrings(entry.provenance?.binding_ids, expectedBindingIds)) errors.push({ code: "EVIDENCE_PROVENANCE_BINDINGS_MISMATCH", evidence_id: entry.evidence_id });
+    if (!sameStrings(entry.provenance?.query_ids, expectedQueryIds)) errors.push({ code: "EVIDENCE_PROVENANCE_QUERIES_MISMATCH", evidence_id: entry.evidence_id });
+    if (!sameStrings(entry.provenance?.claim_ids, expectedClaimIds)) errors.push({ code: "EVIDENCE_PROVENANCE_CLAIMS_MISMATCH", evidence_id: entry.evidence_id });
   }
 
   return {
@@ -72,6 +120,7 @@ function verifyEvidenceRegistry(registry, bindingSet) {
     errors,
     evidence_ids: evidenceIds,
     binding_ids: bindingIds,
+    entry_map: entryMap,
     counts: { evidence: evidenceIds.size, bindings: bindingIds.size, invalid: errors.length }
   };
 }
