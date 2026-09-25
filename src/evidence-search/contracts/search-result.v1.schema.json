@@ -29,6 +29,53 @@
           }
         }
       }
+    },
+    "evidenceRegistryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "evidence_id", "evidence_type", "candidate_id", "source", "content", "provenance", "integrity"],
+      "properties": {
+        "schema_version": { "const": "astera.evidence-registry-entry.v1" },
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "evidence_type": { "const": "EXTERNAL_RECORD" },
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "source": { "type": "object" },
+        "content": { "type": "object" },
+        "provenance": { "type": "object" },
+        "integrity": {
+          "type": "object",
+          "required": ["algorithm", "entry_hash"],
+          "properties": {
+            "algorithm": { "const": "sha256" },
+            "content_hash": { "type": ["string", "null"] },
+            "entry_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        }
+      }
+    },
+    "evidenceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "binding_id", "binding_hash", "request_id", "phase", "query_id", "relation", "evidence_id", "candidate_id", "provider_id"],
+      "properties": {
+        "schema_version": { "const": "astera.evidence-binding.v1" },
+        "binding_id": { "type": "string", "pattern": "^evb_[a-f0-9]{24}$" },
+        "binding_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "request_id": { "type": "string" },
+        "phase": { "enum": ["INITIAL", "REINFORCEMENT"] },
+        "query_id": { "type": "string", "minLength": 1 },
+        "claim_id": { "type": ["string", "null"] },
+        "query_role": { "type": ["string", "null"] },
+        "relation": { "const": "SUPPORTS_QUERY" },
+        "evidence_id": { "type": "string", "minLength": 1 },
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "canonical_record_id": { "type": "string" },
+        "provider_id": { "type": "string" },
+        "source_role": { "type": "string" },
+        "source_family_id": { "type": "string" },
+        "authority_id": { "type": "string" },
+        "url": { "type": ["string", "null"] }
+      }
     }
   },
   "required": [
@@ -60,6 +107,26 @@
     "query_plan_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "duration_ms": { "type": "integer", "minimum": 0 },
     "evidence": { "type": "array" },
+    "evidence_registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "entries", "registry_hash"],
+      "properties": {
+        "schema_version": { "const": "astera.evidence-registry.v1" },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/evidenceRegistryEntry" } },
+        "registry_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "evidence_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "bindings", "bindings_hash"],
+      "properties": {
+        "schema_version": { "const": "astera.evidence-bindings.v1" },
+        "bindings": { "type": "array", "items": { "$ref": "#/$defs/evidenceBinding" } },
+        "bindings_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "coverage": { "type": "object" },
     "quality": { "type": "object" },
     "query_execution": {

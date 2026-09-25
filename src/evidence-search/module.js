@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { SearchOrchestrator } = require('./core/search-orchestrator');
 const { calculateUsageReport } = require('./paid/usage-calculator');
+const { emptyEvidenceRegistry, emptyEvidenceBindings } = require('./evidence/registry');
 const { stableStringify } = require('../quality-completion-evaluator/utils/stable-json');
 
 const REQUEST_SCHEMA_VERSION = 'astera.evidence-search.module-request.v1';
@@ -17,7 +18,12 @@ function enforceAdoptedEvidenceBoundary(result) {
   if (result.status === 'FINAL_VALID') return result;
   const { result_hash: ignoredResultHash, ...withoutHash } = result;
   void ignoredResultHash;
-  const publishable = Object.freeze({ ...withoutHash, evidence: Object.freeze([]) });
+  const publishable = Object.freeze({
+    ...withoutHash,
+    evidence: Object.freeze([]),
+    evidence_registry: emptyEvidenceRegistry(),
+    evidence_bindings: emptyEvidenceBindings()
+  });
   return Object.freeze({ ...publishable, result_hash: sha256(publishable) });
 }
 
