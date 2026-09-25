@@ -21,6 +21,12 @@ class EvidenceSearchClient {
       options.timeoutMs || process.env.ASTERA_EVIDENCE_CLIENT_TIMEOUT_MS,
       8500
     );
+    this.service = String(
+      options.service
+      || process.env.ASTERA_EVIDENCE_CALLER_SERVICE
+      || 'astera-main'
+    ).trim();
+    if (!this.service) throw new Error('EvidenceSearchClient service is required');
     this.secret = loadInternalServiceSecret({
       secret: options.internalSecret,
       secretFile: options.internalSecretFile
@@ -53,7 +59,7 @@ class EvidenceSearchClient {
       const headers = createInternalHeaders({
         body,
         secret: this.secret,
-        service: 'astera-main',
+        service: this.service,
         callerId: context.callerId,
         requestId: context.requestId,
         ttlMs: Math.min(this.timeoutMs + 5000, 60_000)

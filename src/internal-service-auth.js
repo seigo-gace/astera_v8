@@ -132,12 +132,31 @@ function readHeader(headers, name) {
   return Array.isArray(value) ? value[0] : String(value || '');
 }
 
+function normalizeExpectedServices(expectedService, expectedServices) {
+  const source = expectedServices !== undefined ? expectedServices : expectedService;
+  const values = Array.isArray(source) ? source : [source];
+  const allowed = new Set();
+  for (const value of values) {
+    for (const part of String(value || '').split(',')) {
+      const normalized = part.trim();
+      if (normalized) allowed.add(normalized);
+    }
+  }
+  if (allowed.size === 0) {
+    const error = new Error('internal allowed service policy is empty');
+    error.code = 'INTERNAL_SERVICE_POLICY_INVALID';
+    throw error;
+  }
+  return allowed;
+}
+
 function verifyInternalRequest({
   headers,
   body,
   secret,
   nonceGuard,
   expectedService,
+  expectedServices,
   now = Date.now(),
   maximumClockSkewMs = 5_000
 }) {
@@ -157,7 +176,8 @@ function verifyInternalRequest({
     error.code = 'INTERNAL_AUTH_REQUIRED';
     throw error;
   }
-  if (fields.service !== expectedService) {
+  const allowedServices = normalizeExpectedServices(expectedService, expectedServices);
+  if (!allowedServices.has(fields.service)) {
     const error = new Error('internal service identity is not allowed');
     error.code = 'INTERNAL_SERVICE_FORBIDDEN';
     throw error;
@@ -210,6 +230,7 @@ module.exports = {
   createInternalHeaders,
   hasInternalServiceSecret,
   loadInternalServiceSecret,
+  normalizeExpectedServices,
   verifyInternalRequest,
   sha256,
   signEnvelope

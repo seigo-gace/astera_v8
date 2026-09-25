@@ -18,6 +18,14 @@ function positiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+function serviceList(value, fallback = ['astera-main']) {
+  const source = value == null ? fallback : value;
+  const values = Array.isArray(source) ? source : String(source).split(',');
+  const result = [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))];
+  if (result.length === 0) throw Object.assign(new Error('evidence API allowed service list is empty'), { code: 'INTERNAL_SERVICE_POLICY_INVALID' });
+  return Object.freeze(result);
+}
+
 function statusForError(error) {
   const code = String(error?.code || '');
   if (code === 'INTERNAL_AUTH_REQUIRED' || code === 'INTERNAL_SIGNATURE_INVALID') return 401;
@@ -51,6 +59,10 @@ class EvidenceSearchApiServer {
       secret: options.internalSecret,
       secretFile: options.internalSecretFile
     });
+    this.allowedServices = serviceList(
+      options.allowedServices ?? process.env.ASTERA_EVIDENCE_ALLOWED_SERVICES,
+      ['astera-main']
+    );
     this.nonceGuard = options.nonceGuard || new ReplayNonceGuard();
     this.module = options.module || createEvidenceSearchModule(options.moduleOptions || {});
     this.jobManager = options.jobManager || null;
@@ -67,6 +79,7 @@ class EvidenceSearchApiServer {
           text: `${req.method} ${String(req.url || '').split('?')[0]} ${res.statusCode}`,
           payload: {
             request_id: req.verifiedRequestId || null,
+            service: req.verifiedService || null,
             job_id: req.evidenceJobId || null,
             status: res.statusCode,
             duration_ms: Date.now() - startedAt
@@ -194,8 +207,9 @@ class EvidenceSearchApiServer {
         body: rawBody,
         secret: this.secret,
         nonceGuard: this.nonceGuard,
-        expectedService: 'astera-main'
+        expectedServices: this.allowedServices
       });
+      req.verifiedService = identity.service;
       req.verifiedCallerId = identity.caller_id;
       req.verifiedRequestId = identity.request_id;
 
@@ -231,6 +245,7 @@ class EvidenceSearchApiServer {
           {
             request_id: identity.request_id,
             caller_id: identity.caller_id,
+            service: identity.service,
             body_sha256: sha256(rawBody),
             domain_lens: payload.domain_lens || null,
             free_projection: payload.search?.free_projection !== false,
@@ -274,6 +289,7 @@ class EvidenceSearchApiServer {
         text: `Evidence search returned ${result.status}`,
         payload: {
           request_id: identity.request_id,
+          service: identity.service,
           job_id: completedJob?.job_id || null,
           status: result.status,
           evidence_count: result.evidence.length,
@@ -311,6 +327,7 @@ class EvidenceSearchApiServer {
         text: `${req.method} ${String(req.url || '').split('?')[0]} failed`,
         payload: {
           request_id: req.verifiedRequestId || null,
+          service: req.verifiedService || null,
           job_id: req.evidenceJobId || null,
           status,
           error_code: error.code || 'INTERNAL_ERROR'
