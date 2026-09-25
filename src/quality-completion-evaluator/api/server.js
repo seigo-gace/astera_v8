@@ -6,11 +6,17 @@ const Logger = require('../../logger');
 const RateLimiter = require('../../guard/rate-limiter');
 const { parseJsonStrict, maskSecrets } = require('../../safe-json');
 const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('../../auth/skill-api-key');
-const { evaluate } = require('..');
+const { evaluate, GENERIC_REQUEST_SCHEMA_VERSION } = require('..');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
 const DEFAULT_EVALUATE_RATE_LIMIT_PER_MINUTE = 60;
+const EVALUATE_ROUTES = Object.freeze({
+  '/v1/evaluate': Object.freeze({ version: 'v1', skill: false }),
+  '/v1/skill/evaluate': Object.freeze({ version: 'v1', skill: true }),
+  '/v2/evaluate': Object.freeze({ version: 'v2', skill: false }),
+  '/v2/skill/evaluate': Object.freeze({ version: 'v2', skill: true })
+});
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -166,30 +172,46 @@ class EvaluatorApiServer {
           version: pkg.version,
           public_endpoint: '/v1/evaluate',
           skill_endpoint: '/v1/skill/evaluate',
+          legacy_public_endpoint: '/v1/evaluate',
+          generic_public_endpoint: '/v2/evaluate',
+          legacy_skill_endpoint: '/v1/skill/evaluate',
+          generic_skill_endpoint: '/v2/skill/evaluate',
           skill_api_enabled: isSkillApiConfigured(),
           publication_enabled: false,
           ai_used: false,
           time: new Date().toISOString()
         });
       }
-      if (req.method === 'POST' && (url.pathname === '/v1/evaluate' || url.pathname === '/v1/skill/evaluate')) {
-        const isSkillRoute = url.pathname === '/v1/skill/evaluate';
+
+      const route = EVALUATE_ROUTES[url.pathname];
+      if (req.method === 'POST' && route) {
+        const isSkillRoute = route.skill;
         if (isSkillRoute && !isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
         const caller = isSkillRoute
           ? authenticateSkillApiKey(req.headers['x-api-key'])
           : authenticateEvaluateRequest(req, this.host);
         if (!caller) return this._json(req, res, 401, { error: 'unauthorized' });
         if (!isSkillRoute) {
-          const rate = this.limiter.check({ key: `evaluate:${caller.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
+          const rate = this.limiter.check({ key: `evaluate:${route.version}:${caller.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
           if (!rate.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate });
         }
-        const result = await evaluate(await this._readJsonObject(req));
+
+        const body = await this._readJsonObject(req);
+        if (route.version === 'v2' && body.schema_version !== GENERIC_REQUEST_SCHEMA_VERSION) {
+          return this._json(req, res, 400, { error: 'evaluation_schema_route_mismatch', expected: GENERIC_REQUEST_SCHEMA_VERSION });
+        }
+        if (route.version === 'v1' && body.schema_version === GENERIC_REQUEST_SCHEMA_VERSION) {
+          return this._json(req, res, 400, { error: 'evaluation_schema_route_mismatch', expected: 'legacy_v1_contract' });
+        }
+
+        const result = await evaluate(body);
         this.logger.write({
           callerId: caller.id,
           type: 'evaluation_completed',
           text: `Evaluation engine returned ${result.status}`,
           payload: {
             request_id: req.requestId,
+            api_version: route.version,
             access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key',
             candidate_id: result.candidate_id || null,
             subject_id: result.subject_id || null,
