@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evaluation.request.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","evaluation_id","subject","profile_id","metrics","evidence_registry","evidence_bindings"],
+  "properties": {
+    "schema_version": {"const":"astera.evaluation.request.v2"},
+    "evaluation_id": {"type":"string","minLength":1},
+    "project_id": {"type":["string","null"]},
+    "task_id": {"type":["string","null"]},
+    "run_id": {"type":["string","null"]},
+    "trace_id": {"type":["string","null"]},
+    "subject": {"type":"object","additionalProperties":true,"required":["subject_id","subject_type"],"properties":{"subject_id":{"type":"string","minLength":1},"subject_type":{"type":"string","minLength":1},"subject_version":{}}},
+    "profile_id": {"type":"string","minLength":1},
+    "metrics": {"type":"array","items":{"type":"object","additionalProperties":true,"required":["metric_id","value"],"properties":{"metric_id":{"type":"string","minLength":1},"value":{"type":["number","boolean"]},"unit":{"type":["string","null"]},"evidence_refs":{"type":"array","items":{"type":"string","minLength":1}}}}},
+    "evidence_registry": {"type":"object"},
+    "evidence_bindings": {"type":"object"},
+    "metadata": {"type":"object"}
+  }
+}

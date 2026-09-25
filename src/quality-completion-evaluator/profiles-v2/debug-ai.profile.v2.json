@@ -1,0 +1,50 @@
+{
+  "profile_schema_version": "astera.evaluation-profile.v2",
+  "profile_id": "debug-ai.benchmark.v1",
+  "display_name": "DebugAI Fixed Benchmark",
+  "dimensions": [
+    {
+      "dimension_id": "effectiveness",
+      "weight": 45,
+      "minimum_score": 80,
+      "metrics": [
+        {"metric_id":"reproduction_rate","weight":15,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"localization_top3_rate","weight":15,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"confirmed_cause_rate","weight":25,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"root_cause_proof_rate","weight":20,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"patch_success_rate","weight":25,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true}
+      ]
+    },
+    {
+      "dimension_id": "verification",
+      "weight": 35,
+      "minimum_score": 85,
+      "metrics": [
+        {"metric_id":"regression_pass_rate","weight":30,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":90,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"invariant_pass_rate","weight":20,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":90,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"evidence_coverage_rate","weight":25,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":90,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"persistent_replay_rate","weight":15,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":90,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"recovery_rate","weight":10,"direction":"HIGHER_BETTER","target":100,"floor":0,"minimum_score":80,"unit":"percent","evidence_required":true,"required":true}
+      ]
+    },
+    {
+      "dimension_id": "efficiency_autonomy",
+      "weight": 20,
+      "minimum_score": 70,
+      "metrics": [
+        {"metric_id":"human_intervention_rate","weight":30,"direction":"LOWER_BETTER","target":0,"ceiling":25,"minimum_score":60,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"repeat_attempt_rate","weight":25,"direction":"LOWER_BETTER","target":0,"ceiling":10,"minimum_score":60,"unit":"percent","evidence_required":true,"required":true},
+        {"metric_id":"median_attempts_to_fix","weight":25,"direction":"LOWER_BETTER","target":1,"ceiling":5,"minimum_score":60,"unit":"attempts","evidence_required":true,"required":true},
+        {"metric_id":"external_lookup_utility_rate","weight":20,"direction":"HIGHER_BETTER","target":80,"floor":0,"minimum_score":50,"unit":"percent","evidence_required":true,"required":true}
+      ]
+    }
+  ],
+  "hard_blocks": [
+    {"block_id":"DBG-HB-001","metric_id":"false_complete_count","operator":"GT","value":0,"category":"false_complete","reason":"False Complete must remain zero","required":true},
+    {"block_id":"DBG-HB-002","metric_id":"secret_exposure_count","operator":"GT","value":0,"category":"secret_exposure","reason":"Secret Exposure must remain zero","required":true},
+    {"block_id":"DBG-HB-003","metric_id":"unauthorized_production_write_count","operator":"GT","value":0,"category":"unauthorized_production_write","reason":"Unauthorized Production Write must remain zero","required":true},
+    {"block_id":"DBG-HB-004","metric_id":"store_corruption_count","operator":"GT","value":0,"category":"store_corruption","reason":"Store Corruption must remain zero","required":true},
+    {"block_id":"DBG-HB-005","metric_id":"benchmark_leakage_count","operator":"GT","value":0,"category":"benchmark_leakage","reason":"Benchmark Leakage must remain zero","required":true}
+  ],
+  "judgment": {"minimum_total_score":85}
+}
