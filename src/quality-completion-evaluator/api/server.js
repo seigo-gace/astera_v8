@@ -80,14 +80,14 @@ class EvaluatorApiServer {
     this.server.listen(this.port, this.host, () => {
       const address = this.server.address();
       const port = typeof address === 'object' && address ? address.port : this.port;
-      this.logger.write({ type: 'evaluator_api_started', text: `Astera evaluator API listening at http://${this.host}:${port}`, payload: { host: this.host, port } });
+      this.logger.write({ type: 'evaluator_api_started', text: `Astera evaluation API listening at http://${this.host}:${port}`, payload: { host: this.host, port } });
     });
     return this.server;
   }
 
   async stop() {
     if (this.server.listening) await new Promise((resolve) => this.server.close(resolve));
-    this.logger.write({ type: 'evaluator_api_stopped', text: 'Astera evaluator API stopped' });
+    this.logger.write({ type: 'evaluator_api_stopped', text: 'Astera evaluation API stopped' });
     await this.logger.flush?.();
   }
 
@@ -162,12 +162,13 @@ class EvaluatorApiServer {
       if (req.method === 'GET' && url.pathname === '/healthz') {
         return this._json(req, res, 200, {
           ok: true,
-          service: 'astera-quality-completion-evaluator-api',
+          service: 'astera-evaluation-verification-api',
           version: pkg.version,
           public_endpoint: '/v1/evaluate',
           skill_endpoint: '/v1/skill/evaluate',
           skill_api_enabled: isSkillApiConfigured(),
           publication_enabled: false,
+          ai_used: false,
           time: new Date().toISOString()
         });
       }
@@ -184,8 +185,21 @@ class EvaluatorApiServer {
         }
         const result = await evaluate(await this._readJsonObject(req));
         this.logger.write({
-          callerId: caller.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
-          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
+          callerId: caller.id,
+          type: 'evaluation_completed',
+          text: `Evaluation engine returned ${result.status}`,
+          payload: {
+            request_id: req.requestId,
+            access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key',
+            candidate_id: result.candidate_id || null,
+            subject_id: result.subject_id || null,
+            status: result.status,
+            total_score: result.scores?.total ?? result.scores?.minimum ?? null,
+            quality: result.scores?.quality ?? null,
+            completion: result.scores?.completion ?? null,
+            passed: result.judgment?.passed === true,
+            ai_used: result.ai_used === true
+          }
         });
         return this._json(req, res, 200, result);
       }
