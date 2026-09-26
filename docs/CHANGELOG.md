@@ -1,58 +1,87 @@
-# Astera v8 Changelog
+# Astera v8 — Changelog
 
-## 2026-08-03 — Documentation responsibility reset
+## 2026-09-26 — Three-module architecture documentation reconciliation
 
-- READMEをPrivate development repository向けに全面再構成
-- Astera v8を非AI Runtimeとして全公開文書へ統一
-- AI専用ではなく、人間、Application、API、MCP、文書、検索結果、他AI出力を扱えることを明記
-- Core、Independent Evaluator、External System、Legacy compatibilityを分離
-- Account、認証、Square、Credit、財務DBをAstera App / Commerce責務へ統一
-- Tenant、Skill Key、Stripe、Storeを現行Code上のMigration Debtとして明記
-- Human Reader / Dialectic資料から旧KAGURA製品説明と未実装LLM多重競争表現を除去
-- API ReferenceをCore / Evaluator / Legacy Endpointへ再分類
-- 当時は Domain Lens 事後Blocking Rule と Registry の整合を監査対象として記録（後続で canonical 外として QCE から削除。現況は `docs/ARCHITECTURE.md`）
-- Fact Workerが外部検索・一次Source検証を行わないことを明記
-- Current Overlayが最新情報を取得しないことを明記
-- Human Readerが固定Signal処理であり心理診断ではないことを明記
-- Quick Start、User Guide、FAQ、Glossary、Limitations、Security、Deployment、Production Checklist、Troubleshootingを同期
-- Repository内Public文書をInternal Draft / Referenceへ分類
-- 2026-08-03 documentation audit memo（当時追加。現行Treeからは除去済み。内容は git history を参照）
-- `.env.example`のTenant／Skill Key／Stripe変数を互換性維持のMigration Debtとして注記
-- Notion議事録、README参照、Docs Module、実装正本、親Project、GitHub反映ページ、公開本文正本を同期
-- Notion全Code正本をHistorical Snapshot／再生成必要へ訂正
-- Customer AI KBのAstera定義、API入口、API Key、Rate Limit、Response、SQLite、Key Rotation、決済責務を更新
-- Documentation AuditとNotion同期を作業完了条件へ追加
+This documentation pass was performed against the current repository code and the Generic Evaluator v2 candidate branch.
 
-## Validation status for this reset
+### Canonical documentation changes
 
-- GitHub File反映: 確認済み
-- Release Manifest: 監査File接続確認済み
-- Latest checked Commit: `d3d26162ddfdfa61d1df2ffa2f7772d5fef7a746`
-- GitHub Status Check: 成功Evidence未取得
-- Local Test / Smoke / Docker: 未実行
-- 機能Code変更: なし
-- Responsibility Migration: 未完了
-- QCE Defect修正: 未実施
+- Root README refocused on the three core modules instead of mixing runtime internals, product concerns and deployment details.
+- `docs/ARCHITECTURE.md` rebuilt around:
+  1. Judgment Material Generation
+  2. Evidence Search
+  3. Evaluation / Verification
+- Added module-specific references:
+  - `docs/modules/JUDGMENT_MATERIAL_GENERATION.md`
+  - `docs/modules/EVIDENCE_SEARCH.md`
+  - `docs/modules/EVALUATION_VERIFICATION.md`
+- Added `docs/MODULE_MAP.md` to map active files to module/shared/legacy responsibilities.
+- Rebuilt API, Quick Start, deployment, security, troubleshooting and production-checklist documents against current code.
 
-## Historical implementation 1.1.1
+### Corrected stale concepts
 
-現行Repositoryには次の実装が存在します。
+- Main8 `07` corrected from old recommendation wording to **根拠成立状態 / Evidence Status**.
+- Compare documented as material-only: no selected candidate, ranking or automatic recommendation.
+- Root Docker Compose documented as the actual three-service composition on 7373 / 7374 / 7376.
+- Evidence Search documented as an explicit retrieval/adoption module used by Core.
+- Generic v2 Evaluation / Verification separated from Legacy v1 QCE compatibility.
+- Generic v2 current profile coverage limited to actually confirmed v2 profiles rather than legacy profile names.
+- Public `/process` request documentation corrected: caller-provided `llm` object is not part of the current public body allowlist.
+- Domain Lens documentation split between current Judgment Material routing and Legacy evaluator-v1 behavior; Legacy Lens tests are not treated as Generic-v2 proof.
 
-- 38 Domain Lens / 5 Overlay
-- Fact / Risk / Multi / Inquiry / Compare
-- Human Reader / Dialectic
-- 01〜08 Judgment Material
-- Optional LLM Adapter
-- Quality Completion Evaluator
-- TGserver logging / outbox
-- Legacy Tenant / Rate Limit / Stripe / Store
+### Newly documented current inconsistency
 
-Historical implementationの存在は、完成責務または現在の公開製品Contractを意味しません。
+Current Evidence Search production startup injects `evaluateInformationQuality()` **in-process**.
+
+However:
+
+- `src/evidence-search/api/information-quality-client.js` still targets an internal 7374 Information Quality HTTP route.
+- `src/evidence-search/architecture.v1.json` still describes the HTTP-oriented evaluator call.
+- Current Evaluator API Server does not expose that internal Information Quality route.
+- Current Evidence Search startup logging still contains an `EVALUATOR_API_7374` label even though the active evaluator mode is in-process.
+
+This is recorded as an implementation/document-model inconsistency in `docs/LIMITATIONS.md`; documentation does not pretend the inactive HTTP path is operational.
+
+### Scope
+
+This pass changes documentation only. Runtime/source behavior is not silently altered to make documents appear consistent.
+
+---
+
+## 2026-08-03 — Documentation responsibility reset (historical)
+
+The following records describe the 2026-08-03 repository/document state and are retained as history. They are **not current architecture authority**.
+
+- README was reorganized for a private development repository.
+- Astera v8 was documented as a non-AI runtime.
+- Core, independent evaluator, external systems and legacy compatibility were separated according to the design at that time.
+- Human Reader / Dialectic materials were cleaned of older product wording.
+- API Reference and supporting documents were synchronized to the implementation understood at that time.
+- Domain Lens / QCE post-evidence blocking was under migration/audit and was subsequently changed.
+- Documentation audit rules were introduced to prevent unverified code/test claims.
+
+Historical statements from this period such as “Fact Worker does not perform external search”, old QCE terminology, old Main8 07 wording, or old Compose behavior must not override the current code and `docs/ARCHITECTURE.md`.
+
+### Historical validation status
+
+At that documentation reset:
+
+```text
+Latest checked Commit: d3d26162ddfdfa61d1df2ffa2f7772d5fef7a746
+GitHub Status Check: success evidence not acquired
+Local Test / Smoke / Docker: not run
+Functional code changes in that pass: none
+```
+
+These results are historical and must not be reused as current-SHA verification.
+
+---
 
 ## Change rules
 
-- Names、Scope、Core Purposeを無断変更しない
-- Implemented / External / Legacy / Futureを分離する
-- Code変更時はTest、Docs、Notion正本を同期する
-- 未実行・未検証を完成扱いしない
-- 料金・Credit・法務をRuntime文書へ重複保持しない
+- Do not change module purpose or final-decision boundary silently.
+- Separate Current / Legacy / Historical / Future behavior explicitly.
+- Code/Contract changes require related Tests and Documents to be reconciled in the same work unit.
+- Do not call unexecuted or old-SHA verification current PASS.
+- Do not duplicate detailed implementation truth across many documents when a canonical module/API document already owns it.
+- When source and documentation disagree, investigate the active call path before changing documentation to fit an intended design.
