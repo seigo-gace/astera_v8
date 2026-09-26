@@ -14,23 +14,24 @@ Always identify the failure domain before changing code/config.
 1. Exact commit / branch
 2. Which of the three services
 3. Container/process state
-4. Service /healthz
-5. Endpoint + HTTP status + request ID
-6. Contract/schema/auth
-7. External dependency/provider/parser
-8. Test/workflow evidence on the same SHA
-9. Known limitation/inconsistency
+4. Actual listen address / port
+5. Service /healthz
+6. Endpoint + HTTP status + request ID
+7. Contract/schema/auth
+8. External dependency/provider/parser
+9. Test/workflow evidence on the same SHA
+10. Known limitation/inconsistency
 ```
 
 ---
 
 ## 2. Service classification
 
-| Service | Default | Responsibility |
-|---|---|---|
-| Judgment Material Generation | `127.0.0.1:7373` | `/process`, Main8 |
-| Evaluation / Verification | `127.0.0.1:7374` | `/v2/evaluate`, legacy `/v1/evaluate` |
-| Evidence Search | `127.0.0.1:7376` | `/internal/v1/evidence/search` |
+| Service | Code default | Current root Compose | Responsibility |
+|---|---|---|---|
+| Judgment Material Generation | `127.0.0.1:7373` | `127.0.0.1:${ASTERA_PORT}` | `/process`, Main8 |
+| Evaluation / Verification | `127.0.0.1:7374` | **`0.0.0.0:7374`** | `/v2/evaluate`, legacy `/v1/evaluate` |
+| Evidence Search | `127.0.0.1:7376` | `127.0.0.1:7376` | `/internal/v1/evidence/search` |
 
 Support boundaries such as Japanese Parser, TGserver, LLM Provider and Cloudflare are diagnosed separately.
 
@@ -105,15 +106,23 @@ Startup can fail before HTTP listen if required provider/catalog/binding checks 
 
 ---
 
-## 6. Evaluator / 7374 unavailable
+## 6. Evaluator / 7374 unavailable or unexpectedly reachable
 
-Check:
+Check local health:
 
 ```bash
 curl -i http://127.0.0.1:7374/healthz
 ```
 
-Current root Compose already defines the Evaluator service.
+Current root Compose already defines the Evaluator service and overrides its host to:
+
+```text
+ASTERA_EVALUATOR_API_HOST=0.0.0.0
+ASTERA_EVALUATOR_API_PORT=7374
+network_mode=host
+```
+
+Therefore also inspect the actual host listen state and firewall/ingress when diagnosing exposure. A successful `127.0.0.1` health call does **not** prove the service is loopback-only.
 
 For short host development only:
 
@@ -346,7 +355,7 @@ Preserve the first meaningful failure. Do not loop retries until a flaky pass ap
 Include:
 
 - exact Commit SHA
-- service / port
+- service / port / actual bind
 - Node/Docker version as relevant
 - command
 - endpoint / status
@@ -357,5 +366,6 @@ Include:
 - expected vs actual
 - relevant Contract/Profile
 - same-SHA Test/Workflow state
+- firewall/ingress result when reachability is involved
 
 Never include secret values.
