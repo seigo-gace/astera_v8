@@ -40,6 +40,19 @@ test('initial Fast Path returns usable Main8 without Parser, Evidence Search, or
   assert.match(out.material.text, /SEARCH_REQUIRED_BOTH_ROUTES/);
 });
 
+test('initial Fast Path requires Evidence when the input contains externally verifiable claims even without explicit evidence cue words', () => {
+  const out = buildInitialJudgmentMaterial({
+    question: '- Colibri: 744Bモデルを25GB RAMで動かせる。\n- FreeToken: 35Bモデルを8GB GPUで動かせる。',
+    language: 'ja',
+    output_language: 'ja'
+  });
+
+  assert.equal(out.result.evidence_required, true);
+  assert.equal(out.result.evidence_route_policy, 'BOTH_ROUTES_REQUIRED');
+  assert.equal(out.material.sections['07_evidence_status'].state, 'SEARCH_REQUIRED');
+  assert.match(out.material.text, /SEARCH_REQUIRED_BOTH_ROUTES/);
+});
+
 test('initial Fast Path exposes Domain Lens routing failure instead of silently collapsing to null', () => {
   const resolved = resolveInitialDomainLens('Node.jsの仕様を確認する', '', () => {
     const error = new Error('synthetic router failure');
