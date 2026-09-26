@@ -1,67 +1,230 @@
-# ASTERAへの配置・デプロイ手順
+# Astera Evaluation / Verification — Deployment Reference
 
-## 1\. 配置前検証
+Updated: 2026-09-26
 
-【サーバー側・Ubuntu Bash】
+> This document describes the current evaluator runtime in `astera_v8`.  
+> The historical directory name `quality-completion-evaluator` and Legacy v1 compatibility do not redefine the current Generic v2 responsibility.
 
-cd /path/to/astera_v8/src/quality-completion-evaluator
+Canonical references:
 
-./scripts-verify.sh
+- Repository architecture: [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
+- Evaluator module detail: [`../../docs/modules/EVALUATION_VERIFICATION.md`](../../docs/modules/EVALUATION_VERIFICATION.md)
+- HTTP contract: [`../../docs/API_REFERENCE.md`](../../docs/API_REFERENCE.md)
+- VPS deployment: [`../../docs/DEPLOYMENT_VPS.md`](../../docs/DEPLOYMENT_VPS.md)
+- Known limitations: [`../../docs/LIMITATIONS.md`](../../docs/LIMITATIONS.md)
 
-正常表示:
+---
 
-Verification passed
+## 1. Current identity
 
-## 2\. ASTERAへ安全に配置
+```text
+module_id       = evaluation-verification-engine
+module_version  = 2.0.0
+generic schema  = astera.evaluation.request.v2
+generic route   = POST /v2/evaluate
+legacy route    = POST /v1/evaluate
+ai_used         = false
+```
 
-【サーバー側・Ubuntu Bash】
+Generic v2 is the current generic Evaluation / Verification responsibility. Legacy v1 remains for compatibility.
 
-./scripts-install.sh --astera-root /path/to/ASTERA
+---
 
-既存Moduleがある場合は処理を停止します。内容を確認後、入替時だけ次を使用します。
+## 2. Canonical production deployment
 
-./scripts-install.sh --astera-root /path/to/ASTERA --replace
+The evaluator is already part of the repository root `docker-compose.yml`.
 
-`--replace`時は旧Moduleを次の形式で退避します。
+Canonical production deployment is performed from the repository root, not by copying this directory into another ASTERA tree.
 
-quality-completion-evaluator.backup-YYYYMMDD-HHMMSS
+```bash
+cd /home/admin1/projects/astera_v8
+docker compose config
+docker compose up -d --build
+docker compose ps
+```
 
-## 3\. ASTERA本体からImport
+Current root Compose service:
 
-const { evaluate } = require("./src/quality-completion-evaluator");
+```text
+astera-v8-evaluator
+```
 
-const result = await evaluate(packet);
+Current root Compose environment includes:
 
-## 4\. 本番反映前Gate
+```text
+ASTERA_EVALUATOR_API_HOST=0.0.0.0
+ASTERA_EVALUATOR_API_PORT=7374
+network_mode=host
+```
 
-次をすべて確認します。
+**Important:** this current Compose bind is wider than the evaluator code default `127.0.0.1`. Verify firewall/ingress exposure explicitly. See `docs/LIMITATIONS.md`.
 
-scripts-verify.sh 合格
+---
 
-Unit Test 合格
+## 3. Health
 
-Boundary Test 合格
+Local health check:
 
-Integration Test 合格
+```bash
+curl -fsS http://127.0.0.1:7374/healthz
+```
 
-Regression Test 合格
+A successful local health call proves process/API health only. It does **not** prove loopback-only network exposure.
 
-Sampleが PASSED
+---
 
-95未満が REVISION_REQUIRED
+## 4. Source verification before deployment
 
-Blockingありで BLOCKED
+From the repository root:
 
-Hash不一致が INVALID_INPUT
+```bash
+npm run test:evaluator
+npm run test:evaluator-api
+npm run verify
+```
 
-同一Recordが重複登録されない
+When the deployment candidate also depends on Evidence Search mode, run the applicable Evidence Search verification/live gates for the same candidate SHA.
 
-## 6\. Docker単体検証
+Rules:
 
-内部Moduleとして組み込む前の隔離確認用です。
+```text
+TEST_SOURCE_EXISTS ≠ PASS
+OLD_SHA_PASS ≠ CURRENT_SHA_PASS
+NOT_RUN ≠ PASS
+```
 
-docker build \-t astera-quality-completion-evaluator:1.0.0 .
+---
 
-node -e 'const{baseDesignRequest}=require("./tests/fixtures/factory");process.stdout.write(`${JSON.stringify(baseDesignRequest())}\n`);' | docker run --rm \-i astera-quality-completion-evaluator:1.0.0
+## 5. Generic v2 request rules
 
-Docker版はSTDIN評価専用です。ASTERA本体では `src/quality-completion-evaluator` に配置し、既存Dockerfileの `COPY src ./src` で本番コンテナへ含めます。  
+Generic v2 requires:
+
+```text
+schema_version = astera.evaluation.request.v2
+evaluation_id
+evaluation_time
+subject
+profile_id
+measurements
+```
+
+and exactly one Evidence mode:
+
+```text
+A. evidence_search
+
+or
+
+B. evidence_registry + evidence_bindings
+```
+
+Do not use a simplified Legacy v1 sample as proof that Generic v2 works.
+
+Current confirmed v2 Profile:
+
+```text
+generic.measurement.v1
+```
+
+---
+
+## 6. Generic v2 result states
+
+Completed judgments:
+
+```text
+PASSED
+REVISION_REQUIRED
+BLOCKED
+```
+
+Evaluation/input failures:
+
+```text
+INVALID_INPUT
+EVALUATION_FAILED
+```
+
+There is **no fixed universal 95-point rule** for Generic v2. Thresholds come from the selected v2 Profile.
+
+`PASSED` does not automatically authorize:
+
+- merge
+- deployment
+- production change
+- publication
+- KB storage
+- payment/credit action
+
+---
+
+## 7. Container image
+
+Current evaluator Dockerfile:
+
+```text
+src/quality-completion-evaluator/Dockerfile
+```
+
+It starts:
+
+```text
+node src/quality-completion-evaluator/api/start.js
+```
+
+The Dockerfile builds from the repository root context and copies the root `package.json` and `src/` tree. It does not implement the historical STDIN-only evaluator container described by older documentation.
+
+---
+
+## 8. Legacy standalone Compose example
+
+The repository also contains:
+
+```text
+src/quality-completion-evaluator/docker-compose.example.yml
+```
+
+That file still uses historical naming/version/config such as:
+
+```text
+astera-quality-completion-evaluator:1.0.0
+ASTERA_DB
+ASTERA_KEY_PEPPER
+```
+
+It is **not the canonical production deployment definition**. The root `docker-compose.yml` is the current repository production composition.
+
+Do not copy the standalone example into production without first reconciling it with current Generic v2/runtime configuration.
+
+---
+
+## 9. Historical install scripts
+
+If historical `scripts-install.sh` / local packaging helpers remain in this directory, they are not the canonical deployment route for the current repository runtime.
+
+Do not:
+
+```text
+copy the evaluator manually into another ASTERA tree
+replace a running module from this directory without repository-level review
+use an old 1.0.0/95-point procedure as Generic v2 completion proof
+```
+
+Current deployment authority is the repository root Compose and exact candidate SHA.
+
+---
+
+## 10. Production gate
+
+Before declaring evaluator deployment complete:
+
+1. Record exact candidate SHA.
+2. Run current-SHA evaluator/source gates.
+3. Build/start through canonical root Compose.
+4. Verify `GET /healthz`.
+5. Verify a valid Generic v2 fixture on `/v2/evaluate`.
+6. Verify required Evidence mode(s).
+7. Verify Hard Block / Revision / Passed behavior.
+8. Verify actual 7374 listen address and firewall/ingress exposure.
+9. Review current known inconsistencies in `docs/LIMITATIONS.md`.
+10. Do not treat evaluator `PASSED` as deployment authorization by itself.
