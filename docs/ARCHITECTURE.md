@@ -4,7 +4,7 @@ Updated: 2026-09-26
 Repository: `seigo-gace/astera_v8`
 
 > This document is the canonical repository architecture reference for Astera v8.
-> It defines current responsibilities, module boundaries, contracts, and prohibited coupling. Runtime completion must be proven separately on one identical commit SHA.
+> It defines the completed Product Contract: responsibilities, module boundaries, contracts, prohibited coupling and release proof principles.
 
 ---
 
@@ -100,7 +100,12 @@ Convert an input into deterministic Task / Claim / Evidence Requirement and prod
 - Language / locale handling
 - Japanese Parser orchestration when required
 - Deterministic Task decomposition
-- Task dependency / execution-wave validation
+- Task dependency validation
+- Execution-wave planning
+- Bounded parallel Task execution
+- Dependency failure propagation
+- Queue admission / overload rejection
+- Request / Task cancellation propagation
 - Requirement / constraint / prohibition / preserve / condition / exception carry-forward
 - Domain Lens routing (`G01`–`G38`) and overlays
 - Claim extraction and canonical normalization
@@ -128,21 +133,50 @@ Convert an input into deterministic Task / Claim / Evidence Requirement and prod
 
 ---
 
-## 5. Module 2 — Evidence Search
+## 5. Deterministic Task execution
+
+Task decomposition is not merely a list split. Multi-Task requests are executed as a validated dependency graph.
+
+```text
+Task Graph
+→ dependency validation
+→ execution waves
+→ bounded parallel execution per wave
+→ dependency failure / skip propagation
+→ cancellation handling
+→ ordered projection
+```
+
+Invariants:
+
+- a dependent Task never runs before its prerequisite
+- only independent Tasks in the same Wave may execute concurrently
+- concurrency is bounded by policy
+- queue capacity is bounded
+- overload is rejected explicitly rather than growing without limit
+- failed/skipped prerequisites prevent dependent execution
+- cancellation remains a distinct runtime state
+- fulfillment / rejection / skip / timing remain traceable
+
+This execution control is part of Judgment Material Generation runtime correctness, not a fourth module.
+
+---
+
+## 6. Module 2 — Evidence Search
 
 Detailed reference: [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
 
-### 5.1 Purpose
+### 6.1 Purpose
 
 Retrieve external evidence for a Claim and return only evidence that satisfies the module's deterministic adoption rules, otherwise return a truthful rejected / insufficient / unresolved state.
 
-### 5.2 Search classes
+### 6.2 Search classes
 
-The request contract supports free projection/current/general-web search flags. At the architecture level these are grouped into two complementary acquisition routes:
+The request contract supports projection/current/general-web search flags. At the architecture level these are grouped into two complementary acquisition routes:
 
 ```text
-Route A — Specialist / authoritative
-Route B — General / current
+Route A — Specialist / Authoritative
+Route B — General / Current
 ```
 
 Route A provides domain authority and specialist records.
@@ -150,7 +184,7 @@ Route B provides current and generally searchable information.
 
 They are complementary, not duplicate copies of the same search.
 
-### 5.3 Responsibilities
+### 6.3 Responsibilities
 
 - Query Plan compilation from Claim/search requirements
 - Provider Registry / selection
@@ -163,34 +197,39 @@ They are complementary, not duplicate copies of the same search.
 - Freshness measurement
 - Coverage measurement
 - Information Quality evaluation
-- One reinforcement phase when required by the Information Quality result
+- Reinforcement phase when required by Information Quality
 - Final evidence adoption state
 - Durable recovery / idempotency
 - Internal signed HTTP boundary
-- Isolated future usage calculation without payment execution
+- Isolated usage calculation without payment execution
 
-### 5.4 Evidence adoption boundary
+### 6.4 Evidence adoption boundary
 
-A result that is not `FINAL_VALID` must not expose candidates as adopted evidence at the Module boundary.
+A retrieved Candidate is not automatically Evidence.
+
+A result that does not satisfy the final adoption contract must not expose candidates as adopted evidence at the Module boundary.
 
 No evidence must never be silently promoted to confirmed fact.
 
-### 5.5 Current Information Quality runtime truth
+### 6.5 Information Quality contract
 
-Current production startup injects:
+Evidence Search candidate adoption uses a dedicated deterministic Information Quality contract.
 
 ```text
-evaluateInformationQuality()
-mode = IN_PROCESS
+Candidate set
+→ condition/provenance/source-role measurements
+→ conflict/freshness/coverage measurements
+→ Information Quality INITIAL
+→ optional reinforcement
+→ Information Quality FINAL
+→ Adopt / Reject
 ```
 
-from the Evaluation / Verification package into the Evidence Search orchestrator.
+This is an **Evidence Search quality sub-capability**, not Generic Evaluation v2.
 
-This is an **Information Quality sub-capability**, not Generic Evaluation v2.
+The transport used to execute this sub-capability is an implementation detail and must not change the responsibility boundary.
 
-The current active search startup path does not depend on `POST /v2/evaluate` to perform candidate adoption.
-
-### 5.6 Prohibited responsibilities
+### 6.6 Prohibited responsibilities
 
 - Main8 generation
 - Final decision
@@ -198,19 +237,19 @@ The current active search startup path does not depend on `POST /v2/evaluate` to
 - Generic Metric / Dimension / Judgment ownership
 - Paid provider execution
 - Payment / credit / refund execution
-- AI search / AI query generation / AI reranking / AI scoring
+- AI query generation / AI reranking / AI scoring in the deterministic search contract
 
 ---
 
-## 6. Module 3 — Evaluation / Verification
+## 7. Module 3 — Evaluation / Verification
 
 Detailed reference: [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
 
-### 6.1 Purpose
+### 7.1 Purpose
 
 Evaluate a Subject against explicit Profile / Measurements / Evidence and return deterministic scoring, hard blocking, judgment and audit trace.
 
-### 6.2 Generic v2 responsibilities
+### 7.2 Generic v2 responsibilities
 
 - Input validation
 - Profile loading
@@ -226,7 +265,7 @@ Evaluate a Subject against explicit Profile / Measurements / Evidence and return
 - Deterministic judgment
 - Audit result
 
-### 6.3 Generic v2 evidence modes
+### 7.3 Generic v2 evidence modes
 
 Exactly one evidence mode is used:
 
@@ -240,7 +279,7 @@ B. EVIDENCE_SEARCH_API
 
 The two modes must not be mixed in one request.
 
-### 6.4 Generic v2 judgment
+### 7.4 Generic v2 judgment
 
 Normal completed states:
 
@@ -259,7 +298,7 @@ EVALUATION_FAILED
 
 `PASSED` means only that the supplied Subject satisfied the selected Profile under verified Measurements / Evidence.
 
-### 6.5 Prohibited responsibilities
+### 7.5 Prohibited responsibilities
 
 - Artifact auto-modification
 - Repository commit / push
@@ -274,11 +313,11 @@ EVALUATION_FAILED
 
 ---
 
-## 7. Evaluation package: three distinct contracts
+## 8. Evaluation package: three distinct contracts
 
-`src/quality-completion-evaluator/` contains multiple generations/sub-capabilities. They must not be described as one undifferentiated QCE.
+`src/quality-completion-evaluator/` contains multiple contracts/sub-capabilities. They must not be described as one undifferentiated QCE.
 
-### 7.1 Generic Evaluation v2 — current generic responsibility
+### 8.1 Generic Evaluation v2 — current generic responsibility
 
 ```text
 schema: astera.evaluation.request.v2
@@ -288,7 +327,7 @@ engine: generic/evaluator-engine.js
 
 This is the canonical generic Evaluation / Verification path.
 
-### 7.2 Information Quality — Evidence Search sub-capability
+### 8.2 Information Quality — Evidence Search sub-capability
 
 ```text
 schema: astera.information-quality-request.v1
@@ -299,9 +338,9 @@ purpose: candidate adoption quality
 
 This is not Generic v2 scoring.
 
-### 7.3 Legacy Evaluation v1 — compatibility
+### 8.3 Legacy Evaluation v1 — compatibility
 
-Legacy quality/completion/domain-lens evaluation remains in the repository for compatibility.
+Legacy quality/completion/domain-lens evaluation may remain for compatibility.
 
 ```text
 route: POST /v1/evaluate
@@ -311,13 +350,13 @@ Legacy v1 responsibilities must not be silently promoted into Generic v2 respons
 
 ---
 
-## 8. No recursive evaluator/search loop
+## 9. No recursive evaluator/search loop
 
 The two cross-module directions have different contracts.
 
 ```text
 Evidence Search
-  → Information Quality function [IN_PROCESS]
+  → Information Quality contract
   → candidate adoption
 ```
 
@@ -330,7 +369,7 @@ Generic Evaluator v2
   → generic scoring
 ```
 
-Therefore the canonical architecture does not require:
+Therefore the canonical architecture prohibits:
 
 ```text
 Generic v2
@@ -340,11 +379,11 @@ Generic v2
 → ...
 ```
 
-Such recursion is prohibited.
+Information Quality must remain separate from Generic v2 recursion.
 
 ---
 
-## 9. Claim / Evidence invariant
+## 10. Claim / Evidence invariant
 
 A Claim exists before search.
 
@@ -365,7 +404,7 @@ Client-supplied forged `CONFIRMED` state or forged Evidence packet must not beco
 
 ---
 
-## 10. Domain Lens boundary
+## 11. Domain Lens boundary
 
 Domain Lens answers:
 
@@ -389,13 +428,13 @@ Domain Lens does not:
 - own Generic v2 scoring
 - produce a final decision
 
-Generic Evaluation v2 currently does **not** automatically inherit Legacy v1 Domain Lens evaluation behavior. The generic v2 contract is Profile / Measurements / Evidence based.
+Generic Evaluation v2 is Profile / Measurements / Evidence based. Legacy v1 Domain Lens behavior must not be silently treated as a Generic v2 invariant.
 
 Lens taxonomy: [`LENS_GENRE_INDEX.md`](LENS_GENRE_INDEX.md)
 
 ---
 
-## 11. Five-Lane independence
+## 12. Five-Lane independence
 
 The five analytical lanes operate from shared canonical records:
 
@@ -413,9 +452,7 @@ Compare produces material, not ranking or winner selection.
 
 ---
 
-## 12. Main8 contract
-
-Current code authority:
+## 13. Main8 contract
 
 ```text
 01 本当の目的
@@ -430,11 +467,11 @@ Current code authority:
 
 07 is Evidence Status, not Recommendation.
 
-Main8 output declares external-only decision authority and no normative decision generation.
+Main8 output preserves external-only decision authority and no normative decision generation.
 
 ---
 
-## 13. Human Reader boundary
+## 14. Human Reader boundary
 
 Human Reader may influence presentation and attention signals only.
 
@@ -449,7 +486,7 @@ It must not mutate:
 
 ---
 
-## 14. Failure categories
+## 15. Failure categories
 
 Do not collapse distinct failures into a single clarification state.
 
@@ -457,6 +494,9 @@ Keep at least:
 
 - User clarification required
 - Structural task blocking
+- Task dependency failure / skip
+- Task queue overload
+- Request cancellation
 - Japanese Parser / infrastructure failure
 - Evidence Search transport failure
 - Evidence retrieval failure
@@ -468,49 +508,42 @@ Keep at least:
 
 ---
 
-## 15. Runtime composition and network truth
+## 16. Production runtime composition
 
-Current production composition defines three separate services:
-
-```text
-Astera Core               code default 127.0.0.1:7373
-Evidence Search           code default 127.0.0.1:7376
-Evaluation / Verification code default 127.0.0.1:7374
-```
-
-Current root `docker-compose.yml` uses host networking and overrides them as follows:
+Completed production composition uses three private/internal services:
 
 ```text
-Astera Core               127.0.0.1:${ASTERA_PORT}
+Astera Core               127.0.0.1:7373
 Evidence Search           127.0.0.1:7376
-Evaluation / Verification 0.0.0.0:7374
+Evaluation / Verification 127.0.0.1:7374
 ```
 
-Therefore the current Evaluator Compose service is **not loopback-only by configuration**. Actual reachability depends on host firewall/routing/ingress. This is tracked as a known network-boundary inconsistency in [`LIMITATIONS.md`](LIMITATIONS.md).
+The repository deployment model is Container-first. Direct host execution is development/verification only and requires explicit override where supported.
 
-The repository `docker-compose.yml` defines all three services. Container-first production remains the rule. Direct host execution is development/verification only and requires explicit override where the entrypoint enforces container residency.
+Internal ports are not intentionally exposed directly to the Internet. Public access, when required, is provided through a separately authenticated ingress/reverse-proxy boundary.
 
 ---
 
-## 16. Security / trust boundaries
+## 17. Security / trust boundaries
 
 - Public `/process` does not trust caller-injected internal prepared state.
 - Evidence Search internal API uses signed internal-service authentication.
 - Generic Evaluator normal API uses API-key authentication; skill routes use skill-key authentication.
 - Secrets must not be exposed in logs, README or request examples.
-- Internal HTTP services should remain private unless a separate authenticated ingress is intentionally designed.
-- The current Evaluator Compose bind must be exposure-checked rather than assumed private merely because health checks use `127.0.0.1`.
+- Internal HTTP services remain private unless a separate authenticated ingress is intentionally designed.
+- Authentication never bypasses Evidence / Measurement integrity checks.
 
 ---
 
-## 17. Completion proof
+## 18. Completion proof
 
 Completion claims must be tied to one identical final SHA.
 
-Relevant proof may include:
+Relevant proof includes:
 
 - source syntax / JSON / shell validity
 - runtime tests
+- Task graph dependency / Wave / concurrency / cancellation behavior
 - Main8 material-only boundary
 - decision-authority boundary
 - Japanese Parser boundary
@@ -531,7 +564,7 @@ Relevant proof may include:
 
 ---
 
-## 18. Prohibited architecture changes
+## 19. Prohibited architecture changes
 
 Do not introduce:
 
@@ -547,11 +580,11 @@ Do not introduce:
 - Evidence Search ownership of Generic Metric / Criterion / Hard Blocking
 - Recursive Generic Evaluator ↔ Evidence Search calls
 - Legacy v1 behavior silently relabeled as Generic v2
-- Paid provider/payment execution inside the current free Evidence Search path
+- Paid provider/payment execution inside the deterministic free Evidence Search path
 
 ---
 
-## 19. Repository mapping
+## 20. Repository mapping
 
 Full file-to-responsibility map:
 
@@ -569,7 +602,7 @@ HTTP details:
 
 ---
 
-## 20. Document authority
+## 21. Document authority
 
 When repository documents conflict, use this order:
 
@@ -580,4 +613,4 @@ When repository documents conflict, use this order:
 5. README / STRUCTURE / user-facing references
 6. Historical documents / archive
 
-A document must never declare an implementation complete merely because an older design intended it.
+Product-facing documentation describes the completed Product Contract. Development audit findings and unfinished implementation deltas are tracked separately from this document.
