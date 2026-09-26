@@ -28,13 +28,13 @@
 - Initial gate後に必要な場合だけReinforcementを行える
 - Evidence不足とRetrieval failureを分離できる
 - Final gateを通過しないCandidateを採用Evidenceとして公開しない
-- Paid provider / Payment executionを現行Moduleから分離する
+- Paid provider / Payment executionを決定論的無料検索Contractから分離する
 
 ---
 
 ## 3. Search routes
 
-Search Request contractには次の無料検索Classがあります。
+Search Request contractには次の検索Classがあります。
 
 ```text
 free_projection
@@ -42,9 +42,9 @@ free_current
 free_general_web
 ```
 
-Conceptualには次の2系統として扱います。
+Product architectureでは2つの補完経路として扱います。
 
-### Route A — Specialist / authoritative
+### Route A — Specialist / Authoritative
 
 - 専門DB
 - 公式Registry
@@ -54,7 +54,11 @@ Conceptualには次の2系統として扱います。
 - Preselected authoritative sources
 - Indexed specialist projection
 
-### Route B — General / current
+目的:
+
+> Domain authorityと専門性の高い根拠を取得する。
+
+### Route B — General / Current
 
 - General Web
 - Official Web
@@ -62,11 +66,15 @@ Conceptualには次の2系統として扱います。
 - Primary-source announcement
 - Current specification / release information
 
-2系統は同じ検索を二重実行するためではなく、**専門性・AuthorityとCurrentnessを補完するため**です。
+目的:
+
+> 現在性と一般検索可能性を補完し、専門Sourceだけでは拾えない更新情報を取得する。
+
+2系統は同じ検索を二重実行するためではなく、**Authority / SpecializationとCurrentness / Discoverabilityを補完するため**です。
 
 ---
 
-## 4. Active runtime flow
+## 4. Canonical runtime flow
 
 ```text
 Search Request
@@ -97,52 +105,39 @@ REINFORCEMENT_REQUIRED ?
 ↓
 FINAL_VALID ?
 ├─ Yes → Evidence published in result
-└─ No  → Evidence array is emptied at module boundary
+└─ No  → Evidence not adopted
 ```
 
-`src/evidence-search/module.js`は`FINAL_VALID`以外の結果でEvidence配列を公開しない境界を持ちます。
+重要なInvariant:
+
+```text
+retrieved candidate ≠ adopted Evidence
+adopted Evidence ≠ CONFIRMED Claim
+```
+
+Claim Confirmationは呼出し側のJudgment Material Generationが元ClaimへBindingして行います。
 
 ---
 
-## 5. Information Quality — current implementation truth
+## 5. Information Quality contract
 
 根拠検索ModuleのInformation Qualityは、汎用Evaluation v2とは別Contractです。
 
-Current search orchestration:
+目的:
 
-```text
-src/evidence-search/core/search-orchestrator.js
-  → evaluateInformationQuality()
-  → src/quality-completion-evaluator/information-quality/engine.js
-```
+> Retrieved candidateをEvidenceとして採用可能か、決定論的条件で判定する。
 
-現行`src/evidence-search/api/start.js`は次を明示的に注入します。
+評価対象には少なくとも次を含みます。
 
-```text
-informationQualityEvaluator: evaluateInformationQuality
-informationQualityEvaluatorMode: IN_PROCESS
-```
-
-したがって、**現行Production start pathの検索品質判定はin-processです。**
-
-`src/evidence-search/api/information-quality-client.js`には7374向けHTTP Clientが存在しますが、現行`api/start.js`の実配線ではこのClientを使用しません。また現行Evaluator API Serverの公開Routeは`/v1/evaluate`、`/v2/evaluate`等であり、このClientが要求する`/internal/v1/information-quality/evaluate`は現行Server routeとして確認できません。
-
-この不整合は「7374経由でInformation Qualityが稼働済み」と文書化してはいけません。詳細は[`../LIMITATIONS.md`](../LIMITATIONS.md)を参照してください。
-
----
-
-## 6. Information Quality scoring
-
-Information Quality Engineは少なくとも次を評価します。
-
-- Accuracy against requested conditions
-- Provenance completeness
-- Source suitability
-- Corroboration
-- Freshness
-- Conflict / Coverage
-- Domain / Overlay profile
-- Required source roles
+- requested condition accuracy
+- provenance completeness
+- source suitability
+- corroboration
+- freshness
+- conflict
+- coverage
+- domain / overlay requirements
+- required source roles
 
 Blocking例:
 
@@ -154,7 +149,54 @@ Blocking例:
 - `MAJOR_CONFLICT_UNRESOLVED`
 - `CRITICAL_CONFLICT_UNRESOLVED`
 
-Initial / Final thresholdの値は`src/quality-completion-evaluator/information-quality/profiles.v1.json`をAuthorityとし、Documentへ固定値を重複保持しません。
+Information QualityはGeneric v2 scoringへ再帰しません。
+
+```text
+Evidence Search
+→ Information Quality
+→ Adopt / Reject / Reinforce
+```
+
+と、
+
+```text
+Generic Evaluator v2
+→ Evidence Search API
+→ evaluator-side Registry / Binding
+→ generic scoring
+```
+
+は別方向・別Contractです。
+
+Information QualityのTransportは内部実装詳細であり、Product ContractはTransport方式に依存しません。
+
+---
+
+## 6. Evidence state and truthfulness
+
+根拠検索Moduleは少なくとも次を区別します。
+
+```text
+retrieval success
+retrieval failure
+NOT_FOUND
+candidate rejected by quality
+reinforcement required
+FINAL_VALID
+insufficient / unresolved
+```
+
+「検索できなかった」と「検索したが該当Evidenceが無かった」を同一状態へ潰しません。
+
+Evidenceが成立しない場合は:
+
+```text
+fabricate
+infer as fact
+force-confirm
+```
+
+を行いません。
 
 ---
 
@@ -174,7 +216,6 @@ Initial / Final thresholdの値は`src/quality-completion-evaluator/information-
 - `src/evidence-search/api/client.js`
 - `src/evidence-search/api/runtime-client.js`
 - `src/evidence-search/api/internal-auth.js`
-- `src/evidence-search/api/information-quality-client.js`
 
 ### Planning / execution
 
@@ -202,17 +243,18 @@ Initial / Final thresholdの値は`src/quality-completion-evaluator/information-
 - `src/evidence-search/recovery/job-manager.js`
 - `src/evidence-search/recovery/durable-spool.js`
 
-### Future usage calculation
+### Information Quality
 
-- `src/evidence-search/paid/usage-calculator.js`
+- `src/quality-completion-evaluator/information-quality/engine.js`
+- `src/quality-completion-evaluator/information-quality/profiles.v1.json`
 
-このUsage calculatorは**Payment executionではありません**。
+このsub-capabilityはGeneric v2とは別Contractです。
 
 ---
 
 ## 8. Internal HTTP contract
 
-Default bind:
+Production private bind:
 
 ```text
 127.0.0.1:7376
@@ -225,7 +267,7 @@ GET  /healthz
 POST /internal/v1/evidence/search
 ```
 
-`POST /internal/v1/evidence/search`はInternal Service Signatureを要求し、現行Serverは`expectedService: astera-main`として検証します。
+`POST /internal/v1/evidence/search`はInternal Service Signatureを要求します。
 
 Request schema:
 
@@ -242,35 +284,38 @@ Module-level contract:
 
 ---
 
-## 9. Production startup facts
+## 9. Production startup contract
 
-現行`src/evidence-search/api/start.js`はContainer runtimeを要求し、さらにProvider configurationを必須とします。
+Evidence SearchのProduction RuntimeはContainer-firstです。
 
-主なStartup Gate:
+Startupには少なくとも次の成立が必要です。
 
-- `ASTERA_EVIDENCE_PROVIDER_CONFIG` required
-- Source catalog required
-- enabled / certified provider required
-- Base KB target count check
-- Required KB target runtime binding check
-- Durable recovery store / spool initialization
+- Provider configuration
+- Source catalog
+- enabled / certified searchable provider
+- required target/source runtime bindings
+- internal service authentication secret
+- persistent Evidence DB path
+- durable recovery store / spool
+- spool encryption/integrity key
 
-現行CodeはBase KB Target数を`663`としてStartupで検査します。この値はRuntime implementation detailであり、READMEの製品説明へ重複記載しません。
+Container processが存在するだけではREADYではありません。
+
+`GET /healthz`は検索可能Runtimeの成立を確認するために使用します。
 
 ---
 
 ## 10. Module manifest boundary
 
-Current manifest:
+Module identity:
 
 ```text
 module_id = astera-evidence-search
-version   = 2.4.0
 runtime   = node>=22
 active_search_mode = FREE_ONLY
 ```
 
-Prohibited actionsには少なくとも次が含まれます。
+Deterministic free-search contractでは少なくとも次を禁止します。
 
 ```text
 paid_provider_execution
@@ -294,13 +339,14 @@ ai_scoring
 ```text
 Generic Evaluator v2
 → POST /internal/v1/evidence/search
-→ Evidence Search Result
+→ Standard Evidence Search Result
 → evaluator-side Evidence Registry / Binding
+→ Metric / Blocking / Judgment
 ```
 
 Evidence Searchは判定Module用Registry / Binding / Metric / Criterionを所有しません。
 
-また、Evidence Search内部のInformation QualityはGeneric Evaluation v2を再帰的に呼びません。現行start pathでは`evaluateInformationQuality()`をin-processで実行します。
+判定ModuleがEvidence Searchを利用することと、Evidence SearchがInformation Qualityを使うことは別Contractであり、再帰呼出しを作りません。
 
 ---
 
@@ -334,4 +380,4 @@ Evidence Searchは判定Module用Registry / Binding / Metric / Criterionを所�
 - `test/evidence-search-search-concurrency.test.js`
 - `scripts/validate-evidence-modular-architecture.js`
 
-Live Smokeは実Credential / Network / Provider availabilityを必要とするため、Source Testと同一視しません。
+Live retrieval proof requires actual provider/network execution. Source TestとLive Evidence proofを同一視しません。
