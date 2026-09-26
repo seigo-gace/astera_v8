@@ -133,6 +133,28 @@ function buildRiskItems({ question, constraints, evidenceRequired, lang }) {
   return risks;
 }
 
+function normalizeLensErrorCode(error) {
+  const raw = String(error?.code || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 96);
+  return raw || 'DOMAIN_LENS_ROUTING_FAILED';
+}
+
+function resolveInitialDomainLens(question, context, router = routeDomainTemplates) {
+  try {
+    const lens = router({ question, context });
+    return Object.freeze({
+      lens,
+      status: lens?.primary?.id ? 'SELECTED' : 'NOT_SELECTED',
+      error_code: null
+    });
+  } catch (error) {
+    return Object.freeze({
+      lens: null,
+      status: 'FAILED',
+      error_code: normalizeLensErrorCode(error)
+    });
+  }
+}
+
 function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
   const startedAt = process.hrtime.bigint();
   const question = normalize(input.question);
@@ -145,19 +167,15 @@ function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
   const assertions = extractInputAssertions(question);
   const candidates = inferComparisonCandidates(question);
   const evidenceRequired = EXTERNAL_EVIDENCE_CUE.test(`${question}\n${context}`);
-  let lens = null;
-  try {
-    lens = routeDomainTemplates({ question, context });
-  } catch {
-    lens = null;
-  }
-  const primaryLens = lens?.primary?.id || null;
+  const lensResolution = resolveInitialDomainLens(question, context);
+  const primaryLens = lensResolution.lens?.primary?.id || null;
   const materialId = `mat_${sha256(`${question}\n${context}`).slice(0, 24)}`;
   const purpose = instruction.user_goal || tasks.map((task) => task.source).filter(Boolean).join(' / ') || question || (lang === 'ja' ? '入力内容を判断材料へ構造化する' : 'Structure the input into judgment material');
   const missing = unique([
     ...(constraints.length ? [] : [lang === 'ja' ? '明示制約は初期入力から追加抽出されていない。' : 'No explicit constraint was extracted from the initial input.']),
     ...(evidenceRequired ? [lang === 'ja' ? '外部根拠はFast Path時点では未取得。' : 'External evidence is not retrieved in the Fast Path.'] : []),
-    ...(question ? [] : [lang === 'ja' ? '質問本文がない。' : 'The request body is empty.'])
+    ...(question ? [] : [lang === 'ja' ? '質問本文がない。' : 'The request body is empty.']),
+    ...(lensResolution.status === 'FAILED' ? [lang === 'ja' ? `Domain Lens初期分類は失敗状態。code=${lensResolution.error_code}` : `Initial Domain Lens routing failed. code=${lensResolution.error_code}`] : [])
   ]);
   const riskItems = buildRiskItems({ question, constraints, evidenceRequired, lang });
   const oppositionItems = unique([
@@ -205,6 +223,8 @@ function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
     requested_output_language: metadata.requested_output_language,
     task_summary: Object.freeze(tasks),
     lens: primaryLens,
+    lens_status: lensResolution.status,
+    lens_error_code: lensResolution.error_code,
     deliverables: Object.freeze(deliverables(question) || []),
     evidence_required: evidenceRequired,
     evidence_route_policy: evidenceRequired ? 'BOTH_ROUTES_REQUIRED' : 'NOT_REQUIRED',
@@ -232,6 +252,8 @@ function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
       japanese_parser_used: false,
       evidence_search_used: false,
       external_network_wait: false,
+      lens_status: lensResolution.status,
+      lens_error_code: lensResolution.error_code,
       duration_ms: durationMs,
       basic_target_ms: 1000,
       engineering_target_ms: 100,
@@ -241,4 +263,4 @@ function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
   });
 }
 
-module.exports = { buildInitialJudgmentMaterial, ORDER };
+module.exports = { buildInitialJudgmentMaterial, resolveInitialDomainLens, ORDER };
