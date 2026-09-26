@@ -48,6 +48,36 @@ jobs:
       - name: Test Evidence Adoption Boundary
         run: node --test test/evidence-search-adopted-evidence-boundary.test.js
 
+      - name: Test Evidence user journey
+        run: npm run test:evidence-user
+
+      - name: Test Evidence API
+        run: npm run test:evidence-api
+
+      - name: Test Evidence main proxy
+        run: npm run test:evidence-main
+
+      - name: Test Evidence provider adapters
+        run: npm run test:evidence-provider-adapter
+
+      - name: Test Evidence specialist expansion
+        run: npm run test:evidence-specialist-expansion
+
+      - name: Test Evidence evaluator integration
+        run: npm run test:evidence-evaluator
+
+      - name: Test Evidence recovery
+        run: npm run test:evidence-recovery
+
+      - name: Test Evidence projection index
+        run: npm run test:evidence-projection
+
+      - name: Test Evidence modular architecture
+        run: npm run test:evidence-architecture
+
+      - name: Test public API
+        run: node --test test/api.test.js
+
       - name: Run remaining runtime tests
         run: npm run test:runtime
 
