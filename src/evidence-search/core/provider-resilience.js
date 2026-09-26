@@ -1,6 +1,6 @@
 'use strict';
 
-const RETRYABLE_FAILURE = /(?:TIMEOUT|ECONN|ENOTFOUND|EAI_AGAIN|RESET|NETWORK|HTTP_429|HTTP_5\d\d|PROVIDER_FAILED|SEARCH_CANCELLED)/i;
+const RETRYABLE_FAILURE = /(?:TIMEOUT|ECONN|ENOTFOUND|EAI_AGAIN|RESET|NETWORK|HTTP_429|HTTP_5\d\d|PROVIDER_FAILED)/i;
 
 function nonNegativeInt(value, fallback) {
   const parsed = value === undefined || value === null || value === '' ? fallback : Number(value);
@@ -11,10 +11,8 @@ class ProviderResilienceController {
   constructor(options = {}) {
     this.failureThreshold = Math.max(1, nonNegativeInt(options.failureThreshold, 3));
     this.openMs = Math.max(100, nonNegativeInt(options.openMs, 30_000));
-    this.maxCacheEntries = Math.max(1, nonNegativeInt(options.maxCacheEntries, 512));
     this.now = typeof options.now === 'function' ? options.now : Date.now;
     this.states = new Map();
-    this.cache = new Map();
   }
 
   _state(providerId) {
@@ -88,37 +86,10 @@ class ProviderResilienceController {
     return this._snapshot(providerId);
   }
 
-  cacheGet(key) {
-    if (!key) return null;
-    const item = this.cache.get(String(key));
-    if (!item) return null;
-    if (item.expires_at <= this.now()) {
-      this.cache.delete(String(key));
-      return null;
-    }
-    this.cache.delete(String(key));
-    this.cache.set(String(key), item);
-    return Object.freeze({ value: item.value, stored_at: item.stored_at, expires_at: item.expires_at });
-  }
-
-  cacheSet(key, value, ttlMs) {
-    const ttl = nonNegativeInt(ttlMs, 0);
-    if (!key || ttl <= 0) return;
-    const now = this.now();
-    const normalizedKey = String(key);
-    if (this.cache.has(normalizedKey)) this.cache.delete(normalizedKey);
-    this.cache.set(normalizedKey, { value, stored_at: now, expires_at: now + ttl });
-    while (this.cache.size > this.maxCacheEntries) {
-      const oldest = this.cache.keys().next().value;
-      this.cache.delete(oldest);
-    }
-  }
-
   health() {
     return Object.freeze({
       failure_threshold: this.failureThreshold,
       open_ms: this.openMs,
-      cache_entries: this.cache.size,
       providers: Object.freeze([...this.states.entries()].map(([provider_id]) => Object.freeze({ provider_id, ...this._snapshot(provider_id) })))
     });
   }
