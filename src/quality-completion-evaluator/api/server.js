@@ -55,6 +55,15 @@ function authenticateEvaluateRequest(req, host) {
   return null;
 }
 
+function validatePublicV2EvidenceOwnership(body) {
+  const providedEvidence = body.evidence_registry !== undefined || body.evidence_bindings !== undefined;
+  if (providedEvidence) return 'provided_evidence_forbidden_on_public_v2';
+  if (!body.evidence_search || typeof body.evidence_search !== 'object' || Array.isArray(body.evidence_search)) {
+    return 'evidence_search_required_on_public_v2';
+  }
+  return null;
+}
+
 class EvaluatorApiServer {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port || process.env.ASTERA_EVALUATOR_API_PORT, 7374);
@@ -202,6 +211,10 @@ class EvaluatorApiServer {
         }
         if (route.version === 'v1' && body.schema_version === GENERIC_REQUEST_SCHEMA_VERSION) {
           return this._json(req, res, 400, { error: 'evaluation_schema_route_mismatch', expected: 'legacy_v1_contract' });
+        }
+        if (route.version === 'v2' && !isSkillRoute) {
+          const evidenceOwnershipError = validatePublicV2EvidenceOwnership(body);
+          if (evidenceOwnershipError) return this._json(req, res, 400, { error: evidenceOwnershipError });
         }
 
         const result = await evaluate(body);
