@@ -27,6 +27,9 @@ jobs:
       - name: Run source tests
         run: npm run verify:source
 
+      - name: Run Initial Fast Path performance hard gate
+        run: node scripts/verify-initial-fast-path-performance.js
+
       - name: Build real Japanese Parser HTTP runtime
         shell: bash
         run: |
