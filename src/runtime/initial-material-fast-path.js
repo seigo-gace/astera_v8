@@ -9,6 +9,7 @@ const {
 } = require('../deterministic-task-decomposer');
 const { detectLanguageMetadata } = require('../input-understanding');
 const { routeDomainTemplates } = require('../domain-template-router');
+const { observeDocumentMaterial } = require('./standalone-material-normalizer');
 
 const ORDER = Object.freeze([
   '01_purpose',
@@ -166,7 +167,8 @@ function buildInitialJudgmentMaterial(input = {}, caller = { id: 'unknown' }) {
   const constraints = extractConstraints(question, context);
   const assertions = extractInputAssertions(question);
   const candidates = inferComparisonCandidates(question);
-  const evidenceRequired = EXTERNAL_EVIDENCE_CUE.test(`${question}\n${context}`);
+  const observableMaterial = observeDocumentMaterial(question);
+  const evidenceRequired = EXTERNAL_EVIDENCE_CUE.test(`${question}\n${context}`) || observableMaterial.claim_count > 0;
   const lensResolution = resolveInitialDomainLens(question, context);
   const primaryLens = lensResolution.lens?.primary?.id || null;
   const materialId = `mat_${sha256(`${question}\n${context}`).slice(0, 24)}`;
