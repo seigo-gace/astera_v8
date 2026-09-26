@@ -8,6 +8,7 @@ const RateLimiter = require('./guard/rate-limiter');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
 const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('./auth/skill-api-key');
 const { resolveRequestLLM } = require('./llm-request');
+const { normalizePurposeMode } = require('./runtime/purpose-control');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
@@ -42,6 +43,8 @@ function buildProcessAllowlist(body) {
   if (body.language !== undefined) allowlist.language = body.language;
   if (body.locale !== undefined) allowlist.locale = body.locale;
   if (body.output_language !== undefined) allowlist.output_language = body.output_language;
+  const purpose = normalizePurposeMode(body.purpose);
+  if (purpose) allowlist.purpose = purpose;
   const moodAnswers = sanitizeMoodAnswers(body.moodAnswers);
   if (Object.keys(moodAnswers).length) allowlist.moodAnswers = moodAnswers;
   return allowlist;
