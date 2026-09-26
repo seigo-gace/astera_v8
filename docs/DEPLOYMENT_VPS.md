@@ -2,31 +2,23 @@
 
 Updated: 2026-09-26
 
-This guide covers the **current repository runtime composition**. It does not define external product/account/payment systems.
+This guide covers the Astera v8 **production target composition**. It does not define external product/account/payment systems.
 
 Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ---
 
-## 1. Current production composition
+## 1. Production composition
 
-Current root `docker-compose.yml` defines:
+Astera v8 production is composed of three private/internal services:
 
 ```text
 astera-v8                   Judgment Material Generation   127.0.0.1:${ASTERA_PORT}
-astera-v8-evaluator         Evaluation / Verification      0.0.0.0:7374
+astera-v8-evaluator         Evaluation / Verification      127.0.0.1:7374
 astera-v8-evidence-search   Evidence Search                127.0.0.1:7376
 ```
 
-Optional profile:
-
-```text
-astera-v8-cloudflared       ingress support
-```
-
-Cloudflared is not a fourth Astera module.
-
-All three Astera services currently use `network_mode: host`. Core and Evidence Search are explicitly configured to bind loopback. **Evaluator is currently configured to bind `0.0.0.0:7374`, not loopback-only.** This must be treated as a live network-boundary consideration and checked against firewall/ingress policy before production completion.
+Optional ingress support may be added separately through Cloudflare/reverse proxy. Ingress is not a fourth Astera module.
 
 ---
 
@@ -37,7 +29,7 @@ Production is container-first.
 ```text
 Core direct host process      prohibited unless explicit development override
 Evaluator direct host process prohibited unless explicit development override
-Evidence Search host process  prohibited by current container boundary
+Evidence Search host process  prohibited by container boundary
 ```
 
 Canonical production start:
@@ -46,7 +38,7 @@ Canonical production start:
 docker compose up -d --build
 ```
 
-Do not replace this with long-running `node start.js` or `npm run start:evidence-api` host processes.
+Do not replace this with long-running host `node` processes.
 
 ---
 
@@ -56,20 +48,20 @@ Repository:
 
 ```bash
 cd /home/admin1/projects/astera_v8
-cp .env.example .env
+pwd
 ```
 
+Production `.env` is prepared from the required configuration fields; `.env.example` is a **field reference**, not a substitute for production secrets or environment-specific endpoints.
+
 Do not commit `.env` or Secret files.
-
-Before deployment, reconcile `.env` with the current Compose rather than assuming every `.env.example` default is sufficient.
-
-Current Compose requires/uses configuration in these groups.
 
 ### Core
 
 ```text
 ASTERA_PORT
-ASTERA_JAPANESE_PARSER_MODE      # Compose currently overrides to http
+ASTERA_API_KEY
+ASTERA_SKILL_API_KEY
+ASTERA_JAPANESE_PARSER_MODE
 ASTERA_JAPANESE_PARSER_URL
 ASTERA_JAPANESE_PARSER_API_KEY
 ASTERA_JAPANESE_PARSER_DEADLINE_MS
@@ -78,20 +70,26 @@ ASTERA_TGS_URL
 ASTERA_TGS_PROJECT_ID
 ```
 
+For production containers, Japanese Parser should be configured through the intended private HTTP boundary reachable from the Core container/runtime path.
+
 ### Evaluator
 
 ```text
-ASTERA_EVALUATOR_API_HOST        # current Compose explicitly sets 0.0.0.0
-ASTERA_EVALUATOR_API_PORT        # current Compose sets 7374
-ASTERA_API_KEY / skill key as required by caller routes
+ASTERA_EVALUATOR_API_HOST
+ASTERA_EVALUATOR_API_PORT
+ASTERA_API_KEY
+ASTERA_SKILL_API_KEY
 ASTERA_LOG_CACHE_DIR
 ```
+
+The production target is a private/internal bind.
 
 ### Evidence Search
 
 ```text
 ASTERA_EVIDENCE_HOST
 ASTERA_EVIDENCE_PORT
+ASTERA_EVIDENCE_URL
 ASTERA_EVIDENCE_PROVIDER_CONFIG
 ASTERA_EVIDENCE_DB
 ASTERA_EVIDENCE_DURABLE_SPOOL
@@ -117,15 +115,15 @@ The Compose file does not create every dependency used by Astera.
 
 ### Japanese Parser
 
-Current Core Compose configuration expects a Japanese Parser HTTP boundary on the host loopback/default configured URL and requires the API key variable used by Compose.
+Production Core requires a reachable private Parser boundary using the configured mode/URL/API key.
 
-A missing/unreachable Parser must be treated as Parser/infrastructure failure, not user clarification.
+A missing/unreachable Parser is Parser/infrastructure failure, not user clarification.
 
 ### Evidence providers
 
-Evidence Search requires a usable Provider configuration and source catalog. Startup code also checks required KB-target bindings.
+Evidence Search requires a usable Provider configuration and source catalog, plus the runtime bindings required by the module.
 
-A container may be running while Evidence Search health is `503` if no active searchable Provider is available.
+A running container does not by itself prove Evidence Search is READY.
 
 ### TGserver
 
@@ -138,12 +136,12 @@ TGserver is an external Logging boundary. It is not one of the three Astera modu
 At the deployment candidate SHA:
 
 ```bash
-npm run verify
+npm run verify:release
 npm run verify:evidence
 docker compose config
 ```
 
-Run release/live gates required for the release separately where credentials/network are available.
+Run required live Evidence gates on the same candidate SHA where network/provider execution is part of the production acceptance criteria.
 
 Do not treat old-SHA results as proof for the current candidate.
 
@@ -156,15 +154,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Current Compose dependency order includes:
-
-```text
-Core healthy
-→ Evaluator healthy
-→ Evidence Search healthy
-```
-
-This Compose startup order does not redefine architecture ownership. Evidence Search candidate Information Quality is currently injected in-process even though the Compose file waits for the Evaluator service health.
+Service startup ordering must not redefine module responsibility. Dependencies exist only to guarantee required runtime availability.
 
 ---
 
@@ -183,10 +173,8 @@ Interpretation:
 ```text
 7373 healthy = Core HTTP process ready
 7374 healthy = Evaluator HTTP process ready
-7376 healthy = Evidence Search has active searchable Provider(s)
+7376 healthy = Evidence Search searchable runtime ready
 ```
-
-Calling `127.0.0.1:7374` for health is valid even though the current Evaluator listens on `0.0.0.0`; the health command does **not** prove that 7374 is loopback-only.
 
 Do not collapse these into a single “Astera is healthy” claim if one service is unavailable.
 
@@ -196,15 +184,22 @@ Do not collapse these into a single “Astera is healthy” claim if one service
 
 ### Core
 
-Verify authenticated or explicitly local-dev `/process` behavior and Main8 order.
+Verify authenticated `/process` behavior and Main8 order.
 
 ### Evaluator
 
-Verify `/v2/evaluate` using a valid `astera.evaluation.request.v2` fixture/contract. Do not substitute a simplified body that bypasses Measurement/Evidence integrity requirements.
+Verify `/v2/evaluate` using a valid `astera.evaluation.request.v2` fixture/contract.
+
+Verify both required Evidence modes as applicable:
+
+```text
+Provided Evidence Registry / Binding
+Evidence Search API
+```
 
 ### Evidence Search
 
-Verify the signed internal `POST /internal/v1/evidence/search` route using the canonical caller/client implementation. Do not expose the internal signing Secret.
+Verify the signed internal `POST /internal/v1/evidence/search` route using the canonical caller/client implementation.
 
 Live Provider success must be proven separately from source/unit test success.
 
@@ -212,22 +207,20 @@ Live Provider success must be proven separately from source/unit test success.
 
 ## 9. Network / ingress
 
-- Core 7373 and Evidence Search 7376 are explicitly loopback-bound by current Compose.
-- **Evaluator 7374 is currently bound to `0.0.0.0` under host networking. Verify host firewall and external reachability explicitly.**
-- Do not intentionally expose 7374 publicly without a separate authenticated ingress design.
-- Terminate HTTPS at the approved ingress/reverse proxy for any intentionally reachable normal API route.
-- Restrict CORS for externally reachable normal API routes.
+- Core 7373, Evaluator 7374 and Evidence Search 7376 remain private/internal.
+- Do not intentionally expose internal service ports directly to the Internet.
+- External access uses a separately authenticated ingress/reverse proxy design.
+- Terminate HTTPS at the approved ingress layer.
+- Restrict CORS for browser-accessible normal API routes.
 - Keep Evidence Search internal endpoint internal.
-- Configure outer timeout/body/rate controls consistently with the service contracts.
-- Cloudflare profile is optional infrastructure support, not module logic.
-
-A future source/Compose fix that returns Evaluator to loopback must update this guide and [`LIMITATIONS.md`](LIMITATIONS.md) in the same change.
+- Configure timeout/body/rate controls consistently with service contracts.
+- Cloudflare is infrastructure support, not module logic.
 
 ---
 
 ## 10. Data / recovery
 
-Current Evidence Search Compose mounts persistent `astera-data` for:
+Evidence Search persistent operational state includes:
 
 ```text
 Evidence Search DB
@@ -248,7 +241,7 @@ Backup/restore policy must preserve the relationship between encrypted spool dat
 
 ## 11. Logging
 
-Current Core/Evaluator/Evidence paths may write structured logs through the repository Logger boundary.
+Core/Evaluator/Evidence paths use the structured logging boundary where configured.
 
 ```text
 Service event
@@ -278,7 +271,7 @@ After rollback:
 3. check 7373 / 7374 / 7376 health
 4. run required Core/Evidence/Evaluator functional checks
 5. confirm Provider/Parser external boundaries
-6. re-check Evaluator 7374 external reachability/firewall state
+6. confirm private bind/ingress state
 ```
 
 ---
@@ -288,10 +281,10 @@ After rollback:
 - Commit `.env`
 - Print Secret values into logs/docs/chat
 - Keep production Node processes directly on host instead of canonical containers
-- Expose internal Evidence Search endpoint publicly
-- Assume Evaluator 7374 is loopback-only while Compose binds `0.0.0.0`
+- Expose Evidence Search internal endpoint publicly
+- Skip valid Generic v2 request/integrity checks
 - Declare Evidence Search ready from container status alone
-- Declare Generic Evaluator complete from legacy v1 tests alone
+- Declare Generic Evaluator complete from Legacy v1 tests alone
 - Treat `PASSED` as deployment permission
 - Skip current-SHA verification because an older build passed
 
@@ -301,6 +294,6 @@ After rollback:
 
 - [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md)
 - [`API_REFERENCE.md`](API_REFERENCE.md)
-- [`LIMITATIONS.md`](LIMITATIONS.md)
+- [`SECURITY_NOTES.md`](SECURITY_NOTES.md)
 - [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
 - [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
