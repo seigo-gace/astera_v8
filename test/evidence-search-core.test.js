@@ -57,7 +57,7 @@ function searchPayload(overrides = {}) {
         required: true
       }
     ],
-    search: { free_projection: true, free_current: true },
+    search: { free_projection: true, free_current: true, free_general_web: true },
     paid_search: { enabled: false },
     maximum_results: 16,
     deadline_ms: 8000,
@@ -124,6 +124,29 @@ function completeProviders() {
   ];
 }
 
+function weakInitialProviders() {
+  const weakProjection = createJsonProjectionProvider({
+    provider_id: 'incomplete-projection-provider',
+    source_class: 'FREE_PROJECTION',
+    capabilities: ['NO_REINFORCEMENT'],
+    domains: ['G29'],
+    records: [{
+      canonical_record_id: 'weak-projection-record',
+      title: 'Node.js 22 support evidence',
+      excerpt: 'Node.js 22 support evidence',
+      fields: { claim: 'Node.js 22 is supported' }
+    }]
+  });
+  const weakCurrent = createJsonProjectionProvider({
+    provider_id: 'incomplete-current-provider',
+    source_class: 'FREE_OFFICIAL_LIVE',
+    capabilities: ['NO_REINFORCEMENT'],
+    domains: ['G29'],
+    records: []
+  });
+  return [weakProjection, weakCurrent];
+}
+
 test('runs the complete free evidence-search module through one execute connection', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });
   assert.deepEqual(Object.keys(module), ['execute']);
@@ -142,32 +165,23 @@ test('runs the complete free evidence-search module through one execute connecti
   assert.equal(response.result.ai_used, false);
   assert.equal(response.result.payment_executed, false);
   assert.deepEqual(response.result.paid_usage_reports, []);
+  assert.equal(response.result.route_execution.specialist_authoritative.attempted, true);
+  assert.equal(response.result.route_execution.general_current.attempted, true);
   assert.match(response.result.query_plan_hash, /^[a-f0-9]{64}$/);
   assert.match(response.result.result_hash, /^[a-f0-9]{64}$/);
 });
 
-test('does not run reinforcement when initial quality is below 8000', async () => {
-  const incomplete = createJsonProjectionProvider({
-    provider_id: 'incomplete-provider',
-    source_class: 'FREE_PROJECTION',
-    capabilities: ['NO_REINFORCEMENT'],
-    domains: ['G29'],
-    records: [{
-      canonical_record_id: 'weak-record',
-      title: 'Node.js 22 support evidence',
-      excerpt: 'Node.js 22 support evidence',
-      fields: { claim: 'Node.js 22 is supported' }
-    }]
-  });
-
+test('does not run reinforcement when initial quality is below 8000 and both required routes were attempted', async () => {
   const module = createEvidenceSearchModule({
-    providers: [incomplete, completeProviders()[2]]
+    providers: [...weakInitialProviders(), completeProviders()[2]]
   });
   const response = await module.execute(request());
 
   assert.equal(response.result.status, 'REJECTED_BLOCKING');
   assert.equal(response.result.quality.reinforcement_attempt_count, 0);
   assert.deepEqual(response.result.provider_execution.reinforcement, []);
+  assert.equal(response.result.route_execution.specialist_authoritative.attempted, true);
+  assert.equal(response.result.route_execution.general_current.attempted, true);
 });
 
 test('never invokes a paid provider during evidence search', async () => {
