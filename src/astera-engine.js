@@ -4,6 +4,12 @@ const CanonicalAsteraEngine = require('./canonical-astera-engine');
 const { resolveTaskEvidence } = require('./canonical-evidence-resolver');
 const { createEvidenceSearchClient } = require('./evidence-search/api/runtime-client');
 const { buildInitialJudgmentMaterial } = require('./runtime/initial-material-fast-path');
+const {
+  detectAnalysisIntent,
+  observeDocumentMaterial,
+  ensureStandaloneDecisionMaterialRequest,
+  lowInformationPurpose
+} = require('./runtime/standalone-material-normalizer');
 
 // Public decision-material runtime.
 // It does not implement a second canonical processing pipeline. The Canonical base owns
@@ -26,8 +32,106 @@ class AsteraEngine extends CanonicalAsteraEngine {
     return this;
   }
 
+  async prepareRequest(input = {}) {
+    const prepared = await super.prepareRequest(input);
+    return ensureStandaloneDecisionMaterialRequest(prepared, input);
+  }
+
   processInitial(input = {}, caller = { id: 'unknown' }) {
-    return buildInitialJudgmentMaterial(input, caller);
+    const question = String(input.question || '');
+    const observableMaterial = observeDocumentMaterial(question);
+    const analysisIntent = detectAnalysisIntent(question, observableMaterial);
+    const initial = buildInitialJudgmentMaterial(input, caller);
+    if (!initial?.result || typeof initial.result !== 'object') return initial;
+    return {
+      ...initial,
+      result: {
+        ...initial.result,
+        analysis_intent: analysisIntent,
+        observable_material: observableMaterial
+      },
+      material: initial.material && typeof initial.material === 'object'
+        ? { ...initial.material, analysis_intent: analysisIntent }
+        : initial.material,
+      runtime: initial.runtime && typeof initial.runtime === 'object'
+        ? { ...initial.runtime, standalone_intent_auto_detected: true }
+        : initial.runtime
+    };
+  }
+
+  frame(args = {}) {
+    const judgment = super.frame(args);
+    const request = args.request || {};
+    const packet = request.analysis_task_packet || {};
+    const observable = packet.observable_material || request.observable_material || null;
+    const intent = packet.analysis_intent || request.standalone_api_intent || null;
+    if (!observable || !intent) return judgment;
+
+    const next = { ...judgment, analysis_intent: intent, observable_material: observable };
+    const purpose = next['01_purpose'];
+    if (purpose && (lowInformationPurpose(purpose.user_goal) || lowInformationPurpose(purpose.summary))) {
+      next['01_purpose'] = {
+        ...purpose,
+        user_goal: intent.purpose,
+        summary: intent.purpose,
+        items: [intent.purpose],
+        analysis_intent: intent
+      };
+    } else if (purpose) {
+      next['01_purpose'] = { ...purpose, analysis_intent: intent };
+    }
+
+    const comparison = next['06_comparison'];
+    if (comparison && observable.candidates?.length >= 2 && !(comparison.comparison_candidates || []).length) {
+      next['06_comparison'] = {
+        ...comparison,
+        summary: `observable_candidates=${observable.candidates.length}; dimensions=${(observable.dimensions || []).join(' / ') || '-'}`,
+        comparison_candidates: [...observable.candidates],
+        dimensions: [...(observable.dimensions || [])],
+        candidate_materials: observable.candidates.map((label, index) => ({
+          candidate_id: `observable:${index + 1}`,
+          label,
+          material_state: 'OBSERVABLE_UNVERIFIED_MATERIAL',
+          observations: (observable.claim_texts || []).filter((claim) => String(claim).includes(label)),
+          confirmed_claim_ids: [],
+          undetermined_claim_ids: [],
+          supported_scopes: [],
+          evidence_refs: []
+        })),
+        selected_candidate: null,
+        candidate_ranking: [],
+        rejected_candidates: []
+      };
+    }
+
+    const crisis = next['04_crisis'];
+    if (crisis && observable.risks?.length) {
+      const specificRisks = observable.risks.map((risk, index) => ({
+        rule_id: `OBSERVABLE-${risk.code}`,
+        key: risk.code,
+        impact: risk.impact,
+        failure_condition: `${risk.code} を解消するEvidence・成立条件が未確認のまま判断材料を使用する。`,
+        weight: Math.max(35, 60 - index),
+        source: 'OBSERVABLE_MATERIAL',
+        claim_ids: []
+      }));
+      const existing = Array.isArray(crisis.risks) ? crisis.risks : [];
+      const genericDominance = new Set([
+        'Data Loss', 'Downtime', '互換性破壊', 'Security Regression', 'Rollback不能',
+        '幻覚・誤判定', 'Bias', 'Privacy Leak', 'Prompt Injection', '過信・監査Gap',
+        '根拠なしの主張', '弱いSource', '矛盾', 'Source Laundering'
+      ]);
+      const retained = existing.filter((risk) => !(String(risk.rule_id || '').startsWith('RISK-LENS-') && genericDominance.has(String(risk.impact || ''))));
+      const risks = [...specificRisks, ...retained];
+      next['04_crisis'] = {
+        ...crisis,
+        summary: `case_specific_risks=${specificRisks.length}; total_risks=${risks.length}`,
+        risks,
+        items: risks.map((risk) => `${risk.key}[${risk.weight}] ${risk.impact}`)
+      };
+    }
+
+    return next;
   }
 
   async processProgressive(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
