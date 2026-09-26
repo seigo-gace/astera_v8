@@ -1,12 +1,13 @@
 {
   "profile_schema_version": "astera.evaluation-profile.v2",
   "profile_id": "generic.measurement.v1",
+  "profile_version": "2.0.0",
   "display_name": "Generic Measurement",
   "dimensions": [
     {
       "dimension_id": "result",
       "weight": 100,
-      "minimum_score": 0,
+      "minimum_score": 95,
       "metrics": [
         {
           "metric_id": "generic.score",
@@ -14,7 +15,7 @@
           "direction": "HIGHER_BETTER",
           "target": 100,
           "floor": 0,
-          "minimum_score": 0,
+          "minimum_score": 95,
           "evidence_required": true,
           "required": true
         }
@@ -23,6 +24,6 @@
   ],
   "hard_blocks": [],
   "judgment": {
-    "minimum_total_score": 0
+    "minimum_total_score": 95
   }
 }
