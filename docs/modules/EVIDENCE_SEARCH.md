@@ -72,6 +72,8 @@ Product architectureでは2つの補完経路として扱います。
 
 2系統は同じ検索を二重実行するためではなく、**Authority / SpecializationとCurrentness / Discoverabilityを補完するため**です。
 
+根拠検索を実行する場合は、**Route AとRoute Bを毎回ともに実行**します。用途によって片方だけを選ぶSelectorは設けず、双方のCandidateを統合してNormalize / Deduplicate / Conflict / Freshness / Coverage / Lineage / Information Qualityへ通します。
+
 ---
 
 ## 4. Canonical runtime flow
