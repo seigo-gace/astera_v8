@@ -52,13 +52,13 @@ Question / Document / System Output
 
 ## 2. 3つの中核Module
 
-Astera v8は、役割を混ぜない3 Moduleで構成します。
+Astera v8は、役割を混ぜない3 Moduleで構成します。以下のPurpose / 必須条件 / Resultを完成品Contractとして固定し、実装都合で条件を省略・変更しません。
 
-| Module | 目的 | 主な効果 |
-|---|---|---|
-| **判断材料生成Module** | InputをTask / Claim / Evidence Requirementへ構造化し、Main8を生成 | 目的・前提・事実・Risk・反対視点・比較・Evidence状態を分離する |
-| **根拠検索Module** | 専門・権威Sourceと一般・最新SourceからEvidenceを取得・検証する | AIの記憶や推測ではなく追跡可能な根拠を使う |
-| **判定Module** | SubjectをRequirements / Profile / Measurements / Evidenceで評価する | ScoreだけでなくHard BlockとAuditを含む決定論的判定を行う |
+| Module | Purpose | 必須条件 | Result |
+|---|---|---|---|
+| **判断材料生成Module** | Inputを正確に理解・分解し、人間または主役AIが実際の判断に使える高品質な判断材料を高速生成する | **基本1秒以下**でLoadingではない実際の初期判断材料を返す。Engineering targetは**約0.1秒級Fast Path**。外部Network・Evidence Search完了待ち・Browser・OCR・重量Parser等でFast Pathを塞がず、品質を落として速度だけを達成しない | 固定Main8＋Task / Claim / Lens / Constraint / Risk / Comparison Material / Evidence Status |
+| **根拠検索Module** | 判断材料生成Moduleまたは判定・検証Moduleが必要とする事実・根拠を、2種類の検索経路で取得・検証し、採用可能Evidenceへ変換する | **専門・Authority検索**と**一般・最新情報検索**を案件ごとに片方または両方使う。判断材料生成ModuleのFast Pathを塞がない。`FOUND Candidate ≠ Adopted Evidence ≠ CONFIRMED Claim`を維持する | 採用可能Evidence＋検索状態＋Source / Authority / Freshness / Coverage / Conflict / Lineage / Quality / Query・Provider execution |
+| **判定・検証Module** | Subjectが指定されたRequirements / Profile / Measurements / Evidenceを満たすか決定論的に検証する | Evidence不足やHard Blockを推測でPASSにしない。必要時は根拠検索Moduleを使う。推奨・Ranking・最終意思決定を行わない | `PASSED` / `REVISION_REQUIRED` / `BLOCKED`等＋Metric / Evidence Binding / Hard Block / Failure reason / Audit trace |
 
 詳細:
 
@@ -66,13 +66,26 @@ Astera v8は、役割を混ぜない3 Moduleで構成します。
 - [`docs/modules/EVIDENCE_SEARCH.md`](docs/modules/EVIDENCE_SEARCH.md)
 - [`docs/modules/EVALUATION_VERIFICATION.md`](docs/modules/EVALUATION_VERIFICATION.md)
 
-Domain Lens、Japanese Parser、Human Reader、Optional LLM Adapter、Logging、Internal Auth、Ingressは3 Moduleを支えるSupport / Boundaryであり、別のCore Moduleではありません。
+Domain Lens、Japanese Parser、Human Reader、Optional LLM Adapter、Logging、Internal Auth、Ingress、Integrated execution、Task Runtimeは3 Moduleを支えるSupport / Boundaryであり、別のCore Moduleではありません。
 
 ---
 
 ## 3. 判断材料生成Module
 
 判断材料生成Moduleは、Inputをそのまま答えへ流しません。
+
+### Performance contract
+
+判断材料生成ModuleのFast Pathは完成品Contractの一部です。
+
+```text
+basic response target: < 1 second
+engineering Fast Path target: ~0.1 second class
+```
+
+1秒以下で返すものは受付・Loading表示ではなく、**人間または主役AIが実際に判断へ使える初期Main8判断材料**です。
+
+Fast Pathでは、Task / Claim / Lens / Constraint / Risk / Comparison Material / 現時点のEvidence Statusを構造化します。外部Network、Evidence Search完了待ち、Browser、OCR、重量Parser等は同期必須処理としてFast Pathへ直列挿入しません。必要な重処理は初期判断材料返却後にProgressiveに補強し、速度のために判断材料の品質を落としません。
 
 ### Input processing
 
@@ -159,12 +172,16 @@ final decision
 
 ### 2つの検索経路
 
+2つの検索経路は完成品Contractの必須仕様です。
+
 ```text
 Route A — Specialist / Authoritative
 Route B — General / Current
 ```
 
-#### Specialist / Authoritative
+#### Route A — Specialist / Authoritative
+
+現行Contractでは`free_projection`系に相当し、Domain別に整備した専門・公式・一次・権威Sourceを優先します。
 
 - Official registry
 - Law / regulation
@@ -174,7 +191,9 @@ Route B — General / Current
 - Government / authority data
 - Preselected authoritative source
 
-#### General / Current
+#### Route B — General / Current
+
+現行Contractでは`free_current`＋`free_general_web`系に相当し、現在のWeb・最新公式発表・変更情報・一般公開情報を確認します。
 
 - Official web
 - Official API
@@ -184,7 +203,9 @@ Route B — General / Current
 
 2 Routeは同じ検索を二重実行するためではありません。
 
-**Authority / Specialization**と**Currentness / General discoverability**を補完します。
+**Authority / Specialization**と**Currentness / General discoverability**を補完します。案件ごとに片方または両方を使用し、Authority検索だけ、一般検索だけへ固定しません。
+
+判断材料生成Moduleから呼び出す場合も、外部検索完了待ちで基本1秒以下Fast Pathを塞ぎません。
 
 ### Evidence adoption
 
@@ -216,9 +237,9 @@ Evidenceが成立しない場合は推測で補完せず、未解決状態を保
 
 ---
 
-## 5. 判定Module — Evaluation / Verification
+## 5. 判定・検証Module — Evaluation / Verification
 
-判定Moduleは、成果物・実装・Test・Operation・Research等を、自己申告ではなく**検証可能なMeasurement / Evidence**で評価します。
+判定・検証Moduleは、成果物・実装・Test・Operation・Research等を、自己申告ではなく**検証可能なMeasurement / Evidence**で評価します。
 
 ```text
 Subject
@@ -245,7 +266,7 @@ A. Caller-provided Evidence Registry / Binding
 B. Existing Evidence Search Module
 ```
 
-Evidenceを使う場合も、判定ModuleがEvidence Providerそのものになるわけではありません。
+Evidenceを使う場合も、判定・検証ModuleがEvidence Providerそのものになるわけではありません。
 
 ### Judgment
 
@@ -258,6 +279,8 @@ BLOCKED
 ```
 
 入力不成立・評価実行失敗は別Stateとして扱います。
+
+Evidence不足やHard Blockを推測で補完して`PASSED`へ変換しません。
 
 ### Hard Blocking
 
@@ -287,6 +310,8 @@ Evidence
 → Audit
 ```
 
+判定・検証Moduleは、推奨、Candidate Ranking、採用案決定、最終意思決定を行いません。
+
 ---
 
 ## 6. 3 Moduleの接続
@@ -296,13 +321,17 @@ Evidence
 ### Judgment Material → Evidence Search
 
 ```text
+Fast Path
 Task / Claim
 → Evidence Requirement
-→ Search Plan
+→ Initial Main8 (< 1 second basic target)
+
+Progressive enrichment when required
+Search Plan
 → Evidence Search
 → Accepted Evidence / Unresolved
 → Claim Binding / Confirmation
-→ Main8
+→ Main8 update
 ```
 
 ### Evaluation → Evidence Search
@@ -470,6 +499,8 @@ Final human/business decision
 - JavaScript / CommonJS
 - Root runtime npm dependencies: **0**
 - Judgment Material Generation + Evidence Search + Evaluation / Verification
+- 判断材料生成Module: **基本1秒以下 / 約0.1秒級Fast Path**
+- Evidence Search: **Specialist / Authoritative + General / Currentの2 Route必須**
 - Dependency-aware Task Graph / bounded Wave execution
 - Queue admission / overload rejection / cancellation propagation
 - Evidence Search internal signed service boundary
@@ -526,7 +557,7 @@ READMEは完成品の入口です。詳細仕様は各専用Documentへ分離し
 | [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md) | File ownership / responsibility map |
 | [`docs/modules/JUDGMENT_MATERIAL_GENERATION.md`](docs/modules/JUDGMENT_MATERIAL_GENERATION.md) | 判断材料生成Module |
 | [`docs/modules/EVIDENCE_SEARCH.md`](docs/modules/EVIDENCE_SEARCH.md) | 根拠検索Module |
-| [`docs/modules/EVALUATION_VERIFICATION.md`](docs/modules/EVALUATION_VERIFICATION.md) | 判定Module |
+| [`docs/modules/EVALUATION_VERIFICATION.md`](docs/modules/EVALUATION_VERIFICATION.md) | 判定・検証Module |
 | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) | HTTP / Auth / Contract |
 | [`docs/QUICK_START.md`](docs/QUICK_START.md) | Development / Verification start |
 | [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md) | Production deployment |
