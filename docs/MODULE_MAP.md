@@ -1,6 +1,6 @@
 # Astera v8 — Canonical Module Map
 
-このDocumentは、Repository内のActive codeを**3 Module / Shared Support / External Boundary / Verification / Compatibility・Standalone / Historical**へ分類するためのMapです。
+このDocumentは、Repository内のCodeを**3 Module / Shared Support / External Boundary / Verification / Compatibility / Historical**へ分類するためのMapです。
 
 目的は「Directoryにあるから同じModule」と誤認しないことです。
 
@@ -46,6 +46,8 @@ src/runtime/canonical-wave-executor.js
 src/runtime/concurrency-policy.js
 src/worker-pool.js
 ```
+
+Task execution ownership includes Dependency validation、Wave ordering、bounded concurrency、admission、overload rejection、dependency skip propagation、cancellation handlingです。
 
 ### Claim / evidence requirement / confirmation
 
@@ -105,11 +107,11 @@ Subareas:
 ```text
 api/         internal HTTP / client boundary
 contracts/   request/result/module schemas
-core/        query planning / scheduling / orchestration / KB target registry
+core/        query planning / scheduling / orchestration / target registry
 evidence/    normalization / dedupe / condition / lineage / conflict / freshness
 providers/   provider registry / adapters / transports / source catalog
 recovery/    job state / durable spool / recovery
-paid/        isolated future usage calculation only
+paid/        isolated usage calculation only
 utils/       evidence-search local utilities
 ```
 
@@ -177,7 +179,7 @@ integration/
 cli/
 ```
 
-Legacy v1を現行Generic v2の責務としてREADMEへ混ぜません。
+Legacy v1をGeneric v2の責務としてREADMEへ混ぜません。
 
 詳細: [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
 
@@ -241,7 +243,7 @@ src/astera-effect-pair.js
 - Hallucination / False Confirmation / Final Decision Violation等の検出
 - paired story評価と集計
 
-これらは実際にEffect Story runner/testから使用されます。
+代表Runner/Test:
 
 ```text
 scripts/run-astera-effect-stories-v1.js
@@ -253,27 +255,19 @@ Effect scoreはAstera RuntimeのFinal Decisionでも、Generic Evaluator v2のPr
 
 ---
 
-## 7. Standalone / compatibility helper not on the confirmed canonical public path
+## 7. Compatibility / standalone helper
 
-Repository root sourceには次のStandalone helperも存在します。
+Repository root sourceにはCanonical public pathとは別のCompatibility / standalone helperが存在し得ます。
 
 ```text
 src/mood-detector.js
 ```
 
-このFileは`moodAnswers`やTextから独立したMood labelを算出するHelperです。ただし、現行の確認済みpublic canonical pathでは:
+このFileは独立したMood label helperであり、完成品のCanonical public flowを定義するAuthorityではありません。
 
-```text
-src/server.js
-→ moodAnswersをallowlist / sanitize
-→ src/canonical-astera-engine.js
-→ readHumanState(...)
-→ src/hyperion-human-reader.js
-```
+Canonical Human Reader flowは、判断材料生成Module側のInput signal / `moodAnswers`を`src/hyperion-human-reader.js`へ渡す責務として扱います。
 
-となっており、`mood-detector.js`をCanonical active stageとして確認していません。したがってREADMEの現行機能Flowへ組み込まず、Standalone/compatibility fileとしてMapへ残します。
-
-この位置付けを変更する場合は、実Call pathとTestを同時に確認します。
+Compatibility helperをCanonical Runtimeへ昇格する場合は、Architecture / active call path / testsを同一変更単位で更新します。
 
 ---
 
@@ -286,17 +280,15 @@ docker-compose.yml
 deploy/
 ```
 
-現行`docker-compose.yml`は次の3 Runtime Serviceを定義します。
+Production targetは次のPrivate/Internal 3 Runtime Serviceです。
 
 ```text
-astera-v8                 Core / Judgment Material    7373
-astera-v8-evaluator       Evaluation / Verification  7374
-astera-v8-evidence-search Evidence Search             7376
+astera-v8                 Core / Judgment Material    127.0.0.1:7373
+astera-v8-evaluator       Evaluation / Verification  127.0.0.1:7374
+astera-v8-evidence-search Evidence Search             127.0.0.1:7376
 ```
 
-Bindの詳細は[`API_REFERENCE.md`](API_REFERENCE.md)と[`DEPLOYMENT_VPS.md`](DEPLOYMENT_VPS.md)をAuthorityとします。現在のRoot ComposeではEvaluatorだけ`0.0.0.0:7374`へOverrideされています。
-
-Cloudflared serviceはIngress supportであり、Asteraの4つ目のModuleではありません。
+Cloudflared / reverse proxyはIngress supportであり、Asteraの4つ目のModuleではありません。
 
 ---
 
@@ -308,7 +300,7 @@ Cloudflared serviceはIngress supportであり、Asteraの4つ目のModuleでは
 test/
 ```
 
-Judgment Material、Evidence Search、cross-boundary regression、Effect verificationを含みます。
+Judgment Material、Task execution、Evidence Search、cross-boundary regression、Effect verificationを含みます。
 
 ### Evaluator local tests
 
@@ -337,7 +329,7 @@ CI Fileの存在は、任意Commit SHAの成功を意味しません。
 ## 10. Documentation
 
 ```text
-README.md                repository entry
+README.md                completed product entry
 STRUCTURE.md             directory summary
 docs/ARCHITECTURE.md     canonical architecture
 docs/MODULE_MAP.md       this file
@@ -345,11 +337,13 @@ docs/modules/            module-specific detail
 docs/API_REFERENCE.md    HTTP contract
 docs/QUICK_START.md      development verification
 docs/DEPLOYMENT_VPS.md   production deployment
-docs/LIMITATIONS.md      known limitations
+docs/LIMITATIONS.md      product boundaries / inherent limitations
 docs/LENS_GENRE_INDEX.md lens taxonomy
 ```
 
 Brand / LP / Press docsは公開・説明用ReferenceでありTechnical authorityではありません。
+
+Development audit debtはProduct Documentへ混在させず、Project audit recordで管理します。
 
 ---
 
@@ -357,7 +351,7 @@ Brand / LP / Press docsは公開・説明用ReferenceでありTechnical authorit
 
 `archive/`や生成Artifactが存在する場合、それらを現行Architecture authorityへ昇格しません。
 
-過去SHAのResult、過去のTest PASS、古いQCE/KB設計をCurrent implementationへ逆輸入しません。
+過去SHAのResult、過去のTest PASS、古いQCE/KB設計をCurrent Product Contractへ逆輸入しません。
 
 ---
 
@@ -370,4 +364,4 @@ Brand / LP / Press docsは公開・説明用ReferenceでありTechnical authorit
 5. Evidence SearchのSearch/Adoption責務をGeneric Evaluatorへ移さない。
 6. Generic EvaluatorのRegistry/Binding/Metric/Blocking責務をEvidence Searchへ移さない。
 7. Main8のFinal Decision authorityをAsteraへ追加しない。
-8. Active call pathで未確認のStandalone fileをREADMEのCore Flowへ昇格しない。
+8. Compatibility helperをCanonical Product FlowのAuthorityとして扱わない。
