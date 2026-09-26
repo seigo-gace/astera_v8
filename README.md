@@ -84,6 +84,32 @@ Domain Lens、Japanese Parser、Human Reader、Optional LLM Adapter、Logging、
 - Claim extraction / normalization
 - Evidence Requirement生成
 
+### Deterministic execution control
+
+Taskが複数ある場合は、依存関係を持つTask Graphとして扱い、実行順と並列性を決定論的に制御します。
+
+```text
+Task Graph
+→ dependency validation
+→ execution waves
+→ bounded parallel execution inside each wave
+→ dependency failure propagation
+→ cancellation / timeout handling
+→ ordered result projection
+```
+
+これにより:
+
+- 依存Taskより先に後続Taskを実行しない
+- 同一Waveの独立Taskだけを並列化する
+- 無制限並列によるResource暴走を防ぐ
+- 前提Taskが失敗した後続Taskを誤実行しない
+- Queue過負荷を明示的にRejectできる
+- Request cancellation後の不要処理を継続しない
+- 実行結果・失敗・Skip・TimingをTask単位で追跡できる
+
+という実行境界を持ちます。
+
 ### Multi-perspective processing
 
 - `G01`〜`G38` Domain Lens
@@ -444,6 +470,8 @@ Final human/business decision
 - JavaScript / CommonJS
 - Root runtime npm dependencies: **0**
 - Judgment Material Generation + Evidence Search + Evaluation / Verification
+- Dependency-aware Task Graph / bounded Wave execution
+- Queue admission / overload rejection / cancellation propagation
 - Evidence Search internal signed service boundary
 - Generic Evaluation v2 contract
 - Container-first production deployment
@@ -463,6 +491,7 @@ Release verificationでは少なくとも次を分離します。
 ```text
 Source validity
 Unit / Integration / Regression
+Task dependency / wave / cancellation behavior
 Runtime health
 Real external boundary
 Evidence retrieval
