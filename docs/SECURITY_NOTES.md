@@ -1,70 +1,207 @@
 # Astera v8 — Security Notes
 
-Updated: 2026-08-03
+Updated: 2026-09-26
 
-## 1. Security boundary
+Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-Astera v8 Coreは判断材料生成を担当します。Account、個人情報、Square、Credit、財務DBは別Systemが所有します。
+---
 
-Coreへ不要な個人情報や決済情報を渡さないことが第一の防御です。
+## 1. Security model
 
-## 2. Secrets currently present in repository configuration
+Astera v8 has three runtime trust domains:
 
-- Runtime API secrets (`ASTERA_API_KEY`, `ASTERA_SKILL_API_KEY`)
-- Internal service secrets
-- Evidence spool / recovery keys
+```text
+Judgment Material Generation  :7373
+Evaluation / Verification     :7374
+Evidence Search               :7376
+```
+
+Security design must preserve both **service isolation** and **data authority isolation**.
+
+A caller being authenticated does not mean caller-supplied internal truth state is trusted.
+
+---
+
+## 2. Public/process trust boundary
+
+`POST /process` uses an external body allowlist.
+
+The public route must not trust caller-supplied:
+
+- prepared Task graph
+- Canonical Claim Records
+- pre-forged `CONFIRMED` state
+- arbitrary internal Evidence packet
+- internal execution objects
+
+Current boundary tests verify that forged internal state is ignored/reconstructed rather than accepted as truth.
+
+---
+
+## 3. Evidence Search trust boundary
+
+`POST /internal/v1/evidence/search` is an internal signed-service endpoint.
+
+Current implementation verifies:
+
+- service identity
+- request body hash
+- HMAC/signature contract
+- expiry/TTL
+- nonce/replay state
+
+Evidence Search must still validate Provider results after request authentication. A valid internal caller cannot turn an invalid Provider result into accepted Evidence.
+
+Non-`FINAL_VALID` module output must not expose candidates as adopted Evidence.
+
+---
+
+## 4. Evaluator trust boundary
+
+Generic `POST /v2/evaluate` uses API-key authentication on the normal route and Skill API authentication on the skill route.
+
+Authentication does not bypass:
+
+- Request schema validation
+- Measurement hash verification
+- Evidence Registry integrity
+- Evidence Binding integrity
+- Required Evidence checks
+- Hard Blocking
+
+The evaluator must not fabricate evidence or alter the evaluated Subject.
+
+---
+
+## 5. Secrets
+
+Current runtime configuration may include:
+
+- `ASTERA_API_KEY`
+- `ASTERA_SKILL_API_KEY`
+- internal service secret / secret file
+- Evidence durable-spool encryption key
+- Japanese Parser API credential where configured
 - Optional external LLM keys
-- TGserver connection secrets
+- TGserver connectivity/auth material
+- Cloudflare tunnel token file when the optional profile is used
 
-## 3. Implemented protections
+Rules:
 
-- Secret / token / password pattern masking
-- Payload size protection
-- JSON parse validation
-- Worker timeout
-- External HTTP timeout
-- CORS allowlist option
-- HTTPS / HSTS option
-- Structured logging
-- Failed log delivery outbox
-- Skill API key authentication
+- never commit `.env`
+- never commit runtime secret files
+- never print secret values into README/issues/chat/log examples
+- mount secret files read-only where supported
+- keep Browser/client code free of server-side secrets
 
-## 4. Required production controls
+---
 
-- Cloudflare / reverse proxyでHTTPS終端
-- CORSを許可Originへ限定
-- BrowserへServer Secretを埋め込まない
-- Input本文、個人情報、決済情報をLogへ送らない
-- TGserverへ送る前にSecret removalを検証
-- Outboxを長期Log DBとして使用しない
-- Container、Secret、Backup、Restore、Monitoringを検証
-- App / Account / CommerceとのContractを明示する
+## 6. Implemented transport protections
 
-## 5. Data minimization
+Depending on the service, current code includes:
 
-Asteraへ渡すのは判断に必要な範囲だけにします。
+- strict JSON parsing
+- payload-size limits
+- API-key authentication
+- signed internal-service authentication
+- replay/nonce checks for internal requests
+- CORS controls
+- optional HTTPS/HSTS enforcement
+- request/header/keep-alive timeouts
+- provider/client deadlines
+- response/log secret masking
+- transport rate limiting
+- read-only/cap-drop/no-new-privileges settings for evaluator Compose service
+- Evidence recovery artifact encryption/integrity controls
 
-- 不要な氏名、住所、電話、Card情報を除去
-- 文書は必要Sectionへ絞る
-- High-risk dataは識別子を置換する
-- Logには原文を無条件保存しない
+Exact protection is service-specific; do not infer one service's middleware automatically applies to all three.
 
-## 6. Responsibility boundary warning
+---
 
-Core HTTP does not own account, billing, subscription, signup, or commerce state. Do not embed App-owned credentials in Core deployment or treat Core as the account or payment system of record.
+## 7. Data minimization
 
-## 7. Domain Lens と QCE
+Send only data required for the judgment/evaluation/search task.
 
-QCE は Evidence 取得後に Domain Lens 充足で Blocking しません。Lens 確認不足は Evidence Search / Information Quality の責務です。
+- remove unrelated names, addresses, phone numbers and credentials
+- do not send card/payment secrets
+- minimize uploaded/document context to required sections
+- replace sensitive identifiers where full identity is unnecessary
+- do not log raw request bodies by default
+- preserve only operational state required for recovery/audit
 
-## 8. Incident evidence
+Evidence Search recovery data is operational evidence-job state, not a general user-data store.
 
-障害報告では次を残します。
+---
 
-- Commit SHA
-- Request ID
-- Timestamp
-- Endpoint
-- Secret除去済みError
-- Reproduction inputの最小化版
-- Container / workflow status
+## 8. Internal network boundary
+
+Current default service binds are loopback/private.
+
+```text
+7373 Core
+7374 Evaluator
+7376 Evidence Search
+```
+
+Rules:
+
+- keep Evidence Search internal route private
+- do not expose internal ports directly to the Internet without a separately designed authenticated ingress
+- terminate HTTPS at the approved reverse proxy/Cloudflare layer when public ingress is required
+- verify trusted proxy configuration before relying on forwarded-proto headers
+
+---
+
+## 9. Optional LLM boundary
+
+Optional LLM adapters are external dependency boundaries.
+
+- External LLM output must not override Evidence validity.
+- External LLM output must not manufacture `CONFIRMED` Claim state.
+- Request-level arbitrary LLM base URL selection remains disabled unless explicitly enabled for authenticated internal use.
+- Provider keys remain secret runtime configuration.
+
+---
+
+## 10. Logging boundary
+
+TGserver is an external logging sink, not Evidence authority.
+
+Before delivery:
+
+- secret masking/removal must remain active
+- raw confidential content should not be logged unnecessarily
+- failed delivery outbox must not become long-term Knowledge storage
+- successful log delivery must not be interpreted as successful evaluation/search
+
+---
+
+## 11. Information Quality wiring warning
+
+The active Evidence Search production start currently uses in-process `evaluateInformationQuality()`.
+
+A legacy/stale HTTP client exists for `/internal/v1/information-quality/evaluate`, but the current evaluator server does not expose that route.
+
+Security review must evaluate the **actual active call path**, not assume the inactive client/architecture description is runtime truth.
+
+See [`LIMITATIONS.md`](LIMITATIONS.md).
+
+---
+
+## 12. Incident evidence
+
+For a security/runtime incident, preserve at minimum:
+
+- exact Commit SHA
+- service name / port
+- timestamp
+- request ID / evaluation ID / search request ID where applicable
+- endpoint
+- HTTP status / structured error code
+- secret-redacted logs
+- minimal reproduction input
+- container health/state
+- relevant workflow/test result
+- whether Evidence/Measurement hashes were involved
+
+Do not paste secret files or full credentials into the incident report.
