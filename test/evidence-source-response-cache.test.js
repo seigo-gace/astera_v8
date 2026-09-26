@@ -68,3 +68,26 @@ test('non-2xx and Set-Cookie responses are never cached', async () => {
   await secureGet('https://example.com/cookie', { ...base, request: cookieRequest });
   assert.equal(cookieCalls, 2);
 });
+
+test('source cache never bypasses the current maxBytes response limit', async () => {
+  clearSourceResponseCache();
+  let calls = 0;
+  const body = 'x'.repeat(4096);
+  const request = async () => { calls += 1; return response(body); };
+  const base = {
+    allowedHosts: ['example.com'],
+    lookup,
+    request,
+    cacheTtlMs: 5000
+  };
+
+  const first = await secureGet('https://example.com/large', { ...base, maxBytes: 8192 });
+  assert.equal(first.body.length, 4096);
+  assert.equal(first.cache.status, 'MISS');
+
+  await assert.rejects(
+    () => secureGet('https://example.com/large', { ...base, maxBytes: 1024 }),
+    (error) => error?.code === 'SOURCE_RESPONSE_TOO_LARGE'
+  );
+  assert.equal(calls, 2);
+});
