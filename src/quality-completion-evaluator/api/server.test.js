@@ -96,17 +96,15 @@ test('standalone evaluator public API accepts local no-auth legacy evaluate', as
   });
 });
 
-test('standalone evaluator v2 API accepts generic evidence-backed evaluation', async () => {
+test('standalone evaluator public v2 API rejects caller-provided evidence and requires Evidence Search ownership', async () => {
   await withEvaluatorApi(async ({ port }) => {
     const response = await request({
       port, path: '/v2/evaluate',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(genericRequest())
     });
-    assert.equal(response.status, 200);
-    assert.equal(response.json.status, 'PASSED');
-    assert.equal(response.json.ai_used, false);
-    assert.match(response.json.result_hash, /^[a-f0-9]{64}$/);
+    assert.equal(response.status, 400);
+    assert.equal(response.json.error, 'provided_evidence_forbidden_on_public_v2');
   });
 });
 
