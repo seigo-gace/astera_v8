@@ -9,6 +9,10 @@ const {
   observeDocumentMaterial,
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
+const {
+  explicitPurposeIntent,
+  applyExplicitPurposeControl
+} = require('./runtime/purpose-control');
 
 function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
@@ -37,15 +41,18 @@ class AsteraEngine extends CanonicalAsteraEngine {
 
   async prepareRequest(input = {}) {
     const prepared = await super.prepareRequest(input);
-    return ensureStandaloneDecisionMaterialRequest(prepared, input);
+    const normalized = ensureStandaloneDecisionMaterialRequest(prepared, input);
+    return applyExplicitPurposeControl(normalized, input.purpose);
   }
 
   processInitial(input = {}, caller = { id: 'unknown' }) {
     const question = String(input.question || '');
     const observableMaterial = observeDocumentMaterial(question);
-    const analysisIntent = detectAnalysisIntent(question, observableMaterial);
+    const analysisIntent = explicitPurposeIntent(input.purpose)
+      || detectAnalysisIntent(question, observableMaterial);
     const initial = buildInitialJudgmentMaterial(input, caller);
     if (!initial?.result || typeof initial.result !== 'object') return initial;
+    const purposeOverrideUsed = analysisIntent.source === 'EXPLICIT_PURPOSE_OVERRIDE';
     return {
       ...initial,
       result: {
@@ -57,7 +64,11 @@ class AsteraEngine extends CanonicalAsteraEngine {
         ? { ...initial.material, analysis_intent: analysisIntent }
         : initial.material,
       runtime: initial.runtime && typeof initial.runtime === 'object'
-        ? { ...initial.runtime, standalone_intent_auto_detected: true }
+        ? {
+          ...initial.runtime,
+          standalone_intent_auto_detected: !purposeOverrideUsed,
+          purpose_override_used: purposeOverrideUsed
+        }
         : initial.runtime
     };
   }
