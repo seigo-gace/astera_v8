@@ -3,7 +3,7 @@
 Updated: 2026-09-26  
 Runtime: Node.js 22+
 
-This document describes the **currently implemented HTTP surface** of the three Astera v8 services.
+This document defines the **completed HTTP Product Contract** for the three Astera v8 services.
 
 Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
@@ -11,21 +11,21 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ## 1. Service map
 
-Service-code defaults and the current root Compose values are not identical.
+Production services remain private/internal unless a separately authenticated ingress is intentionally designed.
 
-| Service | Code default | Current root Compose | Purpose |
-|---|---|---|---|
-| Astera Core | `127.0.0.1:7373` | `127.0.0.1:${ASTERA_PORT}` | Judgment Material Generation |
-| Evaluation / Verification | `127.0.0.1:7374` | **`0.0.0.0:7374`** | Generic v2 and Legacy v1 evaluation |
-| Evidence Search | `127.0.0.1:7376` | `127.0.0.1:7376` | Internal evidence retrieval / adoption |
+| Service | Production private bind | Purpose |
+|---|---|---|
+| Astera Core | `127.0.0.1:7373` | Judgment Material Generation |
+| Evaluation / Verification | `127.0.0.1:7374` | Generic v2 / Legacy v1 evaluation |
+| Evidence Search | `127.0.0.1:7376` | Internal evidence retrieval / adoption |
 
-Current `docker-compose.yml` defines all three services with `network_mode: host`. The Evaluator Compose override therefore must not be described as loopback-only. Its actual network exposure depends on host firewall/ingress controls and is tracked in [`LIMITATIONS.md`](LIMITATIONS.md).
+All three expose an independent health boundary.
 
 ---
 
 ## 2. Astera Core — 7373
 
-Implementation: `src/server.js`
+Implementation authority: `src/server.js`
 
 ### `GET /healthz`
 
@@ -49,9 +49,9 @@ Development-only alternative:
 ASTERA_LOCAL_NO_AUTH=1
 ```
 
-when the server host is loopback.
+when the server host is loopback and the development override is explicit.
 
-Accepted external body fields are allowlisted by `src/server.js`:
+Accepted external body fields are allowlisted:
 
 ```json
 {
@@ -66,9 +66,9 @@ Accepted external body fields are allowlisted by `src/server.js`:
 
 `question` is required to be a String.
 
-The HTTP route does **not** accept caller-provided internal Task graphs, canonical Claim records, Evidence packets or other internal state as trusted process input.
+The route does **not** accept caller-provided internal Task graphs, canonical Claim records, Evidence packets or other internal execution state as trusted process input.
 
-The current public body allowlist also does not pass caller-provided `llm` configuration through `/process`. LLM selection for this route is resolved after allowlisting, using allowed runtime configuration such as `LLM_CHAIN`.
+Caller-provided arbitrary LLM connection configuration is not part of the public `/process` body contract. Optional LLM selection is controlled by approved runtime configuration.
 
 Response:
 
@@ -76,7 +76,7 @@ Response:
 text/plain; charset=utf-8
 ```
 
-Current Main8 order:
+Main8 order:
 
 ```text
 01 本当の目的
@@ -99,21 +99,21 @@ Auth:
 ASTERA_SKILL_API_KEY
 ```
 
-Transport rate behavior differs from normal `/process`; this does not change Core decision authority.
+The skill route does not change Core decision authority.
 
 ---
 
 ## 3. Evidence Search — 7376
 
-Implementation: `src/evidence-search/api/server.js`
+Implementation authority: `src/evidence-search/api/server.js`
 
 ### `GET /healthz`
 
 Purpose: Evidence Search readiness and active-provider state.
 
-The route executes Module `HEALTH` and returns `503` when no active searchable Provider is available.
+A Search service is READY only when the required searchable runtime/provider boundary is available.
 
-Representative response fields:
+Representative response fields include:
 
 ```text
 ok
@@ -128,29 +128,19 @@ time
 
 ### `POST /internal/v1/evidence/search`
 
-Purpose: Execute the existing Evidence Search contract.
+Purpose: Execute the Evidence Search contract.
 
 This is an **internal signed service endpoint**, not a public browser endpoint.
 
-Authentication / integrity includes the internal-service signature contract and verifies the expected calling service as:
+Authentication / integrity includes the internal-service signature contract and expected service identity.
 
-```text
-astera-main
-```
-
-The request body is the Evidence Search payload. Paid execution is rejected when:
-
-```json
-{"paid_search":{"enabled":true}}
-```
-
-Current Search Request schema:
+Search Request schema:
 
 ```text
 src/evidence-search/contracts/search-request.v1.schema.json
 ```
 
-Current Search Result schema:
+Search Result schema:
 
 ```text
 src/evidence-search/contracts/search-result.v1.schema.json
@@ -177,26 +167,34 @@ maximum_results
 deadline_ms
 ```
 
-The API distinguishes retrieval/execution state from evidence adoption state. A non-`FINAL_VALID` Module result must not be treated as adopted Evidence.
+The request contract exposes individual search classes, while product architecture groups acquisition into two complementary routes:
+
+```text
+Specialist / Authoritative
+General / Current
+```
+
+Paid execution is not part of the deterministic free-search contract.
+
+The API distinguishes retrieval/execution state from Evidence adoption state. A retrieved candidate is not automatically adopted Evidence.
 
 ---
 
 ## 4. Evaluation / Verification — 7374
 
-Implementation: `src/quality-completion-evaluator/api/server.js`
+Implementation authority: `src/quality-completion-evaluator/api/server.js`
 
-Code default host is `127.0.0.1`. **Current root Compose overrides this to `0.0.0.0` while using host networking.** Health examples may still call `127.0.0.1:7374`, but that does not mean the service is bound only to loopback.
+Production private bind:
+
+```text
+127.0.0.1:7374
+```
 
 ### `GET /healthz`
 
 Purpose: Evaluator runtime health and supported endpoint discovery.
 
-The health response exposes Generic v2 and Legacy v1 endpoint names and reports:
-
-```text
-publication_enabled = false
-ai_used = false
-```
+The evaluator remains non-AI and publication-disabled as part of its module boundary.
 
 ### `POST /v2/evaluate`
 
@@ -208,7 +206,7 @@ Auth:
 X-API-Key: ASTERA_API_KEY
 ```
 
-Development-only loopback no-auth is allowed only when explicitly configured.
+Development-only loopback no-auth is permitted only when explicitly configured.
 
 Required schema version:
 
@@ -279,29 +277,23 @@ Purpose: Legacy skill/private evaluator compatibility route.
 
 ---
 
-## 5. Information Quality is not an exposed Generic API contract
+## 5. Information Quality internal contract
 
-Evidence Search uses the evaluator package's Information Quality engine to decide whether retrieved candidates are adoptable Evidence.
+Evidence Search uses a deterministic **Information Quality** contract to decide whether retrieved candidates are adoptable Evidence.
 
-Current production startup wires it as:
-
-```text
-Evidence Search
-→ evaluateInformationQuality()
-→ IN_PROCESS
-```
-
-`src/evidence-search/api/information-quality-client.js` contains an HTTP client targeting:
+This contract is separate from Generic Evaluation v2.
 
 ```text
-/internal/v1/information-quality/evaluate
+Evidence Candidate
+→ Information Quality
+→ Adopt / Reject / Reinforce
 ```
 
-but the current Evaluator API Server does not expose that route, and the current Evidence Search production start path injects the Information Quality function in-process instead.
+Information Quality is an internal module capability, not a public browser API and not a Generic `/v2/evaluate` request.
 
-Therefore this path must **not** be documented as a live HTTP endpoint.
+Its transport/wiring is an implementation detail behind the stable responsibility boundary. Regardless of transport, it must not create a recursive Generic Evaluator ↔ Evidence Search loop.
 
-See [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md) and [`LIMITATIONS.md`](LIMITATIONS.md).
+Detailed contract: [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
 
 ---
 
@@ -326,7 +318,7 @@ Never place secrets in README, example output or committed `.env` files.
 
 ## 7. Common transport behavior
 
-Depending on service/route, current implementations include:
+Service-specific implementations may include:
 
 - strict JSON parsing
 - payload-size limits
@@ -336,12 +328,12 @@ Depending on service/route, current implementations include:
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: no-referrer`
 - `Cache-Control: no-store`
-- optional HSTS / HTTPS enforcement
+- HTTPS/HSTS enforcement where configured
 - request/header/keep-alive timeout
 - secret masking in API responses/log payloads
-- transport rate limiting on normal Core/Evaluator routes
+- transport rate limiting
 
-Do not assume one service's transport policy automatically applies to another; use its server implementation as authority.
+Do not infer one service's middleware automatically applies to another; use its server contract as authority.
 
 ---
 
@@ -360,13 +352,13 @@ Common HTTP meanings include:
 | 409 | recovery/job conflict where applicable |
 | 413 | payload too large |
 | 426 | HTTPS required where enabled |
-| 429 | transport rate limit |
-| 499 | internal cancellation representation in client-side boundary |
+| 429 | transport/admission rate limit |
+| 499 | cancellation representation at an internal/client boundary |
 | 500 | internal failure |
 | 503 | required runtime/provider/integration unavailable |
 | 504 | provider/search/client timeout |
 
-Exact error codes remain defined by current service code and contracts.
+Exact structured error codes remain defined by the service contracts.
 
 ---
 
