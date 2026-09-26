@@ -105,6 +105,8 @@ Evaluator v2
 
 `evidence_search`と`evidence_registry/evidence_bindings`の同時指定はInput errorです。
 
+Evidence Search modeを使っても、判定ModuleはSearch ProviderやEvidence adoptionを所有しません。
+
 ---
 
 ## 5. Evidence traceability
@@ -133,6 +135,8 @@ Audit
 
 Measurementは`measurement_hash`と`provenance`を持ちます。Evidence参照には`evidence_refs`またはEvidence Search Claimと紐付ける`evidence_claim_refs`を利用できます。
 
+判定結果は「何点だったか」だけでなく、**どのEvidenceがどのMeasurement / Metric / Dimension / Blockingへ影響したか**を追跡できることを目的とします。
+
 ---
 
 ## 6. Judgment states
@@ -152,7 +156,7 @@ INVALID_INPUT
 EVALUATION_FAILED
 ```
 
-`PASSED`は、**指定されたProfile / Requirements / Evidenceに対する判定結果**です。
+`PASSED`は、**指定されたProfile / Requirements / Measurements / Evidenceに対する判定結果**です。
 
 次を意味しません。
 
@@ -166,7 +170,23 @@ EVALUATION_FAILED
 
 ---
 
-## 7. Main files — Generic v2
+## 7. Hard Blocking
+
+Hard BlockingはScoreとは別に評価します。
+
+```text
+High Score
++ Critical violation
+= BLOCKED
+```
+
+これにより、総合点だけでは見逃せない重大違反・必須Evidence不足・Integrity failureを完成扱いしません。
+
+ProfileはMetric / Dimension / thresholdだけでなく、Block条件を明示的に定義します。
+
+---
+
+## 8. Main files — Generic v2
 
 ### Entrypoint / API
 
@@ -195,9 +215,9 @@ EVALUATION_FAILED
 
 ---
 
-## 8. Legacy v1 compatibility
+## 9. Legacy v1 compatibility
 
-`src/quality-completion-evaluator/`には旧Quality / Completion Evaluator v1実装も互換性のため残っています。
+`src/quality-completion-evaluator/`には旧Quality / Completion Evaluator v1実装もCompatibility contractとして残り得ます。
 
 代表File:
 
@@ -213,13 +233,13 @@ EVALUATION_FAILED
 - `contracts/evaluation-request.v1.schema.json`
 - `contracts/evaluation-result.v1.schema.json`
 
-`index.js`は`astera.evaluation.request.v2`ならGeneric v2、それ以外はLegacy evaluatorへRoutingします。
+`index.js`はv2 schemaをGeneric v2へ、Legacy requestをCompatibility pathへRoutingします。
 
 **Legacy v1の存在を、現行v2の目的や責務としてREADMEへ混ぜません。**
 
 ---
 
-## 9. Information Quality sub-capability
+## 10. Information Quality sub-capability
 
 同じPackage内に、根拠検索Moduleが利用するInformation Quality Engineがあります。
 
@@ -234,29 +254,38 @@ src/quality-completion-evaluator/information-quality/profiles.v1.json
 
 > Retrieved candidateをEvidenceとして採用可能か判定すること。
 
-現行Evidence Search production startはこのFunctionをin-processで注入します。
+Responsibility direction:
 
-このsub-capabilityの存在によって、汎用判定ModuleがEvidence SearchのProvider、Query Plan、Evidence adoptionを所有するわけではありません。
+```text
+Evidence Search
+→ Information Quality contract
+→ Adopt / Reject / Reinforce
+```
+
+Generic v2側は逆に:
+
+```text
+Generic Evaluator v2
+→ Evidence Search API
+→ evaluator-side Registry / Binding
+→ generic scoring
+```
+
+となります。
+
+この2方向は別Contractであり、再帰呼出しを作りません。
+
+Information QualityのTransportは内部実装詳細であり、Generic `/v2/evaluate`の公開Contractへ混ぜません。
 
 ---
 
-## 10. HTTP surface / network bind
+## 11. HTTP surface / network boundary
 
-Evaluator API server code default:
+Production private bind:
 
 ```text
 127.0.0.1:7374
 ```
-
-Current root Compose override:
-
-```text
-ASTERA_EVALUATOR_API_HOST=0.0.0.0
-ASTERA_EVALUATOR_API_PORT=7374
-network_mode=host
-```
-
-Therefore code default and current production composition must not be conflated. Local health can still be called through `127.0.0.1:7374`, but current Compose may listen on all host interfaces. See [`../LIMITATIONS.md`](../LIMITATIONS.md).
 
 Health:
 
@@ -278,13 +307,17 @@ POST /v1/evaluate
 POST /v1/skill/evaluate
 ```
 
-通常Routeの認証は`X-API-Key`と`ASTERA_API_KEY`（または互換Alias）を使用します。Loopback developmentでは明示設定時だけNo-authを許可します。
+通常Routeの認証は`X-API-Key`と`ASTERA_API_KEY`を使用します。Loopback developmentでは明示設定時だけNo-authを許可します。
+
+内部ServiceをInternetへ直接公開しません。外部到達性が必要な場合は、別の認証済みIngress / Reverse Proxy boundaryを使用します。
 
 ---
 
-## 11. Generic v2 current profile truth
+## 12. Generic v2 profile contract
 
-現行Repositoryで確認できるv2 Profileは:
+Generic v2のProfileは、v2 Profile Loaderが認識するProfileとして明示定義します。
+
+Repositoryの標準Generic profile:
 
 ```text
 generic.measurement.v1
@@ -300,18 +333,19 @@ Legacy v1の`design / implementation / test / operation / research`等Profileを
 
 新しいv2 Profileを追加する場合は、Profile file、Metric contract、Blocking、Test、Documentを同時に更新します。
 
+Caller固有Profileは判定Engine本体へ隠しロジックとして埋め込みません。
+
 ---
 
-## 12. Module manifest boundary
+## 13. Module manifest boundary
 
-Current manifest:
+Module identity:
 
 ```text
-module_id   = evaluation-verification-engine
-display_name = ASTERA 汎用判定・検証Module
-version     = 2.0.0
-runtime     = node>=22
-ai_used     = false
+module_id        = evaluation-verification-engine
+display_name     = ASTERA 汎用判定・検証Module
+runtime          = node>=22
+ai_used          = false
 generic_contract = astera.evaluation.request.v2
 ```
 
@@ -331,7 +365,7 @@ ai_inference
 
 ---
 
-## 13. Non-goals
+## 14. Non-goals
 
 - Artifact auto-fix
 - Code edit / repository mutation
@@ -346,19 +380,28 @@ ai_inference
 
 ---
 
-## 14. Verification anchors
+## 15. Verification anchors
 
-Generic v2:
+Generic v2 verification includes:
+
+- valid v2 schema acceptance
+- invalid schema rejection
+- Provided Evidence mode
+- Evidence Search mode
+- Registry / Binding integrity verification
+- Measurement provenance / hash verification
+- Required Evidence fail-closed behavior
+- Metric / Dimension scoring
+- Hard Blocking
+- `PASSED / REVISION_REQUIRED / BLOCKED`
+- API auth / health / rate / cancellation boundaries
+
+Representative source tests:
 
 - `src/quality-completion-evaluator/tests/unit/generic-v2.test.js`
 - `src/quality-completion-evaluator/tests/integration/evidence-search-api-consumer.test.js`
 - `src/quality-completion-evaluator/api/server.test.js`
 
-Legacy / shared evaluator:
+Legacy / shared evaluator tests remain separate compatibility evidence.
 
-- `src/quality-completion-evaluator/tests/unit/`
-- `src/quality-completion-evaluator/tests/integration/`
-- `src/quality-completion-evaluator/tests/regression/`
-- `src/quality-completion-evaluator/tests/boundary/`
-
-Test sourceの存在と現在SHAでのPASSは別です。
+Test sourceの存在と現在SHAでのPASSは別です。Release proofは同一candidate SHAの実行結果で確認します。
