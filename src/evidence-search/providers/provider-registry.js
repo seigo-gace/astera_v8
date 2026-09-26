@@ -1,8 +1,5 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const { stableStringify } = require('../../quality-completion-evaluator/utils/stable-json');
-
 const SOURCE_CLASSES = new Set([
   'FREE_PROJECTION',
   'FREE_OFFICIAL_LIVE',
@@ -62,62 +59,6 @@ function routingTermMatches(text, term) {
   return text.includes(term);
 }
 
-function envTtl(name, fallback) {
-  const value = process.env[name];
-  if (value === undefined || value === '') return fallback;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-function defaultCacheTtlMs(sourceClass) {
-  if (sourceClass === 'FREE_PROJECTION') return envTtl('ASTERA_SEARCH_CACHE_PROJECTION_TTL_MS', 30_000);
-  if (sourceClass === 'FREE_OFFICIAL_LIVE') return envTtl('ASTERA_SEARCH_CACHE_OFFICIAL_TTL_MS', 5_000);
-  if (sourceClass === 'FREE_GENERAL_WEB') return envTtl('ASTERA_SEARCH_CACHE_GENERAL_TTL_MS', 2_000);
-  return 0;
-}
-
-function createQueryScopedCache(providerId, sourceClass, rawSearch, configuredTtlMs) {
-  const ttlMs = nonNegativeSafeInteger(configuredTtlMs, `${providerId}.cache_ttl_ms`, defaultCacheTtlMs(sourceClass));
-  const maxEntries = envTtl('ASTERA_SEARCH_PROVIDER_CACHE_MAX_ENTRIES', 64) || 64;
-  const cache = new Map();
-  let hits = 0;
-  let misses = 0;
-
-  const search = async (plan, context) => {
-    if (ttlMs <= 0) return rawSearch(plan, context);
-    const parsedEffective = Date.parse(String(plan?.effective_as_of || ''));
-    const effectiveMs = Number.isFinite(parsedEffective) ? parsedEffective : Date.now();
-    const bucket = Math.floor(effectiveMs / ttlMs);
-    const key = crypto.createHash('sha256').update(stableStringify({
-      provider_id: providerId,
-      source_class: sourceClass,
-      phase: plan?.phase || null,
-      domain_lens: plan?.domain_lens || null,
-      conditions: plan?.conditions || [],
-      query_set: plan?.query_set || [],
-      maximum_results: plan?.maximum_results || null,
-      effective_as_of_bucket: bucket
-    })).digest('hex');
-    const now = Date.now();
-    const cached = cache.get(key);
-    if (cached && cached.expires_at > now) {
-      hits += 1;
-      cache.delete(key);
-      cache.set(key, cached);
-      return cached.value;
-    }
-    if (cached) cache.delete(key);
-    misses += 1;
-    const value = await rawSearch(plan, context);
-    cache.set(key, { value, expires_at: now + ttlMs });
-    while (cache.size > maxEntries) cache.delete(cache.keys().next().value);
-    return value;
-  };
-
-  const health = () => Object.freeze({ ttl_ms: ttlMs, entries: cache.size, hits, misses });
-  return { search, health };
-}
-
 function normalizeProvider(provider, index) {
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
     throw new TypeError(`providers[${index}] must be an object`);
@@ -139,16 +80,13 @@ function normalizeProvider(provider, index) {
       || (sourceClass === 'PAID_PROVIDER' ? 'IMMEDIATE_RECEIPT' : 'DETERMINISTIC_REQUEST_TARIFF')
   ).toUpperCase();
   if (!SETTLEMENT_MODES.has(settlementMode)) {
-    throw new TypeError(`provider ${providerId} billing_settlement_mode is invalid`);
+    throw new TypeError(`${providerId}.billing_settlement_mode is invalid`);
   }
 
   const certified = provider.certified !== false;
   if (sourceClass === 'PAID_PROVIDER' && certified && settlementMode === 'UNVERIFIABLE') {
     throw new TypeError(`paid provider ${providerId} cannot be certified with UNVERIFIABLE settlement`);
   }
-
-  const rawSearch = provider.search.bind(provider);
-  const responseCache = createQueryScopedCache(providerId, sourceClass, rawSearch, provider.cache_ttl_ms);
 
   return Object.freeze({
     provider_id: providerId,
@@ -173,8 +111,7 @@ function normalizeProvider(provider, index) {
     supports_idempotency: provider.supports_idempotency === true,
     supports_operation_status: provider.supports_operation_status === true,
     target_matcher: typeof provider.target_matcher === 'function' ? provider.target_matcher.bind(provider) : null,
-    search: responseCache.search,
-    cache_health: responseCache.health,
+    search: provider.search.bind(provider),
     revalidate: typeof provider.revalidate === 'function' ? provider.revalidate.bind(provider) : null,
     read_operation_status: typeof provider.read_operation_status === 'function'
       ? provider.read_operation_status.bind(provider)
@@ -254,10 +191,9 @@ class ProviderRegistry {
       kb_target_binding_enforced: Boolean(provider.target_matcher),
       certified: provider.certified,
       capabilities: provider.capabilities,
-      routing_terms: provider.routing_terms,
-      cache: provider.cache_health ? provider.cache_health() : null
+      routing_terms: provider.routing_terms
     }));
   }
 }
 
-module.exports = { ProviderRegistry, normalizeRoutingTerm, routingTermMatches, defaultCacheTtlMs };
+module.exports = { ProviderRegistry, normalizeRoutingTerm, routingTermMatches };
