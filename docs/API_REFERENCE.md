@@ -11,13 +11,15 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ## 1. Service map
 
-| Service | Default bind | Purpose |
-|---|---|---|
-| Astera Core | `127.0.0.1:7373` | Judgment Material Generation |
-| Evaluation / Verification | `127.0.0.1:7374` | Generic v2 and Legacy v1 evaluation |
-| Evidence Search | `127.0.0.1:7376` | Internal evidence retrieval / adoption |
+Service-code defaults and the current root Compose values are not identical.
 
-Current `docker-compose.yml` defines all three services.
+| Service | Code default | Current root Compose | Purpose |
+|---|---|---|---|
+| Astera Core | `127.0.0.1:7373` | `127.0.0.1:${ASTERA_PORT}` | Judgment Material Generation |
+| Evaluation / Verification | `127.0.0.1:7374` | **`0.0.0.0:7374`** | Generic v2 and Legacy v1 evaluation |
+| Evidence Search | `127.0.0.1:7376` | `127.0.0.1:7376` | Internal evidence retrieval / adoption |
+
+Current `docker-compose.yml` defines all three services with `network_mode: host`. The Evaluator Compose override therefore must not be described as loopback-only. Its actual network exposure depends on host firewall/ingress controls and is tracked in [`LIMITATIONS.md`](LIMITATIONS.md).
 
 ---
 
@@ -182,6 +184,8 @@ The API distinguishes retrieval/execution state from evidence adoption state. A 
 ## 4. Evaluation / Verification — 7374
 
 Implementation: `src/quality-completion-evaluator/api/server.js`
+
+Code default host is `127.0.0.1`. **Current root Compose overrides this to `0.0.0.0` while using host networking.** Health examples may still call `127.0.0.1:7374`, but that does not mean the service is bound only to loopback.
 
 ### `GET /healthz`
 
@@ -371,7 +375,7 @@ Exact error codes remain defined by current service code and contracts.
 No API route changes the fixed authority rule.
 
 ```text
-/process result       = judgment material
+/process result        = judgment material
 Evidence Search result = evidence state
 /v2/evaluate result    = evaluation result
 ```
