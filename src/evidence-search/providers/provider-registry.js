@@ -83,7 +83,7 @@ function normalizeProvider(provider, index) {
     throw new TypeError(`${providerId}.billing_settlement_mode is invalid`);
   }
 
-  const certified = provider.certified !== false;
+  const certified = provider.certified === true;
   if (sourceClass === 'PAID_PROVIDER' && certified && settlementMode === 'UNVERIFIABLE') {
     throw new TypeError(`paid provider ${providerId} cannot be certified with UNVERIFIABLE settlement`);
   }
