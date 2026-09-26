@@ -57,7 +57,7 @@ Astera v8は、役割を混ぜない3 Moduleで構成します。以下のPurpos
 | Module | Purpose | 必須条件 | Result |
 |---|---|---|---|
 | **判断材料生成Module** | Inputを正確に理解・分解し、人間または主役AIが実際の判断に使える高品質な判断材料を高速生成する | **基本1秒以下**でLoadingではない実際の初期判断材料を返す。Engineering targetは**約0.1秒級Fast Path**。外部Network・Evidence Search完了待ち・Browser・OCR・重量Parser等でFast Pathを塞がず、品質を落として速度だけを達成しない | 固定Main8＋Task / Claim / Lens / Constraint / Risk / Comparison Material / Evidence Status |
-| **根拠検索Module** | 判断材料生成Moduleまたは判定・検証Moduleが必要とする事実・根拠を、2種類の検索経路で取得・検証し、採用可能Evidenceへ変換する | **専門・Authority検索**と**一般・最新情報検索**を案件ごとに片方または両方使う。判断材料生成ModuleのFast Pathを塞がない。`FOUND Candidate ≠ Adopted Evidence ≠ CONFIRMED Claim`を維持する | 採用可能Evidence＋検索状態＋Source / Authority / Freshness / Coverage / Conflict / Lineage / Quality / Query・Provider execution |
+| **根拠検索Module** | 判断材料生成Moduleまたは判定・検証Moduleが必要とする事実・根拠を、2種類の検索経路で取得・検証し、採用可能Evidenceへ変換する | **専門・Authority検索**と**一般・最新情報検索**の2 Routeを根拠検索のたびに両方実行する。片方を選ぶSelectorは設けない。判断材料生成ModuleのFast Pathを塞がない。`FOUND Candidate ≠ Adopted Evidence ≠ CONFIRMED Claim`を維持する | 採用可能Evidence＋検索状態＋Source / Authority / Freshness / Coverage / Conflict / Lineage / Quality / Query・Provider execution |
 | **判定・検証Module** | Subjectが指定されたRequirements / Profile / Measurements / Evidenceを満たすか決定論的に検証する | Evidence不足やHard Blockを推測でPASSにしない。必要時は根拠検索Moduleを使う。推奨・Ranking・最終意思決定を行わない | `PASSED` / `REVISION_REQUIRED` / `BLOCKED`等＋Metric / Evidence Binding / Hard Block / Failure reason / Audit trace |
 
 詳細:
@@ -203,7 +203,7 @@ Route B — General / Current
 
 2 Routeは同じ検索を二重実行するためではありません。
 
-**Authority / Specialization**と**Currentness / General discoverability**を補完します。案件ごとに片方または両方を使用し、Authority検索だけ、一般検索だけへ固定しません。
+**Authority / Specialization**と**Currentness / General discoverability**を同時に補完するため、根拠検索を実行する場合は**両Routeを毎回ともに実行**し、双方のCandidateを統合して検証します。用途による片方選択は行いません。
 
 判断材料生成Moduleから呼び出す場合も、外部検索完了待ちで基本1秒以下Fast Pathを塞ぎません。
 
@@ -500,7 +500,7 @@ Final human/business decision
 - Root runtime npm dependencies: **0**
 - Judgment Material Generation + Evidence Search + Evaluation / Verification
 - 判断材料生成Module: **基本1秒以下 / 約0.1秒級Fast Path**
-- Evidence Search: **Specialist / Authoritative + General / Currentの2 Route必須**
+- Evidence Search: **Specialist / Authoritative + General / Currentの2 Routeを根拠検索ごとに両方実行**
 - Dependency-aware Task Graph / bounded Wave execution
 - Queue admission / overload rejection / cancellation propagation
 - Evidence Search internal signed service boundary
