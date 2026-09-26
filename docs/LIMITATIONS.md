@@ -116,6 +116,33 @@ The evaluator does not fix code, alter artifacts, commit, push or deploy. A fail
 
 Generic v2 `evidence_search` mode depends on the existing Evidence Search internal API being available and correctly authenticated. If that API fails, generic evaluation can return `EVALUATION_FAILED`; it must not silently switch to fabricated evidence.
 
+### 4.5 Root Compose evaluator bind is wider than the code default
+
+The Evaluator API code defaults to:
+
+```text
+127.0.0.1:7374
+```
+
+but the current root `docker-compose.yml` overrides:
+
+```text
+ASTERA_EVALUATOR_API_HOST=0.0.0.0
+ASTERA_EVALUATOR_API_PORT=7374
+network_mode=host
+```
+
+Therefore the current Compose configuration can listen on all host interfaces rather than loopback-only. Whether it is reachable externally then depends on the host firewall, routing and ingress configuration.
+
+This is a **runtime network-boundary inconsistency** with the intended private/internal-service posture. Documentation must not describe the current Compose evaluator as loopback-only.
+
+Until source/Compose is reconciled and tested:
+
+- treat 7374 as potentially host-interface reachable
+- verify firewall and external reachability explicitly
+- do not rely on loopback-only assumptions for security
+- do not publish the service intentionally without a separate authenticated ingress design
+
 ---
 
 ## 5. Three-service runtime dependencies
@@ -128,7 +155,8 @@ Current root Compose defines Core, Evaluator and Evidence Search, but full readi
 
 ## 6. Deployment / transport limitations
 
-- Internal runtime ports should remain loopback/private unless a separately authenticated ingress is intentionally configured.
+- Core and Evidence Search are configured loopback in the current root Compose; Evaluator is currently configured `0.0.0.0:7374` with host networking and must be separately exposure-checked.
+- Internal runtime ports should remain private unless a separately authenticated ingress is intentionally configured.
 - HTTPS termination, CORS policy, Secret injection, monitoring and backup are deployment responsibilities.
 - Transport rate-limit state is process-local unless an external shared limiter is introduced.
 - External Provider/MCP/TGserver availability cannot be proven by source tests alone.
