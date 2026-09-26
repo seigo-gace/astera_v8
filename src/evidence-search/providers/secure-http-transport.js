@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_REDIRECTS = 2;
 const DEFAULT_SOURCE_CACHE_MAX_ENTRIES = 256;
+const DEFAULT_SOURCE_CACHE_TTL_MS = 2000;
 const SENSITIVE_REQUEST_HEADERS = new Set(['authorization', 'cookie', 'x-api-key', 'api-key', 'proxy-authorization']);
 const sourceResponseCache = new Map();
 
@@ -228,7 +229,10 @@ async function secureGet(rawUrl, options = {}) {
   const maximumRedirects = Math.max(0, Number(options.maximumRedirects ?? DEFAULT_REDIRECTS));
   const maxBytes = Math.max(1, Number(options.maxBytes || DEFAULT_MAX_BYTES));
   const timeoutMs = Math.max(100, Number(options.timeoutMs || 2500));
-  const cacheTtlMs = nonNegativeInteger(options.cacheTtlMs, 0);
+  const realTransportDefaultTtlMs = options.request
+    ? 0
+    : nonNegativeInteger(process.env.ASTERA_SOURCE_HTTP_CACHE_TTL_MS, DEFAULT_SOURCE_CACHE_TTL_MS);
+  const cacheTtlMs = nonNegativeInteger(options.cacheTtlMs, realTransportDefaultTtlMs);
   const cacheMaxEntries = Math.max(1, nonNegativeInteger(options.cacheMaxEntries, DEFAULT_SOURCE_CACHE_MAX_ENTRIES));
   const headers = {
     Accept: 'application/json, application/feed+json, application/xml, text/xml, text/plain;q=0.8',
