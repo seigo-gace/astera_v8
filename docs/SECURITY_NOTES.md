@@ -133,22 +133,29 @@ Evidence Search recovery data is operational evidence-job state, not a general u
 
 ---
 
-## 8. Internal network boundary
+## 8. Runtime network boundary
 
-Current default service binds are loopback/private.
+Code defaults and current root Compose values differ.
 
 ```text
-7373 Core
-7374 Evaluator
-7376 Evidence Search
+Core code default / Compose      127.0.0.1:7373 or configured ASTERA_PORT
+Evidence Search default/Compose  127.0.0.1:7376
+Evaluator code default           127.0.0.1:7374
+Evaluator current root Compose   0.0.0.0:7374 + network_mode: host
 ```
+
+Therefore the current Evaluator Compose service must be treated as **potentially reachable on host interfaces**. A local health check to `127.0.0.1:7374` does not prove loopback-only exposure.
 
 Rules:
 
 - keep Evidence Search internal route private
-- do not expose internal ports directly to the Internet without a separately designed authenticated ingress
+- verify host firewall/external reachability for Evaluator 7374 explicitly
+- do not intentionally expose internal ports directly to the Internet without a separately designed authenticated ingress
 - terminate HTTPS at the approved reverse proxy/Cloudflare layer when public ingress is required
 - verify trusted proxy configuration before relying on forwarded-proto headers
+- do not use documentation assumptions as a substitute for `ss`/firewall/ingress verification
+
+Known network-boundary inconsistency: [`LIMITATIONS.md`](LIMITATIONS.md)
 
 ---
 
@@ -203,5 +210,6 @@ For a security/runtime incident, preserve at minimum:
 - container health/state
 - relevant workflow/test result
 - whether Evidence/Measurement hashes were involved
+- actual bind/listen state and firewall/ingress state when network exposure is relevant
 
 Do not paste secret files or full credentials into the incident report.
