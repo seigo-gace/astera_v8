@@ -73,7 +73,16 @@ test('source cache never bypasses the current maxBytes response limit', async ()
   clearSourceResponseCache();
   let calls = 0;
   const body = 'x'.repeat(4096);
-  const request = async () => { calls += 1; return response(body); };
+  const request = async (_url, _address, requestOptions) => {
+    calls += 1;
+    const result = response(body);
+    if (result.body.length > requestOptions.maxBytes) {
+      const error = new Error('official source response exceeds maximum bytes');
+      error.code = 'SOURCE_RESPONSE_TOO_LARGE';
+      throw error;
+    }
+    return result;
+  };
   const base = {
     allowedHosts: ['example.com'],
     lookup,
