@@ -85,7 +85,21 @@ test("generic v2 passes with evidence-backed hashed deterministic measurement", 
   assert.equal(result.scores.total, 100);
   assert.equal(result.ai_used, false);
   assert.equal(result.evidence.valid, true);
+  assert.equal(result.judgment.reason_code, "PROFILE_PASSED");
+  assert.equal(result.audit.profile_version, "2.0.0");
+  assert.match(result.audit.profile_hash, /^[a-f0-9]{64}$/);
   assert.match(result.result_hash, /^[a-f0-9]{64}$/);
+});
+
+test("generic v2 requires the production quality threshold instead of passing a low score", async () => {
+  const input = request();
+  input.measurements[0] = measurement({ value: 94 });
+  const result = await evaluateGeneric(input);
+  assert.equal(result.status, "REVISION_REQUIRED");
+  assert.equal(result.judgment.passed, false);
+  assert.equal(result.judgment.reason_code, "PROFILE_THRESHOLD_NOT_MET");
+  assert.equal(result.judgment.minimum_total_score, 95);
+  assert.deepEqual(result.judgment.failed_dimension_ids, ["result"]);
 });
 
 test("generic v2 is byte-stable for the same request", async () => {
@@ -93,6 +107,7 @@ test("generic v2 is byte-stable for the same request", async () => {
   const second = await evaluateGeneric(request());
   assert.deepEqual(first, second);
   assert.equal(first.result_hash, second.result_hash);
+  assert.equal(first.audit.profile_hash, second.audit.profile_hash);
 });
 
 test("generic v2 blocks tampered evidence registry", async () => {
@@ -100,6 +115,7 @@ test("generic v2 blocks tampered evidence registry", async () => {
   input.evidence_registry.entries[0].content.excerpt = "tampered";
   const result = await evaluateGeneric(input);
   assert.equal(result.status, "BLOCKED");
+  assert.equal(result.judgment.reason_code, "HARD_BLOCKED");
   assert.ok(result.blocking.some((item) => item.block_id === "EVAL-HB-001"));
 });
 
