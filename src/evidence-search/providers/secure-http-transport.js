@@ -176,11 +176,11 @@ function hasSensitiveRequestHeaders(headers = {}) {
   return Object.keys(headers).some((name) => SENSITIVE_REQUEST_HEADERS.has(String(name).toLowerCase()));
 }
 
-function sourceCacheKey(url, headers) {
+function sourceCacheKey(url, headers, maxBytes) {
   const normalizedHeaders = Object.entries(headers || {})
     .map(([key, value]) => [String(key).toLowerCase(), String(value)])
     .sort(([left], [right]) => left.localeCompare(right));
-  return crypto.createHash('sha256').update(JSON.stringify([url.toString(), normalizedHeaders])).digest('hex');
+  return crypto.createHash('sha256').update(JSON.stringify([url.toString(), normalizedHeaders, maxBytes])).digest('hex');
 }
 
 function cloneCachedResponse(value, cacheState) {
@@ -244,7 +244,7 @@ async function secureGet(rawUrl, options = {}) {
   let current = String(rawUrl);
   for (let redirectCount = 0; redirectCount <= maximumRedirects; redirectCount += 1) {
     const url = validateUrl(current, allowedHosts);
-    const cacheKey = cacheEligible ? sourceCacheKey(url, headers) : null;
+    const cacheKey = cacheEligible ? sourceCacheKey(url, headers, maxBytes) : null;
     const now = Date.now();
     if (cacheKey) {
       const cached = getCachedSource(cacheKey, now);
