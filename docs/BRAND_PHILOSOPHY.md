@@ -3,9 +3,11 @@
 > **Status: Internal Brand Reference**  
 > 技術仕様、提供範囲、料金、公開ページ本文の正本ではありません。公開時はNotionの最新公開本文正本と各専用正本を優先します。
 
-## 正式名称
+## 正式技術名称
 
-**Astera v8 — Multi-Perspective Cognition Runtime**
+**Astera v8 — Deterministic Judgment-Material Runtime**
+
+Multi-Perspective CognitionはAsteraの重要な機能特性ですが、Technical Product Contract上の正式Runtime名は上記へ統一します。
 
 ## 公式タグライン
 
@@ -32,7 +34,7 @@ Asteraは、もっともらしい文章を生成する知性を装いません�
 - 前提不足を隠さない
 - 危険と反対視点を独立工程で確認する
 - 外部事実が必要な場合はEvidenceを要求する
-- 未取得の根拠や未実装機能を存在するものとして扱わない
+- 根拠が成立しないものを成立済みとして扱わない
 - 最終判断をAstera自身の権限へ取り込まない
 
 AIを使う場合も、AsteraはAIの代替ではなく外側の検査・比較・再構成層です。AIを使わない場合は、人間や業務Systemへ直接判断材料を渡せます。
@@ -41,7 +43,7 @@ AIを使う場合も、AsteraはAIの代替ではなく外側の検査・比較�
 
 Astera v8の中核は次の3 Moduleです。
 
-1. **判断材料生成Module** — 問いをTask / Claimへ分解し、複数観点からMain8を生成する
+1. **判断材料生成Module** — 問いをTask / Claimへ分解し、依存順を守って実行し、複数観点からMain8を生成する
 2. **根拠検索Module** — 専門・権威Sourceと一般・最新SourceからEvidenceを取得・検証する
 3. **判定Module** — 成果物・実装・Test・運用状態等をRequirements / Measurements / Evidenceに照らして評価する
 
@@ -74,6 +76,6 @@ Brand表現だけで実装状態を判定しません。
 - 正式Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - 3 Module詳細: [`MODULE_MAP.md`](MODULE_MAP.md)
 - API契約: [`API_REFERENCE.md`](API_REFERENCE.md)
-- 制限・既知不整合: [`LIMITATIONS.md`](LIMITATIONS.md)
+- Product boundary / limitations: [`LIMITATIONS.md`](LIMITATIONS.md)
 
 Brand文書は技術正本を上書きしません。
