@@ -468,19 +468,27 @@ Keep at least:
 
 ---
 
-## 15. Runtime composition
+## 15. Runtime composition and network truth
 
 Current production composition defines three separate services:
 
 ```text
-Astera Core              127.0.0.1:7373
-Evaluation / Verification 127.0.0.1:7374
-Evidence Search          127.0.0.1:7376
+Astera Core               code default 127.0.0.1:7373
+Evidence Search           code default 127.0.0.1:7376
+Evaluation / Verification code default 127.0.0.1:7374
 ```
 
-The repository `docker-compose.yml` defines all three services.
+Current root `docker-compose.yml` uses host networking and overrides them as follows:
 
-Container-first production remains the rule. Direct host execution is development/verification only and requires explicit override where the entrypoint enforces container residency.
+```text
+Astera Core               127.0.0.1:${ASTERA_PORT}
+Evidence Search           127.0.0.1:7376
+Evaluation / Verification 0.0.0.0:7374
+```
+
+Therefore the current Evaluator Compose service is **not loopback-only by configuration**. Actual reachability depends on host firewall/routing/ingress. This is tracked as a known network-boundary inconsistency in [`LIMITATIONS.md`](LIMITATIONS.md).
+
+The repository `docker-compose.yml` defines all three services. Container-first production remains the rule. Direct host execution is development/verification only and requires explicit override where the entrypoint enforces container residency.
 
 ---
 
@@ -490,7 +498,8 @@ Container-first production remains the rule. Direct host execution is developmen
 - Evidence Search internal API uses signed internal-service authentication.
 - Generic Evaluator normal API uses API-key authentication; skill routes use skill-key authentication.
 - Secrets must not be exposed in logs, README or request examples.
-- Internal HTTP services should remain loopback/private unless a separate authenticated ingress is intentionally designed.
+- Internal HTTP services should remain private unless a separate authenticated ingress is intentionally designed.
+- The current Evaluator Compose bind must be exposure-checked rather than assumed private merely because health checks use `127.0.0.1`.
 
 ---
 
@@ -516,6 +525,7 @@ Relevant proof may include:
 - HTTP integration
 - Story / regression suites
 - required live gates
+- actual service bind/exposure verification
 
 `NOT RUN` is not `PASS`.
 
