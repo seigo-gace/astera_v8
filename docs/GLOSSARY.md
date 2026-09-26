@@ -18,6 +18,13 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 | Five Lanes / 5本柱 | Fact / Risk / Multi / Inquiry / Compare。共通Canonical recordsから独立投影する |
 | Compare | 比較材料を生成するLane。Ranking、Winner、Recommendationを所有しない |
 | Task | Inputを実行・検証可能な処理単位へ分解したもの |
+| Task Graph | Task間の`depends_on`関係と実行順を保持するDependency Graph |
+| Execution Wave | Dependency順を守ったTask実行Group。同一Waveの独立Taskだけを並列化する |
+| Bounded Concurrency | 並列数を固定上限内へ制限し、Resource暴走を防ぐ実行Policy |
+| Task Admission | Active Task数とQueue上限を管理する受付境界。容量超過は明示的にRejectする |
+| `TASK_QUEUE_FULL` | Task admissionのQueue容量を超えたため、新規Workを無制限に積まずRejectした状態 |
+| `SKIPPED_DEPENDENCY` | 必須DependencyがFailed/Skippedのため、後続Taskを誤実行せずSkipした状態 |
+| Cancellation Propagation | Request/TaskのCancelをQueue待ち・Wave実行へ伝播し、不要処理を継続しない仕組み |
 | Claim | 検証対象となる主張。Search resultに合わせて後からTruthを作り替えない |
 | Canonical Claim Record | Claim、Policy、Binding、Confirmation等を保持する正規化Record |
 | Evidence Requirement | Claimを検証するために必要なSource role、scope、条件等 |
@@ -66,6 +73,7 @@ Current technical docsでは次を守ります。
 ```text
 07 = 根拠成立状態
 Compare = material only
+Task Graph = dependency-aware deterministic execution
 Generic v2 = Evaluation / Verification
 Information Quality = Evidence Search candidate adoption
 QCE = historical / legacy context only
