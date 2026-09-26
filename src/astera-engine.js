@@ -18,6 +18,14 @@ function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+function throwIfRequestCancelled(signal) {
+  if (!signal?.aborted) return;
+  const error = new Error('Request cancelled');
+  error.code = 'REQUEST_CANCELLED';
+  error.status = 499;
+  throw error;
+}
+
 // Public decision-material runtime.
 // It does not implement a second canonical processing pipeline. The Canonical base owns
 // Task/Lens/Claim/Binding/G1-G7/Lane/Main8 execution. This class supplies the isolated
@@ -162,12 +170,18 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   async processProgressive(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
+    const signal = executionContext?.signal || null;
+    throwIfRequestCancelled(signal);
+
     const initial = this.processInitial(input, caller);
     if (typeof executionContext.onRevision === 'function') {
       await executionContext.onRevision(initial);
     }
+    throwIfRequestCancelled(signal);
 
     const final = await this.process(input, caller, executionContext);
+    throwIfRequestCancelled(signal);
+
     const revision = {
       ...final,
       result: final?.result && typeof final.result === 'object'
@@ -183,6 +197,8 @@ class AsteraEngine extends CanonicalAsteraEngine {
     if (typeof executionContext.onRevision === 'function') {
       await executionContext.onRevision(revision);
     }
+    throwIfRequestCancelled(signal);
+
     return Object.freeze({ initial, final: revision });
   }
 
