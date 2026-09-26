@@ -28,6 +28,11 @@ test('public AsteraEngine produces review-oriented Main8 from question only', as
     assert.match(out.result.judgment['01_purpose'].summary, /レビュー/);
     assert.doesNotMatch(out.result.judgment['01_purpose'].summary, /^(?:かける|為る)$/u);
 
+    const observable = out.result.analysis_task_packet.observable_material;
+    assert.ok(observable);
+    assert.ok(observable.claim_count > 0, `claim_count=${observable.claim_count}`);
+    assert.ok(observable.candidate_count >= 8, `candidate_count=${observable.candidate_count}`);
+
     const comparison = out.result.judgment['06_comparison'];
     assert.ok(Array.isArray(comparison.comparison_candidates));
     assert.ok(comparison.comparison_candidates.length >= 8, JSON.stringify(comparison.comparison_candidates));
@@ -41,7 +46,6 @@ test('public AsteraEngine produces review-oriented Main8 from question only', as
     assert.ok(crisis.risks.some((risk) => risk.key === 'PROJECT_EXISTENCE_UNVERIFIED'));
     assert.ok(crisis.risks.some((risk) => risk.key === 'BENCHMARK_CONTEXT_MISSING'));
 
-    assert.ok(out.result.claim_state.claim_count > 0, `claim_count=${out.result.claim_state.claim_count}`);
     assert.equal(out.runtime.ai_used, false);
     assert.equal(out.runtime.llm_called, false);
   } finally {
