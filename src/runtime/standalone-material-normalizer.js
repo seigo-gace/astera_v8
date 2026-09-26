@@ -3,6 +3,7 @@
 const GENERIC_PURPOSE = /^(?:-|為る|する|かける|なる|analyze|analysis|判断対象|入力内容)$/iu;
 const FAIL_CLOSED = /JAPANESE_PARSER_FAIL_CLOSED|PARSER_NOT_CONFIGURED|PARSER_TIMEOUT|PARSER_PROTOCOL_ERROR|PARSER_EXECUTION_FAILED|PARSER_OVERALL_FAILED/i;
 const MATERIAL_TENSION = /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED|parser_task_graph_empty/i;
+const WEAK_TARGET = /^(?:|これ|それ|あれ|ここ|そこ|this|that|it|what|how)$/iu;
 
 const INTENT_RULES = Object.freeze([
   ['review', /(?:レビュー|批評|講評|査読|review|critique)/iu],
@@ -217,6 +218,34 @@ function buildDocumentMaterialTask(question, intent, observable, tasks) {
   };
 }
 
+function materialTargetMode(intent) {
+  return ['review', 'compare', 'verify', 'research', 'analyze'].includes(String(intent?.mode || ''));
+}
+
+function resolveMaterialTargets(tasks, packet, intent, observable) {
+  if (!materialTargetMode(intent) || observable.claim_count === 0) {
+    return { tasks, unresolved: packet.unresolved || [], resolved_target_unresolved: [] };
+  }
+  const resolvedTargetUnresolved = (packet.unresolved || []).filter((item) => /:target$/.test(String(item)));
+  const unresolved = (packet.unresolved || []).filter((item) => !/:target$/.test(String(item)));
+  const nextTasks = tasks.map((task) => {
+    if (!WEAK_TARGET.test(norm(task?.target))) return task;
+    return {
+      ...task,
+      target: '入力内容',
+      target_resolution: 'OBSERVABLE_DOCUMENT_SCOPE',
+      field_provenance: {
+        ...(task.field_provenance || {}),
+        target: [
+          ...((task.field_provenance || {}).target || []),
+          { source: 'STANDALONE_API_OBSERVABLE_DOCUMENT_TARGET', prior_target: task.target || null }
+        ]
+      }
+    };
+  });
+  return { tasks: nextTasks, unresolved, resolved_target_unresolved: resolvedTargetUnresolved };
+}
+
 function ensureStandaloneDecisionMaterialRequest(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
@@ -225,9 +254,11 @@ function ensureStandaloneDecisionMaterialRequest(prepared, input = {}) {
   const observable = observeDocumentMaterial(question);
   const intent = detectAnalysisIntent(question, observable);
   const packet = prepared.analysis_task_packet || {};
-  const tasks = Array.isArray(packet.tasks) ? packet.tasks : [];
+  const originalTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
+  const targetResolution = resolveMaterialTargets(originalTasks, packet, intent, observable);
+  const tasks = targetResolution.tasks;
   const maxCoverage = tasks.reduce((max, task) => Math.max(max, taskCoverage(task, question.length)), 0);
-  const markers = [...(packet.hard_blockers || []), ...(packet.unresolved || [])].map(String);
+  const markers = [...(packet.hard_blockers || []), ...targetResolution.unresolved].map(String);
   const materialTension = markers.some((value) => MATERIAL_TENSION.test(value));
   const richObservable = observable.candidate_count >= 2 || observable.claim_count >= 2;
   const needsDocumentTask = !hasFailClosed(prepared)
@@ -254,6 +285,8 @@ function ensureStandaloneDecisionMaterialRequest(prepared, input = {}) {
     user_goal: packetPurpose,
     analysis_intent: intent,
     observable_material: observable,
+    unresolved: targetResolution.unresolved,
+    resolved_target_unresolved: targetResolution.resolved_target_unresolved,
     source_spans: materialTask
       ? [...(packet.source_spans || []), { task_id: materialTask.id, ...materialTask.source_span }]
       : (packet.source_spans || [])
@@ -265,7 +298,8 @@ function ensureStandaloneDecisionMaterialRequest(prepared, input = {}) {
       candidate_count: observable.candidate_count,
       claim_count: observable.claim_count,
       dimensions: observable.dimensions
-    }
+    },
+    resolved_target_unresolved: targetResolution.resolved_target_unresolved
   };
   return {
     ...prepared,
