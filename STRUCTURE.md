@@ -47,6 +47,17 @@ src/domain-template-router.js
 src/hyperion-human-reader.js
 ```
 
+Deterministic Task execution support:
+
+```text
+src/runtime/canonical-task-admission.js
+src/runtime/canonical-task-executor.js
+src/runtime/canonical-wave-executor.js
+src/runtime/concurrency-policy.js
+```
+
+These implement dependency validation, Wave ordering, bounded concurrency, overload rejection, dependency skip propagation and cancellation handling.
+
 Detailed reference: [`docs/modules/JUDGMENT_MATERIAL_GENERATION.md`](docs/modules/JUDGMENT_MATERIAL_GENERATION.md)
 
 ---
@@ -119,17 +130,17 @@ These support multiple paths but are not a fourth Astera module.
 
 ---
 
-## 6. Runtime composition
+## 6. Production runtime composition
 
-Current root Compose defines:
+Completed production composition is:
 
 ```text
-astera-v8                   Core / Judgment Material     7373
-astera-v8-evaluator         Evaluation / Verification   7374
-astera-v8-evidence-search   Evidence Search              7376
+astera-v8                   Core / Judgment Material      127.0.0.1:7373
+astera-v8-evaluator         Evaluation / Verification    127.0.0.1:7374
+astera-v8-evidence-search   Evidence Search               127.0.0.1:7376
 ```
 
-Optional `astera-v8-cloudflared` is an ingress support service.
+Optional ingress support is infrastructure, not a fourth Astera module.
 
 Runtime/deploy files:
 
@@ -161,11 +172,11 @@ Configuration records do not become a separate Module.
 ## 8. Verification / documentation areas
 
 ```text
-test/                                 root runtime and cross-boundary tests
+test/                                   root runtime and cross-boundary tests
 src/quality-completion-evaluator/tests/ evaluator-local tests
-scripts/                              validation / story / live / smoke runners
-.github/workflows/                    CI / live gates
-docs/                                 documentation
+scripts/                                validation / story / live / smoke runners
+.github/workflows/                      CI / live gates
+docs/                                   documentation
 ```
 
 Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md), not duplicated here.
@@ -177,10 +188,12 @@ Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs
 ```text
 1. explicit current owner decision
 2. docs/ARCHITECTURE.md
-3. current contracts / code / tests after reconciliation
+3. reconciled current contracts / code / tests
 4. docs/modules/* and docs/API_REFERENCE.md
 5. README.md / STRUCTURE.md / user-facing references
 6. archive / historical artifacts
 ```
 
 Historical or generated material must not silently redefine current architecture.
+
+Development audit debt is maintained outside completed-product documentation.
