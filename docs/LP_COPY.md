@@ -1,7 +1,7 @@
 # Astera v8 — Landing Page Copy
 
 > **Status: Internal Draft / Reference — 2026-09-26**  
-> 最終公開本文ではありません。公開時はNotionの`Astera公式HP｜公開本文・参照Source正本`、現在のRoute、提供範囲、料金導線へ統合します。技術仕様はRepositoryの現行Architectureを優先します。
+> 最終公開本文ではありません。公開時はNotionの`Astera公式HP｜公開本文・参照Source正本`、現在のRoute、提供範囲、料金導線へ統合します。技術仕様はRepositoryのCanonical Architectureを優先します。
 
 ## Hero
 
@@ -9,7 +9,7 @@
 
 **答える前に、判断できる状態をつくる。**
 
-Astera v8はAIではありません。固定RuleとScriptで、問い・資料・検索結果・他Systemの出力を、目的、前提、事実、危険、反対視点、比較材料、根拠成立状態、次工程へ再構成するRuntimeです。
+Astera v8はAIではありません。固定RuleとScriptで、問い・資料・検索結果・他Systemの出力を、目的、前提、事実、危険、反対視点、比較材料、根拠成立状態、次工程へ再構成するDeterministic Judgment-Material Runtimeです。
 
 ## Why
 
@@ -22,7 +22,7 @@ Asteraは、答えを生成する前に、判断構造と根拠成立状態を�
 ## 3つの中核Module
 
 **判断材料生成Module**  
-問いをTask / Claimへ分解し、Fact / Risk / Multi / Inquiry / CompareからMain8を生成します。
+問いをTask / Claimへ分解し、Task dependencyを守りながらFact / Risk / Multi / Inquiry / CompareからMain8を生成します。
 
 **根拠検索Module**  
 専門・権威Sourceと一般・最新Sourceの2経路からEvidenceを探し、Authority、Freshness、Conflict、Coverage等を確認します。
@@ -31,6 +31,20 @@ Asteraは、答えを生成する前に、判断構造と根拠成立状態を�
 成果物・実装・Test・運用状態等をRequirements / Measurements / Evidenceで決定論的に評価します。
 
 3つの役割は混ぜません。検索、判断材料生成、評価を分離することで、どこから何が出たのかを追跡しやすくします。
+
+## 複数Taskも順序を壊さない
+
+Asteraは複数Taskを無制限に同時実行しません。
+
+```text
+Task Graph
+→ Dependency validation
+→ Execution Waves
+→ 同一Waveだけbounded parallel execution
+→ failure / skip / cancellation propagation
+```
+
+これにより、前提Taskより先に後続Taskを実行したり、前提失敗後の処理を正常結果として扱ったりすることを防ぎます。
 
 ## AI専用ではありません
 
@@ -52,6 +66,7 @@ AIと組み合わせる場合は外側の判断材料生成層として使い、
 ```text
 Input
   → Task / Claim decomposition
+  → Dependency-aware Task execution
   → 38 Domain Lens + Overlay
   → Evidence requirement / search plan
   → Evidence Search when required
@@ -84,6 +99,8 @@ Artifact / Implementation / Test / Operation
 
 ## 主な特徴
 
+- Dependency-aware Task Graph / bounded Wave execution
+- Queue admission / overload rejection / cancellation propagation
 - `G01`〜`G38` Domain Lens
 - 5 Overlay
 - Fact / Risk / Multi / Inquiry / Compare
@@ -101,7 +118,8 @@ Artifact / Implementation / Test / Operation
 - Current Overlay自体が検索Providerではなく、現在情報の確認必要性を強めるLensである
 - Human Readerは固定Signal処理であり心理診断ではない
 - 判定Moduleの`PASSED`はDeployment、公開、KB保存、課金等の外部Actionを自動許可しない
-- Test Sourceの存在だけで現行SHAを検証済みとは扱わない
+- TaskのSkip / Cancel / Overloadを正常完了として扱わない
+- Test Sourceの存在だけで対象SHAを検証済みとは扱わない
 
 ## Boundaries
 
