@@ -186,7 +186,7 @@ Full Evidence Search確認はDocker Compose経由で行います。
 
 ## 8. Full three-service runtime
 
-現行`docker-compose.yml`は次の3 Serviceを起動します。
+Production-equivalent runtimeは次の3 ServiceをPrivate/Internal boundaryで構成します。
 
 ```text
 astera-v8                  7373
@@ -194,15 +194,28 @@ astera-v8-evaluator        7374
 astera-v8-evidence-search  7376
 ```
 
-Prepare:
+### Environment preparation
 
-```bash
-cp .env.example .env
+`.env.example`は設定項目のReferenceとして使用し、Production用`.env`はRoot Composeが要求する値を明示的に設定します。SecretをExample値や空値のまま本番へ持ち込みません。
+
+少なくとも次を実環境へ合わせます。
+
+```text
+ASTERA_PORT
+ASTERA_API_KEY
+ASTERA_SKILL_API_KEY
+ASTERA_JAPANESE_PARSER_MODE
+ASTERA_JAPANESE_PARSER_URL
+ASTERA_JAPANESE_PARSER_API_KEY
+ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST
+ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST
+Evidence Search provider/runtime configuration
+TGserver configuration when enabled
 ```
 
-Production-equivalent構成には、少なくとも現行Composeが要求するSecret File、Japanese Parser接続、Evidence Search provider config / spool key等の実設定が必要です。
+Production ContainerからJapanese Parserを利用する場合は、Containerから到達可能な正式HTTP boundaryを設定します。
 
-設定を確認した上で:
+設定後:
 
 ```bash
 docker compose config
@@ -281,4 +294,4 @@ NOT RUN ≠ PASS
 - Evaluation / Verification: [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
 - HTTP API: [`API_REFERENCE.md`](API_REFERENCE.md)
 - Production deploy: [`DEPLOYMENT_VPS.md`](DEPLOYMENT_VPS.md)
-- Known limitations: [`LIMITATIONS.md`](LIMITATIONS.md)
+- Security: [`SECURITY_NOTES.md`](SECURITY_NOTES.md)
