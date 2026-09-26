@@ -66,6 +66,9 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 ## E. Evaluation / Verification verification
 
 - [ ] `GET 127.0.0.1:7374/healthz` succeeds
+- [ ] Actual 7374 bind/listen address inspected
+- [ ] Current root Compose `0.0.0.0:7374` exposure reviewed against firewall/ingress policy
+- [ ] Unintended external access to 7374 is blocked
 - [ ] Generic `POST /v2/evaluate` accepts valid v2 fixture
 - [ ] v2 route rejects schema mismatch
 - [ ] Provided Evidence mode verified
@@ -112,6 +115,9 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [ ] `astera-v8` healthy
 - [ ] `astera-v8-evaluator` healthy
 - [ ] `astera-v8-evidence-search` healthy/READY
+- [ ] Core 7373 bind matches intended private interface
+- [ ] Evidence Search 7376 remains loopback/internal
+- [ ] Evaluator 7374 actual bind is explicitly verified rather than assumed from health URL
 - [ ] Runtime ports are not unintentionally Internet-exposed
 - [ ] Optional Cloudflared profile is only enabled intentionally
 - [ ] Host-resident production Node processes are not used as a substitute for canonical containers
@@ -126,6 +132,7 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [ ] Evidence spool key file has appropriate permissions
 - [ ] Secrets do not appear in README, logs, CI output or screenshots
 - [ ] Evidence Search internal endpoint remains internal
+- [ ] Evaluator 7374 is not publicly exposed by accident
 - [ ] CORS is restricted where browser-accessible routes exist
 - [ ] HTTPS enforcement / reverse proxy settings match deployment design
 - [ ] Secret masking behavior has been verified
@@ -141,6 +148,7 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [ ] TGserver/logging failure does not alter judgment/evidence truth
 - [ ] Rollback SHA/image/config recorded
 - [ ] Rollback health checks cover 7373 / 7374 / 7376
+- [ ] Rollback re-checks Evaluator bind/firewall exposure
 
 ---
 
@@ -156,6 +164,7 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [ ] `LIMITATIONS.md` records known unresolved inconsistencies
 - [ ] User-facing docs do not call 07 a recommendation
 - [ ] Public/reference docs do not call legacy QCE the current generic module
+- [ ] Network/bind descriptions distinguish code defaults from current Compose overrides
 - [ ] Historical/archive docs are not treated as current authority
 
 ---
@@ -164,7 +173,12 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 Before declaring production completion, explicitly review [`LIMITATIONS.md`](LIMITATIONS.md).
 
-At minimum, the current Information Quality HTTP-client/architecture-file vs active in-process wiring inconsistency must be understood and must not be represented as a working HTTP path unless the source is reconciled and tested.
+At minimum, review both current known categories:
+
+1. Information Quality HTTP-client/architecture-file vs active in-process wiring inconsistency.
+2. Evaluator code default `127.0.0.1` vs current root Compose `0.0.0.0:7374` under host networking.
+
+Neither must be hidden by documentation.
 
 ---
 
@@ -174,6 +188,7 @@ At minimum, the current Information Quality HTTP-client/architecture-file vs act
 SOURCE_EXISTS ≠ PASS
 CONTAINER_RUNNING ≠ READY
 HTTP_200 ≠ EVIDENCE_VALID
+LOCAL_HEALTH_URL ≠ LOOPBACK_ONLY_BIND
 EVALUATOR_PASSED ≠ DEPLOY_PERMISSION
 OLD_SHA_PASS ≠ CURRENT_SHA_PASS
 NOT_RUN ≠ PASS
