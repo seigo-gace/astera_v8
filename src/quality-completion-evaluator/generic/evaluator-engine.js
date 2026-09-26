@@ -35,7 +35,7 @@ function invalid(request, errors) {
     evaluation_complete: false,
     ai_used: false,
     errors,
-    judgment: { passed: false, reason: "input validation failed" },
+    judgment: { passed: false, reason_code: "INVALID_INPUT", reason: "input validation failed" },
     audit: { module_version: MODULE_VERSION, evaluated_at: auditTime(request) }
   });
 }
@@ -49,7 +49,7 @@ function failed(request, error) {
     evaluation_complete: false,
     ai_used: false,
     errors: [{ code: error.code || "EVALUATION_FAILED", message: error.message }],
-    judgment: { passed: false, reason: "evaluation failed" },
+    judgment: { passed: false, reason_code: "EVALUATION_FAILED", reason: "evaluation failed" },
     audit: { module_version: MODULE_VERSION, evaluated_at: auditTime(request) }
   });
 }
@@ -123,6 +123,7 @@ async function resolveEvidence(request, options = {}) {
         status: searchResult.status || null,
         result_hash: searchResult.result_hash || null,
         query_plan_hash: searchResult.query_plan_hash || null,
+        route_execution: searchResult.route_execution || null,
         ai_used: searchResult.ai_used === true
       }
     };
@@ -141,6 +142,7 @@ async function evaluateGeneric(request, options = {}) {
   if (inputErrors.length > 0) return invalid(request, inputErrors);
   try {
     const profile = loadProfile(request.profile_id);
+    const profileHash = sha256(profile);
     const resolvedEvidence = await resolveEvidence(request, options);
     const evidence = verifyEvidenceRegistry(resolvedEvidence.registry, resolvedEvidence.bindings);
     const metrics = evaluateMetrics(profile, request.measurements, evidence);
@@ -183,6 +185,8 @@ async function evaluateGeneric(request, options = {}) {
         module_version: MODULE_VERSION,
         profile_schema_version: profile.profile_schema_version,
         profile_id: profile.profile_id,
+        profile_version: profile.profile_version || null,
+        profile_hash: profileHash,
         evaluation_time: request.evaluation_time,
         project_id: request.project_id ?? null,
         task_id: request.task_id ?? null,
@@ -193,6 +197,7 @@ async function evaluateGeneric(request, options = {}) {
         evidence_bindings_schema_version: resolvedEvidence.bindings?.schema_version || null,
         evidence_search_status: resolvedEvidence.search?.status || null,
         evidence_search_result_hash: resolvedEvidence.search?.result_hash || null,
+        evidence_search_route_execution: resolvedEvidence.search?.route_execution || null,
         evaluated_at: request.evaluation_time
       }
     });
