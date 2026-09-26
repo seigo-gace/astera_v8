@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildInitialJudgmentMaterial, ORDER } = require('../src/runtime/initial-material-fast-path');
+const { buildInitialJudgmentMaterial, resolveInitialDomainLens, ORDER } = require('../src/runtime/initial-material-fast-path');
 
 test('initial Fast Path returns usable Main8 without Parser, Evidence Search, or network wait', () => {
   const out = buildInitialJudgmentMaterial({
@@ -18,6 +18,10 @@ test('initial Fast Path returns usable Main8 without Parser, Evidence Search, or
   assert.equal(out.result.no_normative_decision_generated, true);
   assert.equal(out.result.evidence_required, true);
   assert.equal(out.result.evidence_route_policy, 'BOTH_ROUTES_REQUIRED');
+  assert.ok(['SELECTED', 'NOT_SELECTED'].includes(out.result.lens_status));
+  assert.equal(out.result.lens_error_code, null);
+  assert.equal(out.runtime.lens_status, out.result.lens_status);
+  assert.equal(out.runtime.lens_error_code, null);
   assert.deepEqual(out.result.judgment.order, ORDER);
   assert.equal(ORDER.length, 8);
   for (const key of ORDER) {
@@ -34,6 +38,18 @@ test('initial Fast Path returns usable Main8 without Parser, Evidence Search, or
   assert.match(out.material.text, /01 本当の目的/);
   assert.match(out.material.text, /07 根拠成立状態/);
   assert.match(out.material.text, /SEARCH_REQUIRED_BOTH_ROUTES/);
+});
+
+test('initial Fast Path exposes Domain Lens routing failure instead of silently collapsing to null', () => {
+  const resolved = resolveInitialDomainLens('Node.jsの仕様を確認する', '', () => {
+    const error = new Error('synthetic router failure');
+    error.code = 'DOMAIN_ROUTER_TEST_FAILURE';
+    throw error;
+  });
+
+  assert.equal(resolved.lens, null);
+  assert.equal(resolved.status, 'FAILED');
+  assert.equal(resolved.error_code, 'DOMAIN_ROUTER_TEST_FAILURE');
 });
 
 test('initial Fast Path local p95 stays within the 0.1 second engineering class', () => {
