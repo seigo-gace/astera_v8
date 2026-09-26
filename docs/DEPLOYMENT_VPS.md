@@ -13,8 +13,8 @@ Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 Current root `docker-compose.yml` defines:
 
 ```text
-astera-v8                   Judgment Material Generation   127.0.0.1:7373
-astera-v8-evaluator         Evaluation / Verification      127.0.0.1:7374
+astera-v8                   Judgment Material Generation   127.0.0.1:${ASTERA_PORT}
+astera-v8-evaluator         Evaluation / Verification      0.0.0.0:7374
 astera-v8-evidence-search   Evidence Search                127.0.0.1:7376
 ```
 
@@ -26,7 +26,7 @@ astera-v8-cloudflared       ingress support
 
 Cloudflared is not a fourth Astera module.
 
-All three Astera services use host networking in the current Compose and bind to loopback/private runtime addresses as configured.
+All three Astera services currently use `network_mode: host`. Core and Evidence Search are explicitly configured to bind loopback. **Evaluator is currently configured to bind `0.0.0.0:7374`, not loopback-only.** This must be treated as a live network-boundary consideration and checked against firewall/ingress policy before production completion.
 
 ---
 
@@ -81,8 +81,8 @@ ASTERA_TGS_PROJECT_ID
 ### Evaluator
 
 ```text
-ASTERA_EVALUATOR_API_HOST
-ASTERA_EVALUATOR_API_PORT
+ASTERA_EVALUATOR_API_HOST        # current Compose explicitly sets 0.0.0.0
+ASTERA_EVALUATOR_API_PORT        # current Compose sets 7374
 ASTERA_API_KEY / skill key as required by caller routes
 ASTERA_LOG_CACHE_DIR
 ```
@@ -186,6 +186,8 @@ Interpretation:
 7376 healthy = Evidence Search has active searchable Provider(s)
 ```
 
+Calling `127.0.0.1:7374` for health is valid even though the current Evaluator listens on `0.0.0.0`; the health command does **not** prove that 7374 is loopback-only.
+
 Do not collapse these into a single “Astera is healthy” claim if one service is unavailable.
 
 ---
@@ -210,12 +212,16 @@ Live Provider success must be proven separately from source/unit test success.
 
 ## 9. Network / ingress
 
-- Do not directly expose 7373/7374/7376 to the Internet without an intentional authenticated ingress design.
-- Terminate HTTPS at the approved ingress/reverse proxy.
+- Core 7373 and Evidence Search 7376 are explicitly loopback-bound by current Compose.
+- **Evaluator 7374 is currently bound to `0.0.0.0` under host networking. Verify host firewall and external reachability explicitly.**
+- Do not intentionally expose 7374 publicly without a separate authenticated ingress design.
+- Terminate HTTPS at the approved ingress/reverse proxy for any intentionally reachable normal API route.
 - Restrict CORS for externally reachable normal API routes.
 - Keep Evidence Search internal endpoint internal.
 - Configure outer timeout/body/rate controls consistently with the service contracts.
 - Cloudflare profile is optional infrastructure support, not module logic.
+
+A future source/Compose fix that returns Evaluator to loopback must update this guide and [`LIMITATIONS.md`](LIMITATIONS.md) in the same change.
 
 ---
 
@@ -272,6 +278,7 @@ After rollback:
 3. check 7373 / 7374 / 7376 health
 4. run required Core/Evidence/Evaluator functional checks
 5. confirm Provider/Parser external boundaries
+6. re-check Evaluator 7374 external reachability/firewall state
 ```
 
 ---
@@ -282,6 +289,7 @@ After rollback:
 - Print Secret values into logs/docs/chat
 - Keep production Node processes directly on host instead of canonical containers
 - Expose internal Evidence Search endpoint publicly
+- Assume Evaluator 7374 is loopback-only while Compose binds `0.0.0.0`
 - Declare Evidence Search ready from container status alone
 - Declare Generic Evaluator complete from legacy v1 tests alone
 - Treat `PASSED` as deployment permission
