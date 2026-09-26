@@ -18,20 +18,20 @@ Always identify the failure domain before changing code/config.
 5. Service /healthz
 6. Endpoint + HTTP status + request ID
 7. Contract/schema/auth
-8. External dependency/provider/parser
-9. Test/workflow evidence on the same SHA
-10. Known limitation/inconsistency
+8. Task dependency / cancellation state where relevant
+9. External dependency/provider/parser
+10. Test/workflow evidence on the same SHA
 ```
 
 ---
 
 ## 2. Service classification
 
-| Service | Code default | Current root Compose | Responsibility |
-|---|---|---|---|
-| Judgment Material Generation | `127.0.0.1:7373` | `127.0.0.1:${ASTERA_PORT}` | `/process`, Main8 |
-| Evaluation / Verification | `127.0.0.1:7374` | **`0.0.0.0:7374`** | `/v2/evaluate`, legacy `/v1/evaluate` |
-| Evidence Search | `127.0.0.1:7376` | `127.0.0.1:7376` | `/internal/v1/evidence/search` |
+| Service | Production private bind | Responsibility |
+|---|---|---|
+| Judgment Material Generation | `127.0.0.1:7373` | `/process`, Main8 |
+| Evaluation / Verification | `127.0.0.1:7374` | `/v2/evaluate`, legacy `/v1/evaluate` |
+| Evidence Search | `127.0.0.1:7376` | `/internal/v1/evidence/search` |
 
 Support boundaries such as Japanese Parser, TGserver, LLM Provider and Cloudflare are diagnosed separately.
 
@@ -52,7 +52,7 @@ curl -i http://127.0.0.1:7374/healthz
 curl -i http://127.0.0.1:7376/healthz
 ```
 
-Do not stop at `docker compose ps`: a running Evidence Search container can still report `503` when no active searchable Provider is available.
+Do not stop at `docker compose ps`: container existence is not equivalent to application readiness.
 
 ---
 
@@ -65,22 +65,13 @@ Check:
 - Japanese Parser boundary configuration
 - internal service secret mount
 - startup/runtime log
+- request cancellation / timeout state
 
-Development host start requires explicit:
-
-```text
-ASTERA_ALLOW_HOST_START=1
-```
-
-Production should use Docker Compose.
+Production uses the canonical Container-first deployment path.
 
 ---
 
 ## 5. Evidence Search / 7376 unavailable
-
-Evidence Search production entrypoint is container-required.
-
-Do not attempt to fix it by keeping `node src/evidence-search/api/start.js` running directly on the host.
 
 Check:
 
@@ -88,25 +79,20 @@ Check:
 ASTERA_EVIDENCE_PROVIDER_CONFIG
 source catalog
 certified/active Providers
-KB-target runtime bindings
+required target/runtime bindings
 internal service secret file
 Evidence DB path
 Durable spool path
 Spool key file
 ```
 
-Health meanings include:
+A Search service can be running but not READY if it has no usable searchable Provider/runtime dependency.
 
-```text
-200 READY
-503 UNAVAILABLE_NO_ACTIVE_PROVIDER
-```
-
-Startup can fail before HTTP listen if required provider/catalog/binding checks fail.
+Do not bypass startup/provider gates to force a healthy state.
 
 ---
 
-## 6. Evaluator / 7374 unavailable or unexpectedly reachable
+## 6. Evaluator / 7374 unavailable
 
 Check local health:
 
@@ -114,23 +100,17 @@ Check local health:
 curl -i http://127.0.0.1:7374/healthz
 ```
 
-Current root Compose already defines the Evaluator service and overrides its host to:
+Then verify:
 
-```text
-ASTERA_EVALUATOR_API_HOST=0.0.0.0
-ASTERA_EVALUATOR_API_PORT=7374
-network_mode=host
-```
+- Evaluator container state
+- private bind/listen state
+- API key / skill key
+- request schema version
+- Profile availability
+- Evidence mode
+- Measurement / Registry / Binding integrity
 
-Therefore also inspect the actual host listen state and firewall/ingress when diagnosing exposure. A successful `127.0.0.1` health call does **not** prove the service is loopback-only.
-
-For short host development only:
-
-```bash
-ASTERA_ALLOW_HOST_START=1 ASTERA_LOCAL_NO_AUTH=1 npm run start:evaluator-api
-```
-
-Do not use host development mode as production replacement.
+Do not use a host development process as a production replacement.
 
 ---
 
@@ -141,15 +121,16 @@ Check in order:
 1. Input `question` / `context`
 2. Japanese Parser state
 3. Task decomposition
-4. Domain Lens routing
-5. Claim records
-6. Search Plan
-7. Evidence Search state
-8. Claim Confirmation
-9. Five-Lane material
-10. Main8 projection
+4. Task dependency graph / Wave execution
+5. Domain Lens routing
+6. Claim records
+7. Search Plan
+8. Evidence Search state
+9. Claim Confirmation
+10. Five-Lane material
+11. Main8 projection
 
-Current fixed Main8:
+Fixed Main8:
 
 ```text
 01 本当の目的
@@ -162,38 +143,54 @@ Current fixed Main8:
 08 主役AI／利用者への再指示
 ```
 
-If 07 appears as recommendation in documentation/UI, that documentation/UI is stale; current code defines Evidence Status.
+If 07 appears as recommendation in a consumer, that consumer is using a stale contract.
 
 ---
 
-## 8. Public caller tries to inject internal truth
+## 8. Task skipped or not executed
 
-The public `/process` route intentionally ignores/untrusts internal prepared objects supplied by the caller.
+Check:
 
-Symptoms such as “my supplied CONFIRMED record was not used” are expected security behavior.
+- `depends_on`
+- execution Wave assignment
+- failed/skipped prerequisite
+- request cancellation
+- admission queue state
 
-Relevant tests:
+Expected behaviors include:
 
 ```text
-test/public-decision-boundary.test.js
-test/material-only-public-projection.test.js
+SKIPPED_DEPENDENCY
+TASK_QUEUE_FULL
+TASK_CANCELLED
+REQUEST_CANCELLED
 ```
+
+Do not convert these states into a successful Task result.
+
+---
+
+## 9. Public caller tries to inject internal truth
+
+The public `/process` route intentionally does not trust internal prepared objects supplied by the caller.
+
+Symptoms such as “my supplied CONFIRMED record was not used” are expected security behavior.
 
 Use the normal request fields and allow Astera to derive internal state.
 
 ---
 
-## 9. Request `llm` settings appear ignored
+## 10. Request LLM settings appear ignored
 
-Current `/process` server allowlist does not pass caller-provided `llm` Object into `resolveRequestLLM()`.
+Arbitrary caller-provided LLM endpoint/configuration is not part of the public `/process` contract.
 
-Use the approved runtime/environment configuration, such as `LLM_CHAIN`, for the current route.
+Use the approved runtime configuration for Optional LLM boundaries.
 
-Do not diagnose this as an LLM Provider outage until checking `src/server.js` allowlisting.
+Do not diagnose this as an LLM Provider outage until checking the actual public body allowlist and runtime configuration.
 
 ---
 
-## 10. Evidence Search returns no adopted Evidence
+## 11. Evidence Search returns no adopted Evidence
 
 Distinguish:
 
@@ -205,25 +202,27 @@ Reinforcement failed to add sufficient corroboration
 Final quality rejected
 ```
 
-`src/evidence-search/module.js` intentionally empties the published Evidence array when the result is not `FINAL_VALID`.
-
-Do not bypass that boundary to make the Claim pass.
+Do not bypass the adoption boundary to make a Claim pass.
 
 ---
 
-## 11. Information Quality confusion: 7374 or in-process?
+## 12. Information Quality confusion
 
-Current active Evidence Search startup injects `evaluateInformationQuality()` directly and labels the actual orchestrator mode `IN_PROCESS`.
+Information Quality is a dedicated internal deterministic contract for Evidence candidate adoption.
 
-The repository also contains an older/inactive `information-quality-client.js` targeting an internal 7374 route that the current Evaluator server does not expose.
+```text
+Evidence Search
+→ Information Quality
+→ Adopt / Reject / Reinforce
+```
 
-Treat the **active `api/start.js` wiring** as runtime truth.
+It is not Generic `/v2/evaluate` and must not create a recursive Generic Evaluator ↔ Evidence Search call loop.
 
-See [`LIMITATIONS.md`](LIMITATIONS.md).
+When diagnosing it, inspect the active internal contract and transport without changing the ownership boundary.
 
 ---
 
-## 12. Generic `/v2/evaluate` fails
+## 13. Generic `/v2/evaluate` fails
 
 Check:
 
@@ -257,50 +256,48 @@ REVISION_REQUIRED
 PASSED
 ```
 
-`EVALUATION_FAILED` in Evidence Search mode can mean the internal search API failed; it must not be converted to `PASSED` by removing Evidence requirements.
+`EVALUATION_FAILED` must not be converted to `PASSED` by weakening Evidence requirements.
 
 ---
 
-## 13. Generic v2 Profile not found
+## 14. Generic v2 Profile not found
 
 Do not assume Legacy v1 profiles are Generic v2 profiles.
 
-Current confirmed v2 Profile:
+Repository standard Generic profile:
 
 ```text
 generic.measurement.v1
 ```
 
-If another v2 Profile is required, it must exist under the v2 Profile loader path and be covered by tests/docs.
+Additional v2 Profiles must exist under the v2 Profile Loader path and be covered by Profile/Metric/Blocking/Test documentation.
 
 ---
 
-## 14. Lens mismatch
+## 15. Lens mismatch
 
 Check:
 
 - normalized route text
-- `classification_basis`
-- `confidence`
-- `taxonomy_review_required`
+- classification basis
+- confidence / abstention behavior
 - Primary `Gxx`
 - Secondary list
 - Overlay list
-- abstention behavior
 
-The current router may return `ABSTAIN_LOW_SIGNAL` rather than fabricate a domain.
+A low-signal input may abstain rather than fabricate a domain.
 
 Generic v2 evaluator does not automatically inherit Legacy v1 Domain Lens evaluation behavior.
 
 ---
 
-## 15. 401 / 403 / 429
+## 16. 401 / 403 / 429
 
 ### Core / normal Evaluator
 
 - 401: API key missing/invalid
 - 403: CORS/origin denial or route-specific forbidden state
-- 429: transport rate limit
+- 429: transport/admission rate limit
 
 ### Evidence Search internal API
 
@@ -310,7 +307,7 @@ Do not replace internal signed auth with a public API key as a shortcut.
 
 ---
 
-## 16. Parser failure vs clarification
+## 17. Parser failure vs clarification
 
 A Parser/infrastructure failure is not the same as missing user premise.
 
@@ -318,7 +315,7 @@ When Japanese Parser fails, inspect Parser URL/mode/key/process/timeout before a
 
 ---
 
-## 17. TGserver log missing
+## 18. TGserver log missing
 
 Check:
 
@@ -330,27 +327,21 @@ Check:
 - outbox state
 - retry/TTL
 
-Logging failure does not invalidate otherwise valid Evidence/Judgment by itself, but must be handled according to operational requirements.
+Logging failure does not alter Evidence/Judgment truth by itself.
 
 ---
 
-## 18. Test failure
+## 19. Test failure
 
-Use the script matching the failing area.
+Use the verification command matching the failing area and preserve the first meaningful failure.
 
-```bash
-npm run test:runtime
-npm run test:evaluator
-npm run test:evaluator-api
-npm run verify:evidence
-npm run verify
-```
+Do not loop retries until a flaky pass appears and then discard earlier evidence.
 
-Preserve the first meaningful failure. Do not loop retries until a flaky pass appears and then discard earlier evidence.
+Release proof must be attached to the exact candidate SHA.
 
 ---
 
-## 19. Report evidence
+## 20. Report evidence
 
 Include:
 
