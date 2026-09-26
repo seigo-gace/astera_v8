@@ -41,7 +41,7 @@ const RX = {
   preserve: /(?:維持|保持|残す|壊さず|変えず|そのまま|keep|preserve|retain|without breaking)/i,
   replace: /(?:置換|差し替|入れ替|変更対象|変更|replace|swap|change)/i,
   evidence: /(?:根拠|証拠|Evidence|source|出典|公式|一次資料|事実確認|ファクトチェック|fact.?check|audit|current|latest|現在|最新|価格|料金|法令|規約|外部仕様)/i,
-  internalTest: /(?:テスト|試験|build|CI|lint|unit test|integration test|runtime test|smoke test|回帰|動作確認|ビルド|コンパイル)/i
+  internalTest: /(?:テスト|試験|build|CI|lint|internal tests?|unit test|integration test|runtime test|smoke test|回帰|動作確認|ビルド|コンパイル)/i
 };
 
 const norm = (value) => String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').trim();
