@@ -8,6 +8,7 @@ const RateLimiter = require('./guard/rate-limiter');
 const { parseJsonStrict, maskSecrets } = require('./safe-json');
 const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('./auth/skill-api-key');
 const { resolveRequestLLM } = require('./llm-request');
+const { normalizePurposeMode } = require('./runtime/purpose-control');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
@@ -42,6 +43,8 @@ function buildProcessAllowlist(body) {
   if (body.language !== undefined) allowlist.language = body.language;
   if (body.locale !== undefined) allowlist.locale = body.locale;
   if (body.output_language !== undefined) allowlist.output_language = body.output_language;
+  const purpose = normalizePurposeMode(body.purpose);
+  if (purpose) allowlist.purpose = purpose;
   const moodAnswers = sanitizeMoodAnswers(body.moodAnswers);
   if (Object.keys(moodAnswers).length) allowlist.moodAnswers = moodAnswers;
   return allowlist;
@@ -71,6 +74,16 @@ function resolveGlobalApiKeyCaller(apiKey) {
   const globalKey = process.env.ASTERA_API_KEY || process.env.KAGURA_API_KEY || '';
   if (!globalKey || !timingSafeStringEqual(key, globalKey)) return null;
   return { id: 'admin', plan: 'admin', status: 'active', key_prefix: 'admin', is_global: true };
+}
+
+function publicRevisionPayload(revision) {
+  return maskSecrets({
+    phase: revision?.material?.phase || revision?.result?.phase || null,
+    revision: revision?.material?.revision || revision?.result?.revision || null,
+    material_id: revision?.material?.material_id || revision?.result?.material_id || null,
+    material: revision?.material || null,
+    runtime: revision?.runtime || null
+  });
 }
 
 class AsteraServer {
@@ -201,6 +214,14 @@ class AsteraServer {
     res.end(String(text || ''));
   }
 
+  _sse(req, res, event, payload, id = null) {
+    if (res.writableEnded || res.destroyed) return false;
+    if (id) res.write(`id: ${id}\n`);
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(maskSecrets(payload))}\n\n`);
+    return true;
+  }
+
   async _readRawBody(req, limit = ONE_MB) {
     const chunks = [];
     let total = 0;
@@ -246,13 +267,12 @@ class AsteraServer {
     return authenticateSkillApiKey(req.headers['x-api-key']);
   }
 
-  async _processRequest(req, res, context, caller, { unlimited = false, route = '/process' } = {}) {
-    context.callerId = caller.id;
-    if (!unlimited) {
-      const rl = this.limiter.check({ key: `process:${caller.id}`, limit: transportProcessRateLimit(), windowMs: 60_000 });
-      if (!rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
-    }
+  _checkProcessRate(caller, unlimited = false) {
+    if (unlimited) return null;
+    return this.limiter.check({ key: `process:${caller.id}`, limit: transportProcessRateLimit(), windowMs: 60_000 });
+  }
 
+  async _readProcessAllowlist(req) {
     const body = await this._readJsonObject(req);
     if (typeof body.question !== 'string') {
       const error = new Error('question must be a string');
@@ -278,8 +298,77 @@ class AsteraServer {
     }
     const allowlist = buildProcessAllowlist(body);
     allowlist.llm = resolveRequestLLM(allowlist);
+    return allowlist;
+  }
+
+  async _processRequest(req, res, context, caller, { unlimited = false } = {}) {
+    context.callerId = caller.id;
+    const rl = this._checkProcessRate(caller, unlimited);
+    if (rl && !rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
+    const allowlist = await this._readProcessAllowlist(req);
     const out = await this.engine.process(allowlist, caller);
     return this._text(req, res, 200, out.material?.text || '');
+  }
+
+  async _processProgressiveRequest(req, res, context, caller, { unlimited = false } = {}) {
+    context.callerId = caller.id;
+    const rl = this._checkProcessRate(caller, unlimited);
+    if (rl && !rl.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate: rl });
+    const allowlist = await this._readProcessAllowlist(req);
+    if (!this.engine || typeof this.engine.processProgressive !== 'function') {
+      return this._json(req, res, 503, { error: 'progressive_runtime_not_available' });
+    }
+
+    res.writeHead(200, this._headers(req, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'X-Request-ID': req.requestId || ''
+    }));
+    res.flushHeaders?.();
+
+    const abortController = new AbortController();
+    const abort = () => abortController.abort();
+    req.once('aborted', abort);
+    res.once('close', abort);
+
+    let lastMaterialId = null;
+    try {
+      await this.engine.processProgressive(allowlist, caller, {
+        signal: abortController.signal,
+        onRevision: async (revision) => {
+          const payload = publicRevisionPayload(revision);
+          lastMaterialId = payload.material_id || lastMaterialId;
+          const revisionId = payload.material_id && payload.revision
+            ? `${payload.material_id}:${payload.revision}`
+            : null;
+          this._sse(req, res, 'material', payload, revisionId);
+        }
+      });
+      this._sse(req, res, 'complete', {
+        material_id: lastMaterialId,
+        status: 'COMPLETE'
+      }, lastMaterialId ? `${lastMaterialId}:complete` : null);
+    } catch (error) {
+      const cancelled = abortController.signal.aborted || error?.code === 'REQUEST_CANCELLED';
+      if (!cancelled) {
+        this.logger.write({
+          callerId: context.callerId,
+          type: 'progressive_process_failed',
+          severity: 'error',
+          text: 'Progressive judgment-material processing failed',
+          payload: { request_id: req.requestId, error }
+        });
+        this._sse(req, res, 'error', {
+          material_id: lastMaterialId,
+          status: 'FAILED',
+          error: error?.code || 'progressive_processing_failed'
+        }, lastMaterialId ? `${lastMaterialId}:error` : null);
+      }
+    } finally {
+      req.removeListener('aborted', abort);
+      if (!res.writableEnded && !res.destroyed) res.end();
+    }
   }
 
   async _handle(req, res, context = { callerId: 'anonymous' }) {
@@ -310,6 +399,13 @@ class AsteraServer {
           ok: true,
           service: 'astera-v8',
           version: pkg.version,
+          progressive_api: {
+            enabled: typeof this.engine?.processProgressive === 'function',
+            endpoint: '/v2/process/stream',
+            transport: 'SSE',
+            initial_phase: 'INITIAL_FAST_PATH',
+            final_phase: 'FINAL_ENRICHED'
+          },
           tgserver_logging: this.logger.tgsEnabled,
           skill_api: {
             enabled: isSkillApiConfigured(),
@@ -336,11 +432,22 @@ class AsteraServer {
         return await this._processRequest(req, res, context, caller);
       }
 
+      if (req.method === 'POST' && url.pathname === '/v2/process/stream') {
+        const caller = await this._authenticate(req);
+        if (!caller) {
+          return this._json(req, res, 401, {
+            error: 'unauthorized',
+            hint: 'Set X-API-Key (ASTERA_API_KEY) or enable ASTERA_LOCAL_NO_AUTH=1 on loopback.'
+          });
+        }
+        return await this._processProgressiveRequest(req, res, context, caller);
+      }
+
       if (req.method === 'POST' && url.pathname === '/v1/skill/process') {
         if (!isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
         const caller = await this._authenticateSkill(req);
         if (!caller) return this._json(req, res, 401, { error: 'unauthorized' });
-        return await this._processRequest(req, res, context, caller, { unlimited: true, route: '/v1/skill/process' });
+        return await this._processRequest(req, res, context, caller, { unlimited: true });
       }
 
       return this._json(req, res, 404, { error: 'not_found' });
@@ -354,6 +461,10 @@ class AsteraServer {
         text: `${req.method} ${String(req.url || '').split('?')[0]} failed`,
         payload: { request_id: req.requestId, status, error }
       });
+      if (res.headersSent) {
+        if (!res.writableEnded && !res.destroyed) res.end();
+        return;
+      }
       const publicMessage = status >= 500 ? 'internal_error' : error.message;
       return this._json(req, res, status, { error: publicMessage, status, requestId: req.requestId });
     }
@@ -364,3 +475,4 @@ module.exports = AsteraServer;
 module.exports.parseAllowedOrigins = parseAllowedOrigins;
 module.exports.resolveGlobalApiKeyCaller = resolveGlobalApiKeyCaller;
 module.exports.transportProcessRateLimit = transportProcessRateLimit;
+module.exports.publicRevisionPayload = publicRevisionPayload;

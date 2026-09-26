@@ -80,10 +80,10 @@ function normalizeProvider(provider, index) {
       || (sourceClass === 'PAID_PROVIDER' ? 'IMMEDIATE_RECEIPT' : 'DETERMINISTIC_REQUEST_TARIFF')
   ).toUpperCase();
   if (!SETTLEMENT_MODES.has(settlementMode)) {
-    throw new TypeError(`provider ${providerId} billing_settlement_mode is invalid`);
+    throw new TypeError(`${providerId}.billing_settlement_mode is invalid`);
   }
 
-  const certified = provider.certified !== false;
+  const certified = provider.certified === true;
   if (sourceClass === 'PAID_PROVIDER' && certified && settlementMode === 'UNVERIFIABLE') {
     throw new TypeError(`paid provider ${providerId} cannot be certified with UNVERIFIABLE settlement`);
   }

@@ -6,11 +6,17 @@ const Logger = require('../../logger');
 const RateLimiter = require('../../guard/rate-limiter');
 const { parseJsonStrict, maskSecrets } = require('../../safe-json');
 const { authenticateSkillApiKey, isSkillApiConfigured, timingSafeStringEqual } = require('../../auth/skill-api-key');
-const { evaluate } = require('..');
+const { evaluate, GENERIC_REQUEST_SCHEMA_VERSION } = require('..');
 const pkg = require('../package.json');
 
 const ONE_MB = 1024 * 1024;
 const DEFAULT_EVALUATE_RATE_LIMIT_PER_MINUTE = 60;
+const EVALUATE_ROUTES = Object.freeze({
+  '/v1/evaluate': Object.freeze({ version: 'v1', skill: false }),
+  '/v1/skill/evaluate': Object.freeze({ version: 'v1', skill: true }),
+  '/v2/evaluate': Object.freeze({ version: 'v2', skill: false }),
+  '/v2/skill/evaluate': Object.freeze({ version: 'v2', skill: true })
+});
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -49,6 +55,15 @@ function authenticateEvaluateRequest(req, host) {
   return null;
 }
 
+function validatePublicV2EvidenceOwnership(body) {
+  const providedEvidence = body.evidence_registry !== undefined || body.evidence_bindings !== undefined;
+  if (providedEvidence) return 'provided_evidence_forbidden_on_public_v2';
+  if (!body.evidence_search || typeof body.evidence_search !== 'object' || Array.isArray(body.evidence_search)) {
+    return 'evidence_search_required_on_public_v2';
+  }
+  return null;
+}
+
 class EvaluatorApiServer {
   constructor(options = {}) {
     this.port = options.port === 0 ? 0 : positiveInteger(options.port || process.env.ASTERA_EVALUATOR_API_PORT, 7374);
@@ -80,14 +95,14 @@ class EvaluatorApiServer {
     this.server.listen(this.port, this.host, () => {
       const address = this.server.address();
       const port = typeof address === 'object' && address ? address.port : this.port;
-      this.logger.write({ type: 'evaluator_api_started', text: `Astera evaluator API listening at http://${this.host}:${port}`, payload: { host: this.host, port } });
+      this.logger.write({ type: 'evaluator_api_started', text: `Astera evaluation API listening at http://${this.host}:${port}`, payload: { host: this.host, port } });
     });
     return this.server;
   }
 
   async stop() {
     if (this.server.listening) await new Promise((resolve) => this.server.close(resolve));
-    this.logger.write({ type: 'evaluator_api_stopped', text: 'Astera evaluator API stopped' });
+    this.logger.write({ type: 'evaluator_api_stopped', text: 'Astera evaluation API stopped' });
     await this.logger.flush?.();
   }
 
@@ -162,30 +177,64 @@ class EvaluatorApiServer {
       if (req.method === 'GET' && url.pathname === '/healthz') {
         return this._json(req, res, 200, {
           ok: true,
-          service: 'astera-quality-completion-evaluator-api',
+          service: 'astera-evaluation-verification-api',
           version: pkg.version,
           public_endpoint: '/v1/evaluate',
           skill_endpoint: '/v1/skill/evaluate',
+          legacy_public_endpoint: '/v1/evaluate',
+          generic_public_endpoint: '/v2/evaluate',
+          legacy_skill_endpoint: '/v1/skill/evaluate',
+          generic_skill_endpoint: '/v2/skill/evaluate',
           skill_api_enabled: isSkillApiConfigured(),
           publication_enabled: false,
+          ai_used: false,
           time: new Date().toISOString()
         });
       }
-      if (req.method === 'POST' && (url.pathname === '/v1/evaluate' || url.pathname === '/v1/skill/evaluate')) {
-        const isSkillRoute = url.pathname === '/v1/skill/evaluate';
+
+      const route = EVALUATE_ROUTES[url.pathname];
+      if (req.method === 'POST' && route) {
+        const isSkillRoute = route.skill;
         if (isSkillRoute && !isSkillApiConfigured()) return this._json(req, res, 503, { error: 'skill_api_not_configured' });
         const caller = isSkillRoute
           ? authenticateSkillApiKey(req.headers['x-api-key'])
           : authenticateEvaluateRequest(req, this.host);
         if (!caller) return this._json(req, res, 401, { error: 'unauthorized' });
         if (!isSkillRoute) {
-          const rate = this.limiter.check({ key: `evaluate:${caller.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
+          const rate = this.limiter.check({ key: `evaluate:${route.version}:${caller.id}`, limit: transportEvaluateRateLimit(), windowMs: 60_000 });
           if (!rate.allowed) return this._json(req, res, 429, { error: 'rate_limited', rate });
         }
-        const result = await evaluate(await this._readJsonObject(req));
+
+        const body = await this._readJsonObject(req);
+        if (route.version === 'v2' && body.schema_version !== GENERIC_REQUEST_SCHEMA_VERSION) {
+          return this._json(req, res, 400, { error: 'evaluation_schema_route_mismatch', expected: GENERIC_REQUEST_SCHEMA_VERSION });
+        }
+        if (route.version === 'v1' && body.schema_version === GENERIC_REQUEST_SCHEMA_VERSION) {
+          return this._json(req, res, 400, { error: 'evaluation_schema_route_mismatch', expected: 'legacy_v1_contract' });
+        }
+        if (route.version === 'v2' && !isSkillRoute) {
+          const evidenceOwnershipError = validatePublicV2EvidenceOwnership(body);
+          if (evidenceOwnershipError) return this._json(req, res, 400, { error: evidenceOwnershipError });
+        }
+
+        const result = await evaluate(body);
         this.logger.write({
-          callerId: caller.id, type: 'evaluation_completed', text: `QualityCompletionEvaluator returned ${result.status}`,
-          payload: { request_id: req.requestId, access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key', candidate_id: result.candidate_id || null, status: result.status, quality: result.scores?.quality ?? null, completion: result.scores?.completion ?? null, passed: result.judgment?.passed === true }
+          callerId: caller.id,
+          type: 'evaluation_completed',
+          text: `Evaluation engine returned ${result.status}`,
+          payload: {
+            request_id: req.requestId,
+            api_version: route.version,
+            access_mode: isSkillRoute ? 'owner_skill_private' : 'api_key',
+            candidate_id: result.candidate_id || null,
+            subject_id: result.subject_id || null,
+            status: result.status,
+            total_score: result.scores?.total ?? result.scores?.minimum ?? null,
+            quality: result.scores?.quality ?? null,
+            completion: result.scores?.completion ?? null,
+            passed: result.judgment?.passed === true,
+            ai_used: result.ai_used === true
+          }
         });
         return this._json(req, res, 200, result);
       }
