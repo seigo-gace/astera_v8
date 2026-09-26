@@ -1,21 +1,53 @@
 # Astera v8 — Deterministic Judgment-Material Runtime
 
-> **問いを判断材料へ変換する、非AI・決定論的Runtime。**
+> **問いを、根拠付きで検証可能な判断材料へ変換する非AI・決定論的Runtime。**
 
-Astera v8は、入力をTaskとClaimへ分解し、必要な根拠条件を整理し、Fact / Risk / Multi / Inquiry / Compareの複数観点から**判断材料**を生成するRuntimeです。
+Astera v8は、最終回答や最終意思決定を行うAIではありません。
+入力をTaskとClaimへ分解し、必要な根拠を検索・検証し、複数観点から判断材料を生成し、必要に応じて別系統の判定Moduleで成果物や状態を検証できるようにする**判断材料生成レイヤー**です。
 
-Astera自身が最終判断・採否・推奨案を決定することはありません。
+Astera v8の正式な中核は、次の**3 Module**です。
+
+1. **判断材料生成Module** — 問いを構造化し、Fact / Risk / Multi / Inquiry / CompareからMain8判断材料を生成する
+2. **根拠検索Module** — 専門・権威Sourceと一般・最新Sourceの2経路から、採用可能なEvidenceを検索・検証する
+3. **判定Module** — 要件・実測値・Evidenceを基に、品質・完成・適格性を決定論的に評価し、PASS / REVISION / BLOCKを返す
+
+この3 Moduleをつないだ実行形態は**4つ目のModuleではありません**。Domain Lens、Overlay、Japanese Parser、TGserver等も3 Moduleとは別の補助要素・依存・外部Systemです。
 
 ```text
-Human / Main AI
-      │ request
-      ▼
-Astera v8
-  deterministic task / claim / evidence / multi-perspective processing
-      │ Main8 judgment material
-      ▼
-Human / Main AI
-  final interpretation / decision
+Human / Main AI / Calling System
+             │
+             ▼
+      判断材料生成Module
+             │
+       Claim / Search Plan
+             ▼
+        根拠検索Module
+       ┌─────┴─────┐
+       │           │
+専門・権威Source   一般・最新Source
+       │           │
+       └─────┬─────┘
+             ▼
+      Accepted Evidence
+             │
+             ▼
+      判断材料生成Module
+             │
+          Main8
+             ▼
+Human / Main AI が最終判断
+
+必要時は独立して:
+
+Artifact / Requirements / Metrics
+             │
+             ▼
+          判定Module
+             │
+     必要なら既存の根拠検索API
+             │
+             ▼
+PASS / REVISION / BLOCK + Audit
 ```
 
 Runtime: **Node.js 22+ / Google V8**  
@@ -24,140 +56,406 @@ Primary implementation language: **JavaScript / CommonJS**
 
 ---
 
-## 1. 設計正本
+## 1. Astera v8の目的
 
-Astera v8の基本設計、詳細設計、ロジック、アーキテクチャ、各種定義、境界、Error state、完成Gateは次を正本とします。
+Astera v8の目的は、AIや人間がそのまま結論を出す前に、**判断に必要な材料・根拠・反対視点・リスク・比較軸・不足前提を、非AIで決定論的に整えること**です。
 
-**[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**
+主な狙いは次のとおりです。
 
-READMEは入口・概要です。Architectureを独自に再定義しません。
+- 入力の意図や制約を落とさずTaskへ分解する
+- 事実Claimと推測・未確認事項を分ける
+- 外部事実を「AIがそう言った」ではなくEvidenceで裏付ける
+- 賛成根拠だけでなく反証・矛盾も残す
+- 古い情報だけで判断しない
+- Fact / Risk / Multi / Inquiry / Compareを混ぜず独立して処理する
+- 不明なものを無理に確定せず`UNDETERMINED`として残す
+- 最終判断権を人間または主役AIへ残す
+- 別用途の成果物・実装・運用状態を判定Moduleで再利用可能にする
 
----
-
-## 2. 現在の完成状態
-
-現行Coreの主要処理は実装されていますが、**Repository全体はまだRelease Completeではありません。**
-
-現在解消が必要な主項目:
-
-1. Japanese Parser preparationの一回化
-2. Parser障害と「前提不足」の状態分離
-3. 標準`npm run verify`とREAL Japanese Parser MCP Gateの統合
-4. 現行HEADと同一SHAでのLive Evidence / Story / Main8 E2E再証明
-5. Archive / generated artifacts /旧文書の整理
-
-**過去SHAで成功したTestやArtifactを、現在SHAの完成証拠とは扱いません。**
+Astera自身が最終推薦、Winner選択、採用案決定、ユーザーの意思決定を行うことはありません。
 
 ---
 
-## 3. Astera v8がすること / しないこと
+## 2. 3 Moduleの役割・目的・効果
 
-### Coreがすること
+### 2.1 判断材料生成Module
 
-- Input normalization / source-role isolation
-- 日本語Parser連携
-- Deterministic Task Decomposition
-- Task Graph validation
-- `G01`〜`G38` Lens / Overlay routing
-- Claim extraction / canonicalization
-- Claim Policy / Search Plan生成
-- Evidence Search boundary呼出し
-- Evidence Binding
-- `CONFIRMED / UNDETERMINED`判定
-- Five-Lane projection
-- Perspective expansion
-- Human Reader presentation signal
-- Main8判断材料生成
+#### 目的
 
-### Coreがしないこと
+判断材料生成Moduleの目的は、**曖昧な入力を、検証可能なTask / Claim / Evidence Requirementへ変換し、複数観点から判断材料を生成すること**です。
 
-- 最終意思決定
-- 自動Recommendation / Ranking
-- User Account / Login / Passkey / 2FA管理
-- Plan / Billing / Credit / Refund管理
-- 個人情報DBの所有
-- ASTERA-KBの保存主体
-- 外部Web情報の真実性そのものの保証
-- Account、Billing、Subscription、Application-user state（Astera App が所有）
+主な実装は`src/astera-engine.js`、`src/canonical-astera-engine*.js`、`src/v4-canonical/`、`src/pillars/`等で構成されます。
 
----
-
-## 4. 現在の実行経路
+#### 主な責務
 
 ```text
-start.js
-  ↓
-src/server.js
-  ↓
-src/astera-engine.js
-  ↓
-src/canonical-astera-engine.js
-  ↓
-src/canonical-astera-engine-base.js
-  ↓
-Task / Claim / Evidence / Five Lanes / Main8
-```
-
-Evidence Searchは`src/astera-engine.js`からCanonical Evidence Boundaryへ注入されます。
-
----
-
-## 5. Canonical processing pipeline
-
-```text
-Input / Context / Code / Quote / File
+Input / Context
 ↓
 Source Role Isolation
 ↓
-Language / Locale / Script
-↓
-Japanese Parser MCP or deterministic local understanding
+Language / Japanese Parser boundary
 ↓
 Task Decomposition
 ↓
 Task Graph Validation
 ↓
-Domain Lens / Overlay
+G01–G38 Domain Lens / Overlay
 ↓
 Claim Extraction
 ↓
 Claim Policy
 ↓
 Search Plan
-  ├─ support
-  └─ counter
 ↓
-Evidence Search / supplied Evidence
+Evidence Search boundary
 ↓
-Evidence Binding
-↓
-G1–G7 Confirmation
+Evidence Binding / Confirmation
 ↓
 Canonical Claim Records
-  ├─ CONFIRMED
-  └─ UNDETERMINED
 ↓
-Five Lanes
-  ├─ Fact
-  ├─ Risk
-  ├─ Multi
-  ├─ Inquiry
-  └─ Compare
+Fact / Risk / Multi / Inquiry / Compare
 ↓
 Perspective Expansion
 ↓
 Main8
-↓
-Human / Main AI
 ```
 
-TaskとClaimは別構造です。Search結果がClaimの意味を後から作り替えることもありません。
+具体的には次を担当します。
+
+- Input normalization / source-role isolation
+- 日本語Parser連携
+- Deterministic Task Decomposition
+- Task dependency / condition / exceptionの保持
+- Requirement / constraint / prohibition / preserve条件の保持
+- `G01`〜`G38` LensとOverlayの適用
+- Claim抽出・正規化
+- ClaimごとのEvidence Requirement生成
+- Search Plan生成
+- 根拠検索Moduleの呼出し
+- 返却EvidenceのProtocol整合確認
+- ClaimとEvidenceのBinding
+- `CONFIRMED / UNDETERMINED`の保持
+- Five-Lane projection
+- Main8判断材料生成
+
+#### 効果
+
+このModuleにより、利用者や主役AIは、単純な一発回答ではなく、**目的・不足前提・事実・リスク・反対視点・比較材料・根拠成立状態を分離した材料**を受け取れます。
+
+効果は特に次の点にあります。
+
+- 指示や制約の取りこぼしを減らす
+- 事実と推測の混同を減らす
+- 一方向の見方だけで結論へ進むのを防ぐ
+- 反対材料・リスク・追加確認事項を同時に見える化する
+- 不確実性を隠さず最終判断者へ渡す
+- 同じ入力に対して決定論的な処理を再現できる
+
+#### やらないこと
+
+- 最終意思決定
+- Candidateの自動Ranking / Winner選択
+- 自動Recommendation
+- Evidence Searchが採用済みとしたEvidenceの二重品質採点
+- 不明なClaimの推測補完
+
+---
+
+### 2.2 根拠検索Module
+
+実装: `src/evidence-search/`
+
+#### 目的
+
+根拠検索Moduleの目的は、**Claimを判断するために必要な外部事実を、検索可能・検証可能・追跡可能なEvidenceとして取得すること**です。
+
+単なるWeb検索ではありません。検索結果候補をそのまま「事実」にせず、Authority、Freshness、Conflict、Coverage、Lineage等を確認し、採用できるEvidenceだけを返します。
+
+#### 2つの検索経路
+
+根拠検索Moduleは、目的の異なる**2経路**で根拠を探します。
+
+**Route A — 専門・権威Source**
+
+分野ごとに選定した公式DB、一次情報、規格、研究DB、行政・法令Source、専門Registry等を検索します。
+
+目的:
+
+> **その分野で信頼できる専門根拠を取得すること。**
+
+**Route B — 一般・最新Source**
+
+一般Web、公式Web、公式API、一次発表、現在の仕様・Release・標準等から最新情報を検索します。
+
+目的:
+
+> **専門Sourceだけでは拾えない現在情報・更新情報を補い、古い根拠だけで判断しないこと。**
+
+2経路は同じ検索を二重に行うためではなく、**AuthorityとFreshnessを補完するため**に存在します。
+
+```text
+Search Plan
+    │
+    ├─ Route A: Specialist / Authoritative
+    │
+    └─ Route B: General / Current
+              │
+              ▼
+       Candidate normalization
+              ↓
+         Deduplication
+              ↓
+ Authority / Provenance / Suitability
+              ↓
+ Freshness / Conflict / Coverage / Lineage
+              ↓
+        Initial quality gate
+              ↓
+ Reinforcement search when required
+              ↓
+         Final quality gate
+              ↓
+Accepted Evidence / Insufficient / Unresolved
+```
+
+#### 主な責務
+
+- Query execution
+- Provider selection / Provider-specific adapters
+- 専門・権威Source検索
+- 一般・最新Source検索
+- Candidate normalization
+- Duplicate handling
+- Authority / provenance評価
+- Domain / jurisdiction suitability確認
+- Freshness評価
+- Corroboration
+- Conflict detection
+- Coverage measurement
+- Lineage analysis
+- Initial quality gate
+- 必要時の1回のreinforcement search
+- Final information-quality gate
+- Retrieval失敗と「該当Evidenceなし」の区別
+- Accepted / insufficient / unresolved状態の返却
+- Recovery / bounded scheduling
+
+#### 効果
+
+- AIの記憶や推測を根拠として扱わずに済む
+- 一次情報・公式情報を優先できる
+- 古い情報だけで誤判定する可能性を下げる
+- 1つのSourceだけによる偏りを抑える
+- SUPPORTだけでなくCOUNTERやConflictを保持できる
+- 「見つからなかった」と「検索に失敗した」を区別できる
+- 根拠不足を無理に`CONFIRMED`へ昇格させない
+
+#### やらないこと
+
+- Main8生成
+- 最終意思決定
+- 判定Module用のEvidence Registry / Binding生成
+- 呼出し側の評価CriterionやScore計算
+- 根拠がない場合の捏造・推測補完
+
+**重要:** 判定Moduleが根拠を必要とする場合も、根拠検索Moduleそのものを改造して判定用状態を持たせません。判定Moduleは既存Evidence Search APIを利用し、評価との紐付けは判定Module側で行います。
+
+---
+
+### 2.3 判定Module — Evaluation / Verification Module
+
+実装: `src/quality-completion-evaluator/`
+
+> Directory名は歴史的に`quality-completion-evaluator`ですが、現行の目的はKB専用QCEではなく、**汎用の非AI Evaluation / Verification Module**です。
+
+#### 目的
+
+判定Moduleの目的は、**成果物・実装・Test・運用状態・調査結果などを、与えられたRequirements / Profile / Metrics / Evidenceに照らし、決定論的に評価すること**です。
+
+「AIが完成と言った」「担当Systemが成功と言った」という自己申告を完成証拠にせず、検証可能なEvidenceから合否を決めます。
+
+#### 基本処理
+
+```text
+Evaluation Target
++
+Requirements / Profile / Rubric
++
+Measurements / Runtime Evidence
++
+必要に応じたExternal Evidence
+↓
+Input Validation
+↓
+Requirement Mapping
+↓
+Evidence Verification
+↓
+Evidence Registry / Binding
+↓
+Metric / Criterion Evaluation
+↓
+Score Calculation
+↓
+Hard Blocking
+↓
+Judgment
+↓
+Audit Result
+```
+
+#### 根拠検索Moduleとの関係
+
+判定Moduleは、外部事実の裏付けが必要な場合に**既存の根拠検索APIを利用できます**。
+
+```text
+判定Module
+   ↓
+既存 Evidence Search API
+   ↓
+根拠検索Module
+   ↓
+Standard Evidence Search Response
+   ↓
+判定Module
+   ├─ Evidence Registryを生成
+   ├─ Evidence Bindingを生成
+   ├─ Requirement / Metric / Criterionへ紐付け
+   ├─ Hash / Integrityを検証
+   └─ Score / Blocking / Judgmentへ使用
+```
+
+責務の境界は固定です。
+
+```text
+根拠検索Module = 根拠を探して品質確認し返す
+判定Module     = その根拠を「何の評価に使ったか」管理して判定する
+```
+
+根拠検索Module側へ判定用RegistryやCriterionを持たせません。
+
+#### Evidence trace
+
+判定結果は、点数だけではなく次の追跡関係を持てることを重視します。
+
+```text
+Evidence
+↓
+Evidence Binding
+↓
+Metric
+↓
+Criterion / Dimension
+↓
+Score
+↓
+Hard Blocking
+↓
+Judgment
+```
+
+これにより、**なぜその点数なのか、なぜPASSなのか、なぜBLOCKなのか**をEvidenceまで逆引きできます。
+
+#### 効果
+
+- 自己採点・自己完了宣言を防ぐ
+- 100点でも重大違反があればBLOCKできる
+- 必須Evidence不足をFail-closedにできる
+- 同じ入力に対して同じ判定を再現できる
+- 判定理由をEvidenceまで追跡できる
+- 用途別Profile / Rubricで共通Engineを再利用できる
+- Code、Implementation、Test、Operation、Research等を同じ判定基盤へ載せられる
+
+#### やらないこと
+
+- 対象成果物の自動修正
+- Main8生成
+- 根拠検索Providerの所有
+- 根拠検索Moduleの検索ロジック改変
+- KBへの自動保存・公開
+- 特定製品専用ロジックの内蔵
+- DebugAI固有Profile / DebugAI固有判断の内蔵
+- 人間の最終ビジネス意思決定
+
+判定ModuleのPASSは、**そのProfile / Requirementに対する評価結果**であり、それ自体がDeployment、KB保存、公開、課金、Production変更の許可を意味しません。
+
+---
+
+## 3. 3 Moduleの責務境界
+
+| Module | 主目的 | 入力 | 出力 | 最終判断権 |
+|---|---|---|---|---|
+| 判断材料生成Module | 問いを構造化し判断材料を生成 | Request / Context | Main8 / Canonical material | なし |
+| 根拠検索Module | 外部事実を検索・品質確認 | Search Plan / Claim条件 | Accepted Evidence / unresolved state | なし |
+| 判定Module | RequirementsとEvidenceで合否を評価 | Target / Requirement / Metric / Evidence | PASS / REVISION / BLOCK + Audit | 評価範囲内のみ |
+
+禁止する責務混在:
+
+```text
+根拠検索Module → Main8を作らない
+根拠検索Module → 判定Criterionを所有しない
+判断材料生成Module → Evidence品質を二重採点しない
+判断材料生成Module → Winner / Recommendationを決めない
+判定Module → Search Providerを所有しない
+判定Module → Main8を作らない
+判定Module → 特定呼出し元の専用ロジックを抱え込まない
+```
+
+---
+
+## 4. 3 Moduleが組み合わさることで得られる効果
+
+3 Moduleを分離する理由は、単にCodeを分割するためではありません。
+
+### 4.1 推測と事実を分離できる
+
+判断材料生成Moduleが「何を確認すべきか」を決め、根拠検索Moduleが「本当に確認できたか」をEvidenceで返します。
+
+### 4.2 根拠取得と採点を分離できる
+
+検索Moduleは検索に集中し、判定Moduleは評価に集中します。検索結果を評価都合で改変したり、採点基準を検索Moduleへ埋め込んだりしません。
+
+### 4.3 AIの自己確認を防げる
+
+AIや作業Systemが「成功した」と言っても、判定ModuleはRequirements / Runtime Evidence / Hash / Blocking条件から独立して確認できます。
+
+### 4.4 古さと偏りを抑えられる
+
+根拠検索Moduleの専門・権威経路と一般・最新経路を併用することで、専門性だけ、最新性だけの片寄りを抑えます。
+
+### 4.5 説明可能性を残せる
+
+最終的なMain8や判定結果から、Claim、Evidence、Metric、Criterionまで追跡しやすくなります。
+
+### 4.6 大規模化しても責務を崩さない
+
+処理量が増えた場合はAstera v8の実行単位を横展開できます。共有Moduleへ無制限に責務を寄せるのではなく、3 Moduleの境界を維持したままScaleさせることを前提とします。
+
+---
+
+## 5. 設計Authority
+
+Astera v8の基本設計、詳細設計、ロジック、アーキテクチャ、各種定義、境界、Error state、完成GateのRepository上の基準は次です。
+
+**[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**
+
+ただしRepository文書の優先順位は次のとおりです。
+
+```text
+1. 明示された現行Owner決定
+2. docs/ARCHITECTURE.md
+3. 現行Code / Contract / Test
+4. README / STRUCTURE summary
+5. Archive / historical docs
+```
+
+READMEは入口・概要であり、Owner決定や実Codeを独自に上書きしません。
 
 ---
 
 ## 6. Main8
 
-公開判断材料は8セクションで構成します。
+判断材料生成Moduleの公開出力は8セクションで構成します。
 
 | No. | Section |
 |---:|---|
@@ -204,12 +502,12 @@ Compareは比較材料を作りますが、Weighted Score・Selected Candidate�
 
 日本語解析が必要な入力ではJapanese Parser MCPを使用します。
 
-設計上の必須条件:
-
 - 1 RequestにつきPreparationは原則1回
 - Parser必須時にMockや推測へ無言fallbackしない
 - Parser未設定 / Timeout / Protocol failureを明示状態として保持
 - Parser障害を「ユーザーの前提不足」に置き換えない
+
+Japanese ParserはAstera v8の3 Moduleの1つではなく、判断材料生成Moduleが利用する解析境界です。
 
 REAL MCP Gate runner:
 
@@ -217,65 +515,11 @@ REAL MCP Gate runner:
 node scripts/run-real-mcp-gate.js
 ```
 
-現在、このGateと標準`npm run verify`を同一Release Gateとして閉じる作業が必要です。
-
 ---
 
-## 9. Evidence Search
+## 9. HTTP surface
 
-Evidence Search実装は`src/evidence-search/`に分離されています。
-
-Core側の責務:
-
-```text
-Claim
-→ Policy
-→ Search Plan
-→ Evidence Search boundary
-→ Binding
-→ Confirmation
-```
-
-Evidence Search側の責務:
-
-- Provider retrieval
-- Query execution
-- Provider-specific adapter
-- Recovery / scheduler
-- Search result contract
-
-Retrieval結果が返っただけでは`CONFIRMED`になりません。ClaimとEvidenceのBindingおよびConfirmation Gateを通過する必要があります。
-
----
-
-## 10. Quality Completion Evaluator
-
-`src/quality-completion-evaluator/`はAstera Coreとは独立したEvaluatorです。
-
-```text
-Artifact + Requirements + Evidence
-→ validation
-→ profile
-→ quality rules
-→ completion rules
-→ blocking rules
-→ result
-```
-
-QCEは:
-
-- 成果物を自動修正しない
-- KBへ自動保存しない
-- 採点結果 `PASSED` をKB保存完了扱いしない
-- `/process`へ暗黙挿入しない
-
-Domain Lens 充足の事後Blockingは QCE canonical 外です。Lens 解決メタデータは結果に含めても、Evidence 取得後の Lens 再判定で Blocking しません。
-
----
-
-## 11. HTTP surface
-
-### Core
+### Astera Core / 判断材料生成Module
 
 ```text
 GET  /healthz
@@ -284,29 +528,45 @@ POST /process
 
 Default runtime port: `7373`
 
-`GET /`および`GET /index.html`はProcess APIのPreview UIではありません。
+### 根拠検索Module
 
-### Independent service
-
-QCE APIは別Processとして起動できます。
-
-```bash
-npm run start:evaluator-api
-```
-
-Evidence Search APIも独立起動Scriptを持ちます。
+独立起動Script:
 
 ```bash
 npm run start:evidence-api
 ```
 
-### HTTP authentication (Core)
+Default internal port: `7376`
 
-`/process` は `ASTERA_LOCAL_NO_AUTH=1`（loopback 開発）または `ASTERA_API_KEY` / `X-API-Key` で保護します。`/v1/skill/process` は `ASTERA_SKILL_API_KEY` を維持します。Astera Core HTTP does not own account, billing, subscription, signup, or application-user state. Those belong to Astera App（詳細は `docs/ARCHITECTURE.md`）。
+主要内部API:
+
+```text
+GET  /healthz
+POST /internal/v1/evidence/search
+```
+
+### 判定Module
+
+独立起動Script:
+
+```bash
+npm run start:evaluator-api
+```
+
+Default internal port: `7374`
+
+Generic evaluation API:
+
+```text
+GET  /healthz
+POST /v2/evaluate
+```
+
+判定ModuleはAstera Coreの`/process`へ暗黙挿入しません。独立したEvaluation / Verification serviceとして利用できます。
 
 ---
 
-## 12. 起動
+## 10. 起動
 
 ### Production
 
@@ -335,7 +595,7 @@ npm start
 
 ---
 
-## 13. Test / verification
+## 11. Test / verification
 
 ### Standard source + runtime verification
 
@@ -343,12 +603,17 @@ npm start
 npm run verify
 ```
 
-`verify`はSource validation、Runtime/QCE系Test、Evidence architecture validation、Smokeを含みます。
-
 ### Evidence subsystem
 
 ```bash
 npm run verify:evidence
+```
+
+### Evaluator
+
+```bash
+npm run test:evaluator
+npm run test:evaluator-api
 ```
 
 ### Real Japanese Parser MCP
@@ -361,88 +626,85 @@ node scripts/run-real-mcp-gate.js
 
 Repositoryには100-story、effect-story、unseen-story等のRunnerがあります。
 
-ただし、**完成判定に使う場合は必ず現在の対象Commit SHAで再実行**してください。
+完成判定に使う場合は、**必ず現在の対象Commit SHAで再実行**します。異なるSHAの成功結果を混ぜません。
 
 ---
 
-## 14. 完成条件
+## 12. 完成条件
 
-Astera v8をCompleteと呼ぶには、最低でも同一Commit SHAで以下を成立させます。
+Astera v8をCompleteと呼ぶには、最低でも同一Commit SHAで関連Gateを成立させます。
 
 ```text
 Source / JSON / Shell Gate
 Runtime tests
-QCE tests + blocking registry
-Evaluator API tests
+判断材料生成Module regression
 Evidence architecture validation
+Specialist / authoritative retrieval path
+General / current-information retrieval path
+Information-quality initial / reinforcement / final gate
+Evaluator generic tests
+Evaluator API tests
 Runtime startup / health
 Process API Main8 smoke
 REAL Japanese Parser MCP
-Evidence General Web LIVE
-KB Target LIVE where required
-Story / unseen-story regression
 false confirmation = 0
 final decision violation = 0
 required constraint preservation
 Docs / Runtime map一致
 ```
 
-異なるSHAの成功結果を混ぜて完成判定しません。
+`NOT RUN`は`PASS`ではありません。
 
 ---
 
-## 15. Repository map
+## 13. Repository map
 
 ```text
 astera_v8/
 ├─ start.js
 ├─ src/
 │  ├─ server.js
-│  ├─ astera-engine.js
+│  ├─ astera-engine.js                     # 判断材料生成入口
 │  ├─ canonical-astera-engine.js
 │  ├─ canonical-astera-engine-base.js
 │  ├─ deterministic-task-decomposer.js
 │  ├─ japanese-parser-mcp-client.js
 │  ├─ canonical-claim-runtime.js
 │  ├─ canonical-evidence-resolver.js
-│  ├─ evidence-search/
-│  ├─ quality-completion-evaluator/
+│  ├─ evidence-search/                     # 根拠検索Module
+│  ├─ quality-completion-evaluator/        # 汎用 判定Module
 │  ├─ runtime/
 │  ├─ pillars/
-│  └─ auth/skill-api-key.js guard/ llm-request.js
+│  └─ auth/
 ├─ test/
 ├─ scripts/
 ├─ .github/workflows/
 ├─ deploy/
 ├─ docs/
-│  └─ ARCHITECTURE.md                # canonical design reference
-├─ artifacts/                        # generated evidence; cleanup/curation required
-└─ archive/                          # historical only; never canonical design
+│  └─ ARCHITECTURE.md
+├─ artifacts/
+└─ archive/
 ```
 
 ---
 
-## 16. Documentation rule
+## 14. Documentation rule
 
-実装を確認する際の優先順位:
+実装を確認する際は、READMEだけで完成判断しません。
 
-```text
-1. 明示された現行Owner決定
-2. docs/ARCHITECTURE.md
-3. 現行Code / Contract / Test
-4. README / STRUCTURE summary
-5. Archive / historical docs
-```
-
-Archive、過去Story Artifact、古いREADME記述から現在仕様を逆生成しません。
+- READMEの目的・効果・責務と実Codeが一致していること
+- Contract / TestがREADME記載の境界を実際に守っていること
+- Archiveや旧READMEから現行仕様を逆生成しないこと
+- 根拠検索Moduleと判定Moduleの責務を混ぜないこと
+- 特定の呼出し元の都合で共通Moduleを専用化しないこと
 
 ---
 
-## 17. 関連文書
+## 15. 関連文書
 
 - **Canonical design:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - API surface / responsibility boundary: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
 - Lens index: [`docs/LENS_GENRE_INDEX.md`](docs/LENS_GENRE_INDEX.md)
 - Domain template catalog: [`docs/DOMAIN_TEMPLATE_CATALOG.md`](docs/DOMAIN_TEMPLATE_CATALOG.md)
 
-その他の文書は今後のRepository cleanupで、重複・歴史資料・現行利用有無を判定して統合または削除します。
+その他の文書は、現行Code / Owner決定との一致を確認した上で扱います。
