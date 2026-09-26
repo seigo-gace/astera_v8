@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const AsteraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 
+const silentLogger = { write() {}, async flush() {} };
 const POST = `低スペックPCで大規模AIを動かす候補をレビューする。
 - Colibrì: GLM-5.2 744Bを25GB RAMのPCで動かす純C製エンジン。
 - FreeToken: 8GBのノートPC GPUで35Bモデルを動作させる。
@@ -19,6 +20,7 @@ test('public AsteraEngine prepareRequest resolves standalone review material fro
   const engine = new AsteraEngine({
     japaneseParserClient: defaultMockJapaneseParserClient(),
     evidenceSearchClient: null,
+    logger: silentLogger,
     poolSize: 2
   });
   try {
