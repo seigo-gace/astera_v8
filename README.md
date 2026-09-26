@@ -201,15 +201,19 @@ Main8は判断材料であり、`selected_candidate`、`candidate_ranking`、自
 
 ## 5. Runtime surface
 
-| Service | Default bind | Primary endpoint | Role |
-|---|---|---|---|
-| Astera Core | `127.0.0.1:7373` | `POST /process` | 判断材料生成Module |
-| Evidence Search | `127.0.0.1:7376` | `POST /internal/v1/evidence/search` | 根拠検索Module |
-| Evaluation / Verification | `127.0.0.1:7374` | `POST /v2/evaluate` | 汎用判定Module |
+Service codeの通常Defaultと、Root Composeの現在値は分けて確認します。
+
+| Service | Code default | Current root Compose | Primary endpoint | Role |
+|---|---|---|---|---|
+| Astera Core | `127.0.0.1:7373` | `127.0.0.1:${ASTERA_PORT}` | `POST /process` | 判断材料生成Module |
+| Evidence Search | `127.0.0.1:7376` | `127.0.0.1:7376` | `POST /internal/v1/evidence/search` | 根拠検索Module |
+| Evaluation / Verification | `127.0.0.1:7374` | **`0.0.0.0:7374`** | `POST /v2/evaluate` | 汎用判定Module |
 
 各Serviceは`GET /healthz`を持ちます。
 
-Productionの現行`docker-compose.yml`は、Core、Evaluator、Evidence Searchを別Serviceとして定義します。外部公開可否、認証、Secret、Provider設定を含む詳細は[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)と[`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md)を参照してください。
+**重要:** 現行Root Composeは`network_mode: host`でEvaluatorだけ`ASTERA_EVALUATOR_API_HOST=0.0.0.0`を設定しています。したがって「3 Serviceすべてがloopback bind」とは言えません。Firewall / ingressを含む実公開範囲を確認する必要があります。この既知の構成差は[`docs/LIMITATIONS.md`](docs/LIMITATIONS.md)へ記録します。
+
+Productionの現行`docker-compose.yml`は、Core、Evaluator、Evidence Searchを別Serviceとして定義します。認証、Secret、Provider設定を含む詳細は[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)と[`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md)を参照してください。
 
 ---
 
