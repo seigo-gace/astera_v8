@@ -11,7 +11,8 @@ const INTENT_RULES = Object.freeze([
   ['verify', /(?:検証|事実確認|ファクトチェック|裏取り|真偽|verify|validate|fact\s*check)/iu],
   ['improve', /(?:改善|改良|修正|最適化|強化|improve|optimi[sz]e|refactor|\bfix\b)/iu],
   ['research', /(?:調査|リサーチ|調べ(?:る|て|ろ)|research|investigate)/iu],
-  ['plan', /(?:計画|設計|ロードマップ|方針|plan|roadmap|design)/iu]
+  ['plan', /(?:計画|設計|ロードマップ|方針|plan|roadmap|design)/iu],
+  ['consider', /(?:検討|考慮|吟味|consider|consideration)/iu]
 ]);
 
 const PURPOSE = Object.freeze({
@@ -21,6 +22,7 @@ const PURPOSE = Object.freeze({
   improve: '改善対象・欠陥・制約・検証条件を判断材料として整理する',
   research: '調査対象の主張・不足情報・必要Evidenceを判断材料として整理する',
   plan: '計画対象の前提・選択肢・Risk・検証条件を判断材料として整理する',
+  consider: '検討対象の前提・選択肢・Risk・未確定事項を判断材料として整理する',
   analyze: '入力内容から検証可能な主張・候補・比較材料を抽出し、判断材料として整理する'
 });
 
@@ -219,7 +221,7 @@ function buildDocumentMaterialTask(question, intent, observable, tasks) {
 }
 
 function materialTargetMode(intent) {
-  return ['review', 'compare', 'verify', 'research', 'analyze'].includes(String(intent?.mode || ''));
+  return ['review', 'compare', 'verify', 'improve', 'research', 'plan', 'consider', 'analyze'].includes(String(intent?.mode || ''));
 }
 
 function resolveMaterialTargets(tasks, packet, intent, observable) {
