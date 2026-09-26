@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const { stableStringify } = require("../../utils/stable-json");
 const { evaluateGeneric } = require("../../generic/evaluator-engine");
+const { validateProfile } = require("../../generic/profile-loader");
 
 function sha256(value) {
   return crypto.createHash("sha256").update(typeof value === "string" ? value : stableStringify(value)).digest("hex");
@@ -78,6 +79,45 @@ function request() {
     evidence_bindings: evidence.bindings
   };
 }
+
+function thresholdProfile() {
+  return {
+    profile_schema_version: "astera.evaluation-profile.v2",
+    profile_id: "threshold-contract-test",
+    dimensions: [{
+      dimension_id: "result",
+      weight: 100,
+      minimum_score: 95,
+      metrics: [{
+        metric_id: "score",
+        weight: 100,
+        direction: "HIGHER_BETTER",
+        target: 100,
+        minimum_score: 95,
+        required: true,
+        evidence_required: true
+      }]
+    }],
+    hard_blocks: [],
+    judgment: { minimum_total_score: 95 }
+  };
+}
+
+test("generic v2 rejects profiles that omit pass/fail thresholds instead of defaulting them to zero", () => {
+  const missingDimensionThreshold = thresholdProfile();
+  delete missingDimensionThreshold.dimensions[0].minimum_score;
+  assert.throws(
+    () => validateProfile(missingDimensionThreshold, "missing-dimension-threshold"),
+    (error) => error?.code === "INVALID_EVALUATION_PROFILE"
+  );
+
+  const missingTotalThreshold = thresholdProfile();
+  delete missingTotalThreshold.judgment.minimum_total_score;
+  assert.throws(
+    () => validateProfile(missingTotalThreshold, "missing-total-threshold"),
+    (error) => error?.code === "INVALID_EVALUATION_PROFILE"
+  );
+});
 
 test("generic v2 passes with evidence-backed hashed deterministic measurement", async () => {
   const result = await evaluateGeneric(request());
