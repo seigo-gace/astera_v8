@@ -240,13 +240,23 @@ src/quality-completion-evaluator/information-quality/profiles.v1.json
 
 ---
 
-## 10. HTTP surface
+## 10. HTTP surface / network bind
 
-Default bind:
+Evaluator API server code default:
 
 ```text
 127.0.0.1:7374
 ```
+
+Current root Compose override:
+
+```text
+ASTERA_EVALUATOR_API_HOST=0.0.0.0
+ASTERA_EVALUATOR_API_PORT=7374
+network_mode=host
+```
+
+Therefore code default and current production composition must not be conflated. Local health can still be called through `127.0.0.1:7374`, but current Compose may listen on all host interfaces. See [`../LIMITATIONS.md`](../LIMITATIONS.md).
 
 Health:
 
