@@ -50,7 +50,32 @@ Example:
 
 ---
 
-## 3. Main8の読み方
+## 3. 複数Taskの扱い
+
+1つのInputに複数の作業・確認・依存関係が含まれる場合、Asteraは単純に全部を同時実行しません。
+
+```text
+Task decomposition
+→ Dependency Graph
+→ Execution Waves
+→ 同一Waveの独立Taskだけ並列
+→ Dependency failure / skip propagation
+→ ordered result
+```
+
+利用者側では次の意味になります。
+
+- 前提Taskが終わる前に後続Taskを走らせない
+- 独立Taskは上限付きで並列化できる
+- 前提Taskが失敗したら後続を誤実行せずSkipできる
+- Queue過負荷を無限待ちにせず明示的にRejectできる
+- Cancel後の不要な処理を継続しない
+
+Taskの`Failed / Skipped / Cancelled`を、正常に完了した判断材料として読み替えないでください。
+
+---
+
+## 4. Main8の読み方
 
 | Section | 読むポイント |
 |---|---|
@@ -67,7 +92,7 @@ Example:
 
 ---
 
-## 4. 最終判断の扱い
+## 5. 最終判断の扱い
 
 AsteraのMain8は判断材料です。
 
@@ -83,7 +108,7 @@ final decision authority = external
 
 ---
 
-## 5. Evidenceの読み方
+## 6. Evidenceの読み方
 
 Evidenceが必要なClaimでは、Judgment Material GenerationがSearch Planを作り、Evidence Searchへ問い合わせます。
 
@@ -101,7 +126,7 @@ Searchが失敗した場合、該当情報が見つからない場合、品質�
 
 ---
 
-## 6. AIを使わない場合
+## 7. AIを使わない場合
 
 Main8全体を、会議、設計、承認、レビュー、調査、運用判断の材料として利用できます。
 
@@ -109,7 +134,7 @@ Main8全体を、会議、設計、承認、レビュー、調査、運用判断
 
 ---
 
-## 7. AIを使う場合
+## 8. AIを使う場合
 
 Main AIへ渡す場合は、08だけを切り出すよりMain8全体を保持します。
 
@@ -127,7 +152,7 @@ Main AIへ渡す場合は、08だけを切り出すよりMain8全体を保持し
 
 ---
 
-## 8. 汎用判定Moduleを使う場合
+## 9. 汎用判定Moduleを使う場合
 
 Evaluation / Verification Moduleは、Main8とは別用途です。
 
@@ -167,7 +192,7 @@ Mergeしてよい
 
 ---
 
-## 9. 利用経路
+## 10. 利用経路
 
 | Route | Use | Owner |
 |---|---|---|
@@ -181,9 +206,10 @@ Technical endpoint details: [`API_REFERENCE.md`](API_REFERENCE.md)
 
 ---
 
-## 10. Common mistakes
+## 11. Common mistakes
 
 - Asteraを最終回答AIとして扱う
+- Task dependencyを無視してSkip/Failed Taskを成功扱いする
 - 03の未確認Claimを確定事実へ変える
 - Search Candidateが見つかっただけでEvidence採用済みと扱う
 - 04/05を無視して06だけ見る
@@ -195,7 +221,7 @@ Technical endpoint details: [`API_REFERENCE.md`](API_REFERENCE.md)
 
 ---
 
-## 11. High-risk fields
+## 12. High-risk fields
 
 医療、法律、税務、投資、安全保障、Security Incident、現在の規制・仕様等では、Evidenceが取得できても専門家・Authorityの最終判断を代替しません。
 
@@ -203,7 +229,7 @@ Domain Lens / Overlayは「何を確認すべきか」を強化するもので�
 
 ---
 
-## 12. Further reading
+## 13. Further reading
 
 - [`modules/JUDGMENT_MATERIAL_GENERATION.md`](modules/JUDGMENT_MATERIAL_GENERATION.md)
 - [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
