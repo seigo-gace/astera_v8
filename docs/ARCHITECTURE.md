@@ -1,437 +1,573 @@
-# Astera v8 — Canonical System Design
+# Astera v8 — Canonical System Architecture
 
-Updated: 2026-09-16  
-Repository: `seigo-gace/astera_v8`  
-Design scope: Astera v8 Core / Evidence Search / Main8 / independent information-quality evaluation
+Updated: 2026-09-26  
+Repository: `seigo-gace/astera_v8`
 
-> This document is the canonical repository design reference for Astera v8.
-> It defines responsibilities and module boundaries. Runtime completion must be proven separately on one identical commit SHA.
-
----
-
-## 1. Purpose
-
-Astera v8 is a **non-AI deterministic judgment-material runtime**.
-
-It receives a request, separates requirements and constraints, constructs Tasks and Claims, determines what evidence is required, invokes Evidence Search, binds accepted evidence to Claims, projects the same canonical records through independent viewpoints, and returns structured judgment material.
-
-Astera v8 does **not** own the final decision.
-
-```text
-Human / Main AI
-      │ request
-      ▼
-Astera v8
-  deterministic analysis / evidence request / judgment-material generation
-      │ Main8 judgment material
-      ▼
-Human / Main AI
-  final interpretation / decision / answer
-```
-
-Fixed authority rule:
-
-```text
-Astera = judgment-material generator
-External receiver = final decision authority
-```
+> This document is the canonical repository architecture reference for Astera v8.
+> It defines current responsibilities, module boundaries, contracts, and prohibited coupling. Runtime completion must be proven separately on one identical commit SHA.
 
 ---
 
-## 2. Fixed module responsibilities
+## 1. System purpose
 
-### 2.1 Judgment Material Core
+Astera v8 is a **non-AI deterministic judgment-material runtime** with three core modules:
 
-Judgment Material Core owns:
+1. Judgment Material Generation
+2. Evidence Search
+3. Evaluation / Verification
+
+The system exists to create **decision-ready material**, not to take final decision authority from the receiving Human / Main AI / Calling System.
+
+```text
+Input
+→ structure the problem
+→ determine what must be verified
+→ retrieve and validate evidence
+→ expose facts, uncertainty, risk, opposition and comparison material
+→ return Main8 judgment material
+→ external final decision
+```
+
+The independent Evaluation / Verification Module may additionally evaluate an artifact, implementation, test, operation or research result against explicit Profile / Measurements / Evidence.
+
+---
+
+## 2. Fixed authority rule
+
+```text
+Astera judgment material ≠ final decision
+Astera evidence validity ≠ final business decision
+Evaluator PASSED ≠ deployment/publication/merge authorization
+```
+
+Final decision authority remains external.
+
+The Judgment Material Generation Module must expose uncertainty instead of converting uncertainty into a recommendation.
+
+---
+
+## 3. Canonical three-module model
+
+```text
+                         ┌─────────────────────────────┐
+                         │ Judgment Material Generation │
+                         └──────────────┬──────────────┘
+                                        │ Search Plan
+                                        ▼
+                         ┌─────────────────────────────┐
+                         │       Evidence Search        │
+                         └──────────────┬──────────────┘
+                                        │ Evidence / unresolved
+                                        ▼
+                         ┌─────────────────────────────┐
+                         │ Judgment Material Generation │
+                         └──────────────┬──────────────┘
+                                        │ Main8
+                                        ▼
+                               External decision
+
+Independent evaluation:
+
+Subject + Profile + Measurements
+             │
+             ▼
+┌──────────────────────────────────────┐
+│       Evaluation / Verification      │
+└──────────────────┬───────────────────┘
+                   │
+        Provided Evidence OR
+        existing Evidence Search API
+                   │
+                   ▼
+ Registry / Binding / Metric / Blocking / Judgment / Audit
+```
+
+Shared utilities, Parser, Logging, LLM adapters and deployment services are not additional core modules.
+
+---
+
+## 4. Module 1 — Judgment Material Generation
+
+Detailed reference: [`modules/JUDGMENT_MATERIAL_GENERATION.md`](modules/JUDGMENT_MATERIAL_GENERATION.md)
+
+### 4.1 Purpose
+
+Convert an input into deterministic Task / Claim / Evidence Requirement and produce Main8 material while preserving uncertainty and external final decision authority.
+
+### 4.2 Responsibilities
 
 - Input normalization and source-role isolation
-- Language / locale / script handling
-- Japanese parser orchestration when required
+- Language / locale handling
+- Japanese Parser orchestration when required
 - Deterministic Task decomposition
-- Task dependency graph validation
-- Requirement / constraint / prohibition / preserve / condition carry-forward
+- Task dependency / execution-wave validation
+- Requirement / constraint / prohibition / preserve / condition / exception carry-forward
 - Domain Lens routing (`G01`–`G38`) and overlays
-- Claim extraction and canonical Claim normalization
+- Claim extraction and canonical normalization
 - Claim policy selection
-- Determining what evidence is required for each Claim
-- Building Evidence Search requests
-- Invoking the Evidence Search boundary
-- Verifying protocol / schema / request-id / claim-id consistency on returned packets
-- Binding accepted Evidence to Claims
-- Preserving unresolved Claims as unresolved when Evidence Search does not establish evidence
+- Evidence Requirement and Search Plan generation
+- Evidence Search invocation
+- Protocol / request / task / claim consistency validation
+- Evidence binding to original Claims
+- Claim Confirmation
+- Truthful unresolved state preservation
 - Five independent Lane projections
-- Deterministic perspective expansion
+- Perspective expansion
 - Human Reader presentation signals without fact mutation
-- Main8 judgment-material framing and public projection
-- Runtime trace / safe structured logging boundary
+- Main8 framing
 
-Judgment Material Core does **not** re-evaluate the information quality of evidence already accepted by Evidence Search.
+### 4.3 Prohibited responsibilities
 
-After Evidence Search has returned Accepted Evidence, Judgment Material Core must not perform a second:
-
-- Authority score
-- Provenance score
-- Freshness score
-- Corroboration score
-- Conflict score
-- Coverage score
-- Lineage score
-- Specialist-KB sufficiency decision
-- final 95-point information-quality gate
-- reinforcement search
-
-Protocol validation is allowed. Information-quality re-scoring is not.
+- Final decision
+- Automatic recommendation
+- Candidate ranking / winner selection
+- Rewriting Claims to fit retrieved evidence
+- Fabricating missing evidence
+- Re-scoring accepted Evidence Search information quality
+- Generic evaluation score / hard-block ownership
 
 ---
 
-### 2.2 Domain Lens
+## 5. Module 2 — Evidence Search
+
+Detailed reference: [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
+
+### 5.1 Purpose
+
+Retrieve external evidence for a Claim and return only evidence that satisfies the module's deterministic adoption rules, otherwise return a truthful rejected / insufficient / unresolved state.
+
+### 5.2 Search classes
+
+The request contract supports free projection/current/general-web search flags. At the architecture level these are grouped into two complementary acquisition routes:
+
+```text
+Route A — Specialist / authoritative
+Route B — General / current
+```
+
+Route A provides domain authority and specialist records.
+Route B provides current and generally searchable information.
+
+They are complementary, not duplicate copies of the same search.
+
+### 5.3 Responsibilities
+
+- Query Plan compilation from Claim/search requirements
+- Provider Registry / selection
+- Free provider execution
+- Candidate normalization
+- Deduplication
+- Condition matching
+- Lineage measurement
+- Conflict detection
+- Freshness measurement
+- Coverage measurement
+- Information Quality evaluation
+- One reinforcement phase when required by the Information Quality result
+- Final evidence adoption state
+- Durable recovery / idempotency
+- Internal signed HTTP boundary
+- Isolated future usage calculation without payment execution
+
+### 5.4 Evidence adoption boundary
+
+A result that is not `FINAL_VALID` must not expose candidates as adopted evidence at the Module boundary.
+
+No evidence must never be silently promoted to confirmed fact.
+
+### 5.5 Current Information Quality runtime truth
+
+Current production startup injects:
+
+```text
+evaluateInformationQuality()
+mode = IN_PROCESS
+```
+
+from the Evaluation / Verification package into the Evidence Search orchestrator.
+
+This is an **Information Quality sub-capability**, not Generic Evaluation v2.
+
+The current active search startup path does not depend on `POST /v2/evaluate` to perform candidate adoption.
+
+### 5.6 Prohibited responsibilities
+
+- Main8 generation
+- Final decision
+- Generic evaluator Evidence Registry / Binding ownership
+- Generic Metric / Dimension / Judgment ownership
+- Paid provider execution
+- Payment / credit / refund execution
+- AI search / AI query generation / AI reranking / AI scoring
+
+---
+
+## 6. Module 3 — Evaluation / Verification
+
+Detailed reference: [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
+
+### 6.1 Purpose
+
+Evaluate a Subject against explicit Profile / Measurements / Evidence and return deterministic scoring, hard blocking, judgment and audit trace.
+
+### 6.2 Generic v2 responsibilities
+
+- Input validation
+- Profile loading
+- Measurement validation
+- Evidence mode selection
+- Existing Evidence Search API consumption when requested
+- Evidence Registry construction
+- Evidence Binding construction
+- Registry / Binding integrity verification
+- Metric evaluation
+- Dimension scoring
+- Hard blocking
+- Deterministic judgment
+- Audit result
+
+### 6.3 Generic v2 evidence modes
+
+Exactly one evidence mode is used:
+
+```text
+A. PROVIDED
+   evidence_registry + evidence_bindings
+
+B. EVIDENCE_SEARCH_API
+   evidence_search.request
+```
+
+The two modes must not be mixed in one request.
+
+### 6.4 Generic v2 judgment
+
+Normal completed states:
+
+```text
+PASSED
+REVISION_REQUIRED
+BLOCKED
+```
+
+Non-completed/error states include:
+
+```text
+INVALID_INPUT
+EVALUATION_FAILED
+```
+
+`PASSED` means only that the supplied Subject satisfied the selected Profile under verified Measurements / Evidence.
+
+### 6.5 Prohibited responsibilities
+
+- Artifact auto-modification
+- Repository commit / push
+- Deployment
+- Evidence fabrication
+- Evidence Search provider ownership
+- Evidence Search implementation modification
+- Main8 generation
+- AI inference
+- Caller-specific hidden scoring
+- Final human/business decision
+
+---
+
+## 7. Evaluation package: three distinct contracts
+
+`src/quality-completion-evaluator/` contains multiple generations/sub-capabilities. They must not be described as one undifferentiated QCE.
+
+### 7.1 Generic Evaluation v2 — current generic responsibility
+
+```text
+schema: astera.evaluation.request.v2
+route:  POST /v2/evaluate
+engine: generic/evaluator-engine.js
+```
+
+This is the canonical generic Evaluation / Verification path.
+
+### 7.2 Information Quality — Evidence Search sub-capability
+
+```text
+schema: astera.information-quality-request.v1
+engine: information-quality/engine.js
+caller: Evidence Search
+purpose: candidate adoption quality
+```
+
+This is not Generic v2 scoring.
+
+### 7.3 Legacy Evaluation v1 — compatibility
+
+Legacy quality/completion/domain-lens evaluation remains in the repository for compatibility.
+
+```text
+route: POST /v1/evaluate
+```
+
+Legacy v1 responsibilities must not be silently promoted into Generic v2 responsibilities.
+
+---
+
+## 8. No recursive evaluator/search loop
+
+The two cross-module directions have different contracts.
+
+```text
+Evidence Search
+  → Information Quality function [IN_PROCESS]
+  → candidate adoption
+```
+
+and:
+
+```text
+Generic Evaluator v2
+  → Evidence Search API
+  → Evidence Registry / Binding
+  → generic scoring
+```
+
+Therefore the canonical architecture does not require:
+
+```text
+Generic v2
+→ Evidence Search
+→ Generic v2
+→ Evidence Search
+→ ...
+```
+
+Such recursion is prohibited.
+
+---
+
+## 9. Claim / Evidence invariant
+
+A Claim exists before search.
+
+Search must not redefine a Claim merely to match retrieved material.
+
+Evidence Search may return:
+
+- supporting evidence
+- counter evidence
+- conflicting evidence
+- insufficient evidence
+- no evidence
+- retrieval failure state
+
+Judgment Material Generation binds returned evidence/state to the original Claim.
+
+Client-supplied forged `CONFIRMED` state or forged Evidence packet must not become trusted public `/process` truth.
+
+---
+
+## 10. Domain Lens boundary
 
 Domain Lens answers:
 
-> **What must be examined for this domain and this Claim?**
+> What must be examined for this domain and Claim?
 
-It may define or contribute:
+It may contribute:
 
-- Risk perspectives
-- Inquiry perspectives
-- Comparison dimensions
-- Required evidence characteristics
-- Specialist domain
-- jurisdiction
-- version / standard / specification scope
-- temporal scope
+- risk perspectives
+- inquiry perspectives
+- comparison dimensions
+- required evidence characteristics
+- domain / jurisdiction / temporal scope
 - specialist-source requirement
 - current-information requirement
 - safety considerations
 
-Domain Lens does **not**:
+Domain Lens does not:
 
-- Search external KBs itself
-- Select live Evidence providers itself
-- Score Evidence quality
-- Admit or reject Evidence
-- Run the final 95-point gate
-- Decide publication to any KB
+- execute external Provider search
+- admit Evidence
+- own Generic v2 scoring
+- produce a final decision
 
-The correct direction is:
+Generic Evaluation v2 currently does **not** automatically inherit Legacy v1 Domain Lens evaluation behavior. The generic v2 contract is Profile / Measurements / Evidence based.
+
+Lens taxonomy: [`LENS_GENRE_INDEX.md`](LENS_GENRE_INDEX.md)
+
+---
+
+## 11. Five-Lane independence
+
+The five analytical lanes operate from shared canonical records:
 
 ```text
-Domain Lens
-   ↓
-Evidence Requirement
-   ↓
-Evidence Search
+Fact
+Risk
+Multi
+Inquiry
+Compare
 ```
-
-not:
-
-```text
-Domain Lens
-   ↓
-Evidence Search
-   ↓
-Domain Lens / QCE re-checks evidence quality again
-```
-
----
-
-### 2.3 Evidence Search Module
-
-Evidence Search is the **single owner of evidence retrieval, evidence-quality evaluation, reinforcement, and evidence adoption**.
-
-It has two evidence acquisition routes.
-
-#### Route A — Specialist / authoritative KB sources
-
-Evidence Search accesses selected external specialist or authoritative knowledge sources and retrieves real records suitable for use as evidence.
-
-These are external Evidence sources. They are **not an Astera-owned KB**.
-
-Examples include domain-specific public databases, official registries, standards sources, research databases, legal/administrative authorities, and other pre-selected authoritative searchable sources.
-
-#### Route B — General / current information sources
-
-Evidence Search also retrieves current information from sources such as:
-
-- General Web search
-- Official Web sources
-- Official APIs
-- Primary-source announcements
-- Current specifications / standards / release information
-
-The Evidence Search Module then owns the existing information-quality process, including where applicable:
-
-- Candidate normalization
-- Authority / provenance evaluation
-- Domain suitability
-- Jurisdiction suitability
-- Freshness evaluation
-- Corroboration
-- Conflict detection
-- Coverage measurement
-- Lineage analysis
-- Duplicate handling
-- Initial quality gate
-- One reinforcement-search phase when required
-- Final 95-point information-quality gate
-
-The result returned to Judgment Material is either:
-
-```text
-Accepted Evidence Packet
-```
-
-or a truthful unresolved / insufficient state.
-
-Evidence Search must never fabricate evidence to satisfy a Claim.
-
----
-
-## 3. Canonical evidence flow
-
-```text
-User Request
-   ↓
-Judgment Material Core
-   ↓
-Task / Claim
-   ↓
-Domain Lens
-   ↓
-Evidence Requirement
-   ↓
-================================ responsibility boundary
-   ↓
-Evidence Search
-   ├─ Specialist / authoritative KB route
-   └─ General / current-information route
-   ↓
-Candidate normalization
-   ↓
-Information Quality
-   ↓
-Initial gate
-   ↓
-Reinforcement when required
-   ↓
-Final 95-point gate
-   ↓
-Accepted Evidence / Unresolved
-   ↓
-================================ responsibility boundary
-   ↓
-Judgment Material Core
-   ↓
-Claim binding
-   ↓
-Fact / Risk / Multi / Inquiry / Compare
-   ↓
-Main8
-```
-
-There must be no second Evidence-quality evaluation after the Accepted Evidence Packet crosses back into Judgment Material Core.
-
----
-
-## 4. Information Quality ownership
-
-The existing information-quality capability belongs to the Evidence Search process.
-
-Its purpose is to answer:
-
-> **Is this retrieved material good enough to be adopted as evidence for this request?**
-
-It is not a second Judgment Material completion evaluator.
-
-Information Quality may use Domain Lens metadata as an input to choose domain-specific profiles, required source roles, freshness policies, jurisdiction conditions, or other evidence requirements.
-
-That does **not** give the evaluator ownership over Domain Lens itself or over Main8.
-
----
-
-## 5. KB terminology boundary
-
-Within Evidence Search, `KB` means an **external searchable knowledge source used to retrieve evidence**.
-
-Astera Core does not own a knowledge base into which Judgment Material outputs are admitted or published.
-
-KB publication approval, KB admission approval, and publishing Judgment Material through a KB adapter are not part of the canonical runtime.
-
----
-
-## 6. Domain Lens blocking boundary
-
-Post-evidence Domain Lens completeness re-checks in Quality Completion Evaluator are **not part of the canonical architecture**.
-
-Reason:
-
-- Domain Lens already defines what evidence is required.
-- Evidence Search already evaluates whether evidence satisfies domain/profile requirements.
-- Information Quality already evaluates source suitability, freshness, corroboration, conflict, coverage, and the final quality gate.
-- Re-checking Lens evidence completeness in a later QCE stage creates duplicate evidence evaluation and duplicate blocking authority.
-
-Do not preserve equivalent blocking under a new ID or renamed rule.
-
-Do not move equivalent logic into Judgment Material Core.
-
-If Evidence Search cannot satisfy a domain-specific Evidence Requirement, it must return an insufficient/unresolved Evidence result, and the corresponding Claim remains unresolved.
-
----
-
-## 7. Existing QCE review rule
-
-`src/quality-completion-evaluator/` must not be assumed valid merely because it already exists.
-
-Each responsibility must be classified according to the current architecture:
-
-```text
-KEEP_AS_INFORMATION_QUALITY
-MOVE_TO_EVIDENCE_SEARCH
-RENAME_FOR_INFORMATION_QUALITY
-NOT_CANONICAL_KB_OWNERSHIP
-KEEP_GENERIC_INFRA
-REMOVE_DUPLICATE
-REVIEW_REQUIRED
-```
-
-KB admission and publication are not Information Quality or Judgment Material responsibilities.
-
-Existing `KB-HB-001` through `KB-HB-015` are not automatically canonical. Each rule must be evaluated by responsibility and necessity. Do not keep a rule only to preserve numbering.
-
-If a behavior is already fully owned by Evidence Search, do not duplicate it in Judgment Material or a second evaluator.
-
----
-
-## 8. Claim / Evidence rule
-
-A Claim is created before Evidence Search.
-
-Search and retrieval must not redefine the Claim merely to match retrieved material.
-
-Evidence Search may return:
-
-- accepted supporting evidence
-- accepted counter evidence
-- conflicting evidence
-- insufficient evidence
-- no evidence
-
-Judgment Material then binds the returned state to the original Claim.
-
-No evidence must never be silently promoted into confirmed fact.
-
----
-
-## 9. Five-lane independence
-
-The five analytical lanes operate from the same canonical records and must remain independent.
 
 One lane's narrative output must not become another lane's truth input.
 
-The lanes may consume the same accepted Evidence packet, but one lane must not re-authorize evidence for another lane.
+Compare produces material, not ranking or winner selection.
 
 ---
 
-## 10. Human Reader boundary
+## 12. Main8 contract
 
-Human Reader may affect presentation and explanation only.
+Current code authority:
+
+```text
+01 本当の目的
+02 前提不足
+03 事実確認
+04 危機察知
+05 反対視点
+06 比較案
+07 根拠成立状態
+08 主役AI／利用者への再指示
+```
+
+07 is Evidence Status, not Recommendation.
+
+Main8 output declares external-only decision authority and no normative decision generation.
+
+---
+
+## 13. Human Reader boundary
+
+Human Reader may influence presentation and attention signals only.
 
 It must not mutate:
 
 - Claim truth state
-- Evidence status
+- Evidence validity
 - requirements
 - constraints
-- risk facts
 - source authority
+- final decision
 
 ---
 
-## 11. Main8
+## 14. Failure categories
 
-Main8 remains the public judgment-material projection.
+Do not collapse distinct failures into a single clarification state.
 
-It must present judgment material, not a hidden final decision and not a KB publication decision.
-
-Main8 must truthfully preserve uncertainty and unresolved evidence states.
-
----
-
-## 12. Failure categories
-
-Do not collapse different failures into one user clarification state.
-
-Keep distinct categories for at least:
+Keep at least:
 
 - User clarification required
 - Structural task blocking
-- Japanese parser / infrastructure failure
-- Evidence Search transport/protocol failure
-- Evidence insufficient / unresolved
+- Japanese Parser / infrastructure failure
+- Evidence Search transport failure
+- Evidence retrieval failure
+- Evidence not found / insufficient
 - Evidence quality rejection
-
-An Evidence Search quality rejection does not mean the user failed to provide a premise.
-
----
-
-## 13. Runtime / deployment boundary
-
-Production is container-first.
-
-Direct host execution may be used for development or verification but must not redefine production architecture.
-
-Evidence Search and any independent information-quality process must preserve explicit service and protocol boundaries where deployed separately.
+- Generic evaluation invalid input
+- Generic evaluation failed
+- Generic evaluation hard block
 
 ---
 
-## 14. Completion proof
+## 15. Runtime composition
 
-Completion must be demonstrated on one identical final SHA.
+Current production composition defines three separate services:
 
-At minimum, relevant checks must prove:
+```text
+Astera Core              127.0.0.1:7373
+Evaluation / Verification 127.0.0.1:7374
+Evidence Search          127.0.0.1:7376
+```
 
-- Source syntax / JSON / shell validity
-- Runtime tests
-- Japanese parser boundary behavior
-- Evidence Search architecture
-- Specialist KB retrieval path
-- General/current-information retrieval path
-- Information Quality initial/reinforcement/final gate behavior
-- No duplicate post-adoption Evidence-quality evaluation in Judgment Material
+The repository `docker-compose.yml` defines all three services.
+
+Container-first production remains the rule. Direct host execution is development/verification only and requires explicit override where the entrypoint enforces container residency.
+
+---
+
+## 16. Security / trust boundaries
+
+- Public `/process` does not trust caller-injected internal prepared state.
+- Evidence Search internal API uses signed internal-service authentication.
+- Generic Evaluator normal API uses API-key authentication; skill routes use skill-key authentication.
+- Secrets must not be exposed in logs, README or request examples.
+- Internal HTTP services should remain loopback/private unless a separate authenticated ingress is intentionally designed.
+
+---
+
+## 17. Completion proof
+
+Completion claims must be tied to one identical final SHA.
+
+Relevant proof may include:
+
+- source syntax / JSON / shell validity
+- runtime tests
 - Main8 material-only boundary
-- HTTP integration where applicable
-- Story / regression suites required by the release process
+- decision-authority boundary
+- Japanese Parser boundary
+- Evidence Search architecture validation
+- specialist/authoritative retrieval
+- general/current retrieval
+- Information Quality initial/reinforcement/final behavior
+- Evidence Search truthful-state / adoption boundary
+- Generic v2 evaluator tests
+- Generic v2 Evidence Search consumer test
+- Evaluator API tests
+- HTTP integration
+- Story / regression suites
+- required live gates
 
 `NOT RUN` is not `PASS`.
 
 ---
 
-## 15. Prohibited architecture changes
+## 18. Prohibited architecture changes
 
 Do not introduce:
 
-- A second cognition pipeline
+- A second Judgment Material cognition pipeline
 - A second Evidence Search pipeline
-- A second 95-point information-quality evaluator in Judgment Material
-- Post-adoption Evidence re-scoring in Judgment Material
-- Retrieval logic that rewrites Claims to fit sources
+- Post-adoption Evidence quality re-scoring in Judgment Material Generation
+- Claim rewriting to fit search results
 - Lane-to-lane truth propagation
 - Human Reader fact mutation
 - Automatic final recommendation authority
-- Silent fallback that invents evidence
-- KB publication/admission responsibility inside Judgment Material Core
-- Post-evidence Domain Lens completeness blocking in Judgment Material
+- Silent evidence fabrication
+- Generic Evaluator ownership of Search Providers
+- Evidence Search ownership of Generic Metric / Criterion / Hard Blocking
+- Recursive Generic Evaluator ↔ Evidence Search calls
+- Legacy v1 behavior silently relabeled as Generic v2
+- Paid provider/payment execution inside the current free Evidence Search path
 
 ---
 
-## 16. Document authority
+## 19. Repository mapping
+
+Full file-to-responsibility map:
+
+[`MODULE_MAP.md`](MODULE_MAP.md)
+
+Module details:
+
+- [`modules/JUDGMENT_MATERIAL_GENERATION.md`](modules/JUDGMENT_MATERIAL_GENERATION.md)
+- [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
+- [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
+
+HTTP details:
+
+[`API_REFERENCE.md`](API_REFERENCE.md)
+
+---
+
+## 20. Document authority
 
 When repository documents conflict, use this order:
 
-1. Explicit owner decision
-2. `docs/ARCHITECTURE.md`
-3. Current implementation contracts/tests after they have been reconciled to this design
-4. `README.md` / `STRUCTURE.md`
-5. Historical documents / archive
+1. Explicit current owner decision
+2. This `docs/ARCHITECTURE.md`
+3. Current implementation contracts / code / tests after reconciliation
+4. Module-specific documents / API Reference
+5. README / STRUCTURE / user-facing references
+6. Historical documents / archive
 
-README and STRUCTURE are navigation summaries. They must not silently redefine the canonical architecture.
+A document must never declare an implementation complete merely because an older design intended it.
