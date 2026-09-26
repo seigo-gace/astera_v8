@@ -12,6 +12,10 @@ function fail(message, code = "INVALID_EVALUATION_PROFILE") {
   throw error;
 }
 
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
 function assertPercent(value, label) {
   if (!Number.isFinite(value) || value < 0 || value > 100) fail(`${label} must be between 0 and 100`);
 }
@@ -33,7 +37,8 @@ function validateProfile(profile, source = "profile") {
   for (const dimension of profile.dimensions) {
     if (!dimension.dimension_id || dimensionIds.has(dimension.dimension_id)) fail(`${source} has invalid/duplicate dimension_id`);
     dimensionIds.add(dimension.dimension_id);
-    assertPercent(Number(dimension.minimum_score ?? 0), `${source}.${dimension.dimension_id}.minimum_score`);
+    if (!hasOwn(dimension, "minimum_score")) fail(`${source}.${dimension.dimension_id}.minimum_score is required`);
+    assertPercent(Number(dimension.minimum_score), `${source}.${dimension.dimension_id}.minimum_score`);
     if (!Array.isArray(dimension.metrics) || dimension.metrics.length === 0) fail(`${source}.${dimension.dimension_id}.metrics must be non-empty`);
     assertWeightTotal(dimension.metrics, `${source}.${dimension.dimension_id}.metrics`);
     for (const metric of dimension.metrics) {
@@ -55,8 +60,9 @@ function validateProfile(profile, source = "profile") {
     if (!["GT", "GTE", "LT", "LTE", "EQ", "NE", "TRUE", "FALSE"].includes(rule.operator)) fail(`${rule.block_id}.operator is unsupported`);
   }
 
-  const judgment = profile.judgment || {};
-  assertPercent(Number(judgment.minimum_total_score ?? 0), `${source}.judgment.minimum_total_score`);
+  if (!profile.judgment || typeof profile.judgment !== "object" || Array.isArray(profile.judgment)) fail(`${source}.judgment is required`);
+  if (!hasOwn(profile.judgment, "minimum_total_score")) fail(`${source}.judgment.minimum_total_score is required`);
+  assertPercent(Number(profile.judgment.minimum_total_score), `${source}.judgment.minimum_total_score`);
   return profile;
 }
 
