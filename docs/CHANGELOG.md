@@ -28,8 +28,11 @@ This documentation pass was performed against the current repository code and th
 - Generic v2 current profile coverage limited to actually confirmed v2 profiles rather than legacy profile names.
 - Public `/process` request documentation corrected: caller-provided `llm` object is not part of the current public body allowlist.
 - Domain Lens documentation split between current Judgment Material routing and Legacy evaluator-v1 behavior; Legacy Lens tests are not treated as Generic-v2 proof.
+- Runtime network documentation now distinguishes service-code defaults from current Compose overrides.
 
-### Newly documented current inconsistency
+### Newly documented current inconsistencies
+
+#### Evidence Search Information Quality wiring
 
 Current Evidence Search production startup injects `evaluateInformationQuality()` **in-process**.
 
@@ -40,7 +43,19 @@ However:
 - Current Evaluator API Server does not expose that internal Information Quality route.
 - Current Evidence Search startup logging still contains an `EVALUATOR_API_7374` label even though the active evaluator mode is in-process.
 
-This is recorded as an implementation/document-model inconsistency in `docs/LIMITATIONS.md`; documentation does not pretend the inactive HTTP path is operational.
+#### Evaluator network bind
+
+Evaluator API code defaults to `127.0.0.1:7374`, but the current root `docker-compose.yml` sets:
+
+```text
+ASTERA_EVALUATOR_API_HOST=0.0.0.0
+ASTERA_EVALUATOR_API_PORT=7374
+network_mode=host
+```
+
+Therefore the current Compose Evaluator must not be described as loopback-only. Host firewall/routing/ingress must be checked explicitly until source/Compose is reconciled and tested.
+
+Both categories are recorded in `docs/LIMITATIONS.md`; documentation does not hide them or pretend an intended design is the active runtime truth.
 
 ### Scope
 
