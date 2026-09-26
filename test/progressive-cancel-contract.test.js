@@ -4,9 +4,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const AsteraEngine = require('../src/astera-engine');
 
+const logger = {
+  write() {},
+  status() { return { enabled: false, pending_deliveries: 0, outbox: null }; },
+  async flush() { return true; }
+};
+
 class CancelProbeEngine extends AsteraEngine {
   constructor() {
-    super({ evidenceSearchClient: null });
+    super({ logger, evidenceSearchClient: null });
     this.finalProcessCalls = 0;
   }
 
