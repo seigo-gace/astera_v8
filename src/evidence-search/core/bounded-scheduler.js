@@ -30,8 +30,7 @@ class BoundedScheduler {
     this.perProviderConcurrency = Math.max(1, Number(options.perProviderConcurrency || 2));
     this.resilience = options.resilienceController || new ProviderResilienceController({
       failureThreshold: Number(options.failureThreshold || process.env.ASTERA_SEARCH_BREAKER_FAILURE_THRESHOLD || 3),
-      openMs: Number(options.openMs || process.env.ASTERA_SEARCH_BREAKER_OPEN_MS || 30_000),
-      maxCacheEntries: Number(options.maxCacheEntries || process.env.ASTERA_SEARCH_CACHE_MAX_ENTRIES || 512)
+      openMs: Number(options.openMs || process.env.ASTERA_SEARCH_BREAKER_OPEN_MS || 30_000)
     });
   }
 
@@ -54,17 +53,6 @@ class BoundedScheduler {
           const current = activeByProvider.get(providerId) || 0;
           if (current >= this.perProviderConcurrency) { i += 1; continue; }
 
-          const cached = this.resilience.cacheGet(task.cache_key);
-          if (cached) {
-            queue.splice(i, 1);
-            results.push({
-              status: 'FULFILLED', provider: task.provider, value: cached.value, duration_ms: 0,
-              cache_status: 'HIT', cache_stored_at: cached.stored_at, circuit: this.resilience.before(providerId).circuit
-            });
-            started = true;
-            continue;
-          }
-
           const admission = this.resilience.before(providerId);
           if (!admission.allowed) {
             queue.splice(i, 1);
@@ -73,7 +61,7 @@ class BoundedScheduler {
             error.retry_after_ms = admission.retry_after_ms;
             results.push({
               status: 'REJECTED', provider: task.provider, error, duration_ms: 0,
-              cache_status: 'MISS', circuit: admission.circuit
+              circuit: admission.circuit
             });
             started = true;
             continue;
@@ -86,16 +74,13 @@ class BoundedScheduler {
           const startedAt = Date.now();
           const timeoutMs = Math.max(1, Math.min(task.timeout_ms, context.remaining_ms?.() || task.timeout_ms));
           withTimeout(task.run(), timeoutMs, providerId, context.signal)
-            .then((value) => {
-              this.resilience.cacheSet(task.cache_key, value, task.cache_ttl_ms);
-              results.push({
-                status: 'FULFILLED', provider: task.provider, value, duration_ms: Date.now() - startedAt,
-                cache_status: 'MISS', circuit: this.resilience.success(providerId)
-              });
-            })
+            .then((value) => results.push({
+              status: 'FULFILLED', provider: task.provider, value, duration_ms: Date.now() - startedAt,
+              circuit: this.resilience.success(providerId)
+            }))
             .catch((error) => results.push({
               status: 'REJECTED', provider: task.provider, error, duration_ms: Date.now() - startedAt,
-              cache_status: 'MISS', circuit: this.resilience.failure(providerId, error)
+              circuit: this.resilience.failure(providerId, error)
             }))
             .finally(() => {
               active -= 1;
@@ -103,9 +88,10 @@ class BoundedScheduler {
               drain();
             });
         }
+        if (!queue.length && active === 0) return resolve(results);
         if (!started && active === 0 && queue.length) {
           const impossible = queue.shift();
-          results.push({ status: 'REJECTED', provider: impossible.provider, error: Object.assign(new Error('scheduler deadlock prevented'), { code: 'SCHEDULER_DEADLOCK' }), duration_ms: 0, cache_status: 'MISS', circuit: null });
+          results.push({ status: 'REJECTED', provider: impossible.provider, error: Object.assign(new Error('scheduler deadlock prevented'), { code: 'SCHEDULER_DEADLOCK' }), duration_ms: 0, circuit: null });
           drain();
         }
       };
