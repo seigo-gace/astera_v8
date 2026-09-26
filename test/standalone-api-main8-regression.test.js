@@ -16,13 +16,17 @@ const POST = `低スペックPCで大規模AIを動かす候補をレビュー�
 - Kimari Local AI: GTX 1060 6GBでローカルLLMを動かす。
 - PowerInfer: RTX 4090上で平均13.20 tokens/sを示す。`;
 
-test('public AsteraEngine prepareRequest resolves standalone review material from question only', async () => {
-  const engine = new AsteraEngine({
+function createEngine() {
+  return new AsteraEngine({
     japaneseParserClient: defaultMockJapaneseParserClient(),
     evidenceSearchClient: null,
     logger: silentLogger,
     poolSize: 2
   });
+}
+
+test('public AsteraEngine prepareRequest resolves standalone review material from question only', async () => {
+  const engine = createEngine();
   try {
     const prepared = await engine.prepareRequest({ question: POST });
     assert.equal(prepared.analysis_task_packet.analysis_intent.mode, 'review');
@@ -32,6 +36,40 @@ test('public AsteraEngine prepareRequest resolves standalone review material fro
     assert.ok(prepared.analysis_task_packet.tasks.length > 0);
     assert.ok(prepared.analysis_task_packet.tasks.every((task) => String(task.target || '').trim().length > 0));
     assert.ok(prepared.analysis_task_packet.tasks.some((task) => task.material_only === true || task.observable_material));
+  } finally {
+    await engine.destroy();
+  }
+});
+
+test('public AsteraEngine process produces standalone review Main8 from question only', async () => {
+  const engine = createEngine();
+  try {
+    const out = await engine.process({ question: POST }, { id: 'standalone-main8-regression' });
+    assert.equal(out.result.type, 'cognitive_map');
+    assert.equal(out.result.judgment.analysis_intent.mode, 'review');
+    assert.match(out.result.judgment['01_purpose'].summary, /レビュー/);
+    assert.doesNotMatch(out.result.judgment['01_purpose'].summary, /^(?:かける|為る|する)$/u);
+
+    const observable = out.result.analysis_task_packet.observable_material;
+    assert.ok(observable);
+    assert.ok(observable.claim_count > 0, `claim_count=${observable.claim_count}`);
+    assert.ok(observable.candidate_count >= 8, `candidate_count=${observable.candidate_count}`);
+
+    const comparison = out.result.judgment['06_comparison'];
+    assert.ok(Array.isArray(comparison.comparison_candidates));
+    assert.ok(comparison.comparison_candidates.length >= 8, JSON.stringify(comparison.comparison_candidates));
+    assert.ok(comparison.comparison_candidates.includes('Colibrì'));
+    assert.ok(comparison.comparison_candidates.includes('PowerInfer'));
+    assert.deepEqual(comparison.candidate_ranking, []);
+    assert.equal(comparison.selected_candidate, null);
+    assert.deepEqual(comparison.rejected_candidates, []);
+
+    const crisis = out.result.judgment['04_crisis'];
+    assert.ok(crisis.risks.some((risk) => risk.key === 'PROJECT_EXISTENCE_UNVERIFIED'));
+    assert.ok(crisis.risks.some((risk) => risk.key === 'BENCHMARK_CONTEXT_MISSING'));
+
+    assert.equal(out.runtime.ai_used, false);
+    assert.equal(out.runtime.llm_called, false);
   } finally {
     await engine.destroy();
   }
