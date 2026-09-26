@@ -3,9 +3,9 @@
 > **Status: Internal Draft / Reference — 2026-09-26**  
 > 最終掲載文ではありません。公開時はNotionの最新公開本文正本、提供範囲、法務、料金導線と再照合します。技術仕様はRepositoryの現行Architectureを優先します。
 
-## 正式名称
+## 正式技術名称
 
-**Astera v8 — Multi-Perspective Cognition Runtime**
+**Astera v8 — Deterministic Judgment-Material Runtime**
 
 ## タグライン
 
@@ -19,17 +19,17 @@
 
 Astera v8は、質問へそのまま答えるAIではありません。
 
-入力された問い、資料、検索結果、他Systemや他AIの出力をTask / Claimへ分解し、必要な外部根拠を独立した根拠検索Moduleで確認し、Fact / Risk / Multi / Inquiry / Compareを通して、目的、前提、事実、危険、反対視点、比較材料、根拠成立状態、次工程へ再構成します。
+入力された問い、資料、検索結果、他Systemや他AIの出力をTask / Claimへ分解し、Task dependencyを保ったまま実行し、必要な外部根拠を独立した根拠検索Moduleで確認し、Fact / Risk / Multi / Inquiry / Compareを通して、目的、前提、事実、危険、反対視点、比較材料、根拠成立状態、次工程へ再構成します。
 
 AIと接続する場合は主役AIを置き換えず、その外側で判断材料を整えます。AIを使わない場合も、人間や業務Systemへ判断材料を直接渡せます。
 
 ## English
 
-**Astera v8 is a non-AI, rule-based runtime that restructures questions and external inputs into evidence-backed decision material for humans, applications, and AI systems.**
+**Astera v8 is a non-AI, deterministic runtime that restructures questions and external inputs into evidence-backed judgment material for humans, applications, and AI systems.**
 
 ## 3 Core Modules
 
-1. **Judgment Material Generation Module** — Task / Claim / Evidence Requirementを構造化しMain8を生成
+1. **Judgment Material Generation Module** — Task / Claim / Evidence Requirementを構造化し、Dependency-aware executionを経てMain8を生成
 2. **Evidence Search Module** — 専門・権威Sourceと一般・最新SourceからEvidenceを取得・検証
 3. **Evaluation / Verification Module** — Requirements / Measurements / EvidenceからScore / Blocking / Judgment / Auditを生成
 
@@ -39,6 +39,7 @@ AIと接続する場合は主役AIを置き換えず、その外側で判断材�
 
 - 表面的な依頼だけを処理し、本当の目的を外す
 - 前提不足のまま処理を進める
+- 複数Taskの依存順を崩して処理する
 - 事実、推測、未確認情報を混同する
 - Riskや失敗条件を後回しにする
 - 反対視点や第三案を持たない
@@ -47,8 +48,9 @@ AIと接続する場合は主役AIを置き換えず、その外側で判断材�
 - 「直った」「完成した」という自己申告だけで合格扱いする
 - 次工程へ渡せる構造とAudit trailがない
 
-## 現行Runtimeの主な構成
+## Runtimeの主な構成
 
+- Dependency-aware Task Graph / bounded Wave execution
 - `G01`〜`G38` Domain Lens
 - 5 Overlay
 - Fact / Risk / Multi / Inquiry / Compare
@@ -80,7 +82,8 @@ AsteraはCandidate Ranking、Winner選択、Recommendation、最終意思決定�
 - Human Readerは固定Signal処理であり心理診断ではない
 - Generic Evaluatorの`PASSED`をDeployment、公開、KB保存、課金等の自動許可と表現しない
 - Legacy v1 QCEとGeneric v2 Evaluation / Verificationを同一仕様として説明しない
-- 現在SHAのTest成功は対象SHAの実Workflow Evidenceなしに断定しない
+- Task GraphのSkip/Cancel/Overloadを正常完了として説明しない
+- Test Sourceの存在だけで対象SHAを検証済みとは扱わない
 
 ## Astera全体での位置
 
@@ -95,7 +98,7 @@ AsteraはCandidate Ranking、Winner選択、Recommendation、最終意思決定�
 - Account / billing / commerce をAstera v8の責務として説明しない
 - 外部情報の正しさを無条件保証すると表現しない
 - 料金、Credit、法務はAstera App側の最新正本を参照する
-- 未実装、未検証、Known Limitationを完成済みと表現しない
+- Product ContractをTechnical Architectureと異なる形で簡略化しない
 - 本DraftをNotion公開正本より優先しない
 
 ## 技術資料
