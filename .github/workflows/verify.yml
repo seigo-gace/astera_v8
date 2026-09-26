@@ -24,71 +24,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Check active JavaScript syntax
-        run: npm run check:syntax
-
-      - name: Check active JSON
-        run: npm run check:json
-
-      - name: Check shell syntax
-        run: npm run check:shell
-
-      - name: Test Initial Fast Path
-        run: node --test test/initial-material-fast-path.test.js
-
-      - name: Test Progressive HTTP
-        run: node --test test/progressive-http-api.test.js
-
-      - name: Test Evidence Dual Route Contract
-        run: node --test test/evidence-search-dual-route-contract.test.js
-
-      - name: Test Evidence Core
-        run: node --test test/evidence-search-core.test.js
-
-      - name: Test Evidence Adoption Boundary
-        run: node --test test/evidence-search-adopted-evidence-boundary.test.js
-
-      - name: Test Evidence user journey
-        run: npm run test:evidence-user
-
-      - name: Test Evidence API
-        run: npm run test:evidence-api
-
-      - name: Test Evidence main proxy
-        run: npm run test:evidence-main
-
-      - name: Test Evidence provider adapters
-        run: npm run test:evidence-provider-adapter
-
-      - name: Test Evidence specialist expansion
-        run: npm run test:evidence-specialist-expansion
-
-      - name: Test Evidence evaluator integration
-        run: npm run test:evidence-evaluator
-
-      - name: Test Evidence recovery
-        run: npm run test:evidence-recovery
-
-      - name: Test Evidence projection index
-        run: npm run test:evidence-projection
-
-      - name: Test Evidence modular architecture
-        run: npm run test:evidence-architecture
-
-      - name: Test public API
-        run: node --test test/api.test.js
-
-      - name: Run remaining runtime tests
-        run: npm run test:runtime
-
-      - name: Run evaluator tests
-        run: npm run test:evaluator
-
-      - name: Run evaluator API tests
-        run: npm run test:evaluator-api
-
-      - name: Validate Evidence Search architecture
-        run: npm run validate:evidence-architecture
+      - name: Run source tests
+        run: npm run verify:source
 
       - name: Build real Japanese Parser HTTP runtime
         shell: bash
