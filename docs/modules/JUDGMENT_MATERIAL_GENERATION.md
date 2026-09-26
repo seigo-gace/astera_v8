@@ -24,6 +24,10 @@
 - Constraint / Prohibition / Preserve / Deadline / Condition / Exceptionを保持する
 - 事実Claimと未確認Claimを分離する
 - Evidenceが必要なClaimにSearch Planを付ける
+- 依存関係を持つ複数Taskを順序破壊せず処理する
+- 独立Taskだけを上限付きで並列化する
+- 依存失敗後の後続Task誤実行を防ぐ
+- Cancellation / overloadを明示状態として扱う
 - Riskを他Laneと独立して検出する
 - 反対視点をMainlineのTruthへ混ぜず提示する
 - 比較候補を同じ材料軸で並べる
@@ -59,7 +63,11 @@ Language / Japanese Parser boundary
 ↓
 Task Decomposition
 ↓
-Task Graph / execution waves
+Task Graph validation
+↓
+Execution Wave planning
+↓
+Bounded Task execution / dependency propagation
 ↓
 Requirement / Constraint carry-forward
 ↓
@@ -86,7 +94,79 @@ Main8
 
 ---
 
-## 5. Main files
+## 5. Deterministic Task execution contract
+
+複数Taskは単純な一括並列実行ではなく、Dependencyを持つTask Graphとして扱います。
+
+Primary files:
+
+```text
+src/runtime/canonical-task-admission.js
+src/runtime/canonical-task-executor.js
+src/runtime/canonical-wave-executor.js
+src/runtime/concurrency-policy.js
+```
+
+### 5.1 Graph validation
+
+Runtimeは少なくとも次をRejectします。
+
+- duplicate task ID
+- unknown dependency
+- dependencyを持つのにExecution WaveがないGraph
+- unknown Taskを含むWave
+- 同一Taskの複数Wave重複
+- WaveからのTask omission
+- Dependencyより前または同一Waveへ置かれた後続Task
+
+### 5.2 Wave execution
+
+```text
+Wave 0: prerequisite Tasks
+   ↓ all settled
+Wave 1: next independent Tasks
+   ↓ all settled
+Wave 2: dependent Tasks
+```
+
+同一Wave内だけを上限付き並列実行し、Wave間はDependency順を守ります。
+
+### 5.3 Failure propagation
+
+DependencyがFailureまたはSkipになった場合、後続Taskは無理に実行せず`SKIPPED_DEPENDENCY`として保持します。
+
+これにより、前提が壊れた後の結果を「正常に実行された材料」として混入させません。
+
+### 5.4 Admission / overload control
+
+Global Task admissionはActive concurrencyとQueue上限を持ちます。
+
+Queue上限を超えた場合は、無制限に待たせず`TASK_QUEUE_FULL`としてRejectします。
+
+### 5.5 Cancellation
+
+Request / Task cancellationは実行前・Queue待ち・Wave実行中で伝播します。
+
+Cancellation後の不要Workを継続せず、CancellationをClarificationや正常Failureへ読み替えません。
+
+### 5.6 Execution trace
+
+Task executionは少なくとも次を区別して保持できます。
+
+```text
+fulfilled
+rejected
+skipped
+wave index
+duration
+effective concurrency
+```
+
+このExecution traceは最終Decisionではなく、判断材料生成の再現性・Debuggability・実行整合性のためのRuntime evidenceです。
+
+---
+
+## 6. Main files
 
 ### Runtime / orchestration
 
@@ -141,7 +221,7 @@ Japanese Parser、Logging、LLM Adapter、Internal AuthはこのModuleを支え�
 
 ---
 
-## 6. Main8 contract
+## 7. Main8 contract
 
 Code authority: `src/canonical-astera-engine-base.js`
 
@@ -167,7 +247,7 @@ Code authority: `src/canonical-astera-engine-base.js`
 
 ---
 
-## 7. Evidence boundary
+## 8. Evidence boundary
 
 判断材料生成ModuleはClaimを先に作り、そのClaimからEvidence Requirement / Search Planを作ります。
 
@@ -193,7 +273,7 @@ Public boundary testでは、呼出し側が注入した偽`CONFIRMED` recordや
 
 ---
 
-## 8. Five-Lane independence
+## 9. Five-Lane independence
 
 ```text
 Canonical Records
@@ -210,7 +290,7 @@ Compareは材料生成です。Ranking / Winner / Recommendationは責務外で�
 
 ---
 
-## 9. Domain Lens
+## 10. Domain Lens
 
 - Primary: `G01`〜`G38`から1件
 - Secondary: 補助候補
@@ -222,7 +302,7 @@ Taxonomy詳細: [`../LENS_GENRE_INDEX.md`](../LENS_GENRE_INDEX.md)
 
 ---
 
-## 10. HTTP surface
+## 11. HTTP surface
 
 ```text
 GET  /healthz
@@ -230,13 +310,13 @@ POST /process
 POST /v1/skill/process
 ```
 
-Default: `127.0.0.1:7373`
+Production private bind: `127.0.0.1:7373`
 
-`POST /process`の外部入力Allowlistは、現行`src/server.js`に従います。Request bodyから任意内部Objectを注入する設計ではありません。
+`POST /process`の外部入力Allowlistは`src/server.js`のContractに従います。Request bodyから任意内部Objectを注入する設計ではありません。
 
 ---
 
-## 11. Non-goals
+## 12. Non-goals
 
 - Final decision
 - Automatic recommendation
@@ -248,7 +328,7 @@ Default: `127.0.0.1:7373`
 
 ---
 
-## 12. Verification anchors
+## 13. Verification anchors
 
 代表的な境界Test:
 
@@ -261,5 +341,15 @@ Default: `127.0.0.1:7373`
 - `test/canonical-unresolved-domain-evidence.test.js`
 - `test/task-decomposition-canon-regression.test.js`
 - `test/human-reader-effect-boundary.test.js`
+
+Task execution verification must also cover:
+
+- dependency order
+- duplicate/unknown dependency rejection
+- Wave omission/order rejection
+- bounded concurrency
+- queue overload rejection
+- dependency skip propagation
+- request/task cancellation
 
 Test定義の存在は現在SHAのPASSを意味しません。実行結果は別途同一SHAで証明します。
