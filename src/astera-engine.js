@@ -7,9 +7,12 @@ const { buildInitialJudgmentMaterial } = require('./runtime/initial-material-fas
 const {
   detectAnalysisIntent,
   observeDocumentMaterial,
-  ensureStandaloneDecisionMaterialRequest,
-  lowInformationPurpose
+  ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
+
+function uniqueStrings(values = []) {
+  return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
+}
 
 // Public decision-material runtime.
 // It does not implement a second canonical processing pipeline. The Canonical base owns
@@ -69,26 +72,30 @@ class AsteraEngine extends CanonicalAsteraEngine {
 
     const next = { ...judgment, analysis_intent: intent, observable_material: observable };
     const purpose = next['01_purpose'];
-    if (purpose && (lowInformationPurpose(purpose.user_goal) || lowInformationPurpose(purpose.summary))) {
+    if (purpose) {
+      const priorItems = Array.isArray(purpose.items) ? purpose.items : [];
       next['01_purpose'] = {
         ...purpose,
         user_goal: intent.purpose,
         summary: intent.purpose,
-        items: [intent.purpose],
+        items: uniqueStrings([intent.purpose, ...priorItems.filter((item) => String(item) !== intent.purpose)]),
         analysis_intent: intent
       };
-    } else if (purpose) {
-      next['01_purpose'] = { ...purpose, analysis_intent: intent };
     }
 
     const comparison = next['06_comparison'];
-    if (comparison && observable.candidates?.length >= 2 && !(comparison.comparison_candidates || []).length) {
-      next['06_comparison'] = {
-        ...comparison,
-        summary: `observable_candidates=${observable.candidates.length}; dimensions=${(observable.dimensions || []).join(' / ') || '-'}`,
-        comparison_candidates: [...observable.candidates],
-        dimensions: [...(observable.dimensions || [])],
-        candidate_materials: observable.candidates.map((label, index) => ({
+    if (comparison && observable.candidates?.length >= 2) {
+      const existingCandidates = Array.isArray(comparison.comparison_candidates)
+        ? comparison.comparison_candidates
+        : [];
+      const candidates = uniqueStrings([...observable.candidates, ...existingCandidates]);
+      const existingMaterials = new Map(
+        (Array.isArray(comparison.candidate_materials) ? comparison.candidate_materials : [])
+          .map((item) => [String(item?.label || ''), item])
+      );
+      const candidateMaterials = candidates.map((label, index) => {
+        if (existingMaterials.has(label)) return existingMaterials.get(label);
+        return {
           candidate_id: `observable:${index + 1}`,
           label,
           material_state: 'OBSERVABLE_UNVERIFIED_MATERIAL',
@@ -97,7 +104,16 @@ class AsteraEngine extends CanonicalAsteraEngine {
           undetermined_claim_ids: [],
           supported_scopes: [],
           evidence_refs: []
-        })),
+        };
+      });
+      const dimensions = uniqueStrings([...(observable.dimensions || []), ...(comparison.dimensions || [])]);
+      next['06_comparison'] = {
+        ...comparison,
+        summary: `observable_candidates=${candidates.length}; dimensions=${dimensions.join(' / ') || '-'}`,
+        items: candidates.map((label) => `candidate=${label}`),
+        comparison_candidates: candidates,
+        dimensions,
+        candidate_materials: candidateMaterials,
         selected_candidate: null,
         candidate_ranking: [],
         rejected_candidates: []
