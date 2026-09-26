@@ -24,8 +24,26 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run source tests
-        run: npm run verify:source
+      - name: Check active JavaScript syntax
+        run: npm run check:syntax
+
+      - name: Check active JSON
+        run: npm run check:json
+
+      - name: Check shell syntax
+        run: npm run check:shell
+
+      - name: Run runtime tests
+        run: npm run test:runtime
+
+      - name: Run evaluator tests
+        run: npm run test:evaluator
+
+      - name: Run evaluator API tests
+        run: npm run test:evaluator-api
+
+      - name: Validate Evidence Search architecture
+        run: npm run validate:evidence-architecture
 
       - name: Build real Japanese Parser HTTP runtime
         shell: bash
