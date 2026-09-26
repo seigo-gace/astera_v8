@@ -1,73 +1,182 @@
-# Astera v8 FAQ
+# Astera v8 — FAQ
+
+Updated: 2026-09-26
+
+Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ## Astera v8はAIですか
 
-いいえ。固定RuleとScriptで入力を分類・検査・比較し、判断材料へ再構成する非AI Runtimeです。
+いいえ。中核は非AI・決定論的な3 Moduleです。
 
-## AIがないと使えませんか
+```text
+判断材料生成Module
+根拠検索Module
+判定Module
+```
 
-使えます。01〜07は人間やApplicationが直接利用できます。08は主役AIへ渡す場合の再指示です。
+RepositoryにはOptional LLM Adapterがありますが、Asteraの決定論的責務そのものではありません。
 
-## ChatGPT、Claude、Geminiを置き換えますか
+## Asteraは何をしますか
 
-置き換えません。接続する場合は、AIの外側で目的、前提、事実、Risk、反対視点、比較案を整えます。
+問いをそのまま答えへ流さず、Task / Claim / Evidence Requirementへ構造化し、必要なら外部Evidenceを検索・検証し、Fact / Risk / Multi / Inquiry / CompareからMain8判断材料を生成します。
 
-## MCP専用ですか
+別用途として、成果物や実測結果を汎用判定ModuleでEvaluation / Verificationできます。
 
-違います。Web Form、CLI、API、業務System、MCP、文書、検索結果、他AI出力など、入力経路を限定しません。
+## 最終的な答えや採用案をAsteraが決めますか
 
-## 5本柱と8段の違いは何ですか
+決めません。
 
-5本柱は内部処理、8段は利用者・Application・主役AIへ渡す出力契約です。
+現行Main8は`decision_authority=EXTERNAL_ONLY`で、CompareもRanking / Winner / Automatic Recommendationを生成しません。
+
+## 5本柱とMain8の違いは何ですか
+
+5本柱は内部の独立分析Laneです。
+
+```text
+Fact / Risk / Multi / Inquiry / Compare
+```
+
+Main8はそのCanonical recordsとEvidence状態を利用者へ渡す判断材料Projectionです。
+
+## 07は推奨判断ですか
+
+違います。現行Codeの07は**根拠成立状態 / Evidence Status**です。
+
+Claim ConfirmationとEvidence Searchの成立状態を分離して表示します。
+
+## Asteraは情報検索を行いますか
+
+はい。現行Coreは明示的なEvidence Search境界を持ちます。
+
+Judgment Material GenerationがSearch Planを作り、根拠検索Moduleへ問い合わせます。
+
+ただし「検索結果が見つかった」だけでConfirmed Factにはしません。Evidence Searchの採用条件とClaim Confirmationは別です。
+
+## 根拠検索には何がありますか
+
+概念上、次の2経路があります。
+
+```text
+専門・権威Source
+一般・最新Source
+```
+
+実Request Contractでは`free_projection`、`free_current`、`free_general_web`等の検索Flagを持ちます。
+
+## Evidence Searchが失敗したら推測で埋めますか
+
+埋めません。
+
+Retrieval failure、not found、quality rejection、insufficient等を区別し、必要なClaimを`UNDETERMINED`として残します。
+
+## Evidence SearchはAI検索ですか
+
+現行Module manifestではAI search、LLM query generation、AI reranking、AI scoringは禁止されています。
+
+## 判定Moduleは何を判定しますか
+
+Generic v2はSubject、Profile、Measurements、Evidenceを入力として、Metric / Dimension / Hard Blocking / Judgment / Auditを決定論的に生成します。
+
+## Generic v2の判定結果は何ですか
+
+正常完了時は次です。
+
+```text
+PASSED
+REVISION_REQUIRED
+BLOCKED
+```
+
+Input不正や評価失敗は別状態です。
+
+## `PASSED`ならDeployしてよいですか
+
+いいえ。
+
+`PASSED`は選択したProfileに対する評価結果です。Deploy、Merge、Public release、KB保存、課金、最終Business Decisionの許可ではありません。
+
+## QCEとは何ですか
+
+`QCE`は旧Quality Completion EvaluatorのHistorical名称です。
+
+現在の汎用v2は**Evaluation / Verification Module**として扱います。Legacy `/v1/evaluate`は互換性のため残っています。
+
+## 判定ModuleはEvidence Searchを使えますか
+
+はい。Generic v2は`evidence_search.request`を使って既存Evidence Search APIからEvidenceを取得し、Evaluator側でEvidence Registry / Bindingを構築できます。
+
+CallerがRegistry / Bindingを直接提供するModeもあります。この2 Modeは排他的です。
+
+## Evidence Searchも判定Moduleを呼ぶなら無限Loopになりませんか
+
+現行Canonical pathではなりません。
+
+Evidence Searchが使うのはGeneric v2ではなく、同じPackage内の専用`evaluateInformationQuality()`です。現行Production startではin-processで注入されています。
+
+Generic v2からEvidence Searchを利用する経路とは別Contractです。
+
+## Information Qualityは7374のHTTP APIで動いていますか
+
+現行Production Evidence Searchでは**in-process**です。
+
+HTTP Client fileは残っていますが、現在のEvaluator ServerにそのClientが要求するInternal Information Quality routeはなく、active startupでも使われていません。これはKnown inconsistencyとして[`LIMITATIONS.md`](LIMITATIONS.md)に記録しています。
+
+## Root Docker Composeは何を起動しますか
+
+現行`docker-compose.yml`は少なくとも次の3 Serviceを定義します。
+
+```text
+Astera Core              7373
+Evaluation / Verification 7374
+Evidence Search          7376
+```
+
+Evidence SearchはContainer-required entrypointです。
+
+## CoreをHostで短時間確認できますか
+
+できます。`ASTERA_ALLOW_HOST_START=1`を明示する開発・検証時だけです。
+
+Evidence Search Serviceは現行entrypointにHost overrideがないため、Containerで確認します。
+
+## `/process`のJSONにLLM Providerを直接指定できますか
+
+現行public body allowlistでは`llm` Objectを通していません。Provider chainは`LLM_CHAIN`等のRuntime configurationで解決されます。
 
 ## Lensはいくつありますか
 
-現行Coreは`G01`〜`G38`の38 Domain Lensを持ち、必要に応じてSecondaryと5 Overlayを追加します。
+現行Judgment Material Generationは`G01`〜`G38`の38 Domain LensとOverlayを使用します。
 
-## 情報検索を自動で行いますか
+詳細は[`LENS_GENRE_INDEX.md`](LENS_GENRE_INDEX.md)を参照してください。
 
-Astera Coreは検索エンジンではありません。外部検索ToolやServiceから受け取った結果を構造化できますが、取得や真偽を自動保証しません。
+## Generic v2も同じDomain Lensを自動利用しますか
 
-## 翻訳AIやHF Modelを内蔵していますか
+現行Generic v2のCanonical contractはProfile / Measurements / Evidenceベースです。
 
-内蔵していません。翻訳が必要な場合は外部Serviceの原文、翻訳文、Engine情報、検証情報を入力として受け取る境界です。
+旧Legacy evaluatorのDomain Lens連携を、そのままGeneric v2実装済み機能として扱いません。
 
-## `確認が必要です`は故障ですか
+## 現行Generic v2にはどのProfileがありますか
 
-必ずしも故障ではありません。重大な前提不足を検出して処理を止めた状態です。
+現在確認できるv2 Profileは`generic.measurement.v1`です。
 
-## Quality Completion Evaluatorは常に動きますか
+Legacy v1のdesign / implementation / test / operation / research等Profileと区別します。
 
-いいえ。Runtime本体と独立して明示的に呼び出します。
+## Account、Login、Payment、Creditは3 Moduleですか
 
-## QCE の `PASSED` はKB保存済みですか
+違います。Astera v8 Runtimeの3 Moduleではありません。Product/Application layerの別責務です。
 
-違います。品質・完成度の採点合格であり、Astera canonical 外のKB保存完了ではありません。
+## TGserverやCloudflareはAsteraのModuleですか
 
-## Account、Login、Square、CreditはAstera v8の機能ですか
+違います。LoggingまたはIngressの外部/support boundaryです。
 
-Astera全体には必要ですが、Astera v8 Coreの責務ではありません。Astera App / Commerce側が所有します。
+## 現在の既知不整合はどこにありますか
 
-## Commerce（決済・課金）はこのRepositoryにありますか
+[`LIMITATIONS.md`](LIMITATIONS.md)を参照してください。
 
-いいえ。Commerce は Astera App が所有します。Core HTTP は account、billing、subscription、signup を提供しません。
+## どのDocumentを最初に読めばいいですか
 
-## API key と Skill key は誰が所有しますか
-
-`/process` は `ASTERA_API_KEY`（または loopback 開発の `ASTERA_LOCAL_NO_AUTH`）。Skill 経路は `ASTERA_SKILL_API_KEY` です。これらは Core HTTP の transport 認証であり、Account lifecycle や Plan の正本は Astera App / Gateway です。
-
-## 外部LLM AdapterがあるならAIではないのですか
-
-Adapterを呼べることと、Astera自身がAIであることは別です。Coreは`null` Providerでも固定Rule処理を実行します。
-
-## 医療・法律・投資判断を任せられますか
-
-任せられません。Overlayは確認を強化しますが、専門家判断や外部事実の正しさを保証しません。
-
-## 現在の既知Defectはありますか
-
-README の Open Items を参照してください。Domain Lens completeness is not a QCE blocking stage です。
-
-## 料金はどこで確認しますか
-
-Astera App側の最新プラン・料金ページを参照します。本Repositoryへ料金・Credit契約を重複保持しません。
+1. [`../README.md`](../README.md)
+2. [`ARCHITECTURE.md`](ARCHITECTURE.md)
+3. [`MODULE_MAP.md`](MODULE_MAP.md)
+4. 必要な[`modules/`](modules/)詳細
+5. 実接続なら[`API_REFERENCE.md`](API_REFERENCE.md)
