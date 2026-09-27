@@ -176,6 +176,21 @@ class EvidenceJobManager {
     return completed;
   }
 
+  release(job) {
+    const current = this.store.readJob(job.job_id);
+    if (!current) {
+      const error = new Error(`evidence job not found: ${job.job_id}`);
+      error.code = 'EVIDENCE_JOB_NOT_FOUND';
+      throw error;
+    }
+    if (!this.store.releaseLease(current.job_id, this.workerId)) {
+      const error = new Error('evidence job lease is not owned by this worker');
+      error.code = 'EVIDENCE_JOB_LEASE_RELEASE_FAILED';
+      throw error;
+    }
+    return this.store.readJob(current.job_id);
+  }
+
   fail(job, error, options = {}) {
     const current = this.store.readJob(job.job_id);
     if (!current || ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(current.state)) {

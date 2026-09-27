@@ -12,6 +12,10 @@ const {
 } = require('./internal-auth');
 
 const MAX_REQUEST_BYTES = 256 * 1024;
+const NON_MUTATING_RECOVERY_CONFLICTS = new Set([
+  'EVIDENCE_RECOVERY_REQUEST_MISMATCH',
+  'EVIDENCE_RECOVERY_PLAN_MISMATCH'
+]);
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -416,23 +420,41 @@ class EvidenceSearchApiServer {
       const status = statusForError(error);
       const errorCode = error.code || 'INTERNAL_ERROR';
       if (this.jobManager && activeJob && !['FINAL_VALID', 'REJECTED', 'ERROR'].includes(activeJob.state)) {
-        try {
-          activeJob = this.jobManager.fail(activeJob, error, {
-            status,
-            errorCode
-          });
-        } catch (jobError) {
-          this.logger.write({
-            callerId: req.verifiedCallerId || 'internal-unverified',
-            type: 'evidence_job_failure_record_failed',
-            severity: 'error',
-            text: 'Failed to persist evidence job error state',
-            payload: {
-              request_id: req.verifiedRequestId || null,
-              job_id: req.evidenceJobId || null,
-              error_code: jobError.code || 'EVIDENCE_JOB_ERROR'
-            }
-          });
+        if (NON_MUTATING_RECOVERY_CONFLICTS.has(errorCode)) {
+          try {
+            activeJob = this.jobManager.release(activeJob);
+          } catch (cleanupError) {
+            this.logger.write({
+              callerId: req.verifiedCallerId || 'internal-unverified',
+              type: 'evidence_job_recovery_cleanup_failed',
+              severity: 'error',
+              text: 'Failed to release evidence job lease after recovery conflict',
+              payload: {
+                request_id: req.verifiedRequestId || null,
+                job_id: req.evidenceJobId || null,
+                error_code: cleanupError.code || 'EVIDENCE_JOB_LEASE_RELEASE_FAILED'
+              }
+            });
+          }
+        } else {
+          try {
+            activeJob = this.jobManager.fail(activeJob, error, {
+              status,
+              errorCode
+            });
+          } catch (jobError) {
+            this.logger.write({
+              callerId: req.verifiedCallerId || 'internal-unverified',
+              type: 'evidence_job_failure_record_failed',
+              severity: 'error',
+              text: 'Failed to persist evidence job error state',
+              payload: {
+                request_id: req.verifiedRequestId || null,
+                job_id: req.evidenceJobId || null,
+                error_code: jobError.code || 'EVIDENCE_JOB_ERROR'
+              }
+            });
+          }
         }
       }
 

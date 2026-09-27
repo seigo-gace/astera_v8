@@ -1135,11 +1135,11 @@ async function createCrashedRecoveryJob({
   return { body, job: value.store.readJob(crashed.job_id) };
 }
 
-async function startRecoveryApi({ value, module }) {
+async function startRecoveryApi({ value, module, logger = { write() {}, async flush() {} } }) {
   const api = new EvidenceSearchApiServer({
     port: 0,
     host: '127.0.0.1',
-    logger: { write() {}, async flush() {} },
+    logger,
     internalSecret: INTERNAL_SECRET,
     jobManager: value.manager,
     closeJobManagerOnStop: false,
@@ -1325,7 +1325,7 @@ test('FINAL_JUDGED recovery does not require a skipped reinforcement checkpoint'
   }
 });
 
-test('recovery rejects a modified request and replays the persisted mismatch error', async () => {
+test('request mismatch leaves recovery state intact and the correct request can resume', async () => {
   const value = await runtime();
   const fixture = recoveryModuleFixture();
   let api;
@@ -1361,7 +1361,11 @@ test('recovery rejects a modified request and replays the persisted mismatch err
       initial_evaluator: fixture.counters.initial_evaluator,
       reinforcement_provider: fixture.counters.reinforcement_provider,
       final_evaluator: fixture.counters.final_evaluator,
-      db_state: value.store.readJob(crashed.job.job_id).state
+      db_state: value.store.readJob(crashed.job.job_id).state,
+      error_artifact: value.store.listArtifacts(crashed.job.job_id)
+        .some((artifact) => artifact.stage === 'ERROR'),
+      lease_owner: value.store.readJob(crashed.job.job_id).lease_owner,
+      lease_until: value.store.readJob(crashed.job.job_id).lease_until
     }, {
       status: 409,
       code: 'EVIDENCE_RECOVERY_REQUEST_MISMATCH',
@@ -1370,25 +1374,45 @@ test('recovery rejects a modified request and replays the persisted mismatch err
       initial_evaluator: 0,
       reinforcement_provider: 0,
       final_evaluator: 0,
-      db_state: 'ERROR'
+      db_state: 'PLANNED',
+      error_artifact: false,
+      lease_owner: null,
+      lease_until: null
     });
-    for (const artifact of value.store.listArtifacts(crashed.job.job_id)) {
-      if (protectedArtifacts.has(artifact.stage)) {
-        assert.equal(artifact.ciphertext_sha256, protectedArtifacts.get(artifact.stage));
-      }
-    }
+    assert.deepEqual(
+      new Map(value.store.listArtifacts(crashed.job.job_id)
+        .map((artifact) => [artifact.stage, artifact.ciphertext_sha256])),
+      protectedArtifacts
+    );
 
-    const replay = await signedRecoverySearch({
+    const retry = await signedRecoverySearch({
       api,
       callerId,
-      requestId: 'request-recovery-mismatch-replay',
+      requestId: 'request-recovery-mismatch-correct-retry',
       idempotencyKey,
       payload: RECOVERY_PAYLOAD
     });
-    assert.equal(replay.status, 409);
-    assert.equal(replay.body.code, 'EVIDENCE_RECOVERY_REQUEST_MISMATCH');
-    assert.equal(replay.body.idempotent_replay, true);
-    assert.equal(fixture.counters.module, 0);
+    assert.deepEqual({
+      status: retry.status,
+      result_status: retry.body.status,
+      same_job_id: retry.body.job_id === crashed.job.job_id,
+      db_state: value.store.readJob(crashed.job.job_id).state,
+      module_calls: fixture.counters.module,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator,
+      reinforcement_provider: fixture.counters.reinforcement_provider,
+      final_evaluator: fixture.counters.final_evaluator
+    }, {
+      status: 200,
+      result_status: 'FINAL_VALID',
+      same_job_id: true,
+      db_state: 'FINAL_VALID',
+      module_calls: 1,
+      initial_provider: 2,
+      initial_evaluator: 1,
+      reinforcement_provider: 1,
+      final_evaluator: 1
+    });
   } finally {
     if (api) await api.stop();
     await cleanup(value);
@@ -1409,6 +1433,11 @@ test('recovery rejects a recomputed plan that differs from persisted plan identi
       callerId,
       idempotencyKey
     });
+    const originalPlanHash = crashed.job.query_plan_hash;
+    const protectedArtifacts = new Map(
+      value.store.listArtifacts(crashed.job.job_id)
+        .map((artifact) => [artifact.stage, artifact.ciphertext_sha256])
+    );
     value.store.db.prepare(
       'UPDATE evidence_jobs SET query_plan_hash = ? WHERE job_id = ?'
     ).run('f'.repeat(64), crashed.job.job_id);
@@ -1430,7 +1459,11 @@ test('recovery rejects a recomputed plan that differs from persisted plan identi
       initial_evaluator: fixture.counters.initial_evaluator,
       reinforcement_provider: fixture.counters.reinforcement_provider,
       final_evaluator: fixture.counters.final_evaluator,
-      db_state: value.store.readJob(crashed.job.job_id).state
+      db_state: value.store.readJob(crashed.job.job_id).state,
+      error_artifact: value.store.listArtifacts(crashed.job.job_id)
+        .some((artifact) => artifact.stage === 'ERROR'),
+      lease_owner: value.store.readJob(crashed.job.job_id).lease_owner,
+      lease_until: value.store.readJob(crashed.job.job_id).lease_until
     }, {
       status: 409,
       code: 'EVIDENCE_RECOVERY_PLAN_MISMATCH',
@@ -1439,7 +1472,109 @@ test('recovery rejects a recomputed plan that differs from persisted plan identi
       initial_evaluator: 0,
       reinforcement_provider: 0,
       final_evaluator: 0,
-      db_state: 'ERROR'
+      db_state: 'PLANNED',
+      error_artifact: false,
+      lease_owner: null,
+      lease_until: null
+    });
+    assert.deepEqual(
+      new Map(value.store.listArtifacts(crashed.job.job_id)
+        .map((artifact) => [artifact.stage, artifact.ciphertext_sha256])),
+      protectedArtifacts
+    );
+
+    value.store.db.prepare(
+      'UPDATE evidence_jobs SET query_plan_hash = ? WHERE job_id = ?'
+    ).run(originalPlanHash, crashed.job.job_id);
+    resetRecoveryCounters(fixture.counters);
+    const retry = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-plan-mismatch-correct-retry',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.status, 'FINAL_VALID');
+    assert.equal(retry.body.job_id, crashed.job.job_id);
+    assert.deepEqual(fixture.counters, {
+      module: 1,
+      initial_provider: 2,
+      reinforcement_provider: 1,
+      initial_evaluator: 1,
+      final_evaluator: 1
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('request mismatch remains authoritative when recovery lease cleanup fails', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture();
+  const records = [];
+  let api;
+  try {
+    const callerId = 'caller-recovery-cleanup-failure';
+    const idempotencyKey = 'recovery-cleanup-failure';
+    const crashed = await createCrashedRecoveryJob({
+      value,
+      module: fixture.module,
+      crashStage: 'PLANNED',
+      callerId,
+      idempotencyKey
+    });
+    value.store.releaseLease = () => {
+      throw Object.assign(new Error('injected recovery lease cleanup failure'), {
+        code: 'INJECTED_RECOVERY_CLEANUP_FAILURE'
+      });
+    };
+    resetRecoveryCounters(fixture.counters);
+    api = await startRecoveryApi({
+      value,
+      module: fixture.module,
+      logger: {
+        write(record) {
+          records.push(record);
+        },
+        async flush() {}
+      }
+    });
+
+    const response = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-cleanup-failure',
+      idempotencyKey,
+      payload: { ...RECOVERY_PAYLOAD, question: 'modified recovery cleanup payload' }
+    });
+    const cleanupRecord = records.find(
+      (record) => record.type === 'evidence_job_recovery_cleanup_failed'
+    );
+    assert.deepEqual({
+      status: response.status,
+      code: response.body.code,
+      db_state: value.store.readJob(crashed.job.job_id).state,
+      error_artifact: value.store.listArtifacts(crashed.job.job_id)
+        .some((artifact) => artifact.stage === 'ERROR'),
+      module_calls: fixture.counters.module,
+      cleanup_log: cleanupRecord ? {
+        request_id: cleanupRecord.payload.request_id,
+        job_id: cleanupRecord.payload.job_id,
+        error_code: cleanupRecord.payload.error_code
+      } : null
+    }, {
+      status: 409,
+      code: 'EVIDENCE_RECOVERY_REQUEST_MISMATCH',
+      db_state: 'PLANNED',
+      error_artifact: false,
+      module_calls: 0,
+      cleanup_log: {
+        request_id: 'request-recovery-cleanup-failure',
+        job_id: crashed.job.job_id,
+        error_code: 'INJECTED_RECOVERY_CLEANUP_FAILURE'
+      }
     });
   } finally {
     if (api) await api.stop();
