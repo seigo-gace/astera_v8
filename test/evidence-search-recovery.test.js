@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { once } = require('node:events');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
@@ -10,6 +11,10 @@ const crypto = require('node:crypto');
 const { EvidenceJobStore } = require('../src/evidence-search/recovery/job-store');
 const { DurableEvidenceSpool } = require('../src/evidence-search/recovery/durable-spool');
 const { EvidenceJobManager } = require('../src/evidence-search/recovery/job-manager');
+const EvidenceSearchApiServer = require('../src/evidence-search/api/server');
+const { createInternalHeaders } = require('../src/evidence-search/api/internal-auth');
+
+const INTERNAL_SECRET = 'recovery-test-internal-secret-0000000000000000';
 
 async function runtime() {
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'astera-evidence-recovery-'));
@@ -170,6 +175,166 @@ test('recovery skips a corrupted newest checkpoint and returns the previous vali
     assert.equal(latest.failures.length, 1);
     assert.equal(latest.failures[0].stage, 'PLANNED');
     assert.equal(latest.failures[0].code, 'RECOVERY_ARTIFACT_INVALID');
+  } finally {
+    await cleanup(value);
+  }
+});
+
+test('terminal replay fails closed instead of replaying FINAL_JUDGED after terminal artifact corruption', async () => {
+  const value = await runtime();
+  let api;
+  let moduleCalls = 0;
+  try {
+    const callerId = 'caller-terminal-replay-corruption';
+    const idempotencyKey = 'terminal-replay-corruption-operation';
+    const started = value.manager.begin({
+      callerId,
+      requestId: 'request-terminal-original',
+      idempotencyKey
+    });
+    let job = started.job;
+    job = value.manager.checkpoint(job, 'AUTHENTICATED', {
+      request_id: job.request_id,
+      caller_id: job.caller_id
+    });
+    job = value.manager.checkpoint(job, 'PLANNED', {
+      query_plan_hash: 'b'.repeat(64)
+    }, {
+      effective_as_of: '2026-09-27T00:00:00.000Z',
+      query_plan_hash: 'b'.repeat(64)
+    });
+    job = value.manager.checkpoint(job, 'INITIAL_SEARCH_COMPLETED', {
+      candidate_count: 2
+    });
+    job = value.manager.checkpoint(job, 'INITIAL_JUDGED', {
+      status: 'REINFORCEMENT_REQUIRED',
+      score_bp: 8200
+    }, {
+      initial_score_bp: 8200
+    });
+    job = value.manager.checkpoint(job, 'REINFORCEMENT_COMPLETED', {
+      new_corroboration_count: 1
+    }, {
+      reinforcement_attempt_count: 1
+    });
+    job = value.manager.checkpoint(job, 'FINAL_JUDGED', {
+      status: 'FINAL_VALID',
+      score_bp: 9600
+    }, {
+      final_score_bp: 9600,
+      reinforcement_attempt_count: 1
+    });
+    const terminal = value.manager.complete(job, {
+      status: 'FINAL_VALID',
+      evidence: [{ candidate_id: 'terminal-candidate' }],
+      quality: {
+        initial: { status: 'REINFORCEMENT_REQUIRED', score_bp: 8200 },
+        final: { status: 'FINAL_VALID', score_bp: 9600 },
+        reinforcement_attempt_count: 1
+      },
+      effective_as_of: '2026-09-27T00:00:00.000Z',
+      query_plan_hash: 'b'.repeat(64)
+    });
+    assert.equal(terminal.state, 'FINAL_VALID');
+
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          moduleCalls += 1;
+          throw new Error('terminal replay must not execute the search module');
+        }
+      }
+    });
+    const validReplay = api._terminalReplay(terminal);
+    assert.equal(validReplay.status, 'FINAL_VALID');
+    assert.equal(validReplay.idempotent_replay, true);
+    assert.equal(validReplay.evidence.length, 1);
+
+    const terminalArtifact = value.store.listArtifacts(job.job_id)
+      .find((artifact) => artifact.stage === 'FINAL_VALID');
+    assert.ok(terminalArtifact);
+    fs.appendFileSync(terminalArtifact.file_path, Buffer.from('corrupted-terminal'));
+
+    const fallback = value.manager.readLatestValidCheckpoint(job.job_id);
+    assert.equal(fallback.artifact.stage, 'FINAL_JUDGED');
+    assert.equal(fallback.checkpoint.value.status, 'FINAL_VALID');
+    assert.equal(fallback.failures[0].stage, 'FINAL_VALID');
+    assert.equal(fallback.failures[0].code, 'RECOVERY_ARTIFACT_INVALID');
+
+    api.start();
+    await once(api.server, 'listening');
+    const address = api.server.address();
+    const requestBody = JSON.stringify({
+      idempotency_key: idempotencyKey,
+      paid_search: { enabled: false }
+    });
+    const headers = createInternalHeaders({
+      body: requestBody,
+      secret: INTERNAL_SECRET,
+      service: 'astera-main',
+      callerId,
+      requestId: 'request-terminal-replay'
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/internal/v1/evidence/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: requestBody
+      }
+    );
+    const replay = await response.json();
+
+    assert.equal(
+      response.status,
+      500,
+      `corrupted terminal artifact must fail closed; received HTTP ${response.status}, idempotent_replay=${replay.idempotent_replay}, replay_status=${replay.status}, evidence_array=${Array.isArray(replay.evidence)}, quality_object=${Boolean(replay.quality)}`
+    );
+    assert.equal(replay.code, 'RECOVERY_ARTIFACT_INVALID');
+    assert.equal(moduleCalls, 0);
+    assert.equal(value.store.readJob(job.job_id).state, 'FINAL_VALID');
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('terminal replay rejects a terminal-stage payload missing result contract fields', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-malformed-terminal',
+      requestId: 'request-malformed-terminal',
+      idempotencyKey: 'malformed-terminal-operation'
+    });
+    const terminal = value.manager.complete(started.job, {
+      status: 'FINAL_VALID',
+      effective_as_of: '2026-09-27T00:00:00.000Z',
+      query_plan_hash: 'c'.repeat(64)
+    });
+    assert.equal(terminal.state, 'FINAL_VALID');
+    const latest = value.manager.readLatestValidCheckpoint(terminal.job_id);
+    assert.equal(latest.artifact.stage, 'FINAL_VALID');
+
+    const api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: { async execute() {} }
+    });
+    assert.throws(
+      () => api._terminalReplay(terminal),
+      (error) => error.code === 'RECOVERY_ARTIFACT_INVALID'
+    );
   } finally {
     await cleanup(value);
   }

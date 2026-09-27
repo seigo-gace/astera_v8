@@ -164,7 +164,27 @@ class EvidenceSearchApiServer {
   _terminalReplay(job) {
     const latest = this.jobManager.readLatestValidCheckpoint(job.job_id);
     const value = latest.checkpoint?.value;
-    if (!value || !['FINAL_VALID', 'REJECTED'].includes(value.status)) {
+    const expectedStage = job.state === 'FINAL_VALID'
+      ? 'FINAL_VALID'
+      : job.state === 'REJECTED'
+        ? 'REJECTED'
+        : null;
+    const terminalIdentityValid = Boolean(
+      expectedStage
+      && latest.artifact?.stage === expectedStage
+      && value?.status === expectedStage
+    );
+    const terminalPayloadValid = Boolean(
+      Array.isArray(value?.evidence)
+      && value?.quality
+      && typeof value.quality === 'object'
+      && !Array.isArray(value.quality)
+      && typeof value.query_plan_hash === 'string'
+      && value.query_plan_hash.trim()
+      && typeof value.effective_as_of === 'string'
+      && value.effective_as_of.trim()
+    );
+    if (!terminalIdentityValid || !terminalPayloadValid) {
       const error = new Error('completed evidence job has no valid terminal checkpoint');
       error.code = 'RECOVERY_ARTIFACT_INVALID';
       throw error;
