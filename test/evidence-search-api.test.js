@@ -326,6 +326,87 @@ test('routes caller cancellation to jobManager.fail instead of completing a reje
   }
 });
 
+test('logs job failure persistence errors without replacing the original client error', async () => {
+  const records = [];
+  const boundaryLogger = {
+    write(record) {
+      records.push(record);
+    },
+    async flush() {}
+  };
+  const spoolError = Object.assign(new Error('injected ERROR artifact spool failure'), {
+    code: 'INJECTED_SPOOL_WRITE_FAILURE'
+  });
+  let failCalls = 0;
+  const jobManager = {
+    begin() {
+      return {
+        job: { job_id: 'job-failure-log-test', state: 'RECEIVED' },
+        reusedTerminal: false
+      };
+    },
+    checkpoint(job) {
+      return { ...job, state: 'AUTHENTICATED' };
+    },
+    lifecycle() {
+      return async () => {};
+    },
+    fail() {
+      failCalls += 1;
+      throw spoolError;
+    },
+    complete() {
+      throw new Error('jobManager.complete must not run for a failed search');
+    }
+  };
+  const module = {
+    async execute() {
+      const error = new Error('evidence search cancelled by caller');
+      error.code = 'SEARCH_CANCELLED';
+      error.status = 499;
+      throw error;
+    }
+  };
+  const runtime = await startServer({
+    module,
+    jobManager,
+    closeJobManagerOnStop: false,
+    logger: boundaryLogger
+  });
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-job-failure-log-test',
+      requestId: 'request-job-failure-log-test'
+    });
+    const response = await fetch(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body
+    });
+    const rejected = await response.json();
+
+    assert.equal(failCalls, 1);
+    assert.equal(response.status, 499);
+    assert.equal(rejected.code, 'SEARCH_CANCELLED');
+    assert.equal(rejected.status, 499);
+    const persistenceFailure = records.find(
+      (record) => record.type === 'evidence_job_failure_record_failed'
+    );
+    assert.ok(persistenceFailure);
+    assert.equal(
+      persistenceFailure.payload.error_code,
+      'INJECTED_SPOOL_WRITE_FAILURE'
+    );
+  } finally {
+    await runtime.server.stop();
+  }
+});
+
 test('does not abort the module context after a normal 200 response closes', async () => {
   let capturedSignal;
   const module = {

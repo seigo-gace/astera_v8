@@ -373,3 +373,128 @@ test('job store rejects backward transitions and stale CAS versions', async () =
     await cleanup(value);
   }
 });
+
+test('job failure propagates an ERROR artifact spool failure after transitioning and releasing the lease', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-fail-spool-write',
+      requestId: 'request-fail-spool-write',
+      idempotencyKey: 'fail-spool-write-operation'
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    assert.equal(value.store.readJob(authenticated.job_id).lease_owner, value.manager.workerId);
+
+    const spoolError = Object.assign(new Error('injected ERROR artifact spool failure'), {
+      code: 'INJECTED_SPOOL_WRITE_FAILURE'
+    });
+    value.spool.write = () => {
+      throw spoolError;
+    };
+    const originalError = Object.assign(new Error('caller cancelled'), {
+      code: 'SEARCH_CANCELLED'
+    });
+
+    assert.throws(
+      () => value.manager.fail(authenticated, originalError),
+      (error) => error === spoolError
+    );
+
+    const failed = value.store.readJob(authenticated.job_id);
+    assert.equal(failed.state, 'ERROR');
+    assert.equal(failed.error_code, 'SEARCH_CANCELLED');
+    assert.equal(failed.lease_owner, null);
+    assert.equal(failed.lease_until, null);
+    assert.equal(
+      value.store.listArtifacts(authenticated.job_id)
+        .some((artifact) => artifact.stage === 'ERROR'),
+      false
+    );
+  } finally {
+    await cleanup(value);
+  }
+});
+
+test('job failure persists its ERROR artifact and returns the failed job on the normal path', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-normal-fail',
+      requestId: 'request-normal-fail',
+      idempotencyKey: 'normal-fail-operation'
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    const originalError = Object.assign(new Error('provider failed'), {
+      code: 'PROVIDER_FAILED'
+    });
+
+    const failed = value.manager.fail(authenticated, originalError);
+
+    assert.equal(failed.state, 'ERROR');
+    assert.equal(failed.error_code, 'PROVIDER_FAILED');
+    const persisted = value.store.readJob(authenticated.job_id);
+    assert.equal(persisted.lease_owner, null);
+    assert.equal(persisted.lease_until, null);
+    const artifact = value.store.listArtifacts(authenticated.job_id)
+      .find((item) => item.stage === 'ERROR');
+    assert.ok(artifact);
+    const checkpoint = value.spool.read(artifact);
+    assert.equal(checkpoint.stage, 'ERROR');
+    assert.equal(checkpoint.value.error_code, 'PROVIDER_FAILED');
+    assert.equal(checkpoint.value.failed_state, 'AUTHENTICATED');
+  } finally {
+    await cleanup(value);
+  }
+});
+
+test('job failure prioritizes an ERROR state transition error over an artifact error and still releases the lease', () => {
+  const artifactError = Object.assign(new Error('artifact persistence failed'), {
+    code: 'ARTIFACT_PERSISTENCE_FAILED'
+  });
+  const transitionError = Object.assign(new Error('ERROR state transition failed'), {
+    code: 'EVIDENCE_JOB_CAS_CONFLICT'
+  });
+  let releaseCalls = 0;
+  const manager = new EvidenceJobManager({
+    workerId: 'error-precedence-worker',
+    spool: {
+      write() {
+        throw artifactError;
+      }
+    },
+    store: {
+      readJob() {
+        return {
+          job_id: 'error-precedence-job',
+          caller_id: 'error-precedence-caller',
+          state: 'AUTHENTICATED',
+          state_version: 1
+        };
+      },
+      transition() {
+        throw transitionError;
+      },
+      releaseLease() {
+        releaseCalls += 1;
+        return true;
+      }
+    }
+  });
+
+  assert.throws(
+    () => manager.fail(
+      { job_id: 'error-precedence-job' },
+      Object.assign(new Error('search failed'), { code: 'PROVIDER_FAILED' })
+    ),
+    (error) => error === transitionError
+  );
+  assert.equal(releaseCalls, 1);
+});

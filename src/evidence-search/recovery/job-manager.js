@@ -118,9 +118,9 @@ class EvidenceJobManager {
     if (!current || ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(current.state)) {
       return current;
     }
-    let artifact = null;
+    let artifactError = null;
     try {
-      artifact = this.spool.write({
+      const artifact = this.spool.write({
         callerId: current.caller_id,
         jobId: current.job_id,
         stage: 'ERROR',
@@ -132,16 +132,34 @@ class EvidenceJobManager {
         }
       });
       this.store.recordArtifact(artifact);
-    } finally {
-      const failed = this.store.transition(
+    } catch (error) {
+      artifactError = error;
+    }
+
+    let failed = null;
+    let transitionError = null;
+    try {
+      failed = this.store.transition(
         current.job_id,
         current.state_version,
         'ERROR',
         { error_code: error.code || 'EVIDENCE_SEARCH_ERROR' }
       );
-      this.store.releaseLease(current.job_id, this.workerId);
-      return failed;
+    } catch (error) {
+      transitionError = error;
     }
+
+    let releaseError = null;
+    try {
+      this.store.releaseLease(current.job_id, this.workerId);
+    } catch (error) {
+      releaseError = error;
+    }
+
+    if (transitionError) throw transitionError;
+    if (releaseError) throw releaseError;
+    if (artifactError) throw artifactError;
+    return failed;
   }
 
   readLatestValidCheckpoint(jobId) {
