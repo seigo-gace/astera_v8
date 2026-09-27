@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const createEvidenceSearchModule = require('../src/evidence-search');
+const { SearchOrchestrator } = require('../src/evidence-search/core/search-orchestrator');
 const {
   createJsonProjectionProvider
 } = require('../src/evidence-search/providers/json-projection-provider');
@@ -146,6 +147,144 @@ function weakInitialProviders() {
   });
   return [weakProjection, weakCurrent];
 }
+
+test('propagates an outer abort to the downstream scheduler context signal', async () => {
+  let downstreamSignal;
+  let markSchedulerStarted;
+  let releaseScheduler;
+  const schedulerStarted = new Promise((resolve) => {
+    markSchedulerStarted = resolve;
+  });
+  const schedulerRelease = new Promise((resolve) => {
+    releaseScheduler = resolve;
+  });
+  const scheduler = {
+    async run(_tasks, context) {
+      downstreamSignal = context.signal;
+      markSchedulerStarted();
+      await schedulerRelease;
+      return [];
+    }
+  };
+  const provider = {
+    provider_id: 'cancel-probe-provider',
+    source_class: 'FREE_PROJECTION',
+    certified: true,
+    domains: ['G29'],
+    capabilities: ['NO_REINFORCEMENT'],
+    async search() {
+      throw new Error('injected scheduler must not invoke the provider');
+    }
+  };
+  const orchestrator = new SearchOrchestrator({
+    providers: [provider],
+    scheduler,
+    informationQualityEvaluator: () => ({
+      status: 'REJECTED_BLOCKING',
+      score_bp: 0
+    })
+  });
+  const outerController = new AbortController();
+  const execution = orchestrator.execute(searchPayload(), {
+    caller_id: 'caller-cancel-test',
+    request_id: 'request-cancel-test',
+    execution_time: EXECUTION_TIME,
+    signal: outerController.signal
+  });
+
+  try {
+    await schedulerStarted;
+    assert.ok(downstreamSignal, 'scheduler context must include an AbortSignal');
+
+    outerController.abort();
+
+    assert.equal(
+      downstreamSignal.aborted,
+      true,
+      'downstream context.signal must abort when outer context.signal aborts'
+    );
+  } finally {
+    releaseScheduler();
+    await execution;
+  }
+});
+
+test('starts downstream work aborted when the outer signal is already aborted', async () => {
+  let downstreamSignal;
+  const scheduler = {
+    async run(_tasks, context) {
+      downstreamSignal = context.signal;
+      return [];
+    }
+  };
+  const provider = {
+    provider_id: 'already-cancelled-probe-provider',
+    source_class: 'FREE_PROJECTION',
+    certified: true,
+    domains: ['G29'],
+    capabilities: ['NO_REINFORCEMENT'],
+    async search() {
+      throw new Error('injected scheduler must not invoke the provider');
+    }
+  };
+  const orchestrator = new SearchOrchestrator({
+    providers: [provider],
+    scheduler,
+    informationQualityEvaluator: () => ({
+      status: 'REJECTED_BLOCKING',
+      score_bp: 0
+    })
+  });
+  const outerController = new AbortController();
+  outerController.abort();
+
+  await orchestrator.execute(searchPayload(), {
+    execution_time: EXECUTION_TIME,
+    signal: outerController.signal
+  });
+
+  assert.ok(downstreamSignal, 'scheduler context must include an AbortSignal');
+  assert.equal(downstreamSignal.aborted, true);
+});
+
+test('keeps the internal deadline abort active without an outer signal', async () => {
+  let downstreamSignal;
+  const scheduler = {
+    async run(_tasks, context) {
+      downstreamSignal = context.signal;
+      await new Promise((resolve) => {
+        if (context.signal.aborted) return resolve();
+        context.signal.addEventListener('abort', resolve, { once: true });
+      });
+      return [];
+    }
+  };
+  const provider = {
+    provider_id: 'deadline-probe-provider',
+    source_class: 'FREE_PROJECTION',
+    certified: true,
+    domains: ['G29'],
+    capabilities: ['NO_REINFORCEMENT'],
+    async search() {
+      throw new Error('injected scheduler must not invoke the provider');
+    }
+  };
+  const orchestrator = new SearchOrchestrator({
+    providers: [provider],
+    scheduler,
+    informationQualityEvaluator: () => ({
+      status: 'REJECTED_BLOCKING',
+      score_bp: 0
+    })
+  });
+
+  await orchestrator.execute(searchPayload({ deadline_ms: 1000 }), {
+    execution_time: EXECUTION_TIME
+  });
+
+  assert.ok(downstreamSignal, 'scheduler context must include an AbortSignal');
+  assert.equal(downstreamSignal.aborted, true);
+});
 
 test('runs the complete free evidence-search module through one execute connection', async () => {
   const module = createEvidenceSearchModule({ providers: completeProviders() });

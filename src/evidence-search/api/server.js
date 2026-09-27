@@ -40,6 +40,22 @@ function statusForError(error) {
   return requested >= 400 && requested <= 599 ? requested : 500;
 }
 
+function cancellationForRequest(req, res) {
+  const controller = new AbortController();
+  const abortIfResponseIncomplete = () => {
+    if (!res.writableFinished) controller.abort();
+  };
+  req.once('aborted', abortIfResponseIncomplete);
+  res.once('close', abortIfResponseIncomplete);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      req.removeListener('aborted', abortIfResponseIncomplete);
+      res.removeListener('close', abortIfResponseIncomplete);
+    }
+  };
+}
+
 class EvidenceSearchApiServer {
   constructor(options = {}) {
     this.port = options.port === 0
@@ -162,6 +178,7 @@ class EvidenceSearchApiServer {
 
   async _handle(req, res) {
     let activeJob = null;
+    let requestCancellation = null;
     try {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/healthz') {
@@ -187,6 +204,8 @@ class EvidenceSearchApiServer {
       if (req.method !== 'POST' || url.pathname !== '/internal/v1/evidence/search') {
         return this._json(res, 404, { error: 'not_found' });
       }
+
+      requestCancellation = cancellationForRequest(req, res);
 
       const rawBody = await this._readRawBody(req);
       const identity = verifyInternalRequest({
@@ -247,7 +266,8 @@ class EvidenceSearchApiServer {
           caller_id: identity.caller_id,
           request_id: identity.request_id,
           execution_time: new Date().toISOString(),
-          lifecycle
+          lifecycle,
+          signal: requestCancellation.signal
         },
         payload: {
           ...payload,
@@ -323,6 +343,8 @@ class EvidenceSearchApiServer {
         requestId: req.verifiedRequestId || null,
         jobId: req.evidenceJobId || null
       });
+    } finally {
+      requestCancellation?.cleanup();
     }
   }
 }
