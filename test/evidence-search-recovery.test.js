@@ -801,6 +801,133 @@ async function signedRecoverySearch({ api, callerId, requestId, idempotencyKey }
   return Object.freeze({ status: response.status, body: await response.json() });
 }
 
+test('same manager rejects a concurrent idempotent request and replays the terminal result', async () => {
+  const value = await runtime();
+  let api;
+  let releaseFirst;
+  let markFirstEntered;
+  let moduleCalls = 0;
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const firstEntered = new Promise((resolve) => {
+    markFirstEntered = resolve;
+  });
+  const callerId = 'caller-same-manager-concurrency';
+  const idempotencyKey = 'same-manager-concurrency-operation';
+  const result = Object.freeze({
+    status: 'FINAL_VALID',
+    evidence: [],
+    quality: {
+      initial: { score_bp: 10_000 },
+      final: { score_bp: 10_000 },
+      reinforcement_attempt_count: 0
+    },
+    effective_as_of: '2026-09-27T00:00:00.000Z',
+    query_plan_hash: '7'.repeat(64),
+    duration_ms: 0
+  });
+  let firstRequest;
+
+  try {
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          moduleCalls += 1;
+          if (moduleCalls === 1) {
+            markFirstEntered();
+            await firstGate;
+          }
+          return {
+            status: 'OK',
+            operation: 'SEARCH_EVIDENCE',
+            result
+          };
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+
+    firstRequest = signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-same-manager-A',
+      idempotencyKey
+    });
+    await firstEntered;
+
+    const second = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-same-manager-B',
+      idempotencyKey
+    });
+    assert.deepEqual({
+      status: second.status,
+      code: second.body.code,
+      module_calls: moduleCalls
+    }, {
+      status: 409,
+      code: 'EVIDENCE_JOB_LEASE_CONFLICT',
+      module_calls: 1
+    });
+
+    releaseFirst();
+    const first = await firstRequest;
+    assert.equal(first.status, 200);
+    assert.equal(first.body.status, 'FINAL_VALID');
+
+    const terminalRetry = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-same-manager-C',
+      idempotencyKey
+    });
+    assert.deepEqual({
+      status: terminalRetry.status,
+      state: terminalRetry.body.status,
+      same_job_id: terminalRetry.body.job_id === first.body.job_id,
+      idempotent_replay: terminalRetry.body.idempotent_replay,
+      module_calls: moduleCalls
+    }, {
+      status: 200,
+      state: 'FINAL_VALID',
+      same_job_id: true,
+      idempotent_replay: true,
+      module_calls: 1
+    });
+  } finally {
+    releaseFirst();
+    await firstRequest?.catch(() => {});
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('active leases reject every owner and expired leases can be reacquired', async () => {
+  const value = await runtime();
+  try {
+    const job = value.store.createJob({
+      callerId: 'caller-lease-expiration',
+      requestId: 'request-lease-expiration',
+      idempotencyKey: 'lease-expiration-operation'
+    });
+    assert.equal(value.store.acquireLease(job.job_id, 'first-owner', 1000, 10_000), true);
+    assert.equal(value.store.acquireLease(job.job_id, 'first-owner', 1000, 10_500), false);
+    assert.equal(value.store.acquireLease(job.job_id, 'second-owner', 1000, 10_500), false);
+    assert.equal(value.store.acquireLease(job.job_id, 'second-owner', 1000, 11_001), true);
+  } finally {
+    await cleanup(value);
+  }
+});
+
 async function observeTerminalReleaseFailure(terminalState) {
   const value = await runtime();
   const records = [];

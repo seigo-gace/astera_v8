@@ -166,7 +166,7 @@ class EvidenceJobStore {
           updated_at = ?
         WHERE job_id = ?
           AND state NOT IN ('FINAL_VALID','REJECTED','ERROR')
-          AND (lease_until IS NULL OR lease_until < ? OR lease_owner = ?)
+          AND (lease_until IS NULL OR lease_until < ?)
       `),
       releaseLease: this.db.prepare(`
         UPDATE evidence_jobs SET lease_owner = NULL, lease_until = NULL, updated_at = ?
@@ -312,8 +312,7 @@ class EvidenceJobStore {
       until,
       nowText,
       id,
-      nowText,
-      leaseOwner
+      nowText
     );
     return result.changes === 1;
   }
