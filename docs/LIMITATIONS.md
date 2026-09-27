@@ -1,46 +1,212 @@
-# Astera v8 — Known Limitations and Open Defects
+# Astera v8 — Product Boundaries and Limitations
 
-Updated: 2026-08-03
+Updated: 2026-09-26
 
-## 1. 保証しないもの
+This document describes **product-level limitations and responsibility boundaries of the completed Astera v8 design**.
 
-- 外部情報の最新性・正確性
-- 医療、法律、税務、投資等の専門判断
-- 主役AIや外部Modelが作る最終回答の完全性
-- QCE `PASSED` 後の外部KB自動保存
-- 外部Search、翻訳、MCP、KB、Gatewayの可用性
-- Account、Square、Credit、法務契約
+Implementation defects, migration debt, unfinished wiring and audit findings are not maintained here. They are tracked in the project audit record outside the public product documentation.
 
-## 2. Coreの制限
+Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-- 外部検索を内蔵しない
-- 翻訳Modelを内蔵しない
-- ASTERA-KBへ自動保存しない
-- 汎用Webhook受信はWebhook Gatewayの責務
-- `clarification`は現行HTTPで専用JSON ContractではなくText Response
-- Optional LLM Adapterの品質・料金・可用性はProvider依存
-- Core HTTP does not own account, billing, subscription, signup, or commerce routes
+---
 
-## 3. Transport and skill API
+## 1. Final decision limitation
 
-- Transport rate limit は Process 内 Memory で Replica 間共有ではない
-- 429で`Retry-After` Headerを返さずBodyの`rate.resetAt`に依存する
-- Evaluator APIは本体と別Process
-- Root ComposeはEvaluatorを自動起動しない
-- Skill API key は Core HTTP の transport 認証。Account lifecycle は Astera App
+Astera v8 produces judgment material, evidence state and deterministic evaluation results. It does not guarantee that the final Human / Main AI / Calling System decision is correct.
 
-## 4. Operation limitations
+```text
+Main8 material ≠ final decision
+Accepted Evidence ≠ final business decision
+Evaluator PASSED ≠ deployment / merge / publication authorization
+```
 
-- 本番常駐はDocker Compose
-- HTTPS、CORS、Secret注入、Backup、監視は運用側で設定
-- TGserver Outboxは長期Log正本ではない
-- 外部Serviceの実CredentialなしではE2E検証できない
-- GitHub Actionsの過去成功は最新Commitの成功を意味しない
+Final decision authority remains external.
 
-## 5. Commercial boundary
+---
 
-本Repositoryは、価格、Credit付与、減算、解約、返金、利用規約、Privacy、特商法の正本ではありません。Astera App側の最新正本だけを参照します。
+## 2. External evidence limitation
 
-## 6. Completion rule
+Evidence Search cannot guarantee that required external information always exists, is reachable, is current, or is published by an authoritative source.
 
-制限やDefectを解消した場合は、Code、Test、`STRUCTURE.md`、API Reference、Limitations、Notion議事録・正本を同じ作業Blockで同期します。
+Possible truthful outcomes include:
+
+- supporting evidence
+- counter evidence
+- conflicting evidence
+- insufficient evidence
+- no evidence found
+- retrieval/provider failure
+
+Astera must preserve unresolved state instead of fabricating missing evidence.
+
+A Provider returning data does not by itself make that data accepted Evidence.
+
+---
+
+## 3. Source authority limitation
+
+Authority depends on the Claim, domain, jurisdiction, time scope and requested evidence conditions.
+
+A source that is authoritative for one Claim may be unsuitable for another.
+
+Astera therefore cannot replace domain-specific legal, medical, tax, investment, safety or other licensed professional judgment merely by retrieving a source.
+
+---
+
+## 4. Freshness limitation
+
+Current-information Claims depend on external source freshness and Provider reachability.
+
+The General / Current route reduces stale-information risk but cannot guarantee that every real-world change is immediately observable.
+
+Claims whose freshness requirements are not satisfied must remain unresolved or rejected by the Evidence adoption gate.
+
+---
+
+## 5. Language / parser limitation
+
+Japanese semantic analysis is an external parsing boundary.
+
+Parser failure, timeout, protocol failure or unsupported input must remain distinguishable from:
+
+```text
+user premise deficiency
+Evidence insufficiency
+Task dependency failure
+Generic evaluation failure
+```
+
+Astera must not ask the user to restate already supplied information merely because an external Parser failed.
+
+---
+
+## 6. Optional LLM limitation
+
+Optional LLM adapters are external generation boundaries, not Astera truth authorities.
+
+External LLM output cannot override:
+
+- Evidence validity
+- Claim confirmation
+- Requirement / Constraint
+- Hard Blocking
+- Final Decision Authority
+
+LLM provider availability, price, latency and output quality remain external dependencies.
+
+---
+
+## 7. Task execution limitation
+
+Bounded parallel execution improves throughput while preserving dependency order, but does not make every workload infinitely parallelizable.
+
+Execution is intentionally constrained by:
+
+- Task dependency graph
+- Wave order
+- concurrency limits
+- queue capacity
+- cancellation
+- per-boundary deadlines
+
+When capacity is exceeded, explicit rejection is preferable to uncontrolled resource growth.
+
+---
+
+## 8. Evidence Search limitation
+
+Evidence Search owns retrieval and adoption, but does not:
+
+- generate Main8
+- own Generic Evaluation metrics
+- fabricate missing evidence
+- execute payment / credit / refund
+- use AI query generation or AI reranking in the deterministic free-search contract
+
+Search success and Evidence adoption are separate states.
+
+---
+
+## 9. Evaluation / Verification limitation
+
+Generic Evaluation v2 evaluates only the supplied Subject under the selected Profile, Measurements and verified Evidence.
+
+It does not:
+
+- modify the Subject
+- fix code automatically
+- commit or push
+- deploy
+- publish
+- charge a customer
+- decide a final business action
+
+`PASSED` means the evaluation contract passed, not that every downstream release condition passed.
+
+---
+
+## 10. Legacy compatibility limitation
+
+Legacy v1 evaluator compatibility and Generic v2 are different contracts.
+
+Legacy behavior, profiles or tests must not be treated as proof that the same feature exists in Generic v2.
+
+The historical directory name `quality-completion-evaluator` does not redefine the current v2 responsibility.
+
+---
+
+## 11. Network / deployment limitation
+
+The production design keeps Core, Evaluator and Evidence Search on private/internal service boundaries.
+
+Public exposure, TLS termination, reverse proxy policy, firewall policy, monitoring, backup and secret injection remain deployment responsibilities.
+
+A successful local health request proves service health only; it does not replace explicit ingress/firewall verification.
+
+---
+
+## 12. Logging limitation
+
+TGserver / structured logging is an operational evidence boundary, not a truth authority.
+
+Successful log delivery does not prove:
+
+- Evidence validity
+- evaluation success
+- deployment success
+- final decision correctness
+
+Logging failure also must not silently mutate a valid Claim or Judgment.
+
+---
+
+## 13. Verification limitation
+
+Source presence, Test presence, Container status and HTTP success are not interchangeable with completion proof.
+
+```text
+SOURCE_EXISTS ≠ PASS
+TEST_FILE_EXISTS ≠ PASS
+CONTAINER_RUNNING ≠ READY
+HTTP_200 ≠ EVIDENCE_VALID
+OLD_SHA_PASS ≠ CURRENT_SHA_PASS
+NOT_RUN ≠ PASS
+```
+
+Completion evidence must refer to the exact candidate SHA and the required real boundaries for that release.
+
+---
+
+## 14. Documentation rule
+
+Product documentation describes the completed Product Contract and stable responsibility boundaries.
+
+Development audit findings, unfinished wiring, migration debt and implementation inconsistencies are tracked separately from this public limitation document.
+
+When the Product Contract itself changes, update together as applicable:
+
+- `ARCHITECTURE.md`
+- affected module document
+- `API_REFERENCE.md`
+- README / STRUCTURE summary
+- tests / contracts / manifests

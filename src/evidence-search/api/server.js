@@ -4,6 +4,7 @@ const http = require('node:http');
 const Logger = require('../../logger');
 const { parseJsonStrict, maskSecrets } = require('../../safe-json');
 const createEvidenceSearchModule = require('..');
+const { leaseDurationForDeadline } = require('../recovery/job-manager');
 const {
   ReplayNonceGuard,
   loadInternalServiceSecret,
@@ -12,6 +13,10 @@ const {
 } = require('./internal-auth');
 
 const MAX_REQUEST_BYTES = 256 * 1024;
+const NON_MUTATING_RECOVERY_CONFLICTS = new Set([
+  'EVIDENCE_RECOVERY_REQUEST_MISMATCH',
+  'EVIDENCE_RECOVERY_PLAN_MISMATCH'
+]);
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -20,6 +25,7 @@ function positiveInteger(value, fallback) {
 
 function statusForError(error) {
   const code = String(error?.code || '');
+  if (code === 'SEARCH_CANCELLED') return 499;
   if (code === 'INTERNAL_AUTH_REQUIRED' || code === 'INTERNAL_SIGNATURE_INVALID') return 401;
   if (
     code === 'INTERNAL_SERVICE_FORBIDDEN'
@@ -27,7 +33,12 @@ function statusForError(error) {
     || code === 'INTERNAL_REQUEST_EXPIRED'
     || code === 'INTERNAL_BODY_HASH_MISMATCH'
   ) return 403;
-  if (code === 'EVIDENCE_JOB_LEASE_CONFLICT' || code === 'EVIDENCE_JOB_CAS_CONFLICT') return 409;
+  if (
+    code === 'EVIDENCE_JOB_LEASE_CONFLICT'
+    || code === 'EVIDENCE_JOB_CAS_CONFLICT'
+    || code === 'EVIDENCE_RECOVERY_REQUEST_MISMATCH'
+    || code === 'EVIDENCE_RECOVERY_PLAN_MISMATCH'
+  ) return 409;
   if (
     code.startsWith('INVALID_')
     || code === 'NO_CORE_CONDITION'
@@ -38,6 +49,22 @@ function statusForError(error) {
   if (code === 'PROVIDER_TIMEOUT' || code === 'SEARCH_DEADLINE_EXCEEDED') return 504;
   const requested = Number(error?.status);
   return requested >= 400 && requested <= 599 ? requested : 500;
+}
+
+function cancellationForRequest(req, res) {
+  const controller = new AbortController();
+  const abortIfResponseIncomplete = () => {
+    if (!res.writableFinished) controller.abort();
+  };
+  req.once('aborted', abortIfResponseIncomplete);
+  res.once('close', abortIfResponseIncomplete);
+  return {
+    signal: controller.signal,
+    cleanup() {
+      req.removeListener('aborted', abortIfResponseIncomplete);
+      res.removeListener('close', abortIfResponseIncomplete);
+    }
+  };
 }
 
 class EvidenceSearchApiServer {
@@ -148,7 +175,27 @@ class EvidenceSearchApiServer {
   _terminalReplay(job) {
     const latest = this.jobManager.readLatestValidCheckpoint(job.job_id);
     const value = latest.checkpoint?.value;
-    if (!value || !['FINAL_VALID', 'REJECTED'].includes(value.status)) {
+    const expectedStage = job.state === 'FINAL_VALID'
+      ? 'FINAL_VALID'
+      : job.state === 'REJECTED'
+        ? 'REJECTED'
+        : null;
+    const terminalIdentityValid = Boolean(
+      expectedStage
+      && latest.artifact?.stage === expectedStage
+      && value?.status === expectedStage
+    );
+    const terminalPayloadValid = Boolean(
+      Array.isArray(value?.evidence)
+      && value?.quality
+      && typeof value.quality === 'object'
+      && !Array.isArray(value.quality)
+      && typeof value.query_plan_hash === 'string'
+      && value.query_plan_hash.trim()
+      && typeof value.effective_as_of === 'string'
+      && value.effective_as_of.trim()
+    );
+    if (!terminalIdentityValid || !terminalPayloadValid) {
       const error = new Error('completed evidence job has no valid terminal checkpoint');
       error.code = 'RECOVERY_ARTIFACT_INVALID';
       throw error;
@@ -160,8 +207,40 @@ class EvidenceSearchApiServer {
     });
   }
 
+  _errorTerminalReplay(job, requestId) {
+    const latest = this.jobManager.readLatestValidCheckpoint(job.job_id);
+    const value = latest.checkpoint?.value;
+    const storedCode = typeof value?.error_code === 'string'
+      ? value.error_code.trim()
+      : '';
+    const message = typeof value?.message === 'string'
+      ? value.message
+      : '';
+    if (latest.artifact?.stage !== 'ERROR' || !storedCode || !message) {
+      const error = new Error('failed evidence job has no valid ERROR checkpoint');
+      error.code = 'RECOVERY_ARTIFACT_INVALID';
+      throw error;
+    }
+    const code = storedCode === 'EVIDENCE_SEARCH_ERROR'
+      ? 'INTERNAL_ERROR'
+      : storedCode;
+    const persistedStatus = Number(value.status);
+    const status = persistedStatus >= 400 && persistedStatus <= 599
+      ? persistedStatus
+      : statusForError({ code });
+    return Object.freeze({
+      error: status >= 500 ? 'internal_error' : message,
+      code,
+      status,
+      requestId,
+      jobId: job.job_id,
+      idempotent_replay: true
+    });
+  }
+
   async _handle(req, res) {
     let activeJob = null;
+    let requestCancellation = null;
     try {
       const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       if (req.method === 'GET' && url.pathname === '/healthz') {
@@ -188,6 +267,8 @@ class EvidenceSearchApiServer {
         return this._json(res, 404, { error: 'not_found' });
       }
 
+      requestCancellation = cancellationForRequest(req, res);
+
       const rawBody = await this._readRawBody(req);
       const identity = verifyInternalRequest({
         headers: req.headers,
@@ -212,54 +293,107 @@ class EvidenceSearchApiServer {
       }
 
       let lifecycle;
+      let recovery = null;
+      const executionTime = new Date().toISOString();
       if (this.jobManager) {
         const started = this.jobManager.begin({
           callerId: identity.caller_id,
           requestId: identity.request_id,
-          idempotencyKey: payload.idempotency_key || identity.request_id
+          idempotencyKey: payload.idempotency_key || identity.request_id,
+          leaseDurationMs: leaseDurationForDeadline(payload.deadline_ms)
         });
         activeJob = started.job;
         req.evidenceJobId = activeJob.job_id;
 
         if (started.reusedTerminal) {
+          if (activeJob.state === 'ERROR') {
+            const replay = this._errorTerminalReplay(activeJob, identity.request_id);
+            return this._json(res, replay.status, replay);
+          }
           return this._json(res, 200, this._terminalReplay(activeJob));
         }
 
-        activeJob = this.jobManager.checkpoint(
-          activeJob,
-          'AUTHENTICATED',
-          {
-            request_id: identity.request_id,
-            caller_id: identity.caller_id,
-            body_sha256: sha256(rawBody),
-            domain_lens: payload.domain_lens || null,
-            free_projection: payload.search?.free_projection !== false,
-            free_current: payload.search?.free_current !== false
+        if (started.reusedNonterminal && activeJob.state !== 'RECEIVED') {
+          recovery = this.jobManager.readRecoverySnapshot(activeJob.job_id);
+          const authenticated = recovery.stages.AUTHENTICATED;
+          if (
+            typeof authenticated?.body_sha256 !== 'string'
+            || !/^[a-f0-9]{64}$/i.test(authenticated.body_sha256)
+            || typeof (activeJob.effective_as_of || authenticated.execution_time) !== 'string'
+          ) {
+            const error = new Error('recovery AUTHENTICATED checkpoint is incomplete');
+            error.code = 'RECOVERY_ARTIFACT_INVALID';
+            throw error;
           }
-        );
+          if (authenticated.body_sha256 !== sha256(rawBody)) {
+            const error = new Error('recovery request does not match the authenticated request');
+            error.code = 'EVIDENCE_RECOVERY_REQUEST_MISMATCH';
+            throw error;
+          }
+        } else {
+          activeJob = this.jobManager.checkpoint(
+            activeJob,
+            'AUTHENTICATED',
+            {
+              request_id: identity.request_id,
+              caller_id: identity.caller_id,
+              body_sha256: sha256(rawBody),
+              execution_time: executionTime,
+              domain_lens: payload.domain_lens || null,
+              free_projection: payload.search?.free_projection !== false,
+              free_current: payload.search?.free_current !== false
+            },
+            { effective_as_of: payload.as_of || executionTime }
+          );
+        }
         lifecycle = this.jobManager.lifecycle(activeJob);
       }
+
+      const recoveryExecutionTime = recovery
+        ? recovery.stages.AUTHENTICATED.execution_time || activeJob.effective_as_of
+        : executionTime;
+      const executionRequestId = recovery ? activeJob.request_id : identity.request_id;
 
       const response = await this.module.execute({
         schema_version: 'astera.evidence-search.module-request.v1',
         operation: 'SEARCH_EVIDENCE',
         context: {
           caller_id: identity.caller_id,
-          request_id: identity.request_id,
-          execution_time: new Date().toISOString(),
-          lifecycle
+          request_id: executionRequestId,
+          execution_time: recoveryExecutionTime,
+          ...(recovery ? {
+            effective_as_of: activeJob.effective_as_of,
+            recovery
+          } : {}),
+          lifecycle,
+          signal: requestCancellation.signal
         },
         payload: {
           ...payload,
           caller_id: identity.caller_id,
-          request_id: identity.request_id,
+          request_id: executionRequestId,
           paid_search: { enabled: false }
         }
       });
 
       let completedJob = null;
       if (this.jobManager && activeJob) {
-        completedJob = this.jobManager.complete(activeJob, response.result);
+        completedJob = this.jobManager.complete(activeJob, response.result, {
+          onTerminalCleanupFailure: ({ error: cleanupError, job: terminalJob }) => {
+            this.logger.write({
+              callerId: identity.caller_id,
+              type: 'evidence_job_terminal_cleanup_failed',
+              severity: 'error',
+              text: 'Terminal evidence job committed but lease cleanup failed',
+              payload: {
+                request_id: identity.request_id,
+                job_id: terminalJob.job_id,
+                terminal_state: terminalJob.state,
+                error_code: cleanupError.code || 'EVIDENCE_JOB_TERMINAL_CLEANUP_FAILED'
+              }
+            });
+          }
+        });
         activeJob = completedJob;
       }
 
@@ -285,25 +419,47 @@ class EvidenceSearchApiServer {
       });
       return this._json(res, 200, result);
     } catch (error) {
+      const status = statusForError(error);
+      const errorCode = error.code || 'INTERNAL_ERROR';
       if (this.jobManager && activeJob && !['FINAL_VALID', 'REJECTED', 'ERROR'].includes(activeJob.state)) {
-        try {
-          activeJob = this.jobManager.fail(activeJob, error);
-        } catch (jobError) {
-          this.logger.write({
-            callerId: req.verifiedCallerId || 'internal-unverified',
-            type: 'evidence_job_failure_record_failed',
-            severity: 'error',
-            text: 'Failed to persist evidence job error state',
-            payload: {
-              request_id: req.verifiedRequestId || null,
-              job_id: req.evidenceJobId || null,
-              error_code: jobError.code || 'EVIDENCE_JOB_ERROR'
-            }
-          });
+        if (NON_MUTATING_RECOVERY_CONFLICTS.has(errorCode)) {
+          try {
+            activeJob = this.jobManager.release(activeJob);
+          } catch (cleanupError) {
+            this.logger.write({
+              callerId: req.verifiedCallerId || 'internal-unverified',
+              type: 'evidence_job_recovery_cleanup_failed',
+              severity: 'error',
+              text: 'Failed to release evidence job lease after recovery conflict',
+              payload: {
+                request_id: req.verifiedRequestId || null,
+                job_id: req.evidenceJobId || null,
+                error_code: cleanupError.code || 'EVIDENCE_JOB_LEASE_RELEASE_FAILED'
+              }
+            });
+          }
+        } else {
+          try {
+            activeJob = this.jobManager.fail(activeJob, error, {
+              status,
+              errorCode
+            });
+          } catch (jobError) {
+            this.logger.write({
+              callerId: req.verifiedCallerId || 'internal-unverified',
+              type: 'evidence_job_failure_record_failed',
+              severity: 'error',
+              text: 'Failed to persist evidence job error state',
+              payload: {
+                request_id: req.verifiedRequestId || null,
+                job_id: req.evidenceJobId || null,
+                error_code: jobError.code || 'EVIDENCE_JOB_ERROR'
+              }
+            });
+          }
         }
       }
 
-      const status = statusForError(error);
       this.logger.write({
         callerId: req.verifiedCallerId || 'internal-unverified',
         type: 'evidence_search_api_failed',
@@ -313,16 +469,18 @@ class EvidenceSearchApiServer {
           request_id: req.verifiedRequestId || null,
           job_id: req.evidenceJobId || null,
           status,
-          error_code: error.code || 'INTERNAL_ERROR'
+          error_code: errorCode
         }
       });
       return this._json(res, status, {
         error: status >= 500 ? 'internal_error' : error.message,
-        code: error.code || 'INTERNAL_ERROR',
+        code: errorCode,
         status,
         requestId: req.verifiedRequestId || null,
         jobId: req.evidenceJobId || null
       });
+    } finally {
+      requestCancellation?.cleanup();
     }
   }
 }

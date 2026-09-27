@@ -27,6 +27,9 @@ jobs:
       - name: Run source tests
         run: npm run verify:source
 
+      - name: Run Initial Fast Path performance hard gate
+        run: npm run verify:performance
+
       - name: Build real Japanese Parser HTTP runtime
         shell: bash
         run: |
@@ -51,12 +54,22 @@ jobs:
           docker logs djpmcp-http-ci
           exit 1
 
+      - name: Run real Japanese Parser release gate
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
+        run: npm run verify:real-mcp
+
       - name: Run real HTTP smoke verification
         env:
           ASTERA_JAPANESE_PARSER_MODE: http
           ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
           ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
         run: npm run verify:http-e2e
+
+      - name: Run unseen effect release gate
+        run: npm run verify:effect-unseen
 
       - name: Stop Japanese Parser HTTP runtime
         if: always()

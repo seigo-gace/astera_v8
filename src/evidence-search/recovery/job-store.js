@@ -156,6 +156,9 @@ class EvidenceJobStore {
       listArtifacts: this.db.prepare(
         'SELECT * FROM evidence_artifacts WHERE job_id = ? ORDER BY created_at ASC, stage ASC'
       ),
+      deleteArtifact: this.db.prepare(
+        'DELETE FROM evidence_artifacts WHERE job_id = ? AND stage = ?'
+      ),
       acquireLease: this.db.prepare(`
         UPDATE evidence_jobs SET
           lease_owner = ?,
@@ -163,7 +166,7 @@ class EvidenceJobStore {
           updated_at = ?
         WHERE job_id = ?
           AND state NOT IN ('FINAL_VALID','REJECTED','ERROR')
-          AND (lease_until IS NULL OR lease_until < ? OR lease_owner = ?)
+          AND (lease_until IS NULL OR lease_until < ?)
       `),
       releaseLease: this.db.prepare(`
         UPDATE evidence_jobs SET lease_owner = NULL, lease_until = NULL, updated_at = ?
@@ -291,6 +294,14 @@ class EvidenceJobStore {
     );
   }
 
+  removeArtifact(jobId, stage) {
+    const result = this.statements.deleteArtifact.run(
+      safeString(jobId, 'jobId', 128),
+      safeString(stage, 'stage', 128)
+    );
+    return result.changes === 1;
+  }
+
   acquireLease(jobId, owner, durationMs = 30_000, now = Date.now()) {
     const id = safeString(jobId, 'jobId', 128);
     const leaseOwner = safeString(owner, 'owner', 128);
@@ -301,8 +312,7 @@ class EvidenceJobStore {
       until,
       nowText,
       id,
-      nowText,
-      leaseOwner
+      nowText
     );
     return result.changes === 1;
   }

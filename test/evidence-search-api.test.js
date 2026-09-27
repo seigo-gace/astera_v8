@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { once } = require('node:events');
+const http = require('node:http');
 const EvidenceSearchApiServer = require('../src/evidence-search/api/server');
 const EvidenceSearchClient = require('../src/evidence-search/api/client');
 const {
@@ -114,13 +115,14 @@ function payload() {
   };
 }
 
-async function startServer() {
+async function startServer(options = {}) {
   const server = new EvidenceSearchApiServer({
     port: 0,
     host: '127.0.0.1',
     logger,
     internalSecret: SECRET,
-    moduleOptions: { providers: providers() }
+    moduleOptions: { providers: providers() },
+    ...options
   });
   server.start();
   await once(server.server, 'listening');
@@ -130,6 +132,350 @@ async function startServer() {
     baseUrl: `http://127.0.0.1:${address.port}`
   };
 }
+
+test('aborts the module context signal when the signed HTTP caller disconnects', async () => {
+  let capturedSignal;
+  let releaseModule;
+  let markModuleStarted;
+  const moduleStarted = new Promise((resolve) => {
+    markModuleStarted = resolve;
+  });
+  const moduleRelease = new Promise((resolve) => {
+    releaseModule = resolve;
+  });
+  const module = {
+    async execute(moduleRequest) {
+      assert.equal(moduleRequest.operation, 'SEARCH_EVIDENCE');
+      capturedSignal = moduleRequest.context.signal;
+      markModuleStarted();
+      await moduleRelease;
+      return {
+        status: 'OK',
+        operation: 'SEARCH_EVIDENCE',
+        result: {
+          status: 'FINAL_VALID',
+          evidence: [],
+          quality: {
+            initial: { score_bp: 10_000 },
+            final: { score_bp: 10_000 },
+            reinforcement_attempt_count: 0
+          },
+          duration_ms: 0
+        }
+      };
+    }
+  };
+  const runtime = await startServer({ module });
+  let clientRequest;
+  let clientSocket;
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-cancel-test',
+      requestId: 'request-cancel-test'
+    });
+    const serverSocketClosed = new Promise((resolve) => {
+      runtime.server.server.once('connection', (socket) => socket.once('close', resolve));
+    });
+
+    clientRequest = http.request(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers
+      }
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.on('response', (response) => response.resume());
+    clientRequest.once('socket', (socket) => {
+      clientSocket = socket;
+    });
+    clientRequest.end(body);
+
+    await moduleStarted;
+    clientRequest.destroy();
+    clientSocket?.destroy();
+    await serverSocketClosed;
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(
+      capturedSignal,
+      'module context must include an AbortSignal for caller disconnects'
+    );
+    assert.equal(
+      capturedSignal.aborted,
+      true,
+      'module context signal must abort after the HTTP caller disconnects'
+    );
+  } finally {
+    clientRequest?.destroy();
+    clientSocket?.destroy();
+    releaseModule();
+    await new Promise((resolve) => setImmediate(resolve));
+    await runtime.server.stop();
+  }
+});
+
+test('routes caller cancellation to jobManager.fail instead of completing a rejection', async () => {
+  let completeCalls = 0;
+  let failedError;
+  let markModuleStarted;
+  let markJobFailed;
+  const moduleStarted = new Promise((resolve) => {
+    markModuleStarted = resolve;
+  });
+  const jobFailed = new Promise((resolve) => {
+    markJobFailed = resolve;
+  });
+  const jobManager = {
+    begin() {
+      return {
+        job: { job_id: 'cancel-job', state: 'RECEIVED' },
+        reusedTerminal: false
+      };
+    },
+    checkpoint(job) {
+      return { ...job, state: 'AUTHENTICATED' };
+    },
+    lifecycle() {
+      return async () => {};
+    },
+    complete() {
+      completeCalls += 1;
+      throw new Error('jobManager.complete must not run after caller cancellation');
+    },
+    fail(job, error) {
+      failedError = error;
+      const failed = { ...job, state: 'ERROR', error_code: error.code };
+      markJobFailed(failed);
+      return failed;
+    }
+  };
+  const module = {
+    async execute(moduleRequest) {
+      const { signal } = moduleRequest.context;
+      markModuleStarted();
+      await new Promise((resolve, reject) => {
+        const rejectCancelled = () => {
+          const error = new Error('evidence search cancelled by caller');
+          error.code = 'SEARCH_CANCELLED';
+          error.status = 499;
+          reject(error);
+        };
+        if (signal.aborted) return rejectCancelled();
+        signal.addEventListener('abort', rejectCancelled, { once: true });
+      });
+      throw new Error('unreachable after cancellation');
+    }
+  };
+  const runtime = await startServer({
+    module,
+    jobManager,
+    closeJobManagerOnStop: false
+  });
+  let clientRequest;
+  let clientSocket;
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-job-cancel-test',
+      requestId: 'request-job-cancel-test'
+    });
+    const serverSocketClosed = new Promise((resolve) => {
+      runtime.server.server.once('connection', (socket) => socket.once('close', resolve));
+    });
+    clientRequest = http.request(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers
+      }
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.once('socket', (socket) => {
+      clientSocket = socket;
+    });
+    clientRequest.end(body);
+
+    await moduleStarted;
+    clientRequest.destroy();
+    clientSocket?.destroy();
+
+    const failedJob = await jobFailed;
+    await serverSocketClosed;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(failedJob.state, 'ERROR');
+    assert.equal(failedJob.error_code, 'SEARCH_CANCELLED');
+    assert.equal(failedError.code, 'SEARCH_CANCELLED');
+    assert.equal(failedError.status, 499);
+    assert.equal(completeCalls, 0);
+  } finally {
+    clientRequest?.destroy();
+    clientSocket?.destroy();
+    await runtime.server.stop();
+  }
+});
+
+test('logs job failure persistence errors without replacing the original client error', async () => {
+  const records = [];
+  const boundaryLogger = {
+    write(record) {
+      records.push(record);
+    },
+    async flush() {}
+  };
+  const spoolError = Object.assign(new Error('injected ERROR artifact spool failure'), {
+    code: 'INJECTED_SPOOL_WRITE_FAILURE'
+  });
+  let failCalls = 0;
+  const jobManager = {
+    begin() {
+      return {
+        job: { job_id: 'job-failure-log-test', state: 'RECEIVED' },
+        reusedTerminal: false
+      };
+    },
+    checkpoint(job) {
+      return { ...job, state: 'AUTHENTICATED' };
+    },
+    lifecycle() {
+      return async () => {};
+    },
+    fail() {
+      failCalls += 1;
+      throw spoolError;
+    },
+    complete() {
+      throw new Error('jobManager.complete must not run for a failed search');
+    }
+  };
+  const module = {
+    async execute() {
+      const error = new Error('evidence search cancelled by caller');
+      error.code = 'SEARCH_CANCELLED';
+      error.status = 499;
+      throw error;
+    }
+  };
+  const runtime = await startServer({
+    module,
+    jobManager,
+    closeJobManagerOnStop: false,
+    logger: boundaryLogger
+  });
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-job-failure-log-test',
+      requestId: 'request-job-failure-log-test'
+    });
+    const response = await fetch(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body
+    });
+    const rejected = await response.json();
+
+    assert.equal(failCalls, 1);
+    assert.equal(response.status, 499);
+    assert.equal(rejected.code, 'SEARCH_CANCELLED');
+    assert.equal(rejected.status, 499);
+    const persistenceFailure = records.find(
+      (record) => record.type === 'evidence_job_failure_record_failed'
+    );
+    assert.ok(persistenceFailure);
+    assert.equal(
+      persistenceFailure.payload.error_code,
+      'INJECTED_SPOOL_WRITE_FAILURE'
+    );
+  } finally {
+    await runtime.server.stop();
+  }
+});
+
+test('does not abort the module context after a normal 200 response closes', async () => {
+  let capturedSignal;
+  const module = {
+    async execute(moduleRequest) {
+      capturedSignal = moduleRequest.context.signal;
+      return {
+        status: 'OK',
+        operation: 'SEARCH_EVIDENCE',
+        result: {
+          status: 'FINAL_VALID',
+          evidence: [],
+          quality: {
+            initial: { score_bp: 10_000 },
+            final: { score_bp: 10_000 },
+            reinforcement_attempt_count: 0
+          },
+          duration_ms: 0
+        }
+      };
+    }
+  };
+  const runtime = await startServer({ module });
+  let clientRequest;
+  let clientSocketClosed;
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-normal-close-test',
+      requestId: 'request-normal-close-test'
+    });
+    const response = await new Promise((resolve, reject) => {
+      clientRequest = http.request(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+        method: 'POST',
+        agent: false,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          Connection: 'close',
+          ...headers
+        }
+      }, (incoming) => {
+        incoming.resume();
+        incoming.once('end', () => resolve(incoming));
+      });
+      clientRequest.once('socket', (socket) => {
+        clientSocketClosed = once(socket, 'close');
+      });
+      clientRequest.once('error', reject);
+      clientRequest.end(body);
+    });
+
+    assert.equal(response.statusCode, 200);
+    await clientSocketClosed;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(capturedSignal, 'module context must include an AbortSignal');
+    assert.equal(
+      capturedSignal.aborted,
+      false,
+      'normal response completion must not be treated as caller cancellation'
+    );
+  } finally {
+    clientRequest?.destroy();
+    await runtime.server.stop();
+  }
+});
 
 test('signed client reaches the isolated free evidence search API', async () => {
   const runtime = await startServer();

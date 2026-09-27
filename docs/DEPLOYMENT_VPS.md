@@ -1,100 +1,299 @@
 # Astera v8 — VPS Deployment Guide
 
-Updated: 2026-08-03
+Updated: 2026-09-26
 
-## 1. Scope
+This guide covers the Astera v8 **production target composition**. It does not define external product/account/payment systems.
 
-このGuideはAstera v8 Runtimeの配備を扱います。Account、Square、Credit、Webhook Gateway、ASTERA-KBの配備は別Systemの手順です。
+Canonical architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-## 2. Target
+---
 
-- Ubuntu
-- Docker / Docker Compose
-- Runtime bind: private interface or localhost
-- Public ingress: Cloudflare Tunnel / Reverse Proxy
-- Logging: TGserver
-- Node.js direct process: short development verification only
+## 1. Production composition
 
-## 3. Prepare
+Astera v8 production is composed of three private/internal services:
+
+```text
+astera-v8                   Judgment Material Generation   127.0.0.1:${ASTERA_PORT}
+astera-v8-evaluator         Evaluation / Verification      127.0.0.1:7374
+astera-v8-evidence-search   Evidence Search                127.0.0.1:7376
+```
+
+Optional ingress support may be added separately through Cloudflare/reverse proxy. Ingress is not a fourth Astera module.
+
+---
+
+## 2. Production rule
+
+Production is container-first.
+
+```text
+Core direct host process      prohibited unless explicit development override
+Evaluator direct host process prohibited unless explicit development override
+Evidence Search host process  prohibited by container boundary
+```
+
+Canonical production start:
+
+```bash
+docker compose up -d --build
+```
+
+Do not replace this with long-running host `node` processes.
+
+---
+
+## 3. Required preparation
+
+Repository:
 
 ```bash
 cd /home/admin1/projects/astera_v8
-cp .env.example .env
+pwd
 ```
 
-設定Category:
+Production `.env` is prepared from the required configuration fields; `.env.example` is a **field reference**, not a substitute for production secrets or environment-specific endpoints.
+
+Do not commit `.env` or Secret files.
+
+### Core
 
 ```text
-ASTERA_HOST
 ASTERA_PORT
-ASTERA_CORS_ORIGINS
-ASTERA_REQUIRE_HTTPS
-ASTERA_ENABLE_HSTS
-ASTERA_TGS_ENABLED
+ASTERA_API_KEY
+ASTERA_SKILL_API_KEY
+ASTERA_JAPANESE_PARSER_MODE
+ASTERA_JAPANESE_PARSER_URL
+ASTERA_JAPANESE_PARSER_API_KEY
+ASTERA_JAPANESE_PARSER_DEADLINE_MS
+ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST
 ASTERA_TGS_URL
 ASTERA_TGS_PROJECT_ID
-ASTERA_LOG_CACHE_DIR
-LLM_CHAIN
 ```
 
-`KAGURA_*` は対応する `ASTERA_*` のエイリアスとして受理されます。新しい account / commerce の正本ではありません。Skill / API key は Core transport 用のみ設定します。
+For production containers, Japanese Parser should be configured through the intended private HTTP boundary reachable from the Core container/runtime path.
 
-## 4. Validate before deployment
+### Evaluator
+
+```text
+ASTERA_EVALUATOR_API_HOST
+ASTERA_EVALUATOR_API_PORT
+ASTERA_API_KEY
+ASTERA_SKILL_API_KEY
+ASTERA_LOG_CACHE_DIR
+```
+
+The production target is a private/internal bind.
+
+### Evidence Search
+
+```text
+ASTERA_EVIDENCE_HOST
+ASTERA_EVIDENCE_PORT
+ASTERA_EVIDENCE_URL
+ASTERA_EVIDENCE_PROVIDER_CONFIG
+ASTERA_EVIDENCE_DB
+ASTERA_EVIDENCE_DURABLE_SPOOL
+ASTERA_INTERNAL_SERVICE_SECRET_FILE_HOST
+ASTERA_EVIDENCE_SPOOL_KEY_FILE_HOST
+ASTERA_SEARCH_GLOBAL_CONCURRENCY
+ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY
+```
+
+### Optional Cloudflare profile
+
+```text
+CLOUDFLARE_TUNNEL_TOKEN_FILE
+```
+
+Secret values themselves must not be printed into docs, Chat output or Git history.
+
+---
+
+## 4. External/runtime prerequisites
+
+The Compose file does not create every dependency used by Astera.
+
+### Japanese Parser
+
+Production Core requires a reachable private Parser boundary using the configured mode/URL/API key.
+
+A missing/unreachable Parser is Parser/infrastructure failure, not user clarification.
+
+### Evidence providers
+
+Evidence Search requires a usable Provider configuration and source catalog, plus the runtime bindings required by the module.
+
+A running container does not by itself prove Evidence Search is READY.
+
+### TGserver
+
+TGserver is an external Logging boundary. It is not one of the three Astera modules and does not define the truth of a Judgment/Evidence/Evaluation result.
+
+---
+
+## 5. Validate source before deployment
+
+At the deployment candidate SHA:
 
 ```bash
-npm test
-bash scripts/smoke.sh
-npm run verify
+npm run verify:release
+npm run verify:evidence
 docker compose config
 ```
 
-失敗した場合はDeployを続行しません。
+Run required live Evidence gates on the same candidate SHA where network/provider execution is part of the production acceptance criteria.
 
-## 5. Deploy
+Do not treat old-SHA results as proof for the current candidate.
+
+---
+
+## 6. Start
 
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://127.0.0.1:7373/healthz
 ```
 
-## 6. Ingress
+Service startup ordering must not redefine module responsibility. Dependencies exist only to guarantee required runtime availability.
 
-- Runtime Portを直接Internetへ公開しない
-- CloudflareまたはReverse ProxyでHTTPS終端
-- Client Originを限定
-- Body size / timeout / rate policyを外側でも設定
-- Account / Gatewayを経由する公開Contractを優先
+---
 
-## 7. Logging
+## 7. Health verification
+
+Check all three independently.
+
+```bash
+curl -fsS http://127.0.0.1:7373/healthz
+curl -fsS http://127.0.0.1:7374/healthz
+curl -fsS http://127.0.0.1:7376/healthz
+```
+
+Interpretation:
 
 ```text
-Runtime
-  → secret removal
-  → TGserver
-  → success: outbox deletion
-  → failure: temporary outbox retry
+7373 healthy = Core HTTP process ready
+7374 healthy = Evaluator HTTP process ready
+7376 healthy = Evidence Search searchable runtime ready
 ```
 
-Outboxは監査DBやKnowledge Baseではありません。
+Do not collapse these into a single “Astera is healthy” claim if one service is unavailable.
 
-## 8. Evaluator
+---
 
-Evaluator APIを使用する場合は別Process / Serviceとして配備します。Root Composeが自動起動する前提にしません。
+## 8. Runtime functional verification
 
-## 9. Rollback
+### Core
 
-- Deploy前Commit SHAを記録
-- Image / configの戻し先を用意
-- DB / state schema変更は別Migrationとして扱う
-- App-owned account / commerce Contract が稼働していることを確認してから Core を更新する
-- Rollback後にhealth、smoke、主要Storyを再確認
+Verify authenticated `/process` behavior and Main8 order.
 
-## 10. Prohibited
+### Evaluator
 
-- `.env` Commit
-- SecretのChat / README貼付
-- Runtime Portの無保護公開
-- Node direct processの本番常駐
-- Account / Square / Credit DBのRuntime内再構築
-- Test未実行状態の完成扱い
+Verify `/v2/evaluate` using a valid `astera.evaluation.request.v2` fixture/contract.
+
+Verify both required Evidence modes as applicable:
+
+```text
+Provided Evidence Registry / Binding
+Evidence Search API
+```
+
+### Evidence Search
+
+Verify the signed internal `POST /internal/v1/evidence/search` route using the canonical caller/client implementation.
+
+Live Provider success must be proven separately from source/unit test success.
+
+---
+
+## 9. Network / ingress
+
+- Core 7373, Evaluator 7374 and Evidence Search 7376 remain private/internal.
+- Do not intentionally expose internal service ports directly to the Internet.
+- External access uses a separately authenticated ingress/reverse proxy design.
+- Terminate HTTPS at the approved ingress layer.
+- Restrict CORS for browser-accessible normal API routes.
+- Keep Evidence Search internal endpoint internal.
+- Configure timeout/body/rate controls consistently with service contracts.
+- Cloudflare is infrastructure support, not module logic.
+
+---
+
+## 10. Data / recovery
+
+Evidence Search persistent operational state includes:
+
+```text
+Evidence Search DB
+Durable Evidence job spool
+```
+
+Evidence Search recovery data is operational state, not the final long-term Knowledge Base of Astera.
+
+Protect:
+
+- data volume
+- internal service secret file
+- Evidence spool encryption key file
+
+Backup/restore policy must preserve the relationship between encrypted spool data and its key.
+
+---
+
+## 11. Logging
+
+Core/Evaluator/Evidence paths use the structured logging boundary where configured.
+
+```text
+Service event
+→ secret masking / structured logging boundary
+→ TGserver when configured
+→ temporary outbox on delivery failure
+```
+
+Logging success is not Evidence validity or Evaluation success.
+
+---
+
+## 12. Rollback
+
+Before deploy:
+
+- record exact Git commit SHA
+- record current image/config state
+- ensure data/secret backup path exists
+- identify rollback SHA/image
+
+After rollback:
+
+```text
+1. docker compose config
+2. start services
+3. check 7373 / 7374 / 7376 health
+4. run required Core/Evidence/Evaluator functional checks
+5. confirm Provider/Parser external boundaries
+6. confirm private bind/ingress state
+```
+
+---
+
+## 13. Prohibited deployment shortcuts
+
+- Commit `.env`
+- Print Secret values into logs/docs/chat
+- Keep production Node processes directly on host instead of canonical containers
+- Expose Evidence Search internal endpoint publicly
+- Skip valid Generic v2 request/integrity checks
+- Declare Evidence Search ready from container status alone
+- Declare Generic Evaluator complete from Legacy v1 tests alone
+- Treat `PASSED` as deployment permission
+- Skip current-SHA verification because an older build passed
+
+---
+
+## 14. Related documents
+
+- [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md)
+- [`API_REFERENCE.md`](API_REFERENCE.md)
+- [`SECURITY_NOTES.md`](SECURITY_NOTES.md)
+- [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
+- [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
