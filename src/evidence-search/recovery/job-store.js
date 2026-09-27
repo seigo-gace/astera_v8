@@ -156,6 +156,9 @@ class EvidenceJobStore {
       listArtifacts: this.db.prepare(
         'SELECT * FROM evidence_artifacts WHERE job_id = ? ORDER BY created_at ASC, stage ASC'
       ),
+      deleteArtifact: this.db.prepare(
+        'DELETE FROM evidence_artifacts WHERE job_id = ? AND stage = ?'
+      ),
       acquireLease: this.db.prepare(`
         UPDATE evidence_jobs SET
           lease_owner = ?,
@@ -289,6 +292,14 @@ class EvidenceJobStore {
       this.statements.listArtifacts.all(safeString(jobId, 'jobId', 128))
         .map((row) => Object.freeze({ ...row }))
     );
+  }
+
+  removeArtifact(jobId, stage) {
+    const result = this.statements.deleteArtifact.run(
+      safeString(jobId, 'jobId', 128),
+      safeString(stage, 'stage', 128)
+    );
+    return result.changes === 1;
   }
 
   acquireLease(jobId, owner, durationMs = 30_000, now = Date.now()) {

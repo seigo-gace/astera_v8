@@ -374,6 +374,284 @@ test('job store rejects backward transitions and stale CAS versions', async () =
   }
 });
 
+test('checkpoint transition failure does not leave a future recovery artifact', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-checkpoint-skew',
+      requestId: 'request-checkpoint-skew',
+      idempotencyKey: 'checkpoint-skew-operation'
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    const transitionError = Object.assign(new Error('injected PLANNED transition conflict'), {
+      code: 'EVIDENCE_JOB_CAS_CONFLICT'
+    });
+    const transition = value.store.transition.bind(value.store);
+    value.store.transition = (...args) => {
+      if (args[2] === 'PLANNED') throw transitionError;
+      return transition(...args);
+    };
+
+    let checkpointError;
+    try {
+      value.manager.checkpoint(authenticated, 'PLANNED', { query_plan_hash: 'd'.repeat(64) });
+    } catch (error) {
+      checkpointError = error;
+    }
+
+    const stored = value.store.readJob(authenticated.job_id);
+    const artifacts = value.store.listArtifacts(authenticated.job_id);
+    const latest = value.manager.readLatestValidCheckpoint(authenticated.job_id);
+    const plannedFile = value.spool.artifactPath(
+      authenticated.caller_id,
+      authenticated.job_id,
+      'PLANNED'
+    );
+    value.store.releaseLease(authenticated.job_id, value.manager.workerId);
+    const recoverable = value.manager.recoverable()
+      .find((entry) => entry.job.job_id === authenticated.job_id);
+
+    assert.deepEqual({
+      transition_error: checkpointError?.code,
+      db_state: stored.state,
+      artifact_stages: artifacts.map((artifact) => artifact.stage),
+      planned_file_exists: fs.existsSync(plannedFile),
+      latest_stage: latest.artifact?.stage,
+      recoverable_state: recoverable?.job.state,
+      recoverable_latest_stage: recoverable?.latest.artifact?.stage
+    }, {
+      transition_error: 'EVIDENCE_JOB_CAS_CONFLICT',
+      db_state: 'AUTHENTICATED',
+      artifact_stages: ['AUTHENTICATED'],
+      planned_file_exists: false,
+      latest_stage: 'AUTHENTICATED',
+      recoverable_state: 'AUTHENTICATED',
+      recoverable_latest_stage: 'AUTHENTICATED'
+    });
+  } finally {
+    await cleanup(value);
+  }
+});
+
+test('complete transition failure does not leave a terminal recovery artifact', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-complete-skew',
+      requestId: 'request-complete-skew',
+      idempotencyKey: 'complete-skew-operation'
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    const transitionError = Object.assign(new Error('injected terminal transition conflict'), {
+      code: 'EVIDENCE_JOB_CAS_CONFLICT'
+    });
+    const transition = value.store.transition.bind(value.store);
+    value.store.transition = (...args) => {
+      if (args[2] === 'FINAL_VALID') throw transitionError;
+      return transition(...args);
+    };
+
+    let completeError;
+    try {
+      value.manager.complete(authenticated, {
+        status: 'FINAL_VALID',
+        evidence: [],
+        quality: {
+          initial: { score_bp: 10_000 },
+          final: { score_bp: 10_000 },
+          reinforcement_attempt_count: 0
+        },
+        effective_as_of: '2026-09-27T00:00:00.000Z',
+        query_plan_hash: 'e'.repeat(64)
+      });
+    } catch (error) {
+      completeError = error;
+    }
+
+    const stored = value.store.readJob(authenticated.job_id);
+    const artifacts = value.store.listArtifacts(authenticated.job_id);
+    const latest = value.manager.readLatestValidCheckpoint(authenticated.job_id);
+    const terminalFile = value.spool.artifactPath(
+      authenticated.caller_id,
+      authenticated.job_id,
+      'FINAL_VALID'
+    );
+
+    assert.deepEqual({
+      transition_error: completeError?.code,
+      db_state: stored.state,
+      artifact_stages: artifacts.map((artifact) => artifact.stage),
+      terminal_file_exists: fs.existsSync(terminalFile),
+      latest_stage: latest.artifact?.stage,
+      lease_owner: stored.lease_owner
+    }, {
+      transition_error: 'EVIDENCE_JOB_CAS_CONFLICT',
+      db_state: 'AUTHENTICATED',
+      artifact_stages: ['AUTHENTICATED'],
+      terminal_file_exists: false,
+      latest_stage: 'AUTHENTICATED',
+      lease_owner: value.manager.workerId
+    });
+  } finally {
+    await cleanup(value);
+  }
+});
+
+test('API converts a complete transition failure to ERROR without retaining a terminal artifact', async () => {
+  const value = await runtime();
+  let api;
+  try {
+    const transitionError = Object.assign(new Error('injected terminal transition conflict'), {
+      code: 'EVIDENCE_JOB_CAS_CONFLICT'
+    });
+    const transition = value.store.transition.bind(value.store);
+    value.store.transition = (...args) => {
+      if (args[2] === 'FINAL_VALID') throw transitionError;
+      return transition(...args);
+    };
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          return {
+            status: 'OK',
+            operation: 'SEARCH_EVIDENCE',
+            result: {
+              status: 'FINAL_VALID',
+              evidence: [],
+              quality: {
+                initial: { score_bp: 10_000 },
+                final: { score_bp: 10_000 },
+                reinforcement_attempt_count: 0
+              },
+              effective_as_of: '2026-09-27T00:00:00.000Z',
+              query_plan_hash: 'f'.repeat(64),
+              duration_ms: 0
+            }
+          };
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+    const address = api.server.address();
+    const callerId = 'caller-api-complete-skew';
+    const requestBody = JSON.stringify({
+      idempotency_key: 'api-complete-skew-operation',
+      paid_search: { enabled: false }
+    });
+    const headers = createInternalHeaders({
+      body: requestBody,
+      secret: INTERNAL_SECRET,
+      service: 'astera-main',
+      callerId,
+      requestId: 'request-api-complete-skew'
+    });
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/internal/v1/evidence/search`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: requestBody
+      }
+    );
+    const body = await response.json();
+    const stored = value.store.readJob(body.jobId);
+    const artifacts = value.store.listArtifacts(body.jobId);
+    const terminalFile = value.spool.artifactPath(callerId, body.jobId, 'FINAL_VALID');
+
+    assert.deepEqual({
+      response_status: response.status,
+      response_code: body.code,
+      db_state: stored.state,
+      error_code: stored.error_code,
+      lease_owner: stored.lease_owner,
+      artifact_stages: artifacts.map((artifact) => artifact.stage),
+      terminal_file_exists: fs.existsSync(terminalFile)
+    }, {
+      response_status: 409,
+      response_code: 'EVIDENCE_JOB_CAS_CONFLICT',
+      db_state: 'ERROR',
+      error_code: 'EVIDENCE_JOB_CAS_CONFLICT',
+      lease_owner: null,
+      artifact_stages: ['AUTHENTICATED', 'ERROR'],
+      terminal_file_exists: false
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('checkpoint preserves the transition error and reports compensation failures', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-compensation-failure',
+      requestId: 'request-compensation-failure',
+      idempotencyKey: 'compensation-failure-operation'
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    const transitionError = Object.assign(new Error('injected PLANNED transition conflict'), {
+      code: 'EVIDENCE_JOB_CAS_CONFLICT'
+    });
+    const metadataCleanupError = Object.assign(new Error('injected metadata cleanup failure'), {
+      code: 'INJECTED_METADATA_CLEANUP_FAILURE'
+    });
+    const fileCleanupError = Object.assign(new Error('injected file cleanup failure'), {
+      code: 'INJECTED_FILE_CLEANUP_FAILURE'
+    });
+    const transition = value.store.transition.bind(value.store);
+    value.store.transition = (...args) => {
+      if (args[2] === 'PLANNED') throw transitionError;
+      return transition(...args);
+    };
+    value.store.removeArtifact = () => {
+      throw metadataCleanupError;
+    };
+    value.spool.remove = () => {
+      throw fileCleanupError;
+    };
+
+    let checkpointError;
+    try {
+      value.manager.checkpoint(authenticated, 'PLANNED', { query_plan_hash: '0'.repeat(64) });
+    } catch (error) {
+      checkpointError = error;
+    }
+
+    assert.equal(checkpointError, transitionError);
+    assert.deepEqual(
+      checkpointError.cleanup_errors,
+      [metadataCleanupError, fileCleanupError]
+    );
+    assert.equal(value.store.readJob(authenticated.job_id).state, 'AUTHENTICATED');
+    assert.equal(
+      value.manager.readLatestValidCheckpoint(authenticated.job_id).artifact.stage,
+      'PLANNED'
+    );
+  } finally {
+    await cleanup(value);
+  }
+});
+
 test('job failure propagates an ERROR artifact spool failure after transitioning and releasing the lease', async () => {
   const value = await runtime();
   try {

@@ -43,6 +43,32 @@ class EvidenceJobManager {
     return Object.freeze({ job: this.store.readJob(job.job_id), reusedTerminal: false });
   }
 
+  _transitionWithArtifactCompensation(artifact, transition) {
+    try {
+      return transition();
+    } catch (transitionError) {
+      const cleanupErrors = [];
+      try {
+        this.store.removeArtifact(artifact.job_id, artifact.stage);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      try {
+        this.spool.remove(artifact);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      if (cleanupErrors.length > 0) {
+        Object.defineProperty(transitionError, 'cleanup_errors', {
+          configurable: true,
+          enumerable: true,
+          value: Object.freeze(cleanupErrors)
+        });
+      }
+      throw transitionError;
+    }
+  }
+
   checkpoint(job, lifecycleState, value, patch = {}) {
     const nextState = LIFECYCLE_TO_JOB_STATE[lifecycleState];
     if (!nextState) {
@@ -66,11 +92,14 @@ class EvidenceJobManager {
       value
     });
     this.store.recordArtifact(artifact);
-    return this.store.transition(
-      current.job_id,
-      current.state_version,
-      nextState,
-      patch
+    return this._transitionWithArtifactCompensation(
+      artifact,
+      () => this.store.transition(
+        current.job_id,
+        current.state_version,
+        nextState,
+        patch
+      )
     );
   }
 
@@ -96,18 +125,21 @@ class EvidenceJobManager {
       value: result
     });
     this.store.recordArtifact(artifact);
-    const completed = this.store.transition(
-      current.job_id,
-      current.state_version,
-      terminalState,
-      {
-        effective_as_of: result.effective_as_of || null,
-        query_plan_hash: result.query_plan_hash || null,
-        initial_score_bp: result.quality?.initial?.score_bp ?? null,
-        final_score_bp: result.quality?.final?.score_bp ?? null,
-        reinforcement_attempt_count:
-          result.quality?.reinforcement_attempt_count ?? 0
-      }
+    const completed = this._transitionWithArtifactCompensation(
+      artifact,
+      () => this.store.transition(
+        current.job_id,
+        current.state_version,
+        terminalState,
+        {
+          effective_as_of: result.effective_as_of || null,
+          query_plan_hash: result.query_plan_hash || null,
+          initial_score_bp: result.quality?.initial?.score_bp ?? null,
+          final_score_bp: result.quality?.final?.score_bp ?? null,
+          reinforcement_attempt_count:
+            result.quality?.reinforcement_attempt_count ?? 0
+        }
+      )
     );
     this.store.releaseLease(current.job_id, this.workerId);
     return completed;
