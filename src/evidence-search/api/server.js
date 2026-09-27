@@ -28,7 +28,12 @@ function statusForError(error) {
     || code === 'INTERNAL_REQUEST_EXPIRED'
     || code === 'INTERNAL_BODY_HASH_MISMATCH'
   ) return 403;
-  if (code === 'EVIDENCE_JOB_LEASE_CONFLICT' || code === 'EVIDENCE_JOB_CAS_CONFLICT') return 409;
+  if (
+    code === 'EVIDENCE_JOB_LEASE_CONFLICT'
+    || code === 'EVIDENCE_JOB_CAS_CONFLICT'
+    || code === 'EVIDENCE_RECOVERY_REQUEST_MISMATCH'
+    || code === 'EVIDENCE_RECOVERY_PLAN_MISMATCH'
+  ) return 409;
   if (
     code.startsWith('INVALID_')
     || code === 'NO_CORE_CONDITION'
@@ -283,6 +288,8 @@ class EvidenceSearchApiServer {
       }
 
       let lifecycle;
+      let recovery = null;
+      const executionTime = new Date().toISOString();
       if (this.jobManager) {
         const started = this.jobManager.begin({
           callerId: identity.caller_id,
@@ -300,35 +307,65 @@ class EvidenceSearchApiServer {
           return this._json(res, 200, this._terminalReplay(activeJob));
         }
 
-        activeJob = this.jobManager.checkpoint(
-          activeJob,
-          'AUTHENTICATED',
-          {
-            request_id: identity.request_id,
-            caller_id: identity.caller_id,
-            body_sha256: sha256(rawBody),
-            domain_lens: payload.domain_lens || null,
-            free_projection: payload.search?.free_projection !== false,
-            free_current: payload.search?.free_current !== false
+        if (started.reusedNonterminal && activeJob.state !== 'RECEIVED') {
+          recovery = this.jobManager.readRecoverySnapshot(activeJob.job_id);
+          const authenticated = recovery.stages.AUTHENTICATED;
+          if (
+            typeof authenticated?.body_sha256 !== 'string'
+            || !/^[a-f0-9]{64}$/i.test(authenticated.body_sha256)
+            || typeof (activeJob.effective_as_of || authenticated.execution_time) !== 'string'
+          ) {
+            const error = new Error('recovery AUTHENTICATED checkpoint is incomplete');
+            error.code = 'RECOVERY_ARTIFACT_INVALID';
+            throw error;
           }
-        );
+          if (authenticated.body_sha256 !== sha256(rawBody)) {
+            const error = new Error('recovery request does not match the authenticated request');
+            error.code = 'EVIDENCE_RECOVERY_REQUEST_MISMATCH';
+            throw error;
+          }
+        } else {
+          activeJob = this.jobManager.checkpoint(
+            activeJob,
+            'AUTHENTICATED',
+            {
+              request_id: identity.request_id,
+              caller_id: identity.caller_id,
+              body_sha256: sha256(rawBody),
+              execution_time: executionTime,
+              domain_lens: payload.domain_lens || null,
+              free_projection: payload.search?.free_projection !== false,
+              free_current: payload.search?.free_current !== false
+            },
+            { effective_as_of: payload.as_of || executionTime }
+          );
+        }
         lifecycle = this.jobManager.lifecycle(activeJob);
       }
+
+      const recoveryExecutionTime = recovery
+        ? recovery.stages.AUTHENTICATED.execution_time || activeJob.effective_as_of
+        : executionTime;
+      const executionRequestId = recovery ? activeJob.request_id : identity.request_id;
 
       const response = await this.module.execute({
         schema_version: 'astera.evidence-search.module-request.v1',
         operation: 'SEARCH_EVIDENCE',
         context: {
           caller_id: identity.caller_id,
-          request_id: identity.request_id,
-          execution_time: new Date().toISOString(),
+          request_id: executionRequestId,
+          execution_time: recoveryExecutionTime,
+          ...(recovery ? {
+            effective_as_of: activeJob.effective_as_of,
+            recovery
+          } : {}),
           lifecycle,
           signal: requestCancellation.signal
         },
         payload: {
           ...payload,
           caller_id: identity.caller_id,
-          request_id: identity.request_id,
+          request_id: executionRequestId,
           paid_search: { enabled: false }
         }
       });

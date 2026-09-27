@@ -12,7 +12,11 @@ const { EvidenceJobStore } = require('../src/evidence-search/recovery/job-store'
 const { DurableEvidenceSpool } = require('../src/evidence-search/recovery/durable-spool');
 const { EvidenceJobManager } = require('../src/evidence-search/recovery/job-manager');
 const EvidenceSearchApiServer = require('../src/evidence-search/api/server');
-const { createInternalHeaders } = require('../src/evidence-search/api/internal-auth');
+const createEvidenceSearchModule = require('../src/evidence-search');
+const {
+  createJsonProjectionProvider
+} = require('../src/evidence-search/providers/json-projection-provider');
+const { createInternalHeaders, sha256 } = require('../src/evidence-search/api/internal-auth');
 
 const INTERNAL_SECRET = 'recovery-test-internal-secret-0000000000000000';
 
@@ -777,12 +781,17 @@ test('job failure prioritizes an ERROR state transition error over an artifact e
   assert.equal(releaseCalls, 1);
 });
 
-async function signedRecoverySearch({ api, callerId, requestId, idempotencyKey }) {
-  const address = api.server.address();
-  const body = JSON.stringify({
+function recoveryRequestBody(idempotencyKey, payload = {}) {
+  return JSON.stringify({
     idempotency_key: idempotencyKey,
-    paid_search: { enabled: false }
+    paid_search: { enabled: false },
+    ...payload
   });
+}
+
+async function signedRecoverySearch({ api, callerId, requestId, idempotencyKey, payload }) {
+  const address = api.server.address();
+  const body = recoveryRequestBody(idempotencyKey, payload);
   const headers = createInternalHeaders({
     body,
     secret: INTERNAL_SECRET,
@@ -924,6 +933,580 @@ test('active leases reject every owner and expired leases can be reacquired', as
     assert.equal(value.store.acquireLease(job.job_id, 'second-owner', 1000, 10_500), false);
     assert.equal(value.store.acquireLease(job.job_id, 'second-owner', 1000, 11_001), true);
   } finally {
+    await cleanup(value);
+  }
+});
+
+const RECOVERY_EFFECTIVE_AS_OF = '2026-09-27T05:00:00.000Z';
+const RECOVERY_PAYLOAD = Object.freeze({
+  question: 'Node.js 22 crash recovery evidence',
+  domain_lens: { id: 'G29', taxonomy_version: '1.0.0' },
+  conditions: [{
+    condition_id: 'core_claim',
+    class: 'CORE',
+    field: 'fields.claim',
+    operator: 'EQ',
+    expected_value: 'Node.js 22 is supported',
+    required: true
+  }],
+  search: { free_projection: true, free_current: true, free_general_web: true },
+  maximum_results: 16,
+  deadline_ms: 8000
+});
+
+function recoveryRecord({ id, authority, role, family, capability = 'projection_search' }) {
+  return {
+    canonical_record_id: id,
+    canonical_url: `https://example.test/${id}`,
+    authority_id: authority,
+    publisher_id: authority,
+    publisher_name: authority,
+    source_role: role,
+    source_family_id: family,
+    capability_id: capability,
+    title: `Node.js 22 crash recovery evidence from ${authority}`,
+    excerpt: `${authority} independently confirms Node.js 22 support.`,
+    language: 'en',
+    updated_at: RECOVERY_EFFECTIVE_AS_OF,
+    version: '22.0.0',
+    revision_id: `${id}-revision-1`,
+    retrieval_trace: { current_pointer_verified: true },
+    rights: { access: 'public', reuse: 'allowed' },
+    fields: { domain_id: 'G29', claim: 'Node.js 22 is supported' },
+    lineage_fingerprint: {
+      authority_id: authority,
+      publisher_id: authority,
+      origin_record_id: id,
+      publication_event_id: `${id}-publication`
+    }
+  };
+}
+
+function recoveryProvider(options, counter, counters) {
+  const provider = createJsonProjectionProvider(options);
+  return {
+    ...provider,
+    async search(...args) {
+      counters[counter] += 1;
+      return provider.search(...args);
+    }
+  };
+}
+
+function recoveryModuleFixture(options = {}) {
+  const counters = {
+    module: 0,
+    initial_provider: 0,
+    reinforcement_provider: 0,
+    initial_evaluator: 0,
+    final_evaluator: 0
+  };
+  const providers = [
+    recoveryProvider({
+      provider_id: 'recovery-projection-primary',
+      source_class: 'FREE_PROJECTION',
+      source_family_id: 'recovery-family-primary',
+      capabilities: ['NO_REINFORCEMENT'],
+      domains: ['G29'],
+      records: [recoveryRecord({
+        id: 'recovery-primary-record',
+        authority: 'recovery-authority-primary',
+        role: 'PRIMARY',
+        family: 'recovery-family-primary'
+      })]
+    }, 'initial_provider', counters),
+    recoveryProvider({
+      provider_id: 'recovery-official-current',
+      source_class: 'FREE_OFFICIAL_LIVE',
+      source_family_id: 'recovery-family-official',
+      capabilities: ['NO_REINFORCEMENT'],
+      domains: ['G29'],
+      records: [recoveryRecord({
+        id: 'recovery-official-record',
+        authority: 'recovery-authority-official',
+        role: 'OFFICIAL',
+        family: 'recovery-family-official'
+      })]
+    }, 'initial_provider', counters),
+    recoveryProvider({
+      provider_id: 'recovery-independent-reinforcement',
+      source_class: 'FREE_OFFICIAL_LIVE',
+      source_family_id: 'recovery-family-independent',
+      capabilities: ['REINFORCEMENT_ONLY'],
+      domains: ['G29'],
+      records: [recoveryRecord({
+        id: 'recovery-independent-record',
+        authority: 'recovery-authority-independent',
+        role: 'OFFICIAL',
+        family: 'recovery-family-independent',
+        capability: 'independent_origin'
+      })]
+    }, 'reinforcement_provider', counters)
+  ];
+  const actualModule = createEvidenceSearchModule({
+    providers,
+    informationQualityEvaluator(request) {
+      if (request.phase === 'INITIAL') {
+        counters.initial_evaluator += 1;
+        return {
+          status: options.initialStatus || 'REINFORCEMENT_REQUIRED',
+          score_bp: options.initialScoreBp ?? 8500
+        };
+      }
+      counters.final_evaluator += 1;
+      return { status: 'FINAL_VALID', score_bp: 9600 };
+    }
+  });
+  const module = Object.freeze({
+    async execute(request) {
+      counters.module += 1;
+      return actualModule.execute(request);
+    }
+  });
+  return { module, counters };
+}
+
+function resetRecoveryCounters(counters) {
+  for (const key of Object.keys(counters)) counters[key] = 0;
+}
+
+async function createCrashedRecoveryJob({
+  value,
+  module,
+  crashStage,
+  callerId,
+  idempotencyKey,
+  payload = RECOVERY_PAYLOAD
+}) {
+  const body = recoveryRequestBody(idempotencyKey, payload);
+  const started = value.manager.begin({
+    callerId,
+    requestId: `request-crash-${crashStage.toLowerCase()}`,
+    idempotencyKey
+  });
+  let activeJob = value.manager.checkpoint(
+    started.job,
+    'AUTHENTICATED',
+    {
+      request_id: started.job.request_id,
+      caller_id: callerId,
+      body_sha256: sha256(body),
+      execution_time: RECOVERY_EFFECTIVE_AS_OF,
+      domain_lens: payload.domain_lens,
+      free_projection: true,
+      free_current: true
+    },
+    { effective_as_of: RECOVERY_EFFECTIVE_AS_OF }
+  );
+  if (crashStage !== 'AUTHENTICATED') {
+    const crash = Object.assign(new Error(`simulated crash after ${crashStage}`), {
+      code: 'SIMULATED_PROCESS_CRASH'
+    });
+    await assert.rejects(
+      module.execute({
+        schema_version: 'astera.evidence-search.module-request.v1',
+        operation: 'SEARCH_EVIDENCE',
+        context: {
+          caller_id: callerId,
+          request_id: started.job.request_id,
+          execution_time: RECOVERY_EFFECTIVE_AS_OF,
+          effective_as_of: RECOVERY_EFFECTIVE_AS_OF,
+          lifecycle: async (state, checkpointValue, patch) => {
+            activeJob = value.manager.checkpoint(activeJob, state, checkpointValue, patch);
+            if (state === crashStage) throw crash;
+          }
+        },
+        payload: {
+          ...payload,
+          idempotency_key: idempotencyKey,
+          caller_id: callerId,
+          request_id: started.job.request_id,
+          paid_search: { enabled: false }
+        }
+      }),
+      (error) => error === crash
+    );
+  }
+  const crashed = value.store.readJob(started.job.job_id);
+  assert.equal(crashed.state, crashStage);
+  value.store.db.prepare(
+    'UPDATE evidence_jobs SET lease_until = ? WHERE job_id = ?'
+  ).run('1970-01-01T00:00:00.000Z', crashed.job_id);
+  return { body, job: value.store.readJob(crashed.job_id) };
+}
+
+async function startRecoveryApi({ value, module }) {
+  const api = new EvidenceSearchApiServer({
+    port: 0,
+    host: '127.0.0.1',
+    logger: { write() {}, async flush() {} },
+    internalSecret: INTERNAL_SECRET,
+    jobManager: value.manager,
+    closeJobManagerOnStop: false,
+    module
+  });
+  api.start();
+  await once(api.server, 'listening');
+  return api;
+}
+
+const RECOVERY_EXPECTED_RERUNS = Object.freeze({
+  AUTHENTICATED: {
+    initial_provider: 2,
+    initial_evaluator: 1,
+    reinforcement_provider: 1,
+    final_evaluator: 1
+  },
+  PLANNED: {
+    initial_provider: 2,
+    initial_evaluator: 1,
+    reinforcement_provider: 1,
+    final_evaluator: 1
+  },
+  INITIAL_SEARCH_COMPLETED: {
+    initial_provider: 0,
+    initial_evaluator: 1,
+    reinforcement_provider: 1,
+    final_evaluator: 1
+  },
+  INITIAL_JUDGED: {
+    initial_provider: 0,
+    initial_evaluator: 0,
+    reinforcement_provider: 1,
+    final_evaluator: 1
+  },
+  REINFORCEMENT_COMPLETED: {
+    initial_provider: 0,
+    initial_evaluator: 0,
+    reinforcement_provider: 0,
+    final_evaluator: 1
+  },
+  FINAL_JUDGED: {
+    initial_provider: 0,
+    initial_evaluator: 0,
+    reinforcement_provider: 0,
+    final_evaluator: 0
+  }
+});
+
+test('request-driven durable recovery resumes every nonterminal checkpoint stage', async (t) => {
+  for (const [stage, expectedReruns] of Object.entries(RECOVERY_EXPECTED_RERUNS)) {
+    await t.test(stage, async () => {
+      const value = await runtime();
+      const fixture = recoveryModuleFixture();
+      let api;
+      try {
+        const callerId = `caller-resume-${stage.toLowerCase()}`;
+        const idempotencyKey = `resume-${stage.toLowerCase()}`;
+        const crashed = await createCrashedRecoveryJob({
+          value,
+          module: fixture.module,
+          crashStage: stage,
+          callerId,
+          idempotencyKey
+        });
+        resetRecoveryCounters(fixture.counters);
+        api = await startRecoveryApi({ value, module: fixture.module });
+
+        const response = await signedRecoverySearch({
+          api,
+          callerId,
+          requestId: `request-resume-${stage.toLowerCase()}`,
+          idempotencyKey,
+          payload: RECOVERY_PAYLOAD
+        });
+        const terminal = value.store.readJob(crashed.job.job_id);
+        const terminalArtifact = value.store.listArtifacts(crashed.job.job_id)
+          .find((artifact) => artifact.stage === 'FINAL_VALID');
+        const terminalCheckpoint = terminalArtifact
+          ? value.spool.read(terminalArtifact)
+          : null;
+
+        assert.deepEqual({
+          response_status: response.status,
+          result_status: response.body.status,
+          same_job_id: response.body.job_id === crashed.job.job_id,
+          db_state: terminal.state,
+          terminal_artifact: terminalCheckpoint?.stage,
+          lease_owner: terminal.lease_owner,
+          lease_until: terminal.lease_until,
+          module_calls: fixture.counters.module,
+          initial_provider: fixture.counters.initial_provider,
+          initial_evaluator: fixture.counters.initial_evaluator,
+          reinforcement_provider: fixture.counters.reinforcement_provider,
+          final_evaluator: fixture.counters.final_evaluator
+        }, {
+          response_status: 200,
+          result_status: 'FINAL_VALID',
+          same_job_id: true,
+          db_state: 'FINAL_VALID',
+          terminal_artifact: 'FINAL_VALID',
+          lease_owner: null,
+          lease_until: null,
+          module_calls: 1,
+          ...expectedReruns
+        });
+
+        const replay = await signedRecoverySearch({
+          api,
+          callerId,
+          requestId: `request-resume-replay-${stage.toLowerCase()}`,
+          idempotencyKey,
+          payload: RECOVERY_PAYLOAD
+        });
+        assert.equal(replay.status, 200);
+        assert.equal(replay.body.job_id, crashed.job.job_id);
+        assert.equal(replay.body.idempotent_replay, true);
+        assert.equal(fixture.counters.module, 1);
+      } finally {
+        if (api) await api.stop();
+        await cleanup(value);
+      }
+    });
+  }
+});
+
+test('FINAL_JUDGED recovery does not require a skipped reinforcement checkpoint', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture({
+    initialStatus: 'REJECTED_BLOCKING',
+    initialScoreBp: 7000
+  });
+  let api;
+  try {
+    const callerId = 'caller-resume-final-without-reinforcement';
+    const idempotencyKey = 'resume-final-without-reinforcement';
+    const crashed = await createCrashedRecoveryJob({
+      value,
+      module: fixture.module,
+      crashStage: 'FINAL_JUDGED',
+      callerId,
+      idempotencyKey
+    });
+    assert.equal(
+      value.store.listArtifacts(crashed.job.job_id)
+        .some((artifact) => artifact.stage === 'REINFORCEMENT_COMPLETED'),
+      false
+    );
+    resetRecoveryCounters(fixture.counters);
+    api = await startRecoveryApi({ value, module: fixture.module });
+
+    const response = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-resume-final-without-reinforcement',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.deepEqual({
+      response_status: response.status,
+      result_status: response.body.status,
+      same_job_id: response.body.job_id === crashed.job.job_id,
+      db_state: value.store.readJob(crashed.job.job_id).state,
+      module_calls: fixture.counters.module,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator,
+      reinforcement_provider: fixture.counters.reinforcement_provider,
+      final_evaluator: fixture.counters.final_evaluator
+    }, {
+      response_status: 200,
+      result_status: 'REJECTED_BLOCKING',
+      same_job_id: true,
+      db_state: 'REJECTED',
+      module_calls: 1,
+      initial_provider: 0,
+      initial_evaluator: 0,
+      reinforcement_provider: 0,
+      final_evaluator: 0
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('recovery rejects a modified request and replays the persisted mismatch error', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture();
+  let api;
+  try {
+    const callerId = 'caller-recovery-request-mismatch';
+    const idempotencyKey = 'recovery-request-mismatch';
+    const crashed = await createCrashedRecoveryJob({
+      value,
+      module: fixture.module,
+      crashStage: 'PLANNED',
+      callerId,
+      idempotencyKey
+    });
+    const protectedArtifacts = new Map(
+      value.store.listArtifacts(crashed.job.job_id)
+        .map((artifact) => [artifact.stage, artifact.ciphertext_sha256])
+    );
+    resetRecoveryCounters(fixture.counters);
+    api = await startRecoveryApi({ value, module: fixture.module });
+
+    const mismatch = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-mismatch',
+      idempotencyKey,
+      payload: { ...RECOVERY_PAYLOAD, question: 'modified recovery payload' }
+    });
+    assert.deepEqual({
+      status: mismatch.status,
+      code: mismatch.body.code,
+      module_calls: fixture.counters.module,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator,
+      reinforcement_provider: fixture.counters.reinforcement_provider,
+      final_evaluator: fixture.counters.final_evaluator,
+      db_state: value.store.readJob(crashed.job.job_id).state
+    }, {
+      status: 409,
+      code: 'EVIDENCE_RECOVERY_REQUEST_MISMATCH',
+      module_calls: 0,
+      initial_provider: 0,
+      initial_evaluator: 0,
+      reinforcement_provider: 0,
+      final_evaluator: 0,
+      db_state: 'ERROR'
+    });
+    for (const artifact of value.store.listArtifacts(crashed.job.job_id)) {
+      if (protectedArtifacts.has(artifact.stage)) {
+        assert.equal(artifact.ciphertext_sha256, protectedArtifacts.get(artifact.stage));
+      }
+    }
+
+    const replay = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-mismatch-replay',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.equal(replay.status, 409);
+    assert.equal(replay.body.code, 'EVIDENCE_RECOVERY_REQUEST_MISMATCH');
+    assert.equal(replay.body.idempotent_replay, true);
+    assert.equal(fixture.counters.module, 0);
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('recovery rejects a recomputed plan that differs from persisted plan identity', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture();
+  let api;
+  try {
+    const callerId = 'caller-recovery-plan-mismatch';
+    const idempotencyKey = 'recovery-plan-mismatch';
+    const crashed = await createCrashedRecoveryJob({
+      value,
+      module: fixture.module,
+      crashStage: 'PLANNED',
+      callerId,
+      idempotencyKey
+    });
+    value.store.db.prepare(
+      'UPDATE evidence_jobs SET query_plan_hash = ? WHERE job_id = ?'
+    ).run('f'.repeat(64), crashed.job.job_id);
+    resetRecoveryCounters(fixture.counters);
+    api = await startRecoveryApi({ value, module: fixture.module });
+
+    const response = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-plan-mismatch',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.deepEqual({
+      status: response.status,
+      code: response.body.code,
+      module_calls: fixture.counters.module,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator,
+      reinforcement_provider: fixture.counters.reinforcement_provider,
+      final_evaluator: fixture.counters.final_evaluator,
+      db_state: value.store.readJob(crashed.job.job_id).state
+    }, {
+      status: 409,
+      code: 'EVIDENCE_RECOVERY_PLAN_MISMATCH',
+      module_calls: 1,
+      initial_provider: 0,
+      initial_evaluator: 0,
+      reinforcement_provider: 0,
+      final_evaluator: 0,
+      db_state: 'ERROR'
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('recovery fails closed when a required checkpoint is corrupt', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture();
+  let api;
+  try {
+    const callerId = 'caller-recovery-corrupt-checkpoint';
+    const idempotencyKey = 'recovery-corrupt-checkpoint';
+    const crashed = await createCrashedRecoveryJob({
+      value,
+      module: fixture.module,
+      crashStage: 'INITIAL_JUDGED',
+      callerId,
+      idempotencyKey
+    });
+    const requiredArtifact = value.store.listArtifacts(crashed.job.job_id)
+      .find((artifact) => artifact.stage === 'INITIAL_SEARCH_COMPLETED');
+    fs.appendFileSync(requiredArtifact.file_path, Buffer.from('corrupt-recovery-checkpoint'));
+    resetRecoveryCounters(fixture.counters);
+    api = await startRecoveryApi({ value, module: fixture.module });
+
+    const response = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-corrupt-checkpoint',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.deepEqual({
+      status: response.status,
+      code: response.body.code,
+      module_calls: fixture.counters.module,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator,
+      reinforcement_provider: fixture.counters.reinforcement_provider,
+      final_evaluator: fixture.counters.final_evaluator,
+      db_state: value.store.readJob(crashed.job.job_id).state
+    }, {
+      status: 500,
+      code: 'RECOVERY_ARTIFACT_INVALID',
+      module_calls: 0,
+      initial_provider: 0,
+      initial_evaluator: 0,
+      reinforcement_provider: 0,
+      final_evaluator: 0,
+      db_state: 'ERROR'
+    });
+
+    const replay = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-recovery-corrupt-checkpoint-replay',
+      idempotencyKey,
+      payload: RECOVERY_PAYLOAD
+    });
+    assert.equal(replay.status, 500);
+    assert.equal(replay.body.code, 'RECOVERY_ARTIFACT_INVALID');
+    assert.equal(replay.body.idempotent_replay, true);
+    assert.equal(fixture.counters.module, 0);
+  } finally {
+    if (api) await api.stop();
     await cleanup(value);
   }
 });

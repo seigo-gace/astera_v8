@@ -13,6 +13,22 @@ const LIFECYCLE_TO_JOB_STATE = Object.freeze({
   FINAL_JUDGED: 'FINAL_JUDGED'
 });
 
+const RECOVERY_STAGE_ORDER = Object.freeze([
+  'AUTHENTICATED',
+  'PLANNED',
+  'INITIAL_SEARCH_COMPLETED',
+  'INITIAL_JUDGED',
+  'REINFORCEMENT_COMPLETED',
+  'FINAL_JUDGED'
+]);
+
+function recoveryArtifactError(stage, cause) {
+  const error = new Error(`required recovery checkpoint is missing or invalid: ${stage}`);
+  error.code = 'RECOVERY_ARTIFACT_INVALID';
+  if (cause) error.cause = cause;
+  return error;
+}
+
 function terminalStateFromResult(status) {
   return status === 'FINAL_VALID' ? 'FINAL_VALID' : 'REJECTED';
 }
@@ -33,14 +49,18 @@ class EvidenceJobManager {
       idempotencyKey: idempotencyKey || requestId
     });
     if (job.reused && ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(job.state)) {
-      return Object.freeze({ job, reusedTerminal: true });
+      return Object.freeze({ job, reusedTerminal: true, reusedNonterminal: false });
     }
     if (!this.store.acquireLease(job.job_id, this.workerId)) {
       const error = new Error('evidence job is already leased by another worker');
       error.code = 'EVIDENCE_JOB_LEASE_CONFLICT';
       throw error;
     }
-    return Object.freeze({ job: this.store.readJob(job.job_id), reusedTerminal: false });
+    return Object.freeze({
+      job: this.store.readJob(job.job_id),
+      reusedTerminal: false,
+      reusedNonterminal: job.reused === true
+    });
   }
 
   _transitionWithArtifactCompensation(artifact, transition) {
@@ -227,6 +247,62 @@ class EvidenceJobManager {
     return Object.freeze({ artifact: null, checkpoint: null, failures });
   }
 
+  readRecoverySnapshot(jobId) {
+    const job = this.store.readJob(jobId);
+    if (!job) {
+      const error = new Error(`evidence job not found: ${jobId}`);
+      error.code = 'EVIDENCE_JOB_NOT_FOUND';
+      throw error;
+    }
+    const stateIndex = RECOVERY_STAGE_ORDER.indexOf(job.state);
+    if (stateIndex < 0) {
+      return Object.freeze({ job, state: job.state, stages: Object.freeze({}) });
+    }
+
+    const artifacts = new Map(
+      this.store.listArtifacts(job.job_id).map((artifact) => [artifact.stage, artifact])
+    );
+    const stages = {};
+    const readRequired = (stage) => {
+      const artifact = artifacts.get(stage);
+      if (!artifact) throw recoveryArtifactError(stage);
+      try {
+        const checkpoint = this.spool.read(artifact);
+        if (!checkpoint || typeof checkpoint.value !== 'object' || checkpoint.value === null) {
+          throw recoveryArtifactError(stage);
+        }
+        stages[stage] = checkpoint.value;
+      } catch (cause) {
+        if (
+          cause?.code === 'RECOVERY_ARTIFACT_INVALID'
+          && String(cause.message || '').includes(stage)
+        ) {
+          throw cause;
+        }
+        throw recoveryArtifactError(stage, cause);
+      }
+    };
+
+    for (const stage of RECOVERY_STAGE_ORDER.slice(0, Math.min(stateIndex + 1, 4))) {
+      readRequired(stage);
+    }
+    if (job.state === 'REINFORCEMENT_COMPLETED') {
+      readRequired('REINFORCEMENT_COMPLETED');
+    } else if (
+      job.state === 'FINAL_JUDGED'
+      && stages.INITIAL_JUDGED?.status === 'REINFORCEMENT_REQUIRED'
+    ) {
+      readRequired('REINFORCEMENT_COMPLETED');
+    }
+    if (job.state === 'FINAL_JUDGED') readRequired('FINAL_JUDGED');
+
+    return Object.freeze({
+      job,
+      state: job.state,
+      stages: Object.freeze(stages)
+    });
+  }
+
   recoverable(limit = 100) {
     return this.store.listRecoverable(limit).map((job) => Object.freeze({
       job,
@@ -243,5 +319,6 @@ module.exports = {
   CHECKPOINT_SCHEMA,
   EvidenceJobManager,
   LIFECYCLE_TO_JOB_STATE,
+  RECOVERY_STAGE_ORDER,
   terminalStateFromResult
 };
