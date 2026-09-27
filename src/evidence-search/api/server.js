@@ -299,7 +299,22 @@ class EvidenceSearchApiServer {
 
       let completedJob = null;
       if (this.jobManager && activeJob) {
-        completedJob = this.jobManager.complete(activeJob, response.result);
+        completedJob = this.jobManager.complete(activeJob, response.result, {
+          onTerminalCleanupFailure: ({ error: cleanupError, job: terminalJob }) => {
+            this.logger.write({
+              callerId: identity.caller_id,
+              type: 'evidence_job_terminal_cleanup_failed',
+              severity: 'error',
+              text: 'Terminal evidence job committed but lease cleanup failed',
+              payload: {
+                request_id: identity.request_id,
+                job_id: terminalJob.job_id,
+                terminal_state: terminalJob.state,
+                error_code: cleanupError.code || 'EVIDENCE_JOB_TERMINAL_CLEANUP_FAILED'
+              }
+            });
+          }
+        });
         activeJob = completedJob;
       }
 

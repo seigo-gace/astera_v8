@@ -776,3 +776,230 @@ test('job failure prioritizes an ERROR state transition error over an artifact e
   );
   assert.equal(releaseCalls, 1);
 });
+
+async function signedRecoverySearch({ api, callerId, requestId, idempotencyKey }) {
+  const address = api.server.address();
+  const body = JSON.stringify({
+    idempotency_key: idempotencyKey,
+    paid_search: { enabled: false }
+  });
+  const headers = createInternalHeaders({
+    body,
+    secret: INTERNAL_SECRET,
+    service: 'astera-main',
+    callerId,
+    requestId
+  });
+  const response = await fetch(
+    `http://127.0.0.1:${address.port}/internal/v1/evidence/search`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body
+    }
+  );
+  return Object.freeze({ status: response.status, body: await response.json() });
+}
+
+async function observeTerminalReleaseFailure(terminalState) {
+  const value = await runtime();
+  const records = [];
+  let api;
+  let moduleCalls = 0;
+  let releaseCalls = 0;
+  const callerId = `caller-terminal-release-${terminalState.toLowerCase()}`;
+  const firstRequestId = `request-terminal-release-first-${terminalState.toLowerCase()}`;
+  const idempotencyKey = `terminal-release-${terminalState.toLowerCase()}`;
+  const result = Object.freeze({
+    status: terminalState,
+    evidence: [],
+    quality: {
+      initial: { score_bp: terminalState === 'FINAL_VALID' ? 10_000 : 0 },
+      final: { score_bp: terminalState === 'FINAL_VALID' ? 10_000 : 0 },
+      reinforcement_attempt_count: 0
+    },
+    effective_as_of: '2026-09-27T00:00:00.000Z',
+    query_plan_hash: terminalState === 'FINAL_VALID' ? '1'.repeat(64) : '2'.repeat(64),
+    duration_ms: 0
+  });
+
+  try {
+    value.store.releaseLease = () => {
+      releaseCalls += 1;
+      throw Object.assign(new Error('injected terminal lease release failure'), {
+        code: 'INJECTED_LEASE_RELEASE_FAILURE'
+      });
+    };
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: {
+        write(record) {
+          records.push(record);
+        },
+        async flush() {}
+      },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          moduleCalls += 1;
+          return {
+            status: 'OK',
+            operation: 'SEARCH_EVIDENCE',
+            result
+          };
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+
+    const first = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: firstRequestId,
+      idempotencyKey
+    });
+    const jobId = first.body.job_id || first.body.jobId;
+    const stored = value.store.readJob(jobId);
+    const artifacts = value.store.listArtifacts(jobId);
+    const cleanupRecord = records.find(
+      (record) => record.type === 'evidence_job_terminal_cleanup_failed'
+    );
+    const second = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: `request-terminal-release-second-${terminalState.toLowerCase()}`,
+      idempotencyKey
+    });
+
+    return Object.freeze({
+      first_response_status: first.status,
+      first_result_status: first.body.status,
+      first_result_payload_unchanged:
+        JSON.stringify(first.body.evidence) === JSON.stringify(result.evidence)
+        && JSON.stringify(first.body.quality) === JSON.stringify(result.quality)
+        && !Object.hasOwn(first.body, 'cleanup_error'),
+      db_state: stored.state,
+      terminal_artifact_persisted: artifacts.some(
+        (artifact) => artifact.stage === terminalState
+      ),
+      lease_residual: stored.lease_owner === value.manager.workerId,
+      release_calls: releaseCalls,
+      cleanup_log: cleanupRecord ? {
+        severity: cleanupRecord.severity,
+        request_id: cleanupRecord.payload.request_id,
+        job_id: cleanupRecord.payload.job_id,
+        terminal_state: cleanupRecord.payload.terminal_state,
+        error_code: cleanupRecord.payload.error_code
+      } : null,
+      second_response_status: second.status,
+      second_result_status: second.body.status,
+      second_idempotent_replay: second.body.idempotent_replay,
+      same_job_id: second.body.job_id === jobId,
+      module_calls: moduleCalls
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+}
+
+for (const terminalState of ['FINAL_VALID', 'REJECTED']) {
+  test(`terminal ${terminalState} result survives lease release failure and replays idempotently`, async () => {
+    const observed = await observeTerminalReleaseFailure(terminalState);
+    assert.deepEqual(observed, {
+      first_response_status: 200,
+      first_result_status: terminalState,
+      first_result_payload_unchanged: true,
+      db_state: terminalState,
+      terminal_artifact_persisted: true,
+      lease_residual: true,
+      release_calls: 1,
+      cleanup_log: {
+        severity: 'error',
+        request_id: `request-terminal-release-first-${terminalState.toLowerCase()}`,
+        job_id: observed.cleanup_log?.job_id,
+        terminal_state: terminalState,
+        error_code: 'INJECTED_LEASE_RELEASE_FAILURE'
+      },
+      second_response_status: 200,
+      second_result_status: terminalState,
+      second_idempotent_replay: true,
+      same_job_id: true,
+      module_calls: 1
+    });
+    assert.match(observed.cleanup_log.job_id, /^evj_/);
+  });
+}
+
+test('ERROR commit lease release failure preserves the original search error response', async () => {
+  const value = await runtime();
+  const records = [];
+  let api;
+  try {
+    value.store.releaseLease = () => {
+      throw Object.assign(new Error('injected ERROR lease release failure'), {
+        code: 'INJECTED_FAIL_RELEASE_FAILURE'
+      });
+    };
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: {
+        write(record) {
+          records.push(record);
+        },
+        async flush() {}
+      },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          throw Object.assign(new Error('evidence search cancelled by caller'), {
+            code: 'SEARCH_CANCELLED',
+            status: 499
+          });
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+
+    const response = await signedRecoverySearch({
+      api,
+      callerId: 'caller-error-release-failure',
+      requestId: 'request-error-release-failure',
+      idempotencyKey: 'error-release-failure'
+    });
+    const stored = value.store.readJob(response.body.jobId);
+    const artifacts = value.store.listArtifacts(stored.job_id);
+    const failureRecord = records.find(
+      (record) => record.type === 'evidence_job_failure_record_failed'
+    );
+
+    assert.deepEqual({
+      response_status: response.status,
+      response_code: response.body.code,
+      db_state: stored.state,
+      db_error_code: stored.error_code,
+      error_artifact_persisted: artifacts.some((artifact) => artifact.stage === 'ERROR'),
+      lease_residual: stored.lease_owner === value.manager.workerId,
+      failure_log_error_code: failureRecord?.payload.error_code
+    }, {
+      response_status: 499,
+      response_code: 'SEARCH_CANCELLED',
+      db_state: 'ERROR',
+      db_error_code: 'SEARCH_CANCELLED',
+      error_artifact_persisted: true,
+      lease_residual: true,
+      failure_log_error_code: 'INJECTED_FAIL_RELEASE_FAILURE'
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});

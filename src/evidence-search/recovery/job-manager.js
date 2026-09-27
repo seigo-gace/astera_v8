@@ -109,7 +109,7 @@ class EvidenceJobManager {
     };
   }
 
-  complete(job, result) {
+  complete(job, result, options = {}) {
     const current = this.store.readJob(job.job_id);
     if (!current) {
       const error = new Error(`evidence job not found: ${job.job_id}`);
@@ -141,7 +141,18 @@ class EvidenceJobManager {
         }
       )
     );
-    this.store.releaseLease(current.job_id, this.workerId);
+    try {
+      this.store.releaseLease(current.job_id, this.workerId);
+    } catch (error) {
+      if (typeof options?.onTerminalCleanupFailure === 'function') {
+        try {
+          options.onTerminalCleanupFailure(Object.freeze({
+            error,
+            job: completed
+          }));
+        } catch {}
+      }
+    }
     return completed;
   }
 
