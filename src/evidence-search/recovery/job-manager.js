@@ -3,6 +3,11 @@
 const crypto = require('node:crypto');
 
 const CHECKPOINT_SCHEMA = 'astera.evidence-search.checkpoint.v1';
+const MIN_SEARCH_DEADLINE_MS = 1000;
+const MAX_SEARCH_DEADLINE_MS = 60_000;
+const DEFAULT_LEASE_DURATION_MS = 30_000;
+const LEASE_SAFETY_MARGIN_MS = 5000;
+const MAX_LEASE_DURATION_MS = MAX_SEARCH_DEADLINE_MS + LEASE_SAFETY_MARGIN_MS;
 
 const LIFECYCLE_TO_JOB_STATE = Object.freeze({
   AUTHENTICATED: 'AUTHENTICATED',
@@ -33,6 +38,21 @@ function terminalStateFromResult(status) {
   return status === 'FINAL_VALID' ? 'FINAL_VALID' : 'REJECTED';
 }
 
+function leaseDurationForDeadline(value) {
+  const deadlineMs = Number(value);
+  if (
+    !Number.isSafeInteger(deadlineMs)
+    || deadlineMs < MIN_SEARCH_DEADLINE_MS
+    || deadlineMs > MAX_SEARCH_DEADLINE_MS
+  ) {
+    return DEFAULT_LEASE_DURATION_MS;
+  }
+  return Math.min(
+    MAX_LEASE_DURATION_MS,
+    Math.max(DEFAULT_LEASE_DURATION_MS, deadlineMs + LEASE_SAFETY_MARGIN_MS)
+  );
+}
+
 class EvidenceJobManager {
   constructor({ store, spool, workerId = `worker_${process.pid}_${crypto.randomUUID()}` }) {
     if (!store) throw new TypeError('EvidenceJobManager requires store');
@@ -42,7 +62,12 @@ class EvidenceJobManager {
     this.workerId = String(workerId);
   }
 
-  begin({ callerId, requestId, idempotencyKey }) {
+  begin({
+    callerId,
+    requestId,
+    idempotencyKey,
+    leaseDurationMs = DEFAULT_LEASE_DURATION_MS
+  }) {
     const job = this.store.createJob({
       callerId,
       requestId,
@@ -51,7 +76,7 @@ class EvidenceJobManager {
     if (job.reused && ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(job.state)) {
       return Object.freeze({ job, reusedTerminal: true, reusedNonterminal: false });
     }
-    if (!this.store.acquireLease(job.job_id, this.workerId)) {
+    if (!this.store.acquireLease(job.job_id, this.workerId, leaseDurationMs)) {
       const error = new Error('evidence job is already leased by another worker');
       error.code = 'EVIDENCE_JOB_LEASE_CONFLICT';
       throw error;
@@ -332,8 +357,14 @@ class EvidenceJobManager {
 
 module.exports = {
   CHECKPOINT_SCHEMA,
+  DEFAULT_LEASE_DURATION_MS,
   EvidenceJobManager,
+  LEASE_SAFETY_MARGIN_MS,
   LIFECYCLE_TO_JOB_STATE,
+  MAX_LEASE_DURATION_MS,
+  MAX_SEARCH_DEADLINE_MS,
+  MIN_SEARCH_DEADLINE_MS,
   RECOVERY_STAGE_ORDER,
+  leaseDurationForDeadline,
   terminalStateFromResult
 };

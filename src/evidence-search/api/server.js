@@ -4,6 +4,7 @@ const http = require('node:http');
 const Logger = require('../../logger');
 const { parseJsonStrict, maskSecrets } = require('../../safe-json');
 const createEvidenceSearchModule = require('..');
+const { leaseDurationForDeadline } = require('../recovery/job-manager');
 const {
   ReplayNonceGuard,
   loadInternalServiceSecret,
@@ -298,7 +299,8 @@ class EvidenceSearchApiServer {
         const started = this.jobManager.begin({
           callerId: identity.caller_id,
           requestId: identity.request_id,
-          idempotencyKey: payload.idempotency_key || identity.request_id
+          idempotencyKey: payload.idempotency_key || identity.request_id,
+          leaseDurationMs: leaseDurationForDeadline(payload.deadline_ms)
         });
         activeJob = started.job;
         req.evidenceJobId = activeJob.job_id;

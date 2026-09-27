@@ -10,7 +10,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { EvidenceJobStore } = require('../src/evidence-search/recovery/job-store');
 const { DurableEvidenceSpool } = require('../src/evidence-search/recovery/durable-spool');
-const { EvidenceJobManager } = require('../src/evidence-search/recovery/job-manager');
+const {
+  DEFAULT_LEASE_DURATION_MS,
+  MAX_LEASE_DURATION_MS,
+  EvidenceJobManager,
+  leaseDurationForDeadline
+} = require('../src/evidence-search/recovery/job-manager');
 const EvidenceSearchApiServer = require('../src/evidence-search/api/server');
 const createEvidenceSearchModule = require('../src/evidence-search');
 const {
@@ -937,6 +942,177 @@ test('active leases reject every owner and expired leases can be reacquired', as
   }
 });
 
+test('lease duration policy covers every valid search deadline with a bounded margin', () => {
+  assert.deepEqual({
+    default_lease: leaseDurationForDeadline(undefined),
+    lease_for_8000: leaseDurationForDeadline(8000),
+    lease_for_60000: leaseDurationForDeadline(60_000),
+    lease_for_numeric_string: leaseDurationForDeadline('60000'),
+    invalid_too_small: leaseDurationForDeadline(999),
+    invalid_too_large: leaseDurationForDeadline(60_001),
+    invalid_fraction: leaseDurationForDeadline(8000.5),
+    max_lease: MAX_LEASE_DURATION_MS
+  }, {
+    default_lease: 30_000,
+    lease_for_8000: 30_000,
+    lease_for_60000: 65_000,
+    lease_for_numeric_string: 65_000,
+    invalid_too_small: 30_000,
+    invalid_too_large: 30_000,
+    invalid_fraction: 30_000,
+    max_lease: 65_000
+  });
+  assert.equal(DEFAULT_LEASE_DURATION_MS, 30_000);
+});
+
+test('deadline-sized lease prevents same-worker reentry after the old lease equivalent expires', async () => {
+  const value = await runtime();
+  let api;
+  let releaseFirst;
+  let markFirstEntered;
+  let moduleCalls = 0;
+  const requestedLeaseDurations = [];
+  const realStartedAt = Date.now();
+  const logicalStartedAt = Date.now();
+  const acquireLease = value.store.acquireLease.bind(value.store);
+  value.store.acquireLease = (jobId, owner, durationMs) => {
+    requestedLeaseDurations.push(durationMs);
+    const scaledDurationMs = Number(durationMs) > 30_000 ? 10_000 : 1000;
+    const logicalNow = logicalStartedAt + ((Date.now() - realStartedAt) * 10);
+    return acquireLease(jobId, owner, scaledDurationMs, logicalNow);
+  };
+  const firstGate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  const firstEntered = new Promise((resolve) => {
+    markFirstEntered = resolve;
+  });
+  const callerId = 'caller-deadline-sized-lease';
+  const idempotencyKey = 'deadline-sized-lease-operation';
+  const result = Object.freeze({
+    status: 'FINAL_VALID',
+    evidence: [],
+    quality: {
+      initial: { score_bp: 10_000 },
+      final: { score_bp: 10_000 },
+      reinforcement_attempt_count: 0
+    },
+    effective_as_of: '2026-09-27T06:00:00.000Z',
+    query_plan_hash: '8'.repeat(64),
+    duration_ms: 0
+  });
+  let firstRequest;
+
+  try {
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          moduleCalls += 1;
+          if (moduleCalls === 1) {
+            markFirstEntered();
+            await firstGate;
+          }
+          return {
+            status: 'OK',
+            operation: 'SEARCH_EVIDENCE',
+            result
+          };
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+
+    firstRequest = signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-deadline-sized-A',
+      idempotencyKey,
+      payload: { deadline_ms: 60_000 }
+    });
+    await firstEntered;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const second = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-deadline-sized-B',
+      idempotencyKey,
+      payload: { deadline_ms: 60_000 }
+    });
+    assert.deepEqual({
+      status: second.status,
+      code: second.body.code,
+      module_calls: moduleCalls,
+      requested_lease_durations: requestedLeaseDurations
+    }, {
+      status: 409,
+      code: 'EVIDENCE_JOB_LEASE_CONFLICT',
+      module_calls: 1,
+      requested_lease_durations: [65_000, 65_000]
+    });
+
+    releaseFirst();
+    const first = await firstRequest;
+    assert.equal(first.status, 200);
+    assert.equal(first.body.status, 'FINAL_VALID');
+
+    const replay = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: 'request-deadline-sized-C',
+      idempotencyKey,
+      payload: { deadline_ms: 60_000 }
+    });
+    assert.equal(replay.status, 200);
+    assert.equal(replay.body.job_id, first.body.job_id);
+    assert.equal(replay.body.idempotent_replay, true);
+    assert.equal(moduleCalls, 1);
+  } finally {
+    releaseFirst();
+    await firstRequest?.catch(() => {});
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
+
+test('caller cancellation releases an extended lease immediately', async () => {
+  const value = await runtime();
+  try {
+    const started = value.manager.begin({
+      callerId: 'caller-extended-lease-cancel',
+      requestId: 'request-extended-lease-cancel',
+      idempotencyKey: 'extended-lease-cancel-operation',
+      leaseDurationMs: 65_000
+    });
+    const authenticated = value.manager.checkpoint(
+      started.job,
+      'AUTHENTICATED',
+      { authenticated: true }
+    );
+    const cancelled = value.manager.fail(
+      authenticated,
+      Object.assign(new Error('caller cancelled'), {
+        code: 'SEARCH_CANCELLED',
+        status: 499
+      })
+    );
+    assert.equal(cancelled.state, 'ERROR');
+    assert.equal(cancelled.error_code, 'SEARCH_CANCELLED');
+    const persisted = value.store.readJob(cancelled.job_id);
+    assert.equal(persisted.lease_owner, null);
+    assert.equal(persisted.lease_until, null);
+  } finally {
+    await cleanup(value);
+  }
+});
+
 const RECOVERY_EFFECTIVE_AS_OF = '2026-09-27T05:00:00.000Z';
 const RECOVERY_PAYLOAD = Object.freeze({
   question: 'Node.js 22 crash recovery evidence',
@@ -1149,6 +1325,51 @@ async function startRecoveryApi({ value, module, logger = { write() {}, async fl
   await once(api.server, 'listening');
   return api;
 }
+
+test('invalid search deadline uses the lease fallback and remains an invalid request', async () => {
+  const value = await runtime();
+  const fixture = recoveryModuleFixture();
+  const requestedLeaseDurations = [];
+  const acquireLease = value.store.acquireLease.bind(value.store);
+  value.store.acquireLease = (jobId, owner, durationMs, now) => {
+    requestedLeaseDurations.push(durationMs);
+    return acquireLease(jobId, owner, durationMs, now);
+  };
+  let api;
+  try {
+    api = await startRecoveryApi({ value, module: fixture.module });
+    const response = await signedRecoverySearch({
+      api,
+      callerId: 'caller-invalid-deadline-lease',
+      requestId: 'request-invalid-deadline-lease',
+      idempotencyKey: 'invalid-deadline-lease-operation',
+      payload: { ...RECOVERY_PAYLOAD, deadline_ms: 60_001 }
+    });
+    const job = value.store.readJob(response.body.jobId);
+    assert.deepEqual({
+      status: response.status,
+      code: response.body.code,
+      requested_lease_durations: requestedLeaseDurations,
+      db_state: job.state,
+      lease_owner: job.lease_owner,
+      lease_until: job.lease_until,
+      initial_provider: fixture.counters.initial_provider,
+      initial_evaluator: fixture.counters.initial_evaluator
+    }, {
+      status: 400,
+      code: 'INVALID_SEARCH_REQUEST',
+      requested_lease_durations: [30_000],
+      db_state: 'ERROR',
+      lease_owner: null,
+      lease_until: null,
+      initial_provider: 0,
+      initial_evaluator: 0
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+});
 
 const RECOVERY_EXPECTED_RERUNS = Object.freeze({
   AUTHENTICATED: {
