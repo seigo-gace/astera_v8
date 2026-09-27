@@ -1003,3 +1003,231 @@ test('ERROR commit lease release failure preserves the original search error res
     await cleanup(value);
   }
 });
+
+async function observeErrorTerminalRetry({ name, errorFactory, expectedStatus, expectedCode }) {
+  const value = await runtime();
+  let api;
+  let moduleCalls = 0;
+  try {
+    api = new EvidenceSearchApiServer({
+      port: 0,
+      host: '127.0.0.1',
+      logger: { write() {}, async flush() {} },
+      internalSecret: INTERNAL_SECRET,
+      jobManager: value.manager,
+      closeJobManagerOnStop: false,
+      module: {
+        async execute() {
+          moduleCalls += 1;
+          throw errorFactory();
+        }
+      }
+    });
+    api.start();
+    await once(api.server, 'listening');
+    const callerId = `caller-error-replay-${name}`;
+    const idempotencyKey = `error-replay-${name}`;
+    const first = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: `request-error-replay-first-${name}`,
+      idempotencyKey
+    });
+    const stored = value.store.readJob(first.body.jobId);
+    const errorArtifact = value.store.listArtifacts(stored.job_id)
+      .find((artifact) => artifact.stage === 'ERROR');
+    const checkpoint = value.spool.read(errorArtifact);
+    const recoverable = value.manager.recoverable()
+      .some((entry) => entry.job.job_id === stored.job_id);
+    const second = await signedRecoverySearch({
+      api,
+      callerId,
+      requestId: `request-error-replay-second-${name}`,
+      idempotencyKey
+    });
+
+    return Object.freeze({
+      first_status: first.status,
+      first_code: first.body.code,
+      second_status: second.status,
+      second_code: second.body.code,
+      second_idempotent_replay: second.body.idempotent_replay,
+      same_job_id: second.body.jobId === stored.job_id,
+      module_calls: moduleCalls,
+      db_state: stored.state,
+      lease_owner: stored.lease_owner,
+      recoverable,
+      artifact_stage: errorArtifact.stage,
+      artifact_value: checkpoint.value,
+      expected_status: expectedStatus,
+      expected_code: expectedCode
+    });
+  } finally {
+    if (api) await api.stop();
+    await cleanup(value);
+  }
+}
+
+const errorReplayCases = [
+  {
+    name: 'cancelled',
+    expectedStatus: 499,
+    expectedCode: 'SEARCH_CANCELLED',
+    message: 'evidence search cancelled by caller',
+    errorFactory() {
+      return Object.assign(new Error('evidence search cancelled by caller'), {
+        code: 'SEARCH_CANCELLED',
+        status: 499
+      });
+    }
+  },
+  {
+    name: 'deadline',
+    expectedStatus: 504,
+    expectedCode: 'SEARCH_DEADLINE_EXCEEDED',
+    message: 'evidence search deadline exceeded',
+    errorFactory() {
+      return Object.assign(new Error('evidence search deadline exceeded'), {
+        code: 'SEARCH_DEADLINE_EXCEEDED'
+      });
+    }
+  },
+  {
+    name: 'generic',
+    expectedStatus: 500,
+    expectedCode: 'INTERNAL_ERROR',
+    message: 'injected generic internal failure',
+    errorFactory() {
+      return new Error('injected generic internal failure');
+    }
+  }
+];
+
+for (const replayCase of errorReplayCases) {
+  test(`terminal ERROR replays ${replayCase.name} failure without rerunning the module`, async () => {
+    const observed = await observeErrorTerminalRetry(replayCase);
+    assert.deepEqual(observed, {
+      first_status: replayCase.expectedStatus,
+      first_code: replayCase.expectedCode,
+      second_status: replayCase.expectedStatus,
+      second_code: replayCase.expectedCode,
+      second_idempotent_replay: true,
+      same_job_id: true,
+      module_calls: 1,
+      db_state: 'ERROR',
+      lease_owner: null,
+      recoverable: false,
+      artifact_stage: 'ERROR',
+      artifact_value: {
+        error_code: replayCase.expectedCode,
+        message: replayCase.message,
+        failed_state: 'AUTHENTICATED',
+        status: replayCase.expectedStatus
+      },
+      expected_status: replayCase.expectedStatus,
+      expected_code: replayCase.expectedCode
+    });
+  });
+}
+
+const legacyErrorReplayCases = [
+  {
+    name: 'cancelled',
+    storedCode: 'SEARCH_CANCELLED',
+    expectedCode: 'SEARCH_CANCELLED',
+    expectedStatus: 499
+  },
+  {
+    name: 'generic',
+    storedCode: 'EVIDENCE_SEARCH_ERROR',
+    expectedCode: 'INTERNAL_ERROR',
+    expectedStatus: 500
+  },
+  {
+    name: 'unknown',
+    storedCode: 'LEGACY_UNKNOWN_FAILURE',
+    expectedCode: 'LEGACY_UNKNOWN_FAILURE',
+    expectedStatus: 500
+  }
+];
+
+for (const legacyCase of legacyErrorReplayCases) {
+  test(`legacy ERROR artifact without status replays ${legacyCase.name} failure fail-closed`, async () => {
+    const value = await runtime();
+    let api;
+    let moduleCalls = 0;
+    try {
+      const callerId = `caller-legacy-error-${legacyCase.name}`;
+      const idempotencyKey = `legacy-error-${legacyCase.name}`;
+      const started = value.manager.begin({
+        callerId,
+        requestId: `request-legacy-error-original-${legacyCase.name}`,
+        idempotencyKey
+      });
+      const authenticated = value.manager.checkpoint(
+        started.job,
+        'AUTHENTICATED',
+        { authenticated: true }
+      );
+      const artifact = value.spool.write({
+        callerId,
+        jobId: authenticated.job_id,
+        stage: 'ERROR',
+        schemaVersion: 'astera.evidence-search.checkpoint.v1',
+        value: {
+          error_code: legacyCase.storedCode,
+          message: `legacy ${legacyCase.name} failure`,
+          failed_state: 'AUTHENTICATED'
+        }
+      });
+      value.store.recordArtifact(artifact);
+      value.store.transition(
+        authenticated.job_id,
+        authenticated.state_version,
+        'ERROR',
+        { error_code: legacyCase.storedCode }
+      );
+      value.store.releaseLease(authenticated.job_id, value.manager.workerId);
+
+      api = new EvidenceSearchApiServer({
+        port: 0,
+        host: '127.0.0.1',
+        logger: { write() {}, async flush() {} },
+        internalSecret: INTERNAL_SECRET,
+        jobManager: value.manager,
+        closeJobManagerOnStop: false,
+        module: {
+          async execute() {
+            moduleCalls += 1;
+            throw new Error('legacy ERROR replay must not rerun the module');
+          }
+        }
+      });
+      api.start();
+      await once(api.server, 'listening');
+      const response = await signedRecoverySearch({
+        api,
+        callerId,
+        requestId: `request-legacy-error-retry-${legacyCase.name}`,
+        idempotencyKey
+      });
+
+      assert.deepEqual({
+        status: response.status,
+        code: response.body.code,
+        job_id: response.body.jobId,
+        idempotent_replay: response.body.idempotent_replay,
+        module_calls: moduleCalls
+      }, {
+        status: legacyCase.expectedStatus,
+        code: legacyCase.expectedCode,
+        job_id: authenticated.job_id,
+        idempotent_replay: true,
+        module_calls: 0
+      });
+    } finally {
+      if (api) await api.stop();
+      await cleanup(value);
+    }
+  });
+}

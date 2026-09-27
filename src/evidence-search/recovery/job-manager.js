@@ -32,7 +32,7 @@ class EvidenceJobManager {
       requestId,
       idempotencyKey: idempotencyKey || requestId
     });
-    if (job.reused && ['FINAL_VALID', 'REJECTED'].includes(job.state)) {
+    if (job.reused && ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(job.state)) {
       return Object.freeze({ job, reusedTerminal: true });
     }
     if (!this.store.acquireLease(job.job_id, this.workerId)) {
@@ -156,11 +156,16 @@ class EvidenceJobManager {
     return completed;
   }
 
-  fail(job, error) {
+  fail(job, error, options = {}) {
     const current = this.store.readJob(job.job_id);
     if (!current || ['FINAL_VALID', 'REJECTED', 'ERROR'].includes(current.state)) {
       return current;
     }
+    const errorCode = options?.errorCode || error.code || 'EVIDENCE_SEARCH_ERROR';
+    const requestedStatus = Number(options?.status ?? error.status);
+    const errorStatus = requestedStatus >= 400 && requestedStatus <= 599
+      ? requestedStatus
+      : null;
     let artifactError = null;
     try {
       const artifact = this.spool.write({
@@ -169,9 +174,10 @@ class EvidenceJobManager {
         stage: 'ERROR',
         schemaVersion: CHECKPOINT_SCHEMA,
         value: {
-          error_code: error.code || 'EVIDENCE_SEARCH_ERROR',
+          error_code: errorCode,
           message: error.message,
-          failed_state: current.state
+          failed_state: current.state,
+          ...(errorStatus ? { status: errorStatus } : {})
         }
       });
       this.store.recordArtifact(artifact);
@@ -186,7 +192,7 @@ class EvidenceJobManager {
         current.job_id,
         current.state_version,
         'ERROR',
-        { error_code: error.code || 'EVIDENCE_SEARCH_ERROR' }
+        { error_code: errorCode }
       );
     } catch (error) {
       transitionError = error;

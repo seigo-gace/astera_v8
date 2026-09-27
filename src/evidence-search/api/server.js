@@ -20,6 +20,7 @@ function positiveInteger(value, fallback) {
 
 function statusForError(error) {
   const code = String(error?.code || '');
+  if (code === 'SEARCH_CANCELLED') return 499;
   if (code === 'INTERNAL_AUTH_REQUIRED' || code === 'INTERNAL_SIGNATURE_INVALID') return 401;
   if (
     code === 'INTERNAL_SERVICE_FORBIDDEN'
@@ -196,6 +197,37 @@ class EvidenceSearchApiServer {
     });
   }
 
+  _errorTerminalReplay(job, requestId) {
+    const latest = this.jobManager.readLatestValidCheckpoint(job.job_id);
+    const value = latest.checkpoint?.value;
+    const storedCode = typeof value?.error_code === 'string'
+      ? value.error_code.trim()
+      : '';
+    const message = typeof value?.message === 'string'
+      ? value.message
+      : '';
+    if (latest.artifact?.stage !== 'ERROR' || !storedCode || !message) {
+      const error = new Error('failed evidence job has no valid ERROR checkpoint');
+      error.code = 'RECOVERY_ARTIFACT_INVALID';
+      throw error;
+    }
+    const code = storedCode === 'EVIDENCE_SEARCH_ERROR'
+      ? 'INTERNAL_ERROR'
+      : storedCode;
+    const persistedStatus = Number(value.status);
+    const status = persistedStatus >= 400 && persistedStatus <= 599
+      ? persistedStatus
+      : statusForError({ code });
+    return Object.freeze({
+      error: status >= 500 ? 'internal_error' : message,
+      code,
+      status,
+      requestId,
+      jobId: job.job_id,
+      idempotent_replay: true
+    });
+  }
+
   async _handle(req, res) {
     let activeJob = null;
     let requestCancellation = null;
@@ -261,6 +293,10 @@ class EvidenceSearchApiServer {
         req.evidenceJobId = activeJob.job_id;
 
         if (started.reusedTerminal) {
+          if (activeJob.state === 'ERROR') {
+            const replay = this._errorTerminalReplay(activeJob, identity.request_id);
+            return this._json(res, replay.status, replay);
+          }
           return this._json(res, 200, this._terminalReplay(activeJob));
         }
 
@@ -340,9 +376,14 @@ class EvidenceSearchApiServer {
       });
       return this._json(res, 200, result);
     } catch (error) {
+      const status = statusForError(error);
+      const errorCode = error.code || 'INTERNAL_ERROR';
       if (this.jobManager && activeJob && !['FINAL_VALID', 'REJECTED', 'ERROR'].includes(activeJob.state)) {
         try {
-          activeJob = this.jobManager.fail(activeJob, error);
+          activeJob = this.jobManager.fail(activeJob, error, {
+            status,
+            errorCode
+          });
         } catch (jobError) {
           this.logger.write({
             callerId: req.verifiedCallerId || 'internal-unverified',
@@ -358,7 +399,6 @@ class EvidenceSearchApiServer {
         }
       }
 
-      const status = statusForError(error);
       this.logger.write({
         callerId: req.verifiedCallerId || 'internal-unverified',
         type: 'evidence_search_api_failed',
@@ -368,12 +408,12 @@ class EvidenceSearchApiServer {
           request_id: req.verifiedRequestId || null,
           job_id: req.evidenceJobId || null,
           status,
-          error_code: error.code || 'INTERNAL_ERROR'
+          error_code: errorCode
         }
       });
       return this._json(res, status, {
         error: status >= 500 ? 'internal_error' : error.message,
-        code: error.code || 'INTERNAL_ERROR',
+        code: errorCode,
         status,
         requestId: req.verifiedRequestId || null,
         jobId: req.evidenceJobId || null
