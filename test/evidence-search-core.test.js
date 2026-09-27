@@ -205,15 +205,85 @@ test('propagates an outer abort to the downstream scheduler context signal', asy
     );
   } finally {
     releaseScheduler();
-    await execution;
+    await assert.rejects(
+      execution,
+      (error) => error.code === 'SEARCH_CANCELLED' && error.status === 499
+    );
   }
 });
 
-test('starts downstream work aborted when the outer signal is already aborted', async () => {
-  let downstreamSignal;
+test('outer caller cancellation does not resolve as a normal evidence rejection', async () => {
+  let evaluatorCalls = 0;
+  let markSchedulerStarted;
+  let releaseScheduler;
+  const schedulerStarted = new Promise((resolve) => {
+    markSchedulerStarted = resolve;
+  });
+  const schedulerRelease = new Promise((resolve) => {
+    releaseScheduler = resolve;
+  });
   const scheduler = {
     async run(_tasks, context) {
-      downstreamSignal = context.signal;
+      markSchedulerStarted(context.signal);
+      await schedulerRelease;
+      return [];
+    }
+  };
+  const provider = {
+    provider_id: 'terminal-cancel-probe-provider',
+    source_class: 'FREE_PROJECTION',
+    certified: true,
+    domains: ['G29'],
+    capabilities: ['NO_REINFORCEMENT'],
+    async search() {
+      throw new Error('injected scheduler must not invoke the provider');
+    }
+  };
+  const orchestrator = new SearchOrchestrator({
+    providers: [provider],
+    scheduler,
+    informationQualityEvaluator: () => {
+      evaluatorCalls += 1;
+      return { status: 'REJECTED_BLOCKING', score_bp: 0 };
+    }
+  });
+  const outerController = new AbortController();
+  const execution = orchestrator.execute(searchPayload(), {
+    execution_time: EXECUTION_TIME,
+    signal: outerController.signal
+  });
+  const outcomePromise = execution.then(
+    (value) => ({ type: 'resolved', value }),
+    (error) => ({ type: 'rejected', error })
+  );
+
+  try {
+    const downstreamSignal = await schedulerStarted;
+    outerController.abort();
+    assert.equal(downstreamSignal.aborted, true);
+    releaseScheduler();
+
+    const outcome = await outcomePromise;
+    assert.equal(
+      outcome.type,
+      'rejected',
+      `outer caller cancellation must reject; resolved status=${outcome.value?.status}`
+    );
+    assert.equal(outcome.error.code, 'SEARCH_CANCELLED');
+    assert.equal(outcome.error.status, 499);
+    assert.equal(evaluatorCalls, 0, 'evaluator must not run after caller cancellation');
+  } finally {
+    releaseScheduler?.();
+    await outcomePromise;
+  }
+});
+
+test('rejects an already-aborted outer signal before downstream work starts', async () => {
+  let schedulerCalls = 0;
+  let evaluatorCalls = 0;
+  const scheduler = {
+    async run() {
+      schedulerCalls += 1;
       return [];
     }
   };
@@ -230,21 +300,23 @@ test('starts downstream work aborted when the outer signal is already aborted', 
   const orchestrator = new SearchOrchestrator({
     providers: [provider],
     scheduler,
-    informationQualityEvaluator: () => ({
-      status: 'REJECTED_BLOCKING',
-      score_bp: 0
-    })
+    informationQualityEvaluator: () => {
+      evaluatorCalls += 1;
+      return { status: 'REJECTED_BLOCKING', score_bp: 0 };
+    }
   });
   const outerController = new AbortController();
   outerController.abort();
 
-  await orchestrator.execute(searchPayload(), {
-    execution_time: EXECUTION_TIME,
-    signal: outerController.signal
-  });
-
-  assert.ok(downstreamSignal, 'scheduler context must include an AbortSignal');
-  assert.equal(downstreamSignal.aborted, true);
+  await assert.rejects(
+    orchestrator.execute(searchPayload(), {
+      execution_time: EXECUTION_TIME,
+      signal: outerController.signal
+    }),
+    (error) => error.code === 'SEARCH_CANCELLED' && error.status === 499
+  );
+  assert.equal(schedulerCalls, 0);
+  assert.equal(evaluatorCalls, 0);
 });
 
 test('keeps the internal deadline abort active without an outer signal', async () => {

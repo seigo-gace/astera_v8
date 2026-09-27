@@ -221,6 +221,111 @@ test('aborts the module context signal when the signed HTTP caller disconnects',
   }
 });
 
+test('routes caller cancellation to jobManager.fail instead of completing a rejection', async () => {
+  let completeCalls = 0;
+  let failedError;
+  let markModuleStarted;
+  let markJobFailed;
+  const moduleStarted = new Promise((resolve) => {
+    markModuleStarted = resolve;
+  });
+  const jobFailed = new Promise((resolve) => {
+    markJobFailed = resolve;
+  });
+  const jobManager = {
+    begin() {
+      return {
+        job: { job_id: 'cancel-job', state: 'RECEIVED' },
+        reusedTerminal: false
+      };
+    },
+    checkpoint(job) {
+      return { ...job, state: 'AUTHENTICATED' };
+    },
+    lifecycle() {
+      return async () => {};
+    },
+    complete() {
+      completeCalls += 1;
+      throw new Error('jobManager.complete must not run after caller cancellation');
+    },
+    fail(job, error) {
+      failedError = error;
+      const failed = { ...job, state: 'ERROR', error_code: error.code };
+      markJobFailed(failed);
+      return failed;
+    }
+  };
+  const module = {
+    async execute(moduleRequest) {
+      const { signal } = moduleRequest.context;
+      markModuleStarted();
+      await new Promise((resolve, reject) => {
+        const rejectCancelled = () => {
+          const error = new Error('evidence search cancelled by caller');
+          error.code = 'SEARCH_CANCELLED';
+          error.status = 499;
+          reject(error);
+        };
+        if (signal.aborted) return rejectCancelled();
+        signal.addEventListener('abort', rejectCancelled, { once: true });
+      });
+      throw new Error('unreachable after cancellation');
+    }
+  };
+  const runtime = await startServer({
+    module,
+    jobManager,
+    closeJobManagerOnStop: false
+  });
+  let clientRequest;
+  let clientSocket;
+
+  try {
+    const body = JSON.stringify(payload());
+    const headers = createInternalHeaders({
+      body,
+      secret: SECRET,
+      service: 'astera-main',
+      callerId: 'caller-job-cancel-test',
+      requestId: 'request-job-cancel-test'
+    });
+    const serverSocketClosed = new Promise((resolve) => {
+      runtime.server.server.once('connection', (socket) => socket.once('close', resolve));
+    });
+    clientRequest = http.request(`${runtime.baseUrl}/internal/v1/evidence/search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers
+      }
+    });
+    clientRequest.on('error', () => {});
+    clientRequest.once('socket', (socket) => {
+      clientSocket = socket;
+    });
+    clientRequest.end(body);
+
+    await moduleStarted;
+    clientRequest.destroy();
+    clientSocket?.destroy();
+
+    const failedJob = await jobFailed;
+    await serverSocketClosed;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(failedJob.state, 'ERROR');
+    assert.equal(failedJob.error_code, 'SEARCH_CANCELLED');
+    assert.equal(failedError.code, 'SEARCH_CANCELLED');
+    assert.equal(failedError.status, 499);
+    assert.equal(completeCalls, 0);
+  } finally {
+    clientRequest?.destroy();
+    clientSocket?.destroy();
+    await runtime.server.stop();
+  }
+});
+
 test('does not abort the module context after a normal 200 response closes', async () => {
   let capturedSignal;
   const module = {
