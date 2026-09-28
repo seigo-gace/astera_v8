@@ -97,3 +97,63 @@ test('cycle remains a hard blocker instead of falling through into an executable
   assert.deepEqual(new Set(graph.cycle), new Set(['T01', 'T02']));
   assert.equal(graph.execution_waves.length, 0);
 });
+
+test('Task-scoped context fields are assigned only to the matching Task, global fields reach all Tasks, and provenance is deduplicated', () => {
+  const request = understand(
+    'Task Aを実装する。Task Bを検証する。Task Cを比較する。',
+    [
+      'Task Aの予算は100万円。',
+      'Task Aのみ既存APIを変更しないこと。',
+      'Task Bは金曜日までに完了すること。',
+      'Task Bの完了条件: unit testを通す。',
+      'Task CはEvidenceを確認すること。',
+      '全Taskで本番deployは禁止。'
+    ].join('\n')
+  );
+
+  assert.equal(request.analysis_task_packet.tasks.length, 3);
+
+  const tasks = Object.fromEntries(
+    request.analysis_task_packet.tasks.map((task) => [task.target, task])
+  );
+
+  const taskA = tasks['Task A'];
+  const taskB = tasks['Task B'];
+  const taskC = tasks['Task C'];
+
+  assert.ok(taskA);
+  assert.ok(taskB);
+  assert.ok(taskC);
+
+  assert.ok(taskA.premises.some((item) => item.includes('100万円')));
+  assert.ok(taskA.prohibitions.some((item) => item.includes('既存API')));
+  assert.equal(taskB.prohibitions.some((item) => item.includes('既存API')), false);
+  assert.equal(taskC.prohibitions.some((item) => item.includes('既存API')), false);
+
+  assert.ok(taskB.deadlines.some((item) => item.includes('金曜日')));
+  assert.equal(taskA.deadlines.some((item) => item.includes('金曜日')), false);
+  assert.equal(taskC.deadlines.some((item) => item.includes('金曜日')), false);
+
+  assert.ok(taskB.completion_criteria.some((item) => item.includes('unit test')));
+  assert.equal(taskA.completion_criteria.some((item) => item.includes('unit test')), false);
+  assert.equal(taskC.completion_criteria.some((item) => item.includes('unit test')), false);
+
+  assert.ok(taskC.verification.some((item) => item.includes('Evidence')));
+  assert.equal(taskA.verification.some((item) => item.includes('Evidence')), false);
+
+  for (const task of [taskA, taskB, taskC]) {
+    assert.ok(task.prohibitions.some((item) => item.includes('本番deploy')));
+  }
+
+  const budgetSources = taskA.field_sources.premises.filter(
+    (item) => item.source === 'context' && item.value?.includes('100万円')
+  );
+  assert.equal(budgetSources.length, 1);
+
+  const globalDeploySources = [taskA, taskB, taskC].flatMap(
+    (task) => task.field_sources.prohibitions.filter(
+      (item) => item.source === 'context' && item.value?.includes('本番deploy')
+    )
+  );
+  assert.equal(globalDeploySources.length, 3);
+});

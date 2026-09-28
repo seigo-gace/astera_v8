@@ -95,7 +95,13 @@ function contextBindings(context) {
     if (/(?:最優先|優先|先に|まず|priority|first|before)/i.test(text)) push('priority');
     if (/(?:期限|納期|締切|締め切|deadline|due date|hard_deadline|来週|来月|今週|今月|金曜|月曜|火曜|水曜|木曜|土曜|日曜|までに)/i.test(text)) push('deadline');
   }
-  return bindings;
+  const seen = new Set();
+  return bindings.filter((binding) => {
+    const key = `${binding.kind}|${binding.source_span.start}|${binding.source_span.end}|${binding.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function deliverables(text) {
