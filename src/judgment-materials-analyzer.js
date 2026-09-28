@@ -54,6 +54,10 @@ const clean = (value) => norm(value)
   .replace(/[。！？!?]+$/g, '')
   .trim();
 
+const SEGMENT_PERIOD_SENTINEL = "\uE000";
+function maskProtectedPeriods(input){const text=String(input||"");const chars=[...text];const mask=(a,b)=>{for(let i=a;i<b;i++)if(chars[i]===".")chars[i]=SEGMENT_PERIOD_SENTINEL;};for(const m of text.matchAll(/https?:\/\/[^\s<>"`]+/gi)){const core=m[0].replace(/[.,;!?]+$/u,"");mask(m.index,m.index+core.length);}for(const m of text.matchAll(/\b(?:v)?\d+(?:\.\d+)+\b/gi))mask(m.index,m.index+m[0].length);for(const m of text.matchAll(/\b(?:e\.g\.|i\.e\.|etc\.)/gi))mask(m.index,m.index+m[0].length);for(const m of text.matchAll(/\b[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+\b/g))mask(m.index,m.index+m[0].length);return chars.join("");}
+
+
 function terms(text) {
   const n = norm(text);
   const ascii = n.match(/[A-Za-z][A-Za-z0-9_.:/-]{1,}|\d+(?:\.\d+){0,3}/g) || [];
@@ -90,7 +94,7 @@ function isNegatedDecideMatch(text, item) {
   return negatedDecisionRanges(text).some((range) => item.index >= range.start && item.index < range.end);
 }
 
-function actionMatches(text) {
+function lexicalActionMatches(text) {
   const protectedDecisionRanges = decisionMaterialRanges(text);
   return ACTIONS.map((entry) => {
     const match = entry.re.exec(text);
@@ -101,9 +105,41 @@ function actionMatches(text) {
     .sort((a, b) => a.index - b.index || a.id.localeCompare(b.id));
 }
 
-function action(text) {
-  const matches = actionMatches(text);
+function action(text, role = null) {
+  const matches = actionMatches(text, role);
   return matches.find((item) => item.id !== 'preserve') || matches[0] || { id: 'analyze', match: '', index: -1 };
+}
+
+function classifyClauseRole(span) {
+  const text = clean(typeof span === 'string' ? span : span?.text || '');
+  if (!text) return 'UNDETERMINED';
+  const roleText = text.replace(/[。！？!?.]+$/u, '').trim();
+  if (/^(?:do\s+not|don't|never)\b|\bmust\s+not\b/i.test(roleText) || /(?:するな|してはいけない|しないで|禁止)/u.test(roleText)) return 'PROHIBITION';
+  if (/(?:cannot|can't|could\s+not|couldn't)\s+be\s+(?:verified|confirmed)|\bthere\s+is\s+no\b|\bno\s+(?:formal|official|measurement|evidence|record|quotation)\b/i.test(roleText) || /(?:確認できない|確認できず|根拠なし|証拠なし|記録がない)/u.test(roleText)) return 'MISSING_EVIDENCE';
+  if (/^(?:according\s+to)\b/i.test(roleText) || /^[^.!?]{1,160}\b(?:said|says|stated|states|reported|reports)\b/i.test(roleText) || /(?:によると|と述べた|と述べている|と報告した)/u.test(roleText)) return 'ATTRIBUTION';
+  if (/^[^.!?]{1,160}\b(?:record|report|document|log)\b[^.!?]{0,80}\b(?:shows|confirms|records|documents|establishes)\b/i.test(roleText) || /(?:記録|報告書|文書|ログ).{0,80}(?:示す|確認できる|記録している)/u.test(roleText)) return 'FACT_WITH_SOURCE';
+  if (/^[^.!?]{1,160}\s+(?:is|are|was|were)\s+[^.!?]+$/i.test(roleText) || /^[^。！？]{1,120}(?:は|が)[^。！？]{1,120}(?:である|です)$/u.test(roleText)) return 'DESCRIPTION';
+  const directAction = lexicalActionMatches(roleText).find((item) => item.index === 0);
+  if (directAction || /^(?:please\s+)?[A-Z][a-z]+\s+(?:only\s+)?(?:the|a|an|all|any|each|facts?|information|data|evidence|results?|material)\b/.test(roleText) || /(?:せよ|しろ|してください|すること)$/u.test(roleText)) return 'INSTRUCTION';
+  return 'UNDETERMINED';
+}
+
+function actionMatches(text, role = null) {
+  const resolvedRole = role || classifyClauseRole({ text });
+  return resolvedRole === 'INSTRUCTION' ? lexicalActionMatches(text) : [];
+}
+
+function semanticStates(text) {
+  const value = clean(text);
+  const state = { fact: [], attributed_claim: [], missing_evidence: [] };
+  if (!value) return state;
+  const formalSourceFact = /^(?:according\s+to)\b[^.!?]{0,140}\b(?:record|report|document|log)\b/i.test(value) || /\b(?:record|report|document|log)\b[^.!?]{0,120}\b(?:confirms|shows|records|documents|establishes)\b/i.test(value) || /(?:記録|報告書|文書|ログ).{0,100}(?:確認できる|示す|記録している)/u.test(value);
+  const attributed = /\b(?:said|says|stated|states|reported|reports)\b/i.test(value) || /(?:と述べた|と述べている|と報告した)/u.test(value);
+  const missing = /(?:cannot|can't|could\s+not|couldn't)\s+be\s+(?:verified|confirmed)|\bthere\s+is\s+no\b|\bno\s+(?:formal|official|measurement|evidence|record|quotation)\b/i.test(value) || /(?:確認できない|確認できず|根拠なし|証拠なし|記録がない)/u.test(value);
+  if (formalSourceFact) state.fact.push(value);
+  if (attributed) state.attributed_claim.push(value);
+  if (missing) state.missing_evidence.push(value);
+  return state;
 }
 
 function clauseType(text) {
@@ -126,6 +162,7 @@ function spanPart(segment, raw, start, end, source) {
 
 function segment(input) {
   const text = String(input || '');
+  const masked = maskProtectedPeriods(text);
   const base = [];
   let start = 0;
   let quote = null;
@@ -139,13 +176,13 @@ function segment(input) {
     if (finish > begin) base.push({ start: begin, end: finish, text: text.slice(begin, finish) });
     start = end;
   };
-  for (let index = 0; index < text.length; index += 1) {
-    if (text.slice(index, index + 3) === '```') { code = !code; index += 2; continue; }
+  for (let index = 0; index < masked.length; index += 1) {
+    if (masked.slice(index, index + 3) === '```') { code = !code; index += 2; continue; }
     if (code) continue;
-    const char = text[index];
+    const char = masked[index];
     if (!quote && ['「','『','“','"'].includes(char)) quote = char;
     else if (quote && ((quote === '「' && char === '」') || (quote === '『' && char === '』') || (quote === '“' && char === '”') || (quote === '"' && char === '"'))) quote = null;
-    if (!quote && /[。！？!?\n;]/.test(char)) push(index + 1);
+    if (!quote && /[。！？!?\n;.]/.test(char)) push(index + 1);
   }
   if (start < text.length) push(text.length);
   const output = [];
@@ -223,24 +260,26 @@ function objective(targetName, actionName, lang) {
 
 function makeTask(sourceSpan, index, lang, globalSuccess) {
   const text = clean(sourceSpan.text);
-  const detected = action(text);
+  const role = classifyClauseRole(sourceSpan);
+  const detected = action(text, role);
   const type = clauseType(text);
+  const semanticState = semanticStates(text);
   const taskTarget = target(text, detected);
-  const actionable = (detected.id !== 'analyze' || ['verification','decision'].includes(type))
-    && !(type === 'prohibition' && detected.id === 'decide');
+  const actionable = role === 'INSTRUCTION';
   const taskSuccess = unique([...success(text), ...globalSuccess.filter((item) => text.includes(item))]);
-  return { id:`T${String(index + 1).padStart(2, '0')}`, source_span:{start:sourceSpan.start,end:sourceSpan.end,text}, raw_text:norm(sourceSpan.text), clause_type:type, actionable, action:detected.id, target:taskTarget, objective:objective(taskTarget,detected.id,lang), deliverables:[], premises:[], constraints:constraints(text), prohibitions:prohibitions(text), preserve:preserves(text), replace:replacements(text), conditions:conditions(text), exceptions:exceptions(text), deadlines:deadlines(text), priority:RX.priority.test(text)?'high':'normal', order:index+1, depends_on:[], parallelizable:true, success_criteria:taskSuccess, verification:verifications(text), completion_criteria:taskSuccess, unresolved:[], evidence_need:{required:RX.evidence.test(text),reasons:[],queries:terms(text).slice(0,12)}, external_action:['implement','improve','integrate','migrate','remove'].includes(detected.id), hard_blockers:[] };
+  return { id:`T${String(index + 1).padStart(2, '0')}`, source_span:{start:sourceSpan.start,end:sourceSpan.end,text}, raw_text:norm(sourceSpan.text), clause_type:type, clause_role:role, semantic_states:semanticState, actionable, action:detected.id, target:taskTarget, objective:objective(taskTarget,detected.id,lang), deliverables:[], premises:[], constraints:constraints(text), prohibitions:prohibitions(text), preserve:preserves(text), replace:replacements(text), conditions:conditions(text), exceptions:exceptions(text), deadlines:deadlines(text), priority:RX.priority.test(text)?'high':'normal', order:index+1, depends_on:[], parallelizable:true, success_criteria:taskSuccess, verification:verifications(text), completion_criteria:taskSuccess, unresolved:[], evidence_need:{required:RX.evidence.test(text),reasons:[],queries:terms(text).slice(0,12)}, external_action:['implement','improve','integrate','migrate','remove'].includes(detected.id), hard_blockers:[] };
 }
 
 function attach(tasks, others) {
   if (!tasks.length) return;
   for (const clause of others) {
     const text = clause.source_span.text;
+    const semanticState = semanticStates(text);
     const taskSuccess=success(text), taskConstraints=constraints(text), taskProhibitions=prohibitions(text), taskPreserves=preserves(text), taskReplacements=replacements(text), taskConditions=conditions(text), taskExceptions=exceptions(text), taskVerifications=verifications(text), premises=['statement','question'].includes(clause.clause_type)?[clean(text)]:[];
     const global = taskProhibitions.length || taskSuccess.length;
     const targets = global ? tasks : [tasks.slice().reverse().find((task)=>task.source_span.start<clause.source_span.start)||tasks[0]];
     for (const task of targets) {
-      task.success_criteria=unique([...task.success_criteria,...taskSuccess]); task.completion_criteria=unique([...task.completion_criteria,...taskSuccess]); task.constraints=unique([...task.constraints,...taskConstraints]); task.prohibitions=unique([...task.prohibitions,...taskProhibitions]); task.preserve=unique([...task.preserve,...taskPreserves]); task.replace=unique([...task.replace,...taskReplacements]); task.conditions=unique([...task.conditions,...taskConditions]); task.exceptions=unique([...task.exceptions,...taskExceptions]); task.verification=unique([...task.verification,...taskVerifications]); task.premises=unique([...task.premises,...premises]); if(RX.evidence.test(text)) task.evidence_need.required=true;
+      task.success_criteria=unique([...task.success_criteria,...taskSuccess]); task.completion_criteria=unique([...task.completion_criteria,...taskSuccess]); task.constraints=unique([...task.constraints,...taskConstraints]); task.prohibitions=unique([...task.prohibitions,...taskProhibitions]); task.preserve=unique([...task.preserve,...taskPreserves]); task.replace=unique([...task.replace,...taskReplacements]); task.conditions=unique([...task.conditions,...taskConditions]); task.exceptions=unique([...task.exceptions,...taskExceptions]); task.verification=unique([...task.verification,...taskVerifications]); task.premises=unique([...task.premises,...premises]); task.semantic_states=task.semantic_states||{fact:[],attributed_claim:[],missing_evidence:[]}; task.semantic_states.fact=unique([...(task.semantic_states.fact||[]),...semanticState.fact]); task.semantic_states.attributed_claim=unique([...(task.semantic_states.attributed_claim||[]),...semanticState.attributed_claim]); task.semantic_states.missing_evidence=unique([...(task.semantic_states.missing_evidence||[]),...semanticState.missing_evidence]); if(RX.evidence.test(text)) task.evidence_need.required=true;
     }
   }
 }
@@ -275,7 +314,7 @@ function inferDeps(tasks) {
 
 function buildExecutionWaves(tasks=[],dependencies=[]){const ids=new Set(tasks.map((task)=>task.id)),incoming=new Map(tasks.map((task)=>[task.id,new Set()]));for(const dependency of dependencies)if(ids.has(dependency.from)&&ids.has(dependency.to))incoming.get(dependency.to).add(dependency.from);const remaining=new Set(ids),waves=[];while(remaining.size){const ready=[...remaining].filter((id)=>[...incoming.get(id)].every((parent)=>!remaining.has(parent))).sort();if(!ready.length){waves.push([...remaining].sort());break;}waves.push(ready);ready.forEach((id)=>remaining.delete(id));}return waves;}
 
-function analyzeRequest({question='',context=''}={}){const q=norm(question);if(language(q)==='ja'){const error=new Error('Japanese semantic analysis must use Deterministic Japanese Parser MCP.');error.code='JAPANESE_BUILTIN_ANALYZER_DISABLED';throw error;}const ctx=norm(context),lang=language(q),spans=segment(q),globalSuccess=success(q),clauses=spans.map((sourceSpan,index)=>makeTask(sourceSpan,index,lang,globalSuccess));let tasks=clauses.filter((item)=>item.actionable);const others=clauses.filter((item)=>!item.actionable);if(!tasks.length&&q){tasks=[makeTask(spans[0]||{start:0,end:q.length,text:q},0,lang,globalSuccess)];tasks[0].actionable=true;}tasks=tasks.map((task,index)=>({...task,id:`T${String(index+1).padStart(2,'0')}`,order:index+1}));attach(tasks,others);resolveRefs(tasks);const dependencies=inferDeps(tasks),globalConstraints=constraints(q),globalProhibitions=prohibitions(q),globalPreserves=preserves(q),globalReplacements=replacements(q),globalVerification=verifications(q),conflicts=[];if(globalProhibitions.some((prohibition)=>globalReplacements.some((replacement)=>tokenOverlap(prohibition,replacement)>=0.5)))conflicts.push({type:'PROHIBITION_REPLACE_OVERLAP',note:'同一対象に禁止と変更指示が重なる可能性がある。'});for(const task of tasks){if(!task.target||/^(?:入力対象|input target)$/.test(task.target))task.unresolved.push('target');if(!task.success_criteria.length&&['implement','improve','migrate','integrate','remove'].includes(task.action))task.unresolved.push('completion_criteria');}const unresolved=unique(tasks.flatMap((task)=>task.unresolved.map((item)=>`${task.id}:${item}`))),hardBlockers=unique(conflicts.map((item)=>item.type)),packet={schema_version:'astera.analysis-task-packet.v1',intent:tasks[0]?.action||'analyze',tasks,dependencies,execution_waves:buildExecutionWaves(tasks,dependencies),constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,completion_criteria:globalSuccess,unresolved,conflicts,hard_blockers:hardBlockers,source_spans:tasks.map((task)=>({task_id:task.id,...task.source_span}))},primary=tasks[0];return{schema_version:'astera.request-model.v2',language:lang,normalized_question:q,target:primary?.target||'',target_confidence:primary?.unresolved?.includes('target')?'low':'high',action:primary?.action||'analyze',objective:primary?.objective||objective('','analyze',lang),success_criteria:globalSuccess,constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,query_terms:terms(`${q}\n${ctx}`),context_present:Boolean(ctx),context_length:ctx.length,instruction_map:{clause_count:clauses.length,task_count:tasks.length,correction_count:clauses.filter((item)=>item.clause_type==='correction').length,prohibition_count:globalProhibitions.length,preserve_count:globalPreserves.length,verification_count:globalVerification.length},instruction_understanding:{mode:'INTERNAL_DETERMINISTIC',parser:null,execution_allowed:hardBlockers.length===0,blocked_reasons:hardBlockers},analysis_task_packet:packet};}
+function analyzeRequest({question='',context=''}={}){const q=norm(question);if(language(q)==='ja'){const error=new Error('Japanese semantic analysis must use Deterministic Japanese Parser MCP.');error.code='JAPANESE_BUILTIN_ANALYZER_DISABLED';throw error;}const ctx=norm(context),lang=language(q),spans=segment(q),globalSuccess=success(q),clauses=spans.map((sourceSpan,index)=>makeTask(sourceSpan,index,lang,globalSuccess));let tasks=clauses.filter((item)=>item.actionable);const others=clauses.filter((item)=>!item.actionable);tasks=tasks.map((task,index)=>({...task,id:`T${String(index+1).padStart(2,'0')}`,order:index+1}));attach(tasks,others);resolveRefs(tasks);const dependencies=inferDeps(tasks),globalConstraints=constraints(q),globalProhibitions=prohibitions(q),globalPreserves=preserves(q),globalReplacements=replacements(q),globalVerification=verifications(q),conflicts=[];if(globalProhibitions.some((prohibition)=>globalReplacements.some((replacement)=>tokenOverlap(prohibition,replacement)>=0.5)))conflicts.push({type:'PROHIBITION_REPLACE_OVERLAP',note:'同一対象に禁止と変更指示が重なる可能性がある。'});for(const task of tasks){if(!task.target||/^(?:入力対象|input target)$/.test(task.target))task.unresolved.push('target');if(!task.success_criteria.length&&['implement','improve','migrate','integrate','remove'].includes(task.action))task.unresolved.push('completion_criteria');}const unresolved=unique(tasks.flatMap((task)=>task.unresolved.map((item)=>`${task.id}:${item}`))),hardBlockers=unique(conflicts.map((item)=>item.type)),packet={schema_version:'astera.analysis-task-packet.v1',intent:tasks[0]?.action||'analyze',tasks,dependencies,execution_waves:buildExecutionWaves(tasks,dependencies),constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,completion_criteria:globalSuccess,unresolved,conflicts,hard_blockers:hardBlockers,source_spans:tasks.map((task)=>({task_id:task.id,...task.source_span}))},primary=tasks[0];return{schema_version:'astera.request-model.v2',language:lang,normalized_question:q,target:primary?.target||'',target_confidence:primary?.unresolved?.includes('target')?'low':'high',action:primary?.action||'analyze',objective:primary?.objective||objective('','analyze',lang),success_criteria:globalSuccess,constraints:globalConstraints,prohibitions:globalProhibitions,preserve:globalPreserves,replace:globalReplacements,verification:globalVerification,query_terms:terms(`${q}\n${ctx}`),context_present:Boolean(ctx),context_length:ctx.length,instruction_map:{clause_count:clauses.length,task_count:tasks.length,correction_count:clauses.filter((item)=>item.clause_type==='correction').length,prohibition_count:globalProhibitions.length,preserve_count:globalPreserves.length,verification_count:globalVerification.length},instruction_understanding:{mode:'INTERNAL_DETERMINISTIC',parser:null,execution_allowed:hardBlockers.length===0,blocked_reasons:hardBlockers},analysis_task_packet:packet};}
 
 function deriveEvidenceNeed(task={},domain={}){const reasons=unique(task.evidence_need?.reasons||[]),domainEvidence=Array.isArray(domain.primary?.evidence_to_collect)?domain.primary.evidence_to_collect:[],overlays=(domain.overlays||[]).map((item)=>item.id),clauseEvidenceText=[task.raw_text||'',...(task.verification||[]),...(task.success_criteria||[]),...(task.completion_criteria||[]),...(task.conditions||[])].join(' '),sourceEvidenceText=[clauseEvidenceText,task.target||'',task.objective||''].join(' '),internalVerification=RX.internalTest.test(clauseEvidenceText),externalEvidenceSignal=RX.evidence.test(clauseEvidenceText),explicitEvidenceOverlay=overlays.includes('current_information')||overlays.includes('evidence_strict');if(task.evidence_need?.required)reasons.push('task_contract_requires_evidence');if(externalEvidenceSignal&&!internalVerification)reasons.push('task_criteria_requires_external_evidence');if(explicitEvidenceOverlay&&!internalVerification)reasons.push(overlays.includes('current_information')?'overlay:current_information':'overlay:evidence_strict');if(['verify','compare','decide'].includes(task.action)&&domainEvidence.length&&(externalEvidenceSignal||explicitEvidenceOverlay)&&!internalVerification)reasons.push(`action:${task.action}:external_evidence`);const required=reasons.length>0,queries=required?unique([...(task.evidence_need?.queries||[]),task.target||'',task.objective||'',...domainEvidence,...(task.verification||[]),...(task.conditions||[])]).slice(0,20):[];return{required,reasons:unique(reasons),queries};}
 
@@ -286,4 +325,4 @@ function characterGrams(text){const compact=norm(text).toLowerCase().replace(/[^
 function tokenOverlap(left,right){const a=norm(left).toLowerCase(),b=norm(right).toLowerCase();if(!a||!b)return 0;if(a.includes(b)||b.includes(a))return 1;const x=new Set(characterGrams(a)),y=new Set(characterGrams(b));if(!x.size||!y.size)return 0;let hits=0;for(const gram of x)if(y.has(gram))hits+=1;return hits/Math.max(1,Math.min(x.size,y.size));}
 function matchingEvidence(text,packet,threshold=0.25){return(packet?.evidence||[]).map((item)=>({item,overlap:tokenOverlap(text,item.claim)})).filter((entry)=>entry.overlap>=threshold).sort((a,b)=>b.overlap-a.overlap);}
 
-module.exports={analyzeRequest,normalizeEvidencePacket,normalizeText:norm,splitSentences,segmentSource:segment,extractTerms:terms,matchingEvidence,tokenOverlap,unique,deriveEvidenceNeed,buildExecutionWaves};
+module.exports={analyzeRequest,normalizeEvidencePacket,normalizeText:norm,splitSentences,segmentSource:segment,classifyClauseRole,extractTerms:terms,matchingEvidence,tokenOverlap,unique,deriveEvidenceNeed,buildExecutionWaves};
