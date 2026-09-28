@@ -326,7 +326,8 @@ function consolidateMaterialOnlyConsultTasks(question, tasks) {
   if (primary.action === 'improve') {
     primary.unresolved = unique((primary.unresolved || []).filter((item) => item !== 'deliverable'));
   }
-  return [primary];
+  const carrierIds = new Set(carriers.map((task) => task.id));
+  return tasks.filter((task) => task.id === primary.id || !carrierIds.has(task.id)).map((task) => task.id === primary.id ? primary : task);
 }
 
 function extractPublicConstraintLines(question) {
