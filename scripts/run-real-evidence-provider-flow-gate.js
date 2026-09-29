@@ -45,6 +45,22 @@ function queryRuns(packet = {}) {
   ];
 }
 
+function summarizeProviderQueryResults(runs) {
+  return Object.fromEntries(PROVIDERS.map((providerId) => [
+    providerId,
+    runs
+      .filter((run) => run.provider_id === providerId)
+      .flatMap((run) => (run.query_results || []).map((query) => ({
+        query_id: query.query_id,
+        status: query.retrieval_status,
+        error_code: query.error_code || null,
+        candidate_count: Array.isArray(query.candidate_record_ids) ? query.candidate_record_ids.length : 0,
+        endpoint_count: query.endpoint_count ?? null,
+        completed_endpoint_count: query.completed_endpoint_count ?? null
+      })))
+  ]));
+}
+
 function gateSummary({ packet, out }) {
   const runs = providerRuns(packet);
   const attempts = Object.fromEntries(PROVIDERS.map((providerId) => {
@@ -63,7 +79,13 @@ function gateSummary({ packet, out }) {
   const queryStates = queryRuns(packet).map((query) => ({
     query_id: query.query_id,
     role: query.role,
-    status: query.status
+    status: query.status,
+    provider_records: (query.provider_records || []).map((record) => ({
+      provider_id: record.provider_id,
+      status: record.status,
+      error_code: record.error_code || null,
+      candidate_count: Array.isArray(record.candidate_record_ids) ? record.candidate_record_ids.length : 0
+    }))
   }));
   const taskResults = out.result?.task_results || [];
   const canonicalStatus = String(out.result?.canonical_claims?.status || 'UNKNOWN');
@@ -74,11 +96,11 @@ function gateSummary({ packet, out }) {
     search_state: result.evidence?.search_state,
     canonical_status: result.canonical?.status
   }));
-  const sections = out.result?.judgment?.sections || [];
-  const section3 = sections.find((section) => section.id === '03_facts');
-  const section7 = sections.find((section) => section.id === '07_evidence_status');
+  const judgment = out.result?.judgment || {};
+  const section3 = judgment['03_facts'];
+  const section7 = judgment['07_evidence_status'];
   return {
-    schema_version: 'astera.real-evidence-provider-flow-gate.v1',
+    schema_version: 'astera.real-evidence-provider-flow-gate.v2',
     connected: {
       required_provider_attempts: attempts,
       required_source_classes_attempted: classAttempts,
@@ -90,7 +112,9 @@ function gateSummary({ packet, out }) {
       evidence_count: Array.isArray(packet.evidence) ? packet.evidence.length : 0,
       provider_fulfilled_count: runs.filter((run) => run.status === 'FULFILLED').length,
       provider_failed_count: runs.filter((run) => run.status !== 'FULFILLED').length,
-      query_states: queryStates
+      provider_query_results: summarizeProviderQueryResults(runs),
+      query_states: queryStates,
+      all_queries_completed: queryStates.every((query) => query.status !== 'RETRIEVAL_FAILED')
     },
     effect: {
       canonical_status: canonicalStatus,
@@ -162,7 +186,8 @@ async function main() {
     const summary = gateSummary({ packet: lastPacket, out });
     const connected = summary.connected.all_required_providers_attempted
       && summary.connected.all_required_source_classes_attempted;
-    const result = PROVIDERS.every((providerId) => summary.connected.required_provider_attempts[providerId].fulfilled);
+    const result = PROVIDERS.every((providerId) => summary.connected.required_provider_attempts[providerId].fulfilled)
+      && summary.result.all_queries_completed;
     const effect = summary.effect.false_confirmation_blocked
       && summary.effect.adopted_evidence_boundary_respected;
     const handoff = Object.values(summary.handoff).every(Boolean);
