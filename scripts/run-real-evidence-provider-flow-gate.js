@@ -162,7 +162,7 @@ async function main() {
     const summary = gateSummary({ packet: lastPacket, out });
     const connected = summary.connected.all_required_providers_attempted
       && summary.connected.all_required_source_classes_attempted;
-    const result = summary.result.provider_fulfilled_count === PROVIDERS.length;
+    const result = PROVIDERS.every((providerId) => summary.connected.required_provider_attempts[providerId].fulfilled);
     const effect = summary.effect.false_confirmation_blocked
       && summary.effect.adopted_evidence_boundary_respected;
     const handoff = Object.values(summary.handoff).every(Boolean);
