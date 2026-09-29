@@ -32,7 +32,7 @@ const REPLACED_SPECIALIST_PROVIDER_IDS = new Set(['nominatim-search', 'un-digita
 const REPLACED_WORLD_PROVIDER_IDS = new Set(['ecolex-search', 'pubmed-search']);
 const WAVE5_REPLACED_PROVIDER_IDS = new Set(['huggingface-model-search']);
 const PUBLIC_PROVIDER_RUNTIME_POLICIES = Object.freeze({
-  'crossref-works': Object.freeze({ minimum_interval_ms: 1100 })
+  'crossref-works': Object.freeze({ minimum_interval_ms: 1100, latency_p95_ms: 4000 })
 });
 const ACTIVE_PUBLIC_SPECIALIST = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS.filter((provider) => !REPLACED_PUBLIC_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
 const ACTIVE_SPECIALIST_EXPANSION = Object.freeze(PUBLIC_SPECIALIST_PROVIDER_DEFINITIONS_SPECIALIST_EXPANSION.filter((provider) => !BLOCKED_PUBLIC_PROVIDER_IDS.has(provider.provider_id) && !REPLACED_SPECIALIST_PROVIDER_IDS.has(provider.provider_id)));
@@ -94,8 +94,9 @@ function readConfig(filePath) {
 function safeProviderId(value, index) { const id = String(value || '').trim(); if (!/^[a-z0-9][a-z0-9._-]{1,126}[a-z0-9]$/i.test(id)) throw configError(`providers[${index}].provider_id is invalid`); return id; }
 function resolveDataFile(configFile, value, index) { if (typeof value !== 'string' || !value.trim()) throw configError(`providers[${index}].file_path is required`); const filePath = path.resolve(path.dirname(configFile), value); const stat = fs.statSync(filePath); if (!stat.isFile()) throw configError(`providers[${index}].file_path must reference a file`); return filePath; }
 function sharedProviderFields(raw, index) { return { provider_id: safeProviderId(raw.provider_id, index), source_family_id: String(raw.source_family_id || raw.provider_id), priority: Number.isInteger(raw.priority) ? raw.priority : 100, domains: Array.isArray(raw.domains) ? raw.domains : [], capabilities: Array.isArray(raw.capabilities) ? raw.capabilities : [], routing_terms: Array.isArray(raw.routing_terms) ? raw.routing_terms : (PUBLIC_ROUTING_OVERRIDES[raw.provider_id] || []), latency_p50_ms: Number.isFinite(Number(raw.latency_p50_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p50_ms))) : undefined, latency_p95_ms: Number.isFinite(Number(raw.latency_p95_ms)) ? Math.max(1, Math.floor(Number(raw.latency_p95_ms))) : undefined, certified: raw.certified !== false }; }
+function runtimePolicy(raw) { return PUBLIC_PROVIDER_RUNTIME_POLICIES[raw.provider_id] || null; }
 function runtimeTransport(raw) {
-  const policy = PUBLIC_PROVIDER_RUNTIME_POLICIES[raw.provider_id];
+  const policy = runtimePolicy(raw);
   if (!policy?.minimum_interval_ms) return undefined;
   return createPacedTransport({ transport: secureGet, minimumIntervalMs: policy.minimum_interval_ms });
 }
@@ -108,7 +109,7 @@ function buildProvider(configFile, raw, index) {
   if (type === 'SEARCH_DETAIL_JSON') { assertNoPlaceholderOfficialHosts(raw, index); return createSearchDetailJsonProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], search: raw.search || {}, detail: raw.detail || {}, authority_id: raw.authority_id || raw.provider_id, publisher_name: raw.publisher_name || raw.authority_id || raw.provider_id, source_role: raw.source_role || 'OFFICIAL', timeout_ms: raw.timeout_ms, maximum_attempts: raw.maximum_attempts, request_headers: raw.request_headers || {} }); }
   if (type === 'STATIC_JSON_FILTER') { assertNoPlaceholderOfficialHosts(raw, index); return createStaticJsonFilterProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoint: raw.endpoint || {}, latency_p50_ms: common.latency_p50_ms || 80, latency_p95_ms: common.latency_p95_ms || 500 }); }
   if (type === 'POST_JSON') { assertNoPlaceholderOfficialHosts(raw, index); return createPostJsonProvider({ ...common, catalog_source_ids: Array.isArray(raw.catalog_source_ids) ? raw.catalog_source_ids : [], allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoint: raw.endpoint || {}, latency_p50_ms: common.latency_p50_ms || 700, latency_p95_ms: common.latency_p95_ms || 2500 }); }
-  if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') { assertNoPlaceholderOfficialHosts(raw, index); return createFreeOfficialLiveProvider({ ...common, source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE', allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [], transport: runtimeTransport(raw), latency_p50_ms: common.latency_p50_ms || 500, latency_p95_ms: common.latency_p95_ms || 1500 }); }
+  if (type === 'FREE_OFFICIAL_HTTP' || type === 'FREE_PUBLIC_HTTP') { const policy = runtimePolicy(raw); assertNoPlaceholderOfficialHosts(raw, index); return createFreeOfficialLiveProvider({ ...common, source_class: type === 'FREE_PUBLIC_HTTP' ? 'FREE_PROJECTION' : 'FREE_OFFICIAL_LIVE', allowed_hosts: Array.isArray(raw.allowed_hosts) ? raw.allowed_hosts : [], endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [], transport: runtimeTransport(raw), latency_p50_ms: common.latency_p50_ms || 500, latency_p95_ms: policy?.latency_p95_ms || common.latency_p95_ms || 1500 }); }
   throw configError(`providers[${index}].type is unsupported: ${type}`, 'EVIDENCE_PROVIDER_TYPE_UNSUPPORTED');
 }
 function loadEvidenceProviders(options = {}) {
