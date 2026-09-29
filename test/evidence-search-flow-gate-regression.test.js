@@ -100,6 +100,7 @@ class EvidenceSearchFlowEngine extends CanonicalAsteraEngine {
     super(options);
     this.searchCalls = [];
     this.activeTask = null;
+    this.lastResolvedEvidence = null;
     this.evidenceClient = {
       search: async (payload) => {
         this.searchCalls.push(payload);
@@ -110,13 +111,14 @@ class EvidenceSearchFlowEngine extends CanonicalAsteraEngine {
 
   async resolveEvidenceForTask({ task, input, caller: requestCaller, signal }) {
     this.activeTask = task;
-    return resolveTaskEvidence({
+    this.lastResolvedEvidence = await resolveTaskEvidence({
       client: this.evidenceClient,
       task,
       input,
       caller: requestCaller,
       signal
     });
+    return this.lastResolvedEvidence;
   }
 }
 
@@ -145,9 +147,9 @@ test('Evidence Search stage closes connection, result, effect, and Main8 handoff
     );
 
     // 2) RESULT: returned provider/query execution becomes a FOUND Evidence packet under upstream canonical planning authority.
+    assert.equal(engine.lastResolvedEvidence.planning_authority, 'UPSTREAM_CANONICAL');
     assert.equal(taskResult.evidence.search_state, 'FOUND');
     assert.equal(taskResult.evidence.source_status, 'FINAL_VALID');
-    assert.equal(taskResult.evidence.planning_authority, 'UPSTREAM_CANONICAL');
     assert.ok(taskResult.evidence.search_execution.provider_attempt_count >= 2);
     assert.ok(taskResult.evidence.search_execution.evidence_count >= 2);
 
