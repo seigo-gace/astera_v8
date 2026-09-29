@@ -118,9 +118,9 @@ function classifyClauseRole(span) {
   if (/(?:cannot|can't|could\s+not|couldn't)\s+be\s+(?:verified|confirmed)|\bthere\s+is\s+no\b|\bno\s+(?:formal|official|measurement|evidence|record|quotation)\b/i.test(roleText) || /(?:確認できない|確認できず|根拠なし|証拠なし|記録がない)/u.test(roleText)) return 'MISSING_EVIDENCE';
   if (/^(?:according\s+to)\b/i.test(roleText) || /^[^.!?]{1,160}\b(?:said|says|stated|states|reported|reports)\b/i.test(roleText) || /(?:によると|と述べた|と述べている|と報告した)/u.test(roleText)) return 'ATTRIBUTION';
   if (/^[^.!?]{1,160}\b(?:record|report|document|log)\b[^.!?]{0,80}\b(?:shows|confirms|records|documents|establishes)\b/i.test(roleText) || /(?:記録|報告書|文書|ログ).{0,80}(?:示す|確認できる|記録している)/u.test(roleText)) return 'FACT_WITH_SOURCE';
-  if (/^[^.!?]{1,160}\s+(?:is|are|was|were)\s+[^.!?]+$/i.test(roleText) || /^[^。！？]{1,120}(?:は|が)[^。！？]{1,120}(?:である|です)$/u.test(roleText)) return 'DESCRIPTION';
   const directAction = lexicalActionMatches(roleText).find((item) => item.index === 0);
   if (directAction || /^(?:please\s+)?[A-Z][a-z]+\s+(?:only\s+)?(?:the|a|an|all|any|each|facts?|information|data|evidence|results?|material)\b/.test(roleText) || /(?:せよ|しろ|してください|すること)$/u.test(roleText)) return 'INSTRUCTION';
+  if (/^[^.!?]{1,160}\s+(?:is|are|was|were)\s+[^.!?]+$/i.test(roleText) || /^[^。！？]{1,120}(?:は|が)[^。！？]{1,120}(?:である|です)$/u.test(roleText)) return 'DESCRIPTION';
   return 'UNDETERMINED';
 }
 

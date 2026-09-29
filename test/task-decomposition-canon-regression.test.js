@@ -25,6 +25,24 @@ test('canonical Task decomposition applies context constraints only to the deter
   assert.ok(api.field_sources.prohibitions.some((item) => item.source === 'context' && item.scope === 'TASK'));
 });
 
+
+test('English verify imperative remains an executable Task before DESCRIPTION classification', () => {
+  const request = understand('Verify that Node 22 is supported in production using official evidence.');
+  assert.equal(request.analysis_task_packet.tasks.length, 1);
+  const task = request.analysis_task_packet.tasks[0];
+  assert.equal(task.action, 'verify');
+  assert.match(task.target, /Node 22/i);
+});
+
+test('English verify target preserves dotted identifiers such as Node.js instead of truncating at the period', () => {
+  const request = understand('Verify that Node.js 22 is supported in production using official evidence.');
+  assert.equal(request.analysis_task_packet.tasks.length, 1);
+  const task = request.analysis_task_packet.tasks[0];
+  assert.equal(task.action, 'verify');
+  assert.match(task.target, /Node\.js 22/i);
+  assert.notEqual(task.target, 'that Node');
+});
+
 test('pronoun reference resolves to the immediately preceding unambiguous Task target with provenance', () => {
   const request = understand('APIサーバーを検証する。それを改善する。');
   assert.equal(request.analysis_task_packet.tasks.length, 2);

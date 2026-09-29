@@ -440,7 +440,13 @@ function inferTarget(text, actionMatch, fallback = '') {
       if (candidate) return candidate;
     }
     if (/^[A-Za-z]/.test(value.slice(match.index))) {
-      const after = value.slice(match.end).replace(/^(?:\s+the|\s+an?|\s+)/i, '').split(/\b(?:then|while|without|if|when)\b|[.,;!?]/i)[0].trim();
+      const remainder = value.slice(match.end).replace(/^(?:\s+the|\s+an?|\s+)/i, '');
+      const firstSpan = segmentSource(remainder)[0]?.text || remainder;
+      let after = norm(firstSpan)
+        .split(/\b(?:then|while|without|if|when)\b|[;,!?]/i)[0]
+        .replace(/[.]+$/u, '')
+        .trim();
+      if (match.id === 'verify') after = after.replace(/^that\s+/i, '').trim();
       if (after && after.length <= 120) return after;
     }
     if (before && before.length <= 120 && !REFERENCE_CUE.test(before)) return before.replace(/(?:は|が|を|で|の)$/u, '').trim();
