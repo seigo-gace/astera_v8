@@ -8,7 +8,7 @@ const { createGeneralWebSearchProvider } = require('../src/evidence-search/provi
 
 const PROVIDERS = Object.freeze([
   'crossref-works',
-  'loc-search',
+  'gemet-search',
   'free-general-web-search'
 ]);
 const EXPECTED_CLASSES = Object.freeze([
@@ -61,7 +61,7 @@ function summarizeProviderQueryResults(runs) {
   ]));
 }
 
-function gateSummary({ packet, out }) {
+function gateSummary({ packet, out, generalWebSmoke }) {
   const runs = providerRuns(packet);
   const attempts = Object.fromEntries(PROVIDERS.map((providerId) => {
     const matches = runs.filter((run) => run.provider_id === providerId);
@@ -100,7 +100,7 @@ function gateSummary({ packet, out }) {
   const section3 = judgment['03_facts'];
   const section7 = judgment['07_evidence_status'];
   return {
-    schema_version: 'astera.real-evidence-provider-flow-gate.v2',
+    schema_version: 'astera.real-evidence-provider-flow-gate.v3',
     connected: {
       required_provider_attempts: attempts,
       required_source_classes_attempted: classAttempts,
@@ -115,6 +115,14 @@ function gateSummary({ packet, out }) {
       provider_query_results: summarizeProviderQueryResults(runs),
       query_states: queryStates,
       all_queries_completed: queryStates.every((query) => query.status !== 'RETRIEVAL_FAILED')
+    },
+    diagnostics: {
+      general_web_smoke: {
+        status: generalWebSmoke?.query_results?.[0]?.retrieval_status || 'UNKNOWN',
+        error_code: generalWebSmoke?.query_results?.[0]?.error_code || null,
+        candidate_count: Array.isArray(generalWebSmoke?.candidates) ? generalWebSmoke.candidates.length : 0,
+        coverage_state: generalWebSmoke?.coverage_state || 'UNKNOWN'
+      }
     },
     effect: {
       canonical_status: canonicalStatus,
@@ -145,7 +153,13 @@ async function main() {
     if (!provider) fail(`required provider is missing: ${providerId}`);
     return provider;
   });
-  selected.push(createGeneralWebSearchProvider({ resultLimit: 2, query_concurrency: 2 }));
+  const generalWebProvider = createGeneralWebSearchProvider({ resultLimit: 2, query_concurrency: 2 });
+  selected.push(generalWebProvider);
+
+  const generalWebSmoke = await generalWebProvider.search({
+    domain_lens: { id: 'G29' },
+    query_set: Object.freeze([{ query_id: 'general-web-smoke', text: 'Node.js official documentation site' }])
+  }, {});
 
   const evidenceModule = createEvidenceSearchModule({
     providers: selected,
@@ -183,7 +197,7 @@ async function main() {
     }, { id: 'real-evidence-provider-flow-gate', is_global: true, plan: 'admin' });
 
     if (!lastPacket) fail('Evidence Search did not execute');
-    const summary = gateSummary({ packet: lastPacket, out });
+    const summary = gateSummary({ packet: lastPacket, out, generalWebSmoke });
     const connected = summary.connected.all_required_providers_attempted
       && summary.connected.all_required_source_classes_attempted;
     const result = PROVIDERS.every((providerId) => summary.connected.required_provider_attempts[providerId].fulfilled)
