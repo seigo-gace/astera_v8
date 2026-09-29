@@ -78,9 +78,10 @@ test('post-to-answer stage closes connection, result, intended effect, and downs
     assert.equal(out.result.judgment['03_facts'].confirmed.some((item) => item.task_id === 'T01'), false);
     assert.ok(out.result.judgment['03_facts'].unconfirmed.some((item) => item.task_id === 'T01'));
 
-    // 4) NEXT HANDOFF: Main8/material output is still produced, carries the unresolved state, and preserves external decision authority.
+    // 4) NEXT HANDOFF: Main8/material and the external-consumer brief both carry the unresolved state without granting Astera decision authority.
     assert.ok(out.result.judgment['08_reinstruction']);
     assert.ok(String(out.material?.text || '').trim().length > 0);
+    assert.ok(String(out.prompt || '').includes('Consumer rule: preserve task order, hard constraints, evidence status, and UNDETERMINED claims.'));
     assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
     assert.equal(out.result.no_normative_decision_generated, true);
     assert.equal(out.result.comparison.selected_candidate, null);
