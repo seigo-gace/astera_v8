@@ -146,12 +146,16 @@ test('Evidence Search stage closes connection, result, effect, and Main8 handoff
       task.canonical_plan.search_plan.planned_query_roles
     );
 
-    // 2) RESULT: returned provider/query execution becomes a FOUND Evidence packet under upstream canonical planning authority.
+    // 2) RESULT: the real resolver preserves provider/query execution, then the public compact packet carries the valid Evidence result.
     assert.equal(engine.lastResolvedEvidence.planning_authority, 'UPSTREAM_CANONICAL');
+    assert.equal(engine.lastResolvedEvidence.query_execution.initial.length, task.canonical_plan.search_plan.queries.length);
+    assert.equal(engine.lastResolvedEvidence.provider_execution.initial.length, 1);
+    assert.equal(engine.lastResolvedEvidence.provider_execution.reinforcement.length, 1);
     assert.equal(taskResult.evidence.search_state, 'FOUND');
     assert.equal(taskResult.evidence.source_status, 'FINAL_VALID');
-    assert.ok(taskResult.evidence.search_execution.provider_attempt_count >= 2);
-    assert.ok(taskResult.evidence.search_execution.evidence_count >= 2);
+    assert.equal(taskResult.evidence.state, 'VALID');
+    assert.ok(taskResult.evidence.unique_evidence_count >= 2);
+    assert.equal(taskResult.evidence.provider_failures.length, 0);
 
     // 3) EFFECT: valid Evidence confirms the intended Claim and appears as confirmed fact material, not merely as a successful search call.
     assert.ok(taskResult.canonical.confirmed_count >= 1);
