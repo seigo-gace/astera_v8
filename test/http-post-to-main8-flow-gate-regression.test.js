@@ -111,9 +111,10 @@ test('real HTTP POST reaches canonical Task flow and returns Main8 material with
     assert.doesNotMatch(response.body, /"result"\s*:/);
     assert.doesNotMatch(response.body, /"prompt"\s*:/);
 
-    // 3) EFFECT: unavailable evidence remains visibly unresolved instead of becoming a confirmed fact.
-    assert.match(response.body, /UNDETERMINED/);
-    assert.match(response.body, /REJECTED_SEARCH_NOT_EXECUTED/);
+    // 3) EFFECT: unavailable evidence remains visibly unresolved in reader-facing language instead of becoming a confirmed fact or leaking internal enums.
+    assert.match(response.body, /External search was not executed|external evidence is not currently established/i);
+    assert.match(response.body, /remain(?:s)? unresolved|unresolved rather than being promoted|must remain unresolved/i);
+    assert.doesNotMatch(response.body, /REJECTED_SEARCH_NOT_EXECUTED|UNDETERMINED|SearchExecution=|EvidenceQuality=/);
     assert.doesNotMatch(response.body, /selected_candidate\s*=\s*[^-]/i);
 
     // 4) NEXT HANDOFF: all eight material sections are present for the external consumer/user to continue from.
