@@ -125,7 +125,12 @@ class AsteraEngine extends CanonicalAsteraEngine {
     }
 
     if (!observable || !intent) return next;
-    next.analysis_intent = intent;
+    const taskSpecificPurpose = uniqueStrings((packet.tasks || []).map((task) => task?.purpose || task?.objective))[0] || '';
+    const specificPurpose = intent.source === 'EXPLICIT_PURPOSE_OVERRIDE'
+      ? intent.purpose
+      : (packet.user_goal || taskSpecificPurpose || next['01_purpose']?.user_goal || intent.purpose);
+    const resolvedIntent = { ...intent, purpose: specificPurpose || intent.purpose };
+    next.analysis_intent = resolvedIntent;
     next.observable_material = observable;
 
     const purpose = next['01_purpose'];
@@ -133,10 +138,10 @@ class AsteraEngine extends CanonicalAsteraEngine {
       const priorItems = Array.isArray(purpose.items) ? purpose.items : [];
       next['01_purpose'] = {
         ...purpose,
-        user_goal: intent.purpose,
-        summary: intent.purpose,
-        items: uniqueStrings([intent.purpose, ...priorItems.filter((item) => String(item) !== intent.purpose)]),
-        analysis_intent: intent
+        user_goal: resolvedIntent.purpose,
+        summary: resolvedIntent.purpose,
+        items: uniqueStrings([resolvedIntent.purpose, ...priorItems.filter((item) => String(item) !== resolvedIntent.purpose)]),
+        analysis_intent: resolvedIntent
       };
     }
 
@@ -195,9 +200,13 @@ class AsteraEngine extends CanonicalAsteraEngine {
       const genericDominance = new Set([
         'Data Loss', 'Downtime', '互換性破壊', 'Security Regression', 'Rollback不能',
         '幻覚・誤判定', 'Bias', 'Privacy Leak', 'Prompt Injection', '過信・監査Gap',
+        '製品安全', '誤表示', 'Recall', '保証不履行', '互換性問題',
         '根拠なしの主張', '弱いSource', '矛盾', 'Source Laundering'
       ]);
-      const retained = existing.filter((risk) => !(String(risk.rule_id || '').startsWith('RISK-LENS-') && genericDominance.has(String(risk.impact || ''))));
+      const retained = existing.filter((risk) => {
+        if (String(risk.rule_id || '').startsWith('OBSERVABLE-')) return true;
+        return !genericDominance.has(String(risk.impact || ''));
+      });
       const risks = [...specificRisks, ...retained];
       next['04_crisis'] = {
         ...crisis,
