@@ -11,6 +11,7 @@ const {
 } = require('./runtime/standalone-material-normalizer');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
+const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
@@ -227,6 +228,11 @@ class AsteraEngine extends CanonicalAsteraEngine {
 
   externalBrief(judgment) {
     return renderUnifiedMain8(judgment).text;
+  }
+
+  async process(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
+    const out = await super.process(input, caller, executionContext);
+    return attachEvidenceCitations(out);
   }
 
   async processProgressive(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
