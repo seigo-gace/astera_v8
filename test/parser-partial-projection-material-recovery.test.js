@@ -157,7 +157,7 @@ test('partial Japanese parser projection becomes substantive unified human/AI Ma
     assert.match(sections[5], /理解度|網羅率|読みやすさ/);
 
     assert.match(sections[6], /外部検索を必要としない|外部根拠|確認済み/);
-    assert.match(sections[6], /入力で与えられた材料|利用者が与えた条件/);
+    assert.match(sections[6], /利用者入力として与えられた材料|利用者入力の条件|利用者が与えた条件/);
 
     assert.match(sections[7], /返金ポリシー|固定する条件/);
     assert.match(sections[7], /作業時間/);
