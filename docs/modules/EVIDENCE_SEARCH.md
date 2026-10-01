@@ -74,6 +74,16 @@ Product architectureでは2つの補完経路として扱います。
 
 根拠検索を実行する場合は、**Route AとRoute Bを毎回ともに実行**します。用途によって片方だけを選ぶSelectorは設けず、双方のCandidateを統合してNormalize / Deduplicate / Conflict / Freshness / Coverage / Lineage / Information Qualityへ通します。
 
+Runtime上のProvider分類は次のように扱います。
+
+```text
+FREE_PROJECTION    → Specialist / Authoritative
+FREE_GENERAL_WEB   → General / Current
+FREE_OFFICIAL_LIVE → Specialist / Authoritative と General / Current の橋渡しClass
+```
+
+`FREE_OFFICIAL_LIVE`は公式・権威Sourceでありながら現在情報をLive取得するため、片側へ固定しません。ただし、**1つのProvider実行だけを2 Route実行済みとは数えません**。Dual Route成立にはInitial phaseで少なくとも2つの異なるProvider実行が必要で、Specialist / AuthoritativeとGeneral / Currentの両方に実行記録が存在しなければFail-closedとします。
+
 ---
 
 ## 4. Canonical runtime flow
@@ -262,124 +272,154 @@ Production private bind:
 127.0.0.1:7376
 ```
 
-Endpoints:
+Main → Evidence Search:
 
 ```text
-GET  /healthz
 POST /internal/v1/evidence/search
 ```
 
-`POST /internal/v1/evidence/search`はInternal Service Signatureを要求します。
+内部通信は共有Secretを使う署名付きRequestです。
 
-Request schema:
+- caller identity
+- request ID
+- timestamp
+- nonce
+- body hash
+- HMAC signature
 
-- `src/evidence-search/contracts/search-request.v1.schema.json`
+を検証します。
 
-Result schema:
-
-- `src/evidence-search/contracts/search-result.v1.schema.json`
-
-Module-level contract:
-
-- `src/evidence-search/contracts/module-request.v1.schema.json`
-- `src/evidence-search/contracts/module-response.v1.schema.json`
+External public routeではありません。
 
 ---
 
-## 9. Production startup contract
+## 9. Durable recovery
 
-Evidence SearchのProduction RuntimeはContainer-firstです。
+Evidence Searchは検索途中状態をJobとして保持します。
 
-Startupには少なくとも次の成立が必要です。
-
-- Provider configuration
-- Source catalog
-- enabled / certified searchable provider
-- required target/source runtime bindings
-- internal service authentication secret
-- persistent Evidence DB path
-- durable recovery store / spool
-- spool encryption/integrity key
-
-Container processが存在するだけではREADYではありません。
-
-`GET /healthz`は検索可能Runtimeの成立を確認するために使用します。
-
----
-
-## 10. Module manifest boundary
-
-Module identity:
+代表State:
 
 ```text
-module_id = astera-evidence-search
-runtime   = node>=22
-active_search_mode = FREE_ONLY
+RECEIVED
+AUTHENTICATED
+PLANNED
+INITIAL_SEARCH_COMPLETED
+INITIAL_JUDGED
+REINFORCEMENT_COMPLETED
+FINAL_JUDGED
+FINAL_VALID / REJECTED / ERROR
 ```
 
-Deterministic free-search contractでは少なくとも次を禁止します。
+Checkpointは暗号化Artifactとして保存し、Crash後に最後の有効Checkpointから再開できます。
+
+Recoveryは:
+
+- Search Request body
+- Query Plan hash
+- effective_as_of
+- State version
+- Checkpoint hash
+
+の整合性を確認します。
+
+---
+
+## 10. Paid search boundary
+
+現在の実検索Pathは無料検索だけです。
 
 ```text
-paid_provider_execution
-payment_execution
-credit_balance_management
-charge_reservation
-refund_execution
-settlement_execution
-ai_search
-llm_query_generation
-ai_reranking
-ai_scoring
+paid_search.enabled = false
 ```
 
----
+を固定します。
 
-## 11. Relationship with Generic Evaluator v2
-
-汎用判定Module v2は必要時にEvidence Search APIをCallerとして利用します。
+Paid providerの将来利用に備えたUsage Calculationはありますが、これは検索実行と分離したOperationです。
 
 ```text
-Generic Evaluator v2
-→ POST /internal/v1/evidence/search
-→ Standard Evidence Search Result
-→ evaluator-side Evidence Registry / Binding
-→ Metric / Blocking / Judgment
+CALCULATE_PAID_USAGE
 ```
 
-Evidence Searchは判定Module用Registry / Binding / Metric / Criterionを所有しません。
+このOperationは:
 
-判定ModuleがEvidence Searchを利用することと、Evidence SearchがInformation Qualityを使うことは別Contractであり、再帰呼出しを作りません。
+- Paymentを実行しない
+- Creditを減算しない
+- Providerを呼ばない
+- 料金を整数最小通貨単位で計算する
 
----
-
-## 12. Non-goals
-
-- Main8 generation
-- Final human/business decision
-- Generic evaluation scoring
-- Evaluator-specific Evidence Registry / Binding
-- Paid provider execution
-- Payment / Credit / Refund
-- AI-generated search query
-- AI reranking / AI scoring
-- Missing evidence fabrication
+だけです。
 
 ---
 
-## 13. Verification anchors
+## 11. Failure semantics
 
-代表Test / Gate:
+代表的なFailure:
 
-- `test/evidence-search-core.test.js`
-- `test/evidence-search-api.test.js`
-- `test/evidence-search-main-proxy.test.js`
-- `test/evidence-search-provider-adapter.test.js`
-- `test/evidence-search-general-web-provider.test.js`
-- `test/evidence-search-kb-target-registry.test.js`
-- `test/evidence-search-recovery.test.js`
-- `test/evidence-search-truthful-state.test.js`
-- `test/evidence-search-adopted-evidence-boundary.test.js`
-- `test/evidence-search-search-concurrency.test.js`
-- `scripts/validate-evidence-modular-architecture.js`
+```text
+INVALID_SEARCH_REQUEST
+NO_CORE_CONDITION
+EVIDENCE_SEARCH_NO_ACTIVE_PROVIDER
+PROVIDER_TIMEOUT
+PROVIDER_RESPONSE_INVALID
+INFORMATION_QUALITY_RESPONSE_INVALID
+SEARCH_DEADLINE_EXCEEDED
+SEARCH_CANCELLED
+RECOVERY_ARTIFACT_INVALID
+```
 
-Live retrieval proof requires actual provider/network execution. Source TestとLive Evidence proofを同一視しません。
+Provider失敗はCandidate採用成功と同義ではありません。
+
+Evidence不足時に捏造Candidateで補完しません。
+
+---
+
+## 12. Security boundary
+
+- Evidence APIはloopback private bind
+- HMAC署名付き内部Request
+- Nonce replay protection
+- Secret値はLogしない
+- Provider HTTPはHost制限を持つ
+- Redirect先も再検証する
+- HTTPSを優先する
+- Paid providerは実行しない
+- Recovery artifactは暗号化する
+
+---
+
+## 13. Current implementation state
+
+現在実装済み:
+
+- Provider Registry
+- Query Plan Compiler
+- Bounded Scheduler
+- Candidate Normalization
+- Deduplication
+- Lineage / Conflict / Freshness / Coverage
+- Information Quality 80/95 gate
+- Reinforcement
+- Durable Job / Checkpoint / Recovery
+- Internal HMAC API
+- Paid Usage calculation boundary
+- General Web provider
+- KB target registry / runtime binding
+
+重要:
+
+> Evidence Searchの成功は「HTTP 200」ではなく、検索経路・Provider実行・Candidate・Quality・Recovery stateまで含めて判定します。
+
+---
+
+## 14. Canonical invariants
+
+1. Evidence Searchは**non-AI**。
+2. Search Planは決定論的。
+3. AIの記憶をEvidenceにしない。
+4. Candidateを自動Truth化しない。
+5. Final gate不合格Candidateは採用Evidenceとして公開しない。
+6. Payment実行をEvidence Searchへ混ぜない。
+7. Crash recoveryで別Requestを再利用しない。
+8. Search failureをEvidence absenceへ偽装しない。
+9. MainはEvidence Searchの内部探索責務を持たない。
+10. Evidence Searchは最終意思決定を持たない。
