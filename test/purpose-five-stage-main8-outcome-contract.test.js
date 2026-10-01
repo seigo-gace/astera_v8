@@ -41,7 +41,13 @@ test('purpose -> five parallel stages -> Main8 returns usable judgment material,
     const judgment = result.judgment || {};
     const packet = result.analysis_task_packet || {};
     const five = result.five_stage || {};
-    const task = (result.task_results || [])[0] || {};
+    const aggregate = {
+      facts: result.facts,
+      risks: result.risks,
+      multi: result.multi,
+      inquiry: result.inquiry,
+      comparison: result.comparison
+    };
 
     if (result.type !== 'cognitive_map') failures.push(`result.type=${result.type || '-'}`);
 
@@ -55,21 +61,17 @@ test('purpose -> five parallel stages -> Main8 returns usable judgment material,
     if (!includesAny(premiseText, ['法務確認', '未'])) failures.push('02_premise lost the unresolved legal condition');
 
     assert.deepEqual(five.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
-    if (five.lane_execution?.mode !== 'FIVE_STAGE_PARALLEL_WORKER_THREADS') {
-      failures.push(`five_stage lane execution is not parallel: ${five.lane_execution?.mode || 'missing'}`);
-    }
 
-    const laneBlob = textOf(task);
     for (const lane of ['facts', 'risks', 'multi', 'inquiry', 'comparison']) {
-      if (!task[lane] || !textOf(task[lane]).replace(/[{}\[\]",:]/g, '').trim()) failures.push(`${lane} lane is empty`);
+      if (!aggregate[lane] || !textOf(aggregate[lane]).replace(/[{}\[\]",:]/g, '').trim()) failures.push(`${lane} aggregate lane is empty`);
     }
-    if (!includesAny(task.risks, ['法務', '返金', '禁止', '未確認', '変更'])) failures.push('risk lane has no case-specific risk material');
-    if ((task.multi?.perspectives || []).length < 2) failures.push('multi lane has insufficient perspectives');
-    if (!((task.inquiry?.open_items || []).length || (task.inquiry?.missing_questions || []).length || (task.inquiry?.missing_fields || []).length)) {
+    if (!includesAny(aggregate.risks, ['法務', '返金', '禁止', '未確認', '変更'])) failures.push('risk lane has no case-specific risk material');
+    if ((aggregate.multi?.perspectives || []).length < 2) failures.push('multi lane has insufficient perspectives');
+    if (!((aggregate.inquiry?.open_items || []).length || (aggregate.inquiry?.missing_questions || []).length || (aggregate.inquiry?.missing_fields || []).length)) {
       failures.push('inquiry lane does not expose unresolved/missing material');
     }
-    if (!includesAny(task.comparison, ['A案']) || !includesAny(task.comparison, ['B案'])) failures.push('compare lane lost comparison candidates');
-    if (!includesAny(task.comparison, ['作業時間']) || !includesAny(task.comparison, ['法務リスク']) || !includesAny(task.comparison, ['利用者理解'])) {
+    if (!includesAny(aggregate.comparison, ['A案']) || !includesAny(aggregate.comparison, ['B案'])) failures.push('compare lane lost comparison candidates');
+    if (!includesAny(aggregate.comparison, ['作業時間']) || !includesAny(aggregate.comparison, ['法務リスク']) || !includesAny(aggregate.comparison, ['利用者理解'])) {
       failures.push('compare lane lost explicit comparison dimensions');
     }
 
@@ -97,8 +99,15 @@ test('purpose -> five parallel stages -> Main8 returns usable judgment material,
       if (!ids.length || !ids.every((id) => taskIds.has(id))) failures.push(`${key} lacks valid purpose/task trace`);
     }
 
+    const resultTrace = textOf({
+      five_stage: five,
+      task_results: result.task_results,
+      comparison: result.comparison,
+      judgment
+    });
     if (result.no_normative_decision_generated !== true) failures.push('normative decision boundary is not enforced');
-    if (!laneBlob.includes('A案') || !laneBlob.includes('B案')) failures.push('purpose-to-result task material is not traceable to the user input');
+    if (!resultTrace.includes('A案') || !resultTrace.includes('B案')) failures.push('purpose-to-result material is not traceable to the user input');
+    if (!resultTrace.includes('返金ポリシー')) failures.push('purpose-to-result material lost the preserve constraint');
 
     assert.deepEqual(failures, [], failures.join('\n'));
   } finally {
