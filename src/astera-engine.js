@@ -10,6 +10,7 @@ const {
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
+const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
 const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
@@ -207,6 +208,16 @@ class AsteraEngine extends CanonicalAsteraEngine {
     }
 
     return next;
+  }
+
+  // A single final material is exposed to every consumer. Human-facing and AI-facing
+  // judgment material must never diverge into separate semantic outputs.
+  material(judgment) {
+    return renderUnifiedMain8(judgment);
+  }
+
+  externalBrief(judgment) {
+    return renderUnifiedMain8(judgment).text;
   }
 
   async processProgressive(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
