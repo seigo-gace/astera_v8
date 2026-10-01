@@ -62,6 +62,8 @@ CORE_HITS="$(docker logs "$CORE" 2>&1 | grep -Eic 'evidence|process|parser' || t
 EVID_HITS="$(docker logs "$EVID" 2>&1 | grep -Eic 'search|evidence|provider|request' || true)"
 JOB_PROBE="$(docker exec "$EVID" node -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("/data/evidence-search.db",{readOnly:true});const rows=db.prepare("SELECT state,COUNT(*) AS count FROM evidence_jobs GROUP BY state ORDER BY state").all();const total=rows.reduce((n,r)=>n+Number(r.count),0);const terminal=rows.filter(r=>r.state==="FINAL_VALID"||r.state==="REJECTED").reduce((n,r)=>n+Number(r.count),0);const errors=rows.filter(r=>r.state==="ERROR").reduce((n,r)=>n+Number(r.count),0);const artifacts=Number(db.prepare("SELECT COUNT(*) AS count FROM evidence_artifacts").get().count);console.log([total,terminal,errors,artifacts,rows.map(r=>`${r.state}:${r.count}`).join(",")].join("\t"));db.close();' 2>/dev/null || true)"
 IFS=$'\t' read -r JOB_TOTAL JOB_TERMINAL JOB_ERRORS ARTIFACT_TOTAL JOB_STATES <<< "$JOB_PROBE"
+ERROR_PROBE="$(docker exec "$EVID" node -e 'const {DatabaseSync}=require("node:sqlite");const {DurableEvidenceSpool}=require("./src/evidence-search/recovery/durable-spool");const db=new DatabaseSync("/data/evidence-search.db",{readOnly:true});const job=db.prepare("SELECT job_id,error_code FROM evidence_jobs WHERE state=\"ERROR\" ORDER BY updated_at DESC LIMIT 1").get();if(!job){console.log(["","","","",""].join("\t"));db.close();process.exit(0);}const stages=db.prepare("SELECT stage FROM evidence_artifacts WHERE job_id=? ORDER BY created_at ASC,stage ASC").all(job.job_id).map(r=>r.stage).join(",");const rec=db.prepare("SELECT * FROM evidence_artifacts WHERE job_id=? AND stage=\"ERROR\" LIMIT 1").get(job.job_id);let failed="",status="",message="";if(rec){try{const cp=new DurableEvidenceSpool().read(rec);failed=String(cp.value?.failed_state||"");status=String(cp.value?.status||"");message=String(cp.value?.message||"").replace(/\s+/g," ").slice(0,500);}catch(error){message=`ARTIFACT_READ_FAILED:${error.code||"ERROR"}`;}}console.log([String(job.error_code||""),failed,status,message,stages].join("\t"));db.close();' 2>/dev/null || true)"
+IFS=$'\t' read -r ERROR_CODE ERROR_FAILED_STATE ERROR_STATUS ERROR_MESSAGE ARTIFACT_STAGES <<< "$ERROR_PROBE"
 
 echo "EXACT_SHA=$EXPECTED_SHA"
 echo "HTTP_STATUS=$HTTP"
@@ -71,13 +73,19 @@ echo "EVIDENCE_JOB_TERMINAL=${JOB_TERMINAL:-0}"
 echo "EVIDENCE_JOB_ERRORS=${JOB_ERRORS:-0}"
 echo "EVIDENCE_ARTIFACT_TOTAL=${ARTIFACT_TOTAL:-0}"
 echo "EVIDENCE_JOB_STATES=${JOB_STATES:-NONE}"
+echo "EVIDENCE_ARTIFACT_STAGES=${ARTIFACT_STAGES:-NONE}"
+echo "EVIDENCE_ERROR_CODE=${ERROR_CODE:-NONE}"
+echo "EVIDENCE_ERROR_FAILED_STATE=${ERROR_FAILED_STATE:-NONE}"
+echo "EVIDENCE_ERROR_STATUS=${ERROR_STATUS:-NONE}"
+echo "EVIDENCE_ERROR_MESSAGE=${ERROR_MESSAGE:-NONE}"
 echo "CORE_RUNTIME_LOG_HITS=$CORE_HITS"
 echo "EVIDENCE_RUNTIME_LOG_HITS=$EVID_HITS"
 if [ "$HTTP" != 200 ]; then echo '--- CORE LOG ---'; docker logs "$CORE" 2>&1 | tail -n 100; echo '--- EVIDENCE LOG ---'; docker logs "$EVID" 2>&1 | tail -n 100; echo '--- RESPONSE ---'; head -c 8000 "$RESP"; echo; fail HTTP; fi
 if [ "$SEP" -ne 7 ]; then echo '--- RESPONSE ---'; head -c 8000 "$RESP"; echo; echo '--- CORE LOG ---'; docker logs "$CORE" 2>&1 | tail -n 100; echo '--- EVIDENCE LOG ---'; docker logs "$EVID" 2>&1 | tail -n 100; fail MAIN8; fi
 [[ "${JOB_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_NOT_REACHED
+[[ "${JOB_ERRORS:-}" =~ ^[0-9]+$ ]] || fail EVIDENCE_PROBE_INVALID
+[ "$JOB_ERRORS" -eq 0 ] || fail EVIDENCE_ERROR
 [[ "${JOB_TERMINAL:-}" =~ ^[0-9]+$ ]] && [ "$JOB_TERMINAL" -eq "$JOB_TOTAL" ] || fail EVIDENCE_NONTERMINAL
-[[ "${JOB_ERRORS:-}" =~ ^[0-9]+$ ]] && [ "$JOB_ERRORS" -eq 0 ] || fail EVIDENCE_ERROR
 [[ "${ARTIFACT_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_ARTIFACT_MISSING
 
 echo 'GATE=PASS_HTTP_MAIN8_EVIDENCE'
