@@ -36,8 +36,15 @@ function enforceDualRoutePayload(payload) {
 
 function routeExecutionSummary(result) {
   const initial = Array.isArray(result?.provider_execution?.initial) ? result.provider_execution.initial : [];
-  const specialist = initial.filter((item) => item.source_class === 'FREE_PROJECTION');
-  const generalCurrent = initial.filter((item) => item.source_class === 'FREE_OFFICIAL_LIVE' || item.source_class === 'FREE_GENERAL_WEB');
+  // FREE_OFFICIAL_LIVE is intentionally a bridge class: an official live source can
+  // satisfy the authoritative side of Route A and the current side of Route B.
+  // FREE_PROJECTION remains specialist-only; FREE_GENERAL_WEB remains general/current-only.
+  const specialist = initial.filter((item) => (
+    item.source_class === 'FREE_PROJECTION' || item.source_class === 'FREE_OFFICIAL_LIVE'
+  ));
+  const generalCurrent = initial.filter((item) => (
+    item.source_class === 'FREE_OFFICIAL_LIVE' || item.source_class === 'FREE_GENERAL_WEB'
+  ));
   const summarize = (records) => Object.freeze({
     attempted: records.length > 0,
     provider_count: records.length,
@@ -45,16 +52,22 @@ function routeExecutionSummary(result) {
     rejected_count: records.filter((item) => item.status !== 'FULFILLED').length,
     provider_ids: Object.freeze(records.map((item) => item.provider_id))
   });
+  const distinctProviderIds = new Set(initial.map((item) => String(item?.provider_id || '').trim()).filter(Boolean));
   return Object.freeze({
     specialist_authoritative: summarize(specialist),
-    general_current: summarize(generalCurrent)
+    general_current: summarize(generalCurrent),
+    distinct_provider_count: distinctProviderIds.size
   });
 }
 
 function attachDualRouteTrace(result) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const routeExecution = routeExecutionSummary(result);
-  if (!routeExecution.specialist_authoritative.attempted || !routeExecution.general_current.attempted) {
+  if (
+    !routeExecution.specialist_authoritative.attempted
+    || !routeExecution.general_current.attempted
+    || routeExecution.distinct_provider_count < 2
+  ) {
     fail(
       'Evidence Search did not attempt both required search routes',
       'EVIDENCE_DUAL_ROUTE_EXECUTION_INCOMPLETE'
