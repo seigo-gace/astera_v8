@@ -11,6 +11,7 @@ const {
 } = require('./runtime/standalone-material-normalizer');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
+const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const {
   explicitPurposeIntent,
@@ -43,11 +44,6 @@ function throwIfRequestCancelled(signal) {
   throw error;
 }
 
-// Public decision-material runtime.
-// It does not implement a second canonical processing pipeline. The Canonical base owns
-// Task/Lens/Claim/Binding/G1-G7/Lane/Main8 execution. This class supplies the isolated
-// Evidence Search resolver plus the no-network initial Fast Path used before progressive
-// Parser/Evidence enrichment.
 class AsteraEngine extends CanonicalAsteraEngine {
   constructor(options = {}) {
     super(options);
@@ -220,14 +216,12 @@ class AsteraEngine extends CanonicalAsteraEngine {
     return next;
   }
 
-  // A single final material is exposed to every consumer. Human-facing and AI-facing
-  // judgment material must never diverge into separate semantic outputs.
   material(judgment) {
-    return renderUnifiedMain8(judgment);
+    return normalizeUnifiedMain8Material(renderUnifiedMain8(judgment));
   }
 
   externalBrief(judgment) {
-    return renderUnifiedMain8(judgment).text;
+    return this.material(judgment).text;
   }
 
   async process(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
