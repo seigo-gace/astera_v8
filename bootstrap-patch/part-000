@@ -1,0 +1,147 @@
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..ccdfe4f
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,16 @@
++.git
++.github
++archive
++node_modules
++dist
++coverage
++test-results
++playwright-report
++*.log
++.env
++.env.*
++!.env.example
++*.zip
++*.tar
++*.tar.gz
++*.tar.xz
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..bcbff03
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,55 @@
++# Astera Body Runtime — internal execution service called only by Astera App or approved owner-only systems
++ASTERA_BODY_HOST=127.0.0.1
++ASTERA_BODY_PORT=7373
++
++# Production Runtime config. Must export implementationSpec and taxonomyMasterPath.
++# retrievalAdapter is optional; when omitted Core uses the connected Evidence Search Module.
++ASTERA_RUNTIME_CONFIG_FILE=/absolute/path/to/runtime-config.mjs
++ASTERA_TAXONOMY_FILE=/absolute/path/to/all_domain_taxonomy_v1.json
++ASTERA_RUNTIME_CONFIG_MODULE=/config/runtime-config.mjs
++
++# Evidence Search Module provider configuration
++# Example file contains disabled placeholders only. Production must supply active providers.
++ASTERA_EVIDENCE_PROVIDER_CONFIG=/config/evidence-providers.json
++
++# Standalone/internal Evidence Search API
++ASTERA_EVIDENCE_HOST=127.0.0.1
++ASTERA_EVIDENCE_PORT=7375
++ASTERA_INTERNAL_SERVICE_SECRET_FILE=/run/secrets/astera_internal_service_secret
++ASTERA_EVIDENCE_DB=/data/evidence-search.db
++ASTERA_EVIDENCE_DURABLE_SPOOL=/data/evidence-jobs
++ASTERA_EVIDENCE_SPOOL_KEY_FILE=/run/secrets/astera_evidence_spool_key
++# Node.js / Google V8 Runtime control for Evidence Search
++ASTERA_EVIDENCE_RUNTIME_CONCURRENCY=8
++ASTERA_EVIDENCE_RUNTIME_MAXIMUM_QUEUE=256
++
++# Provider I/O scheduling and backpressure
++ASTERA_SEARCH_GLOBAL_CONCURRENCY=8
++ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY=2
++ASTERA_SEARCH_MAXIMUM_QUEUE=256
++
++# Heavy-task Worker Bridge (projection scoring and durable checkpoint codec)
++ASTERA_EVIDENCE_WORKER_CONCURRENCY=2
++ASTERA_EVIDENCE_WORKER_MAXIMUM_QUEUE=256
++ASTERA_EVIDENCE_WORKER_TIMEOUT_MS=30000
++ASTERA_PROJECTION_WORKER_SCORE_THRESHOLD=10000
++
++# App-to-Body service credential. Store the value in a runtime secret file.
++# Do not reuse user API keys, Skill keys, billing keys or public app credentials.
++ASTERA_BODY_SERVICE_KEY_FILE=/absolute/path/to/astera_body_service_key
++
++# Internal Body API limits
++ASTERA_BODY_LIMIT_BYTES=1048576
++ASTERA_BODY_HEADERS_TIMEOUT_MS=10000
++ASTERA_BODY_REQUEST_TIMEOUT_MS=60000
++ASTERA_BODY_KEEPALIVE_TIMEOUT_MS=5000
++ASTERA_BODY_MAX_REQUESTS_PER_SOCKET=1000
++
++# TGserver execution logging and durable outbox
++ASTERA_TGS_ENABLED=1
++ASTERA_TGS_URL=http://127.0.0.1:3000/ingest
++ASTERA_TGS_PROJECT_ID=P002
++ASTERA_TGS_TIMEOUT_MS=15000
++ASTERA_TGS_RETRIES=1
++ASTERA_LOG_CACHE_DIR=/cache/outbox
++ASTERA_LOG_CACHE_TTL_MS=604800000
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..1b19206
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,22 @@
++name: Astera Body Modular CI
++
++on:
++  push:
++  pull_request:
++
++permissions:
++  contents: read
++
++jobs:
++  verify:
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 22
++          cache: npm
++      - run: npm ci
++      - run: npm run check
++      - run: npm audit --audit-level=high
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..c044676
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,14 @@
++node_modules/
++dist/
++coverage/
++test-results/
++playwright-report/
++.env
++.env.*
++!.env.example
++*.db
++*.db-shm
++*.db-wal
++*.store.json
++*.tmp
++*.log
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..b7a92fc
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,26 @@
++FROM node:22-slim AS build
++WORKDIR /app
++COPY package.json package-lock.json tsconfig.json ./
++RUN npm ci
++COPY src ./src
++RUN npm run build
++
++FROM node:22-slim AS runtime
++ENV NODE_ENV=production \
++    ASTERA_BO
