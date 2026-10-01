@@ -1,0 +1,107 @@
+name: Replace Astera v8 runtime
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: astera-v8-runtime-replacement
+  cancel-in-progress: false
+
+jobs:
+  replace:
+    if: github.head_ref == 'agent/runtime-replacement-hf' && github.repository == 'seigo-gace/astera_v8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download, decrypt and verify payload
+        shell: bash
+        env:
+          TRANSFER_URL: https://huggingface.co/datasets/seigo-gace/astera-runtime-transfer-20260720/resolve/main/runtime.zip.enc?download=true
+          PAYLOAD_KEY: 7c0a6f3e81d4b925ce17a6408f3d2e5b9a6c1d47e0f8b3524c9e7a13d5b2604f
+          PAYLOAD_IV: 2f9b7c1d0a6e4f83b5d2c9187a34e65f
+          EXPECTED_ZIP_SHA256: 5f996ea065a75126a667c1f85ba3a40d1f032297b5e8afc9bcac32f0bf441eb6
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/astera-transfer /tmp/astera-unpack /tmp/astera-runtime
+          mkdir -p /tmp/astera-transfer /tmp/astera-unpack
+          curl --fail --location --retry 4 --retry-all-errors --connect-timeout 20 --max-time 300 \
+            "$TRANSFER_URL" -o /tmp/astera-transfer/runtime.zip.enc
+          openssl enc -d -aes-256-ctr -K "$PAYLOAD_KEY" -iv "$PAYLOAD_IV" \
+            -in /tmp/astera-transfer/runtime.zip.enc \
+            -out /tmp/astera-transfer/runtime.zip
+          echo "$EXPECTED_ZIP_SHA256  /tmp/astera-transfer/runtime.zip" | sha256sum -c -
+          unzip -q /tmp/astera-transfer/runtime.zip -d /tmp/astera-unpack
+          PACKAGE_JSON=$(find /tmp/astera-unpack -maxdepth 3 -type f -name package.json -print -quit)
+          test -n "$PACKAGE_JSON"
+          RUNTIME_ROOT=$(dirname "$PACKAGE_JSON")
+          cp -a "$RUNTIME_ROOT" /tmp/astera-runtime
+          test "$(node -p "require('/tmp/astera-runtime/package.json').version")" = "4.2.2-evidence-v8.2"
+
+      - name: Keep only the deployable source of truth
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/astera-runtime
+          rm -rf archive node_modules dist coverage test-results playwright-report logs .git
+          rm -f RELEASE_MANIFEST.txt MANIFEST.sha256 EXAMPLE_TEST_REPORT.md REAL_EXAMPLE_RESULTS.json
+          rm -f IMPLEMENTATION_STATUS.md TEST_REPORT.md
+          rm -f docs/BENCHMARK_SYNTHETIC.json docs/IMPLEMENTATION_STATUS.md docs/TEST_REPORT.md
+          find . -type f \( -name '*.zip' -o -name '*.tar' -o -name '*.tar.gz' -o -name '*.tar.xz' \) -delete
+          find . -type f \( -name '*.db' -o -name '*.db-shm' -o -name '*.db-wal' -o -name '*.log' \) -delete
+          test ! -e archive
+          test ! -e src/public/index.html
+          test ! -e src/billing/stripe-client.js
+          test ! -e .env.gpg
+
+      - name: Regenerate lockfile and run complete verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/astera-runtime
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org
+          npm run check
+          npm audit --audit-level=high --registry=https://registry.npmjs.org
+
+      - name: Remove generated files before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/astera-runtime
+          npm run clean
+          rm -rf node_modules logs
+          find . -type f \( -name '*.db' -o -name '*.db-shm' -o -name '*.db-wal' -o -name '*.log' \) -delete
+
+      - name: Replace main in one commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/astera-runtime/. "$GITHUB_WORKSPACE"/
+          git add -A
+          git diff --cached --quiet && { echo 'Replacement produced no changes'; exit 1; }
+          git commit -m "Replace Astera v8 with integrated V8 runtime"
+          git push origin HEAD:main
