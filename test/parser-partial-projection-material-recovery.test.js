@@ -12,7 +12,7 @@ function textOf(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-test('partial Japanese parser projection cannot collapse full purpose/comparison material into final prohibition only', async () => {
+test('partial Japanese parser projection becomes substantive unified human/AI Main8 material instead of template leakage', async () => {
   const question = [
     '来週金曜までにFAQへ新しい問い合わせ例を追加するための判断材料を整理して。',
     '公開済みの返金ポリシー文言は変えない。',
@@ -93,7 +93,7 @@ test('partial Japanese parser projection cannot collapse full purpose/comparison
     assert.ok(packet.deadlines.some((item) => /来週金曜/.test(item)));
     assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)));
     assert.deepEqual(packet.observable_material.candidates, ['A案', 'B案']);
-    assert.ok((packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'parser tension must remain traceable');
+    assert.ok((packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'parser tension must remain traceable internally');
 
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     assert.equal(observedLaneExecution?.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
@@ -108,48 +108,66 @@ test('partial Japanese parser projection cannot collapse full purpose/comparison
     for (const dimension of ['作業時間', '法務リスク', '利用者理解']) {
       assert.ok((task.comparison?.dimensions || []).includes(dimension), `missing dimension: ${dimension}`);
     }
-    assert.match(textOf(task.risks), /法務|返金|Policy|禁止|未確認/);
-    assert.ok((task.multi?.perspectives || []).length >= 2);
-    assert.match(textOf(task.inquiry), /法務確認|未|unresolved/i);
-
-    const judgment = out.result.judgment;
-    assert.equal(judgment.order.length, 8);
-    assert.match(textOf(judgment['01_purpose']), /FAQ/);
-    assert.match(textOf(judgment['01_purpose']), /問い合わせ例/);
-    assert.match(textOf(judgment['02_premise']), /返金ポリシー/);
-    assert.match(textOf(judgment['02_premise']), /来週金曜/);
-    assert.match(textOf(judgment['02_premise']), /法務確認/);
-    assert.match(textOf(judgment['03_facts']), /3件/);
-    assert.match(textOf(judgment['03_facts']), /10件/);
-    assert.match(textOf(judgment['04_crisis']), /法務|返金|Policy|未確認/);
-    assert.match(textOf(judgment['06_comparison']), /A案/);
-    assert.match(textOf(judgment['06_comparison']), /B案/);
-    assert.doesNotMatch(textOf(judgment['06_comparison'].comparison_candidates), /A案とB案/);
-    assert.match(textOf(judgment['06_comparison']), /作業時間/);
-    assert.match(textOf(judgment['06_comparison']), /法務リスク/);
-    assert.match(textOf(judgment['06_comparison']), /利用者理解/);
-    assert.match(textOf(judgment['08_reinstruction']), /返金ポリシー|変えない|維持/);
 
     const rendered = String(out.material.text || '');
     const sections = rendered.split('\n---\n');
     assert.equal(sections.length, 8, rendered);
+    assert.equal(out.material.consumer_scope, 'HUMAN_AND_AI_SAME_MATERIAL');
+    assert.equal(out.prompt, rendered, 'human and AI consumers must receive the same semantic material');
+
     assert.match(sections[0], /FAQ/);
     assert.match(sections[0], /問い合わせ例/);
+    assert.match(sections[0], /A案/);
+    assert.match(sections[0], /B案/);
+    assert.match(sections[0], /作業時間/);
+    assert.match(sections[0], /法務リスク/);
+    assert.match(sections[0], /利用者理解/);
+
     assert.match(sections[1], /返金ポリシー/);
     assert.match(sections[1], /来週金曜/);
     assert.match(sections[1], /法務確認/);
     assert.match(sections[1], /未確定|未確認|未完了/);
-    assert.match(sections[2], /3件/);
-    assert.match(sections[2], /10件/);
-    assert.match(sections[2], /未検証/);
+
+    assert.match(sections[2], /A案[^\n]*3件/);
+    assert.match(sections[2], /B案[^\n]*10件/);
+    assert.match(sections[2], /7件/);
+    assert.match(sections[2], /3\.33倍|3\.3倍/);
+    assert.match(sections[2], /利用者入力|入力で与えられた|入力材料/);
+
+    assert.match(sections[3], /法務確認/);
+    assert.match(sections[3], /返金|既存内容|変えない/);
+    assert.match(sections[3], /件数|作業時間/);
+    assert.match(sections[3], /断定|確定|未確認/);
+
+    assert.match(sections[4], /A案/);
+    assert.match(sections[4], /B案/);
+    assert.match(sections[4], /反対|確認|未確認/);
+    assert.match(sections[4], /単一指標|件数/);
+
     assert.match(sections[5], /A案/);
     assert.match(sections[5], /B案/);
-    assert.doesNotMatch(sections[5], /candidates:[^\n]*A案とB案/);
     assert.match(sections[5], /作業時間/);
     assert.match(sections[5], /法務リスク/);
     assert.match(sections[5], /利用者理解/);
-    assert.match(sections[6], /NOT_REQUIRED|UNDETERMINED/);
-    assert.match(sections[7], /返金ポリシー/);
+    assert.match(sections[5], /現在分かること/);
+    assert.match(sections[5], /まだ言えないこと/);
+    assert.match(sections[5], /追加で必要な材料/);
+    assert.match(sections[5], /1件あたり作業時間/);
+    assert.match(sections[5], /法務確認結果/);
+    assert.match(sections[5], /理解度|網羅率|読みやすさ/);
+
+    assert.match(sections[6], /外部検索を必要としない|外部根拠|確認済み/);
+    assert.match(sections[6], /入力で与えられた材料|利用者が与えた条件/);
+
+    assert.match(sections[7], /返金ポリシー|固定する条件/);
+    assert.match(sections[7], /作業時間/);
+    assert.match(sections[7], /法務リスク/);
+    assert.match(sections[7], /利用者理解/);
+    assert.match(sections[7], /未確定/);
+
+    const leakedInternalTemplate = /candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|policy_notes|Task Wave|Lens=|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|MATERIAL_ONLY|OBSERVABLE_UNVERIFIED_MATERIAL|INSUFFICIENT_COMPARISON_MATERIAL/u;
+    assert.doesNotMatch(rendered, leakedInternalTemplate, rendered);
+    for (const section of sections) assert.ok(section.length >= 120, `section is too thin to be useful: ${section}`);
     assert.equal((rendered.match(/^---$/gm) || []).length, 7);
     assert.equal(out.result.no_normative_decision_generated, true);
   } finally {
