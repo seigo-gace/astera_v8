@@ -51,6 +51,41 @@ function candidateClaim(candidate) {
 function sourceSpan(candidate) {
   return candidate?.canonical_locator?.url || candidate?.url || candidate?.canonical_record_id || candidate?.candidate_id || 'UNKNOWN';
 }
+function safeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {};
+}
+function replayableSourceMetadata(candidate = {}) {
+  const locator = safeObject(candidate.canonical_locator);
+  const publisher = safeObject(candidate.publisher);
+  const retrievalTrace = safeObject(candidate.retrieval_trace);
+  const url = locator.url || candidate.url || null;
+  return {
+    provider_id: candidate.provider_id || null,
+    source_id: candidate.source_id || null,
+    source_class: candidate.source_class || null,
+    canonical_record_id: candidate.canonical_record_id || null,
+    canonical_locator: {
+      url,
+      locator_type: locator.locator_type || (url ? 'URL' : 'RECORD_ID'),
+      replayable: locator.replayable !== false && Boolean(url || candidate.canonical_record_id)
+    },
+    title: normalizeText(candidate.title || ''),
+    excerpt: normalizeText(candidate.excerpt || candidate.text || candidate.content || ''),
+    publisher: {
+      id: publisher.id || null,
+      name: publisher.name || null
+    },
+    published_at: candidate.published_at || null,
+    updated_at: candidate.updated_at || null,
+    retrieved_at: retrievalTrace.retrieved_at || retrievalTrace.completed_at || retrievalTrace.timestamp || null,
+    retrieval_trace: retrievalTrace,
+    content_hash: candidate.content_hash || null,
+    revision_id: candidate.revision_id || null,
+    jurisdiction: candidate.jurisdiction || null,
+    language: candidate.language || null,
+    version: candidate.version || null
+  };
+}
 function bindingBase(claim, candidate, relation, extra = {}) {
   const span = sourceSpan(candidate);
   return deepFreeze({
@@ -69,6 +104,7 @@ function bindingBase(claim, candidate, relation, extra = {}) {
     source_family_id: candidate.source_family_id || null,
     authority_id: candidate.authority_id || null,
     provenance_series_id: candidate.provenance_series_id || null,
+    ...replayableSourceMetadata(candidate),
     ...extra
   });
 }
