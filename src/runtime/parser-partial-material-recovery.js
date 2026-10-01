@@ -1,6 +1,7 @@
 'use strict';
 
 const MATERIAL_TENSION = /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED|parser_task_graph_empty/i;
+const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|裏取り|調査|リサーチ|根拠|出典|公式(?:根拠|情報|Source)?|verify|validate|fact\s*check|research|investigate|evidence|source)/iu;
 
 function norm(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -47,8 +48,12 @@ function inlineCandidates(text) {
   const labels = [];
   const value = norm(text);
   for (const match of value.matchAll(/([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,12}案)と([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,12}案)(?=を|で|について|の|、|,|。|\s)/gu)) labels.push(match[1], match[2]);
-  for (const match of value.matchAll(/(?:^|[、,。\s])([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,12}案)(?=は|が|を|と|、|,|。|\s)/gu)) labels.push(match[1]);
-  return unique(labels);
+  for (const match of value.matchAll(/(?:^|[、,。\s])([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)(?=は|が|を|と|、|,|。|\s)/gu)) labels.push(match[1]);
+  const deduped = unique(labels);
+  return deduped.filter((label) => {
+    const composite = /^(.+案)と(.+案)$/u.exec(label);
+    return !composite || !(deduped.includes(composite[1]) && deduped.includes(composite[2]));
+  });
 }
 
 function comparisonDimensions(text) {
@@ -125,6 +130,10 @@ function shouldRecover(prepared, question, candidates, claims) {
   return partial && (candidates.length >= 2 || claims.length >= 2);
 }
 
+function externalEvidenceRequested(text) {
+  return EXTERNAL_EVIDENCE_CUE.test(norm(text));
+}
+
 function recoverPartialParserMaterial(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
@@ -141,13 +150,19 @@ function recoverPartialParserMaterial(prepared, input = {}) {
   const purpose = purposeFromInput(question, fallbackPurpose);
   const source = comparisonSpan(question, candidates) || { start: 0, end: question.length, text: question };
   const id = nextTaskId(originalTasks);
+  const needsExternalEvidence = claims.length > 0 && externalEvidenceRequested(question);
+  const observableCandidates = unique([...(packet.observable_material?.candidates || []), ...candidates]).filter((label) => {
+    const composite = /^(.+案)と(.+案)$/u.exec(label);
+    return !composite || !(candidates.includes(composite[1]) && candidates.includes(composite[2]));
+  });
+  const observableClaims = unique([...(packet.observable_material?.claim_texts || []), ...claims]);
   const observable = {
     ...(packet.observable_material || prepared.observable_material || {}),
     source: 'ORIGINAL_QUESTION',
-    candidates: unique([...(packet.observable_material?.candidates || []), ...candidates]),
-    candidate_count: unique([...(packet.observable_material?.candidates || []), ...candidates]).length,
-    claim_texts: unique([...(packet.observable_material?.claim_texts || []), ...claims]),
-    claim_count: unique([...(packet.observable_material?.claim_texts || []), ...claims]).length,
+    candidates: observableCandidates,
+    candidate_count: observableCandidates.length,
+    claim_texts: observableClaims,
+    claim_count: observableClaims.length,
     dimensions: unique([...(packet.observable_material?.dimensions || []), ...dims])
   };
   const task = {
@@ -173,10 +188,21 @@ function recoverPartialParserMaterial(prepared, input = {}) {
     conditions: terms.conditions, exceptions: terms.exceptions, deadlines: terms.deadlines,
     priority_records: [], deliverables: [], unresolved: terms.unresolved, hard_blockers: [], depends_on: [], branches: [],
     conditional_branch: null, execution_gate: 'ALWAYS', parallel_group: null, supersedes: [], superseded_by: [],
-    evidence_need: { required: claims.length > 0, queries: claims, reasons: claims.length ? ['OBSERVABLE_EXTERNAL_CLAIMS'] : [] },
+    evidence_need: {
+      required: needsExternalEvidence,
+      queries: needsExternalEvidence ? claims : [],
+      reasons: needsExternalEvidence ? ['EXPLICIT_EXTERNAL_EVIDENCE_REQUEST'] : []
+    },
     field_provenance: { purpose: [{ source: 'ORIGINAL_QUESTION_PURPOSE' }], target: [{ source: 'ORIGINAL_QUESTION_CANDIDATES' }], parser_projection_recovery: [{ source: 'ASTERA_PARTIAL_PROJECTION_RECOVERY' }] }
   };
-  const recovery = { applied: true, replaced_partial_projection: true, task_union_coverage_ratio: coverage, original_task_ids: originalTasks.map((item) => item.id), recovered_task_id: id };
+  const recovery = {
+    applied: true,
+    replaced_partial_projection: true,
+    task_union_coverage_ratio: coverage,
+    original_task_ids: originalTasks.map((item) => item.id),
+    recovered_task_id: id,
+    external_evidence_requested: needsExternalEvidence
+  };
   return {
     ...prepared,
     target: task.target,
@@ -208,4 +234,4 @@ function recoverPartialParserMaterial(prepared, input = {}) {
   };
 }
 
-module.exports = { recoverPartialParserMaterial, taskUnionCoverage, inlineCandidates, comparisonDimensions, contracts };
+module.exports = { recoverPartialParserMaterial, taskUnionCoverage, inlineCandidates, comparisonDimensions, contracts, externalEvidenceRequested };
