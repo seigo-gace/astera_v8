@@ -65,6 +65,15 @@ test('partial Japanese parser projection cannot collapse full purpose/comparison
     }
   });
   const engine = new AsteraEngine({ japaneseParserClient: parserClient, evidenceSearchClient: null, logger: silentLogger, poolSize: 5 });
+  const canonicalExecutor = engine.getCanonicalTaskExecutor();
+  const stageExecutor = canonicalExecutor.fiveStageExecutor;
+  const originalStageExec = stageExecutor.exec.bind(stageExecutor);
+  let observedLaneExecution = null;
+  stageExecutor.exec = async (...args) => {
+    const projected = await originalStageExec(...args);
+    observedLaneExecution = projected.lane_execution;
+    return projected;
+  };
 
   try {
     const out = await engine.process({ question, language: 'ja' }, { id: 'partial-parser-material-recovery' });
@@ -81,10 +90,12 @@ test('partial Japanese parser projection cannot collapse full purpose/comparison
     assert.ok(packet.preserve.some((item) => /返金ポリシー/.test(item) && /変えない/.test(item)));
     assert.ok(packet.deadlines.some((item) => /来週金曜/.test(item)));
     assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)));
-    assert.ok(!(packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))));
+    assert.ok((packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'parser tension must remain traceable');
 
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
-    assert.equal(out.result.five_stage.lane_execution?.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
+    assert.equal(observedLaneExecution?.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
+    assert.equal(observedLaneExecution?.lane_count, 5);
+    assert.equal(new Set((observedLaneExecution?.telemetry || []).map((item) => item.thread_id)).size, 5);
     const task = out.result.task_results[0];
     assert.ok(task);
     assert.ok((task.comparison?.comparison_candidates || []).includes('A案'));
