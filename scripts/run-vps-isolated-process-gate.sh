@@ -60,15 +60,27 @@ HTTP="$(curl -sS --max-time 90 -o "$RESP" -w '%{http_code}' -H 'Content-Type: ap
 SEP="$(grep -c '^---$' "$RESP" || true)"
 CORE_HITS="$(docker logs "$CORE" 2>&1 | grep -Eic 'evidence|process|parser' || true)"
 EVID_HITS="$(docker logs "$EVID" 2>&1 | grep -Eic 'search|evidence|provider|request' || true)"
+JOB_PROBE="$(docker exec "$EVID" node -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("/data/evidence-search.db",{readOnly:true});const rows=db.prepare("SELECT state,COUNT(*) AS count FROM evidence_jobs GROUP BY state ORDER BY state").all();const total=rows.reduce((n,r)=>n+Number(r.count),0);const terminal=rows.filter(r=>r.state==="FINAL_VALID"||r.state==="REJECTED").reduce((n,r)=>n+Number(r.count),0);const errors=rows.filter(r=>r.state==="ERROR").reduce((n,r)=>n+Number(r.count),0);const artifacts=Number(db.prepare("SELECT COUNT(*) AS count FROM evidence_artifacts").get().count);console.log([total,terminal,errors,artifacts,rows.map(r=>`${r.state}:${r.count}`).join(",")].join("\t"));db.close();' 2>/dev/null || true)"
+IFS=$'\t' read -r JOB_TOTAL JOB_TERMINAL JOB_ERRORS ARTIFACT_TOTAL JOB_STATES <<< "$JOB_PROBE"
 
 echo "EXACT_SHA=$EXPECTED_SHA"
 echo "HTTP_STATUS=$HTTP"
 echo "MAIN8_SEPARATOR_COUNT=$SEP"
+echo "EVIDENCE_JOB_TOTAL=${JOB_TOTAL:-0}"
+echo "EVIDENCE_JOB_TERMINAL=${JOB_TERMINAL:-0}"
+echo "EVIDENCE_JOB_ERRORS=${JOB_ERRORS:-0}"
+echo "EVIDENCE_ARTIFACT_TOTAL=${ARTIFACT_TOTAL:-0}"
+echo "EVIDENCE_JOB_STATES=${JOB_STATES:-NONE}"
 echo "CORE_RUNTIME_LOG_HITS=$CORE_HITS"
 echo "EVIDENCE_RUNTIME_LOG_HITS=$EVID_HITS"
 if [ "$HTTP" != 200 ]; then echo '--- CORE LOG ---'; docker logs "$CORE" 2>&1 | tail -n 100; echo '--- EVIDENCE LOG ---'; docker logs "$EVID" 2>&1 | tail -n 100; echo '--- RESPONSE ---'; head -c 8000 "$RESP"; echo; fail HTTP; fi
 if [ "$SEP" -ne 7 ]; then echo '--- RESPONSE ---'; head -c 8000 "$RESP"; echo; echo '--- CORE LOG ---'; docker logs "$CORE" 2>&1 | tail -n 100; echo '--- EVIDENCE LOG ---'; docker logs "$EVID" 2>&1 | tail -n 100; fail MAIN8; fi
-echo 'GATE=PASS_HTTP_MAIN8'
+[[ "${JOB_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_NOT_REACHED
+[[ "${JOB_TERMINAL:-}" =~ ^[0-9]+$ ]] && [ "$JOB_TERMINAL" -eq "$JOB_TOTAL" ] || fail EVIDENCE_NONTERMINAL
+[[ "${JOB_ERRORS:-}" =~ ^[0-9]+$ ]] && [ "$JOB_ERRORS" -eq 0 ] || fail EVIDENCE_ERROR
+[[ "${ARTIFACT_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_ARTIFACT_MISSING
+
+echo 'GATE=PASS_HTTP_MAIN8_EVIDENCE'
 echo 'PERSISTENT_SERVICES_RESTARTED=NO'
 echo 'MAIN_MERGE=NO'
 echo 'PRODUCTION_CHANGE=NONE'
