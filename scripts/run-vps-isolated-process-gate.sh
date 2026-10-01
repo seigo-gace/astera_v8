@@ -38,21 +38,42 @@ curl -fsS http://127.0.0.1:17376/healthz >/dev/null || { docker logs "$EVID" 2>&
 docker run -d --name "$CORE" --network host --env-file "$CENV" -e ASTERA_HOST=127.0.0.1 -e ASTERA_PORT=17373 -e ASTERA_LOCAL_NO_AUTH=1 -e ASTERA_EVIDENCE_URL=http://127.0.0.1:17376 --tmpfs /cache:rw,size=32m,mode=1777 --mount type=bind,src="$CORE_SECRET",dst="$CORE_SECRET",readonly -v "$WT/src:/app/src:ro" -v "$WT/config:/app/config:ro" -v "$WT/start.js:/app/start.js:ro" -v "$WT/package.json:/app/package.json:ro" "$IMAGE" >/dev/null
 for _ in $(seq 1 40); do curl -fsS http://127.0.0.1:17373/healthz >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS http://127.0.0.1:17373/healthz >/dev/null || { docker logs "$CORE" 2>&1 | tail -n 80; fail TEMP_CORE_HEALTH; }
-PAYLOAD='{"question":"2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。最終判断や推奨はせず、根拠が成立しなければ根拠なしと明示してください。"}'
+PAYLOAD='{"question":"2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。最終判断や推奨はせず、根拠が成立しなければ根拠なしと明示してください。","language":"ja"}'
 HTTP="$(curl -sS --max-time 90 -o "$RESP" -w '%{http_code}' -H 'Content-Type: application/json' --data-binary "$PAYLOAD" http://127.0.0.1:17373/process || true)"
 SEP="$(grep -c '^---$' "$RESP" || true)"
-if [ "$HTTP" != 200 ]; then echo '--- RESPONSE ---'; head -c 12000 "$RESP"; echo; fail HTTP; fi
-if [ "$SEP" -ne 7 ]; then echo '--- RESPONSE ---'; head -c 12000 "$RESP"; echo; fail MAIN8; fi
+if [ "$HTTP" != 200 ]; then echo '--- EVIDENCE_RESPONSE ---'; head -c 24000 "$RESP"; echo; fail HTTP; fi
+if [ "$SEP" -ne 7 ]; then echo '--- EVIDENCE_RESPONSE ---'; head -c 24000 "$RESP"; echo; fail MAIN8; fi
+EVIDENCE_CHECK="$(RESP="$RESP" python3 - <<'PY'
+import os,re,sys
+text=open(os.environ['RESP'],encoding='utf-8').read(); sections=re.split(r'\n---\n',text); checks=[]
+def need(i, needles, label, all_required=False):
+    value=sections[i] if i < len(sections) else ''
+    ok=all(n in value for n in needles) if all_required else any(n in value for n in needles)
+    if not ok: checks.append(label)
+if len(sections)!=8: checks.append(f'section_count={len(sections)}')
+if len(text)<900: checks.append('material_total_too_thin')
+need(0,['Node.js 22'],'purpose_target')
+need(4,['Node.js 22'],'opposition_target')
+need(4,['バージョン','時点','対象範囲'],'opposition_scope',True)
+need(6,['外部根拠','根拠'],'evidence_explained')
+need(6,['未成立','未確定','確認済み','成立'],'evidence_boundary')
+need(7,['反証','例外','対象範囲','時点'],'reinstruction_scope')
+leaks=re.compile(r'candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|policy_notes|Task Wave|Lens=|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|MATERIAL_ONLY|OBSERVABLE_UNVERIFIED_MATERIAL|INSUFFICIENT_',re.I)
+irrelevant=re.compile(r'Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換')
+if leaks.search(text): checks.append('internal_template_leak')
+if irrelevant.search(text): checks.append('irrelevant_domain_template_leak')
+if checks: print('FAIL:'+','.join(checks)); sys.exit(1)
+print('PASS')
+PY
+)" || { echo '--- EVIDENCE_RESPONSE ---'; head -c 24000 "$RESP"; echo; echo "EVIDENCE_MATERIAL_CHECK=${EVIDENCE_CHECK:-FAILED}"; fail EVIDENCE_MATERIAL; }
 PURPOSE_PAYLOAD='{"question":"来週金曜までにFAQへ新しい問い合わせ例を追加するための判断材料を整理して。公開済みの返金ポリシー文言は変えない。法務確認はまだ終わっていない。A案は問い合わせ例を3件追加、B案は10件追加。A案とB案を作業時間と法務リスクと利用者理解で比較して。最終判断や推奨はしないで。","language":"ja"}'
 PURPOSE_HTTP="$(curl -sS --max-time 120 -o "$PURPOSE_RESP" -w '%{http_code}' -H 'Content-Type: application/json' --data-binary "$PURPOSE_PAYLOAD" http://127.0.0.1:17373/process || true)"
 PURPOSE_SEP="$(grep -c '^---$' "$PURPOSE_RESP" || true)"
-if [ "$PURPOSE_HTTP" != 200 ]; then echo '--- PURPOSE_RESPONSE ---'; head -c 20000 "$PURPOSE_RESP"; echo; fail PURPOSE_HTTP; fi
-if [ "$PURPOSE_SEP" -ne 7 ]; then echo '--- PURPOSE_RESPONSE ---'; head -c 20000 "$PURPOSE_RESP"; echo; fail PURPOSE_MAIN8; fi
+if [ "$PURPOSE_HTTP" != 200 ]; then echo '--- PURPOSE_RESPONSE ---'; head -c 24000 "$PURPOSE_RESP"; echo; fail PURPOSE_HTTP; fi
+if [ "$PURPOSE_SEP" -ne 7 ]; then echo '--- PURPOSE_RESPONSE ---'; head -c 24000 "$PURPOSE_RESP"; echo; fail PURPOSE_MAIN8; fi
 PURPOSE_CHECK="$(PURPOSE_RESP="$PURPOSE_RESP" python3 - <<'PY'
 import os,re,sys
-text=open(os.environ['PURPOSE_RESP'],encoding='utf-8').read()
-sections=re.split(r'\n---\n',text)
-checks=[]
+text=open(os.environ['PURPOSE_RESP'],encoding='utf-8').read(); sections=re.split(r'\n---\n',text); checks=[]
 def need(index, needles, label, all_required=False):
     value=sections[index] if index < len(sections) else ''
     ok=all(n in value for n in needles) if all_required else any(n in value for n in needles)
@@ -62,45 +83,27 @@ def pattern(index, rx, label):
     if not re.search(rx,value,re.I): checks.append(label)
 if len(sections)!=8: checks.append(f'section_count={len(sections)}')
 for i,s in enumerate(sections):
-    if len(s) < 120: checks.append(f'section_{i+1}_too_thin')
-need(0,['FAQ','問い合わせ例'],'purpose_goal',True)
-need(0,['A案','B案'],'purpose_candidates',True)
-need(0,['作業時間','法務リスク','利用者理解'],'purpose_dimensions',True)
-need(1,['返金ポリシー'],'premise_preserve')
-need(1,['来週金曜','期限'],'premise_deadline')
-need(1,['法務確認'],'premise_legal_unresolved')
-need(2,['A案','3件','B案','10件'],'facts_candidate_values',True)
-need(2,['7件'],'facts_delta')
-pattern(2,r'3\.(?:3|33)倍','facts_ratio')
-need(3,['法務確認'],'risk_legal')
-need(3,['返金','既存内容','変えない'],'risk_preserve')
-need(3,['件数','作業時間'],'risk_workload')
-need(4,['A案','B案'],'opposition_candidates',True)
-need(4,['単一指標','件数'],'opposition_countercheck')
-need(5,['A案','B案'],'compare_candidates',True)
-need(5,['作業時間','法務リスク','利用者理解'],'compare_dimensions',True)
-need(5,['現在分かること','まだ言えないこと','追加で必要な材料'],'compare_explanation',True)
-need(5,['1件あたり作業時間'],'compare_worktime_missing')
-need(5,['法務確認結果'],'compare_legal_missing')
-need(5,['理解度','網羅率','読みやすさ'],'compare_understanding_missing')
-need(6,['外部検索を必要としない','外部根拠'],'evidence_explained')
-need(6,['入力で与えられた材料','利用者が与えた条件'],'evidence_input_boundary')
-need(7,['固定する条件','返金ポリシー'],'reinstruction_constraints')
-need(7,['作業時間','法務リスク','利用者理解'],'reinstruction_missing_material',True)
-need(7,['未確定'],'reinstruction_no_guess')
-leaks=re.compile(r'candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|policy_notes|Task Wave|Lens=|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|MATERIAL_ONLY|OBSERVABLE_UNVERIFIED_MATERIAL|INSUFFICIENT_COMPARISON_MATERIAL',re.I)
+    if len(s)<120: checks.append(f'section_{i+1}_too_thin')
+need(0,['FAQ','問い合わせ例'],'purpose_goal',True); need(0,['A案','B案'],'purpose_candidates',True); need(0,['作業時間','法務リスク','利用者理解'],'purpose_dimensions',True)
+need(1,['返金ポリシー'],'premise_preserve'); need(1,['来週金曜','期限'],'premise_deadline'); need(1,['法務確認'],'premise_legal_unresolved')
+need(2,['A案','3件','B案','10件'],'facts_candidate_values',True); need(2,['7件'],'facts_delta'); pattern(2,r'3\.(?:3|33)倍','facts_ratio')
+need(3,['法務確認'],'risk_legal'); need(3,['返金','既存内容','変えない'],'risk_preserve'); need(3,['件数','作業時間'],'risk_workload')
+need(4,['A案','B案'],'opposition_candidates',True); need(4,['単一指標','件数'],'opposition_countercheck')
+need(5,['A案','B案'],'compare_candidates',True); need(5,['作業時間','法務リスク','利用者理解'],'compare_dimensions',True); need(5,['現在分かること','まだ言えないこと','追加で必要な材料'],'compare_explanation',True); need(5,['1件あたり作業時間'],'compare_worktime_missing'); need(5,['法務確認結果'],'compare_legal_missing'); need(5,['理解度','網羅率','読みやすさ'],'compare_understanding_missing')
+need(6,['外部検索を必要としない','外部根拠'],'evidence_explained'); need(6,['利用者入力として与えられた材料','利用者入力の条件','利用者が与えた条件','利用者入力で明示された'],'evidence_input_boundary'); need(6,['A案','B案','3件','10件'],'evidence_case_material',True); need(6,['作業時間','法務リスク','利用者理解'],'evidence_unresolved_dimensions',True); need(6,['根拠なし','推測','未確定','外部確認済み'],'evidence_no_fabrication')
+need(7,['固定する条件','返金ポリシー'],'reinstruction_constraints'); need(7,['作業時間','法務リスク','利用者理解'],'reinstruction_missing_material',True); need(7,['未確定'],'reinstruction_no_guess')
+leaks=re.compile(r'candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|policy_notes|Task Wave|Lens=|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|MATERIAL_ONLY|OBSERVABLE_UNVERIFIED_MATERIAL|INSUFFICIENT_',re.I)
 if leaks.search(text): checks.append('internal_template_leak')
-if checks:
-    print('FAIL:'+','.join(checks)); sys.exit(1)
+if checks: print('FAIL:'+','.join(checks)); sys.exit(1)
 print('PASS')
 PY
-)" || { echo '--- PURPOSE_RESPONSE ---'; head -c 20000 "$PURPOSE_RESP"; echo; echo "PURPOSE_CHECK=${PURPOSE_CHECK:-FAILED}"; fail PURPOSE_OUTCOME; }
-echo '--- PURPOSE_RESPONSE ---'; cat "$PURPOSE_RESP"; echo; echo '--- PURPOSE_RESPONSE_END ---'
+)" || { echo '--- PURPOSE_RESPONSE ---'; head -c 24000 "$PURPOSE_RESP"; echo; echo "PURPOSE_CHECK=${PURPOSE_CHECK:-FAILED}"; fail PURPOSE_OUTCOME; }
+echo '--- EVIDENCE_RESPONSE ---'; cat "$RESP"; echo; echo '--- EVIDENCE_RESPONSE_END ---'; echo '--- PURPOSE_RESPONSE ---'; cat "$PURPOSE_RESP"; echo; echo '--- PURPOSE_RESPONSE_END ---'
 JOB_PROBE="$(docker exec "$EVID" node -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("/data/evidence-search.db",{readOnly:true});const rows=db.prepare("SELECT state,COUNT(*) AS count FROM evidence_jobs GROUP BY state ORDER BY state").all();const total=rows.reduce((n,r)=>n+Number(r.count),0);const terminal=rows.filter(r=>r.state==="FINAL_VALID"||r.state==="REJECTED").reduce((n,r)=>n+Number(r.count),0);const errors=rows.filter(r=>r.state==="ERROR").reduce((n,r)=>n+Number(r.count),0);const artifacts=Number(db.prepare("SELECT COUNT(*) AS count FROM evidence_artifacts").get().count);console.log([total,terminal,errors,artifacts,rows.map(r=>`${r.state}:${r.count}`).join(",")].join("\t"));db.close();' 2>/dev/null || true)"
 IFS=$'\t' read -r JOB_TOTAL JOB_TERMINAL JOB_ERRORS ARTIFACT_TOTAL JOB_STATES <<< "$JOB_PROBE"
-echo "EXACT_SHA=$EXPECTED_SHA"; echo "HTTP_STATUS=$HTTP"; echo "MAIN8_SEPARATOR_COUNT=$SEP"; echo "PURPOSE_HTTP_STATUS=$PURPOSE_HTTP"; echo "PURPOSE_MAIN8_SEPARATOR_COUNT=$PURPOSE_SEP"; echo "PURPOSE_OUTCOME_CHECK=$PURPOSE_CHECK"; echo "EVIDENCE_JOB_TOTAL=${JOB_TOTAL:-0}"; echo "EVIDENCE_JOB_TERMINAL=${JOB_TERMINAL:-0}"; echo "EVIDENCE_JOB_ERRORS=${JOB_ERRORS:-0}"; echo "EVIDENCE_ARTIFACT_TOTAL=${ARTIFACT_TOTAL:-0}"; echo "EVIDENCE_JOB_STATES=${JOB_STATES:-NONE}"
+echo "EXACT_SHA=$EXPECTED_SHA"; echo "HTTP_STATUS=$HTTP"; echo "MAIN8_SEPARATOR_COUNT=$SEP"; echo "EVIDENCE_MATERIAL_CHECK=$EVIDENCE_CHECK"; echo "PURPOSE_HTTP_STATUS=$PURPOSE_HTTP"; echo "PURPOSE_MAIN8_SEPARATOR_COUNT=$PURPOSE_SEP"; echo "PURPOSE_OUTCOME_CHECK=$PURPOSE_CHECK"; echo "EVIDENCE_JOB_TOTAL=${JOB_TOTAL:-0}"; echo "EVIDENCE_JOB_TERMINAL=${JOB_TERMINAL:-0}"; echo "EVIDENCE_JOB_ERRORS=${JOB_ERRORS:-0}"; echo "EVIDENCE_ARTIFACT_TOTAL=${ARTIFACT_TOTAL:-0}"; echo "EVIDENCE_JOB_STATES=${JOB_STATES:-NONE}"
 [[ "${JOB_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_NOT_REACHED
 [[ "${JOB_ERRORS:-}" =~ ^[0-9]+$ ]] && [ "$JOB_ERRORS" -eq 0 ] || fail EVIDENCE_ERROR
 [[ "${JOB_TERMINAL:-}" =~ ^[0-9]+$ ]] && [ "$JOB_TERMINAL" -eq "$JOB_TOTAL" ] || fail EVIDENCE_NONTERMINAL
 [[ "${ARTIFACT_TOTAL:-}" =~ ^[1-9][0-9]*$ ]] || fail EVIDENCE_ARTIFACT_MISSING
-echo 'GATE=PASS_HTTP_MAIN8_EVIDENCE_PURPOSE_OUTCOME'; echo 'PERSISTENT_SERVICES_RESTARTED=NO'; echo 'MAIN_MERGE=NO'; echo 'PRODUCTION_CHANGE=NONE'
+echo 'GATE=PASS_HTTP_MAIN8_EVIDENCE_SUBSTANTIVE_MATERIAL'; echo 'PERSISTENT_SERVICES_RESTARTED=NO'; echo 'MAIN_MERGE=NO'; echo 'PRODUCTION_CHANGE=NONE'
