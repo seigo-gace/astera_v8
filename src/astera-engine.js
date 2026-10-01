@@ -9,6 +9,7 @@ const {
   observeDocumentMaterial,
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
+const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
@@ -50,7 +51,8 @@ class AsteraEngine extends CanonicalAsteraEngine {
   async prepareRequest(input = {}) {
     const prepared = await super.prepareRequest(input);
     const normalized = ensureStandaloneDecisionMaterialRequest(prepared, input);
-    return applyExplicitPurposeControl(normalized, input.purpose);
+    const recovered = recoverPartialParserMaterial(normalized, input);
+    return applyExplicitPurposeControl(recovered, input.purpose);
   }
 
   processInitial(input = {}, caller = { id: 'unknown' }) {
