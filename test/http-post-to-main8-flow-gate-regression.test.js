@@ -103,17 +103,20 @@ test('real HTTP POST reaches canonical Task flow and returns Main8 material with
     assert.equal(evidenceCalls[0].payload.search.free_current, true);
     assert.equal(evidenceCalls[0].payload.paid_search.enabled, false);
 
-    // 2) RESULT: the HTTP response is the canonical fixed Main8 material, not an internal JSON dump.
+    // 2) RESULT: the HTTP response is the canonical fixed Main8 material, not an internal JSON dump or domain-template spill.
     assert.match(response.body, /01 True Objective/);
     assert.match(response.body, /03 Fact Check/);
     assert.match(response.body, /07 Evidence Status/);
     assert.match(response.body, /08 Re-instruction to Main AI \/ User/);
     assert.doesNotMatch(response.body, /"result"\s*:/);
     assert.doesNotMatch(response.body, /"prompt"\s*:/);
+    assert.doesNotMatch(response.body, /candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|Task Wave|Lens=|SearchExecution=|EvidenceQuality=|MATERIAL_ONLY|INSUFFICIENT_/i);
+    assert.doesNotMatch(response.body, /Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換/);
 
     // 3) EFFECT: unavailable evidence remains visibly unresolved in reader-facing language instead of becoming a confirmed fact or leaking internal enums.
     assert.match(response.body, /External search was not executed|external evidence is not currently established/i);
     assert.match(response.body, /remain(?:s)? unresolved|unresolved rather than being promoted|must remain unresolved/i);
+    assert.match(response.body, /counter-evidence|failure conditions|mismatched version|time scope/i);
     assert.doesNotMatch(response.body, /REJECTED_SEARCH_NOT_EXECUTED|UNDETERMINED|SearchExecution=|EvidenceQuality=/);
     assert.doesNotMatch(response.body, /selected_candidate\s*=\s*[^-]/i);
 
