@@ -142,7 +142,7 @@ function section01(judgment, lang) {
   const lines = [`- ${lang === 'ja' ? '今回の目的' : 'Purpose'}: ${purpose || (lang === 'ja' ? '入力内容を判断材料として整理する' : 'Organize the input into judgment material')}`];
   if (candidates.length) lines.push(`- ${lang === 'ja' ? '判断対象' : 'Candidates'}: ${candidates.join(' / ')}`);
   if (dims.length) lines.push(`- ${lang === 'ja' ? '比較する観点' : 'Comparison dimensions'}: ${dims.join(' / ')}`);
-  lines.push(`- ${lang === 'ja' ? 'この結果で行うこと' : 'What this result provides'}: ${lang === 'ja' ? '候補を先に決めるのではなく、分かっている事実、足りない材料、守る条件、比較できる差を整理し、判断する人またはAIが同じ材料から判断できる状態にする。' : 'Do not preselect a winner. Separate known facts, missing material, constraints, and comparable differences so a human or AI can judge from the same material.'}`);
+  lines.push(`- ${lang === 'ja' ? 'この結果で行うこと' : 'What this result provides'}: ${lang === 'ja' ? '候補を先に決めるのではなく、分かっている事実、足りない材料、守る条件、比較できる差を整理し、同じ材料から判断できる状態にする。' : 'Do not preselect a winner. Separate known facts, missing material, constraints, and comparable differences so the same material can support a later judgment.'}`);
   return lines.join('\n');
 }
 function section02(judgment, lang) {
@@ -252,18 +252,36 @@ function section07(judgment, lang) {
   const entries = evidenceEntries(judgment);
   const confirmed = Number(section.confirmed_claim_count || 0);
   const unresolved = Number(section.undetermined_claim_count || 0);
+  const supplied = observableClaims(judgment);
+  const candidates = candidateLabels(judgment);
+  const dims = dimensions(judgment);
+  const diff = quantityDifference(judgment, lang);
   const lines = [];
-  if (confirmed + unresolved > 0) lines.push(`- ${lang === 'ja' ? '主張の確認状態' : 'Claim confirmation'}: ${lang === 'ja' ? `${confirmed}件が確認済み、${unresolved}件は未確定。` : `${confirmed} confirmed; ${unresolved} remain unresolved.`}`);
+  if (supplied.length) {
+    lines.push(`- ${lang === 'ja' ? '根拠状態を判定する対象になっている入力材料' : 'Input material whose evidence status is being evaluated'}:`);
+    for (const value of supplied.slice(0, 6)) lines.push(`  - ${clean(value)}`);
+  } else {
+    const target = purposeText(judgment);
+    if (target) lines.push(`- ${lang === 'ja' ? '根拠確認の対象' : 'Evidence target'}: ${target}`);
+  }
+  if (confirmed + unresolved > 0) lines.push(`- ${lang === 'ja' ? '主張の確認状態' : 'Claim confirmation'}: ${lang === 'ja' ? `${confirmed}件が外部根拠まで確認済み、${unresolved}件は未確定。確認済みと未確定を同じ事実として扱わない。` : `${confirmed} claims are externally confirmed; ${unresolved} remain unresolved. Confirmed and unresolved claims must not be treated as equivalent facts.`}`);
   for (const text of unique(entries.map((entry) => evidenceExplanation(entry, lang)))) lines.push(`- ${text}`);
+  if (candidates.length) {
+    lines.push(`- ${lang === 'ja' ? '現時点で判断材料としてそのまま使える範囲' : 'Material that can be used directly at this point'}: ${lang === 'ja' ? `${candidates.join(' / ')}について利用者入力で明示された内容と、そこから直接計算できる差まで。${diff || '外部確認を伴う追加事実は成立していない。'}` : `User-supplied observations for ${candidates.join(' / ')} and differences directly calculable from them. ${diff || 'No additional externally established fact is available.'}`}`);
+    if (dims.length) lines.push(`- ${lang === 'ja' ? 'まだ根拠が成立していない判断軸' : 'Decision dimensions still lacking sufficient evidence'}: ${dims.map((d) => `${d}→${missingForDimension(d, lang)}`).join(' / ')}`);
+    lines.push(`- ${lang === 'ja' ? 'この区別が判断に与える意味' : 'Why this boundary matters'}: ${lang === 'ja' ? '入力された件数や条件は比較の出発点として使えるが、作業時間・法務リスク・利用者理解など未測定の観点を入力値から推測して補ってはいけない。外部根拠が必要な事実は、成立した根拠が得られるまで未確定として残す。' : 'Supplied counts and conditions can be used as the starting point, but unmeasured dimensions must not be inferred from those values. Facts requiring external support remain unresolved until acceptable evidence exists.'}`);
+  } else {
+    lines.push(`- ${lang === 'ja' ? 'この根拠状態から直接言えること' : 'What follows directly from this evidence state'}: ${lang === 'ja' ? '成立した外部根拠がある主張だけを確認済みとして使用できる。成立していない、実行されていない、対象範囲や時点が一致しない根拠は、主張の裏付けとして使用しない。' : 'Only claims backed by accepted external evidence may be treated as confirmed. Missing, unexecuted, scope-mismatched, or time-mismatched evidence must not be used as support.'}`);
+  }
   if (!lines.length) lines.push(`- ${lang === 'ja' ? '外部根拠の成立状態を示せる材料がないため、未確認の内容を確認済みとして扱わない。' : 'No concrete external-evidence status is available, so unverified material must not be treated as confirmed.'}`);
-  lines.push(`- ${lang === 'ja' ? '判断時の区別' : 'Decision boundary'}: ${lang === 'ja' ? '「利用者入力として与えられた材料」「外部根拠まで成立した事実」「未確定」を混ぜない。' : 'Keep user-supplied material, externally supported facts, and unresolved items separate.'}`);
+  lines.push(`- ${lang === 'ja' ? '判断時の区別' : 'Decision boundary'}: ${lang === 'ja' ? '「利用者入力として与えられた材料」「外部根拠まで成立した事実」「未確定」を混ぜない。根拠なしの場合は根拠なしのまま示し、不足部分を推測や一般論で補強しない。' : 'Keep user-supplied material, externally supported facts, and unresolved items separate. When evidence is absent, state that it is absent instead of filling the gap with assumptions or generic claims.'}`);
   return lines.join('\n');
 }
 function section08(judgment, lang) {
   const candidates = candidateLabels(judgment);
   const dims = dimensions(judgment);
   const premises = premiseLines(judgment, lang);
-  const lines = [`- ${lang === 'ja' ? 'この材料を受け取った人またはAIが次に確認すること' : 'What the next human or AI should verify from this material'}:`];
+  const lines = [`- ${lang === 'ja' ? 'この材料から次に確認すること' : 'What to verify next from this material'}:`];
   if (premises.length) lines.push(`  - ${lang === 'ja' ? '判断中も固定する条件' : 'Conditions to preserve throughout judgment'}: ${premises.join(' / ')}`);
   if (candidates.length && dims.length) lines.push(`  - ${lang === 'ja' ? '候補を同じ条件で比べるために埋める材料' : 'Material to fill before comparing candidates under the same conditions'}: ${dims.map((d) => `${d}→${missingForDimension(d, lang)}`).join(' / ')}`);
   if (!candidates.length) lines.push(`  - ${lang === 'ja' ? '対象主張について、支持根拠だけでなく反証・例外・対象範囲・時点も確認し、根拠が成立しない場合は未確定のまま残す。' : 'For the target claim, check counter-evidence, exceptions, scope, and time as well as supporting evidence; leave it unresolved if evidence is not established.'}`);
