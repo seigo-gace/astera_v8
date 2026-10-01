@@ -2,6 +2,7 @@
 
 const Logger = require('./logger');
 const { CanonicalTaskExecutor } = require('./runtime/canonical-task-executor');
+const { FiveStageExecutor } = require('./runtime/five-stage-executor');
 const { canonicalConcurrency } = require('./runtime/concurrency-policy');
 const { destroyGlobalCanonicalTaskAdmission } = require('./runtime/canonical-task-admission');
 
@@ -26,6 +27,7 @@ class CanonicalEngineSupport {
       Math.max(this.poolSize * 8, 32)
     );
     this.canonicalTaskExecutor = null;
+    this.fiveStageExecutor = null;
   }
 
   getCanonicalTaskExecutor() {
@@ -38,6 +40,17 @@ class CanonicalEngineSupport {
       });
     }
     return this.canonicalTaskExecutor;
+  }
+
+  getFiveStageExecutor() {
+    if (!this.fiveStageExecutor) {
+      this.fiveStageExecutor = new FiveStageExecutor({
+        timeoutMs: this.workerTimeoutMs,
+        maxQueue: Math.max(40, this.workerQueueSize * 5),
+        logger: this.logger
+      });
+    }
+    return this.fiveStageExecutor;
   }
 
   clarify(questions, lang = 'ja') {
@@ -61,9 +74,14 @@ class CanonicalEngineSupport {
 
   async destroy() {
     const executor = this.canonicalTaskExecutor;
+    const fiveStageExecutor = this.fiveStageExecutor;
     this.canonicalTaskExecutor = null;
+    this.fiveStageExecutor = null;
     await destroyGlobalCanonicalTaskAdmission();
-    if (executor) await executor.destroy();
+    await Promise.allSettled([
+      executor ? executor.destroy() : Promise.resolve(),
+      fiveStageExecutor ? fiveStageExecutor.destroy() : Promise.resolve()
+    ]);
   }
 }
 
