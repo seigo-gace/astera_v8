@@ -6,6 +6,7 @@ const SECTION_KEYS = Object.freeze([
 ]);
 const EXTERNAL = 'EXTERNAL_RETRIEVED_EVIDENCE';
 const USED_RELATIONS = new Set(['SUPPORTS', 'CONTRADICTS', 'PARTIALLY_SUPPORTS']);
+const EVIDENCE_MARKER = '===ASTERA_EVIDENCE===';
 
 function text(value) {
   return String(value == null ? '' : value).normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -15,12 +16,6 @@ function unique(values = []) {
 }
 function sourceKey(binding = {}) {
   return text(binding.candidate_id || binding.canonical_record_id || binding.canonical_locator?.url || binding.source_span || binding.evidence_binding_id);
-}
-function relationPriority(value) {
-  if (value === 'SUPPORTS') return 0;
-  if (value === 'CONTRADICTS') return 1;
-  if (value === 'PARTIALLY_SUPPORTS') return 2;
-  return 9;
 }
 function collectBindings(result = {}) {
   const rows = [];
@@ -92,6 +87,7 @@ function sourceRecord(sourceId, key, rows, sectionMap) {
   return {
     id: sourceId,
     source_id: sourceId,
+    display_number: Number(sourceId.slice(1)),
     candidate_id: first.candidate_id || null,
     canonical_record_id: first.canonical_record_id || null,
     title: text(first.title) || text(first.publisher?.name) || text(first.authority_id) || text(first.provider_id) || first.candidate_id || sourceId,
@@ -109,6 +105,7 @@ function sourceRecord(sourceId, key, rows, sectionMap) {
     retrieved_at: first.retrieved_at || null,
     content_hash: first.content_hash || null,
     revision_id: first.revision_id || null,
+    verification_status: claims.every((link) => link.confirmation_status === 'CONFIRMED' && link.relation === 'SUPPORTS') ? 'confirmed' : 'qualified',
     section_keys: sectionKeys,
     claim_links: claims
   };
@@ -146,6 +143,25 @@ function buildEvidenceCitationMaterial(result = {}) {
     claim_source_ids: claimSourceIds
   };
 }
+function annotationLines(ids, citationMaterial, lang) {
+  const sources = citationMaterial.sources.filter((source) => ids.includes(source.id));
+  const claimMap = new Map();
+  for (const source of sources) {
+    for (const link of source.claim_links) {
+      const claim = link.claim_text || link.claim_id;
+      if (!claim) continue;
+      claimMap.set(claim, unique([...(claimMap.get(claim) || []), source.id]).sort());
+    }
+  }
+  const lines = [];
+  if (claimMap.size) {
+    lines.push(`- ${lang === 'ja' ? '回答と根拠の対応' : 'Answer-to-evidence mapping'}:`);
+    for (const [claim, sourceIds] of claimMap) lines.push(`  - ${claim} → ${sourceIds.map((id) => `[${id}]`).join(' ')}`);
+  } else {
+    lines.push(`- ${lang === 'ja' ? 'この項目で使用した外部根拠' : 'External evidence used in this section'}: ${ids.map((id) => `[${id}]`).join(' ')}`);
+  }
+  return lines;
+}
 function annotateMain8Text(main8Text, citationMaterial, lang = 'ja') {
   const blocks = String(main8Text || '').split('\n---\n');
   if (blocks.length !== SECTION_KEYS.length) return String(main8Text || '');
@@ -153,44 +169,18 @@ function annotateMain8Text(main8Text, citationMaterial, lang = 'ja') {
     const key = SECTION_KEYS[index];
     const ids = citationMaterial.section_source_ids[key] || [];
     if (!ids.length) return block;
-    const label = lang === 'ja' ? 'この項目で使用した外部根拠' : 'External evidence used in this section';
-    return `${block}\n- ${label}: ${ids.map((id) => `[${id}]`).join(' ')}`;
+    return `${block}\n${annotationLines(ids, citationMaterial, lang).join('\n')}`;
   }).join('\n---\n');
 }
-function renderEvidenceTrailer(citationMaterial, lang = 'ja') {
-  const lines = ['===ASTERA_EVIDENCE==='];
-  if (!citationMaterial.sources.length) {
-    lines.push(lang === 'ja'
-      ? 'Evidence / 根拠: この回答で採用された外部根拠はありません。'
-      : 'Evidence: No external evidence was adopted for this response.');
-    return lines.join('\n');
-  }
-  lines.push(lang === 'ja' ? 'Evidence / 根拠' : 'Evidence');
-  for (const source of citationMaterial.sources) {
-    lines.push(`[${source.id}] ${source.title}`);
-    lines.push(`${lang === 'ja' ? '対象項目' : 'Sections'}: ${source.section_keys.length ? source.section_keys.join(', ') : '07_evidence_status'}`);
-    for (const link of source.claim_links) {
-      lines.push(`${lang === 'ja' ? '対象主張' : 'Claim'}: ${link.claim_text || link.claim_id || '-'} (${link.relation})`);
-    }
-    lines.push(`${lang === 'ja' ? '出典種別' : 'Source role'}: ${source.source_role || '-'}${source.authority_id ? ` / Authority=${source.authority_id}` : ''}${source.provider_id ? ` / Provider=${source.provider_id}` : ''}`);
-    lines.push(`${lang === 'ja' ? '出典' : 'Source'}: ${source.publisher?.name || source.publisher?.id || source.source_family_id || source.title}`);
-    if (source.url) lines.push(`URL: ${source.url}`);
-    else lines.push(`${lang === 'ja' ? 'Canonical Locator' : 'Canonical Locator'}: ${source.canonical_locator?.locator_type || 'RECORD_ID'}:${source.canonical_record_id || source.candidate_id || '-'}`);
-    if (source.excerpt) lines.push(`${lang === 'ja' ? '確認内容' : 'Observed content'}: ${source.excerpt}`);
-    if (source.published_at) lines.push(`${lang === 'ja' ? '公開日時' : 'Published'}: ${source.published_at}`);
-    if (source.updated_at) lines.push(`${lang === 'ja' ? '更新日時' : 'Updated'}: ${source.updated_at}`);
-    if (source.retrieved_at) lines.push(`${lang === 'ja' ? '取得日時' : 'Retrieved'}: ${source.retrieved_at}`);
-    lines.push(`${lang === 'ja' ? '追跡ID' : 'Trace IDs'}: candidate=${source.candidate_id || '-'} / binding=${unique(source.claim_links.map((link) => link.binding_id)).join(',') || '-'}`);
-    lines.push('');
-  }
-  return lines.join('\n').trimEnd();
+function renderEvidenceTrailer(citationMaterial) {
+  return `${EVIDENCE_MARKER}\n${JSON.stringify(citationMaterial, null, 2)}`;
 }
 function attachEvidenceCitations(out = {}) {
   if (!out?.result?.judgment || !out?.material?.text) return out;
   const lang = String(out.result.judgment.output_language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
   const evidenceCitations = buildEvidenceCitationMaterial(out.result);
   const main8Text = annotateMain8Text(out.material.text, evidenceCitations, lang);
-  const evidenceText = renderEvidenceTrailer(evidenceCitations, lang);
+  const evidenceText = renderEvidenceTrailer(evidenceCitations);
   const textWithEvidence = `${main8Text}\n${evidenceText}`;
   const judgment = { ...out.result.judgment, evidence_citations: evidenceCitations };
   for (const key of SECTION_KEYS) {
@@ -214,6 +204,7 @@ function attachEvidenceCitations(out = {}) {
 
 module.exports = {
   SECTION_KEYS,
+  EVIDENCE_MARKER,
   buildEvidenceCitationMaterial,
   annotateMain8Text,
   renderEvidenceTrailer,
