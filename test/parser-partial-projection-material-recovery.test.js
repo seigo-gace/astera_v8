@@ -12,7 +12,7 @@ function textOf(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-test('partial Japanese parser projection becomes substantive unified human/AI Main8 material instead of template leakage', async () => {
+test('partial Japanese parser projection becomes substantive unified Main8 material instead of template leakage', async () => {
   const question = [
     '来週金曜までにFAQへ新しい問い合わせ例を追加するための判断材料を整理して。',
     '公開済みの返金ポリシー文言は変えない。',
@@ -113,7 +113,7 @@ test('partial Japanese parser projection becomes substantive unified human/AI Ma
     const sections = rendered.split('\n---\n');
     assert.equal(sections.length, 8, rendered);
     assert.equal(out.material.consumer_scope, 'HUMAN_AND_AI_SAME_MATERIAL');
-    assert.equal(out.prompt, rendered, 'human and AI consumers must receive the same semantic material');
+    assert.equal(out.prompt, rendered, 'all consumers must receive the same semantic material');
 
     assert.match(sections[0], /FAQ/);
     assert.match(sections[0], /問い合わせ例/);
@@ -157,7 +157,15 @@ test('partial Japanese parser projection becomes substantive unified human/AI Ma
     assert.match(sections[5], /理解度|網羅率|読みやすさ/);
 
     assert.match(sections[6], /外部検索を必要としない|外部根拠|確認済み/);
-    assert.match(sections[6], /利用者入力として与えられた材料|利用者入力の条件|利用者が与えた条件/);
+    assert.match(sections[6], /利用者入力として与えられた材料|利用者入力の条件|利用者が与えた条件|利用者入力で明示された/);
+    assert.match(sections[6], /A案/);
+    assert.match(sections[6], /B案/);
+    assert.match(sections[6], /3件/);
+    assert.match(sections[6], /10件/);
+    assert.match(sections[6], /作業時間/);
+    assert.match(sections[6], /法務リスク/);
+    assert.match(sections[6], /利用者理解/);
+    assert.match(sections[6], /根拠なし|推測|未確定|外部確認済み/);
 
     assert.match(sections[7], /返金ポリシー|固定する条件/);
     assert.match(sections[7], /作業時間/);
