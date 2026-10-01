@@ -19,6 +19,20 @@ function uniqueStrings(values = []) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
+function publicRecoveryUnresolvedItems(packet = {}, lang = 'ja') {
+  const values = uniqueStrings([
+    ...(packet.unresolved || []),
+    ...(packet.tasks || []).flatMap((task) => task?.unresolved || [])
+  ]);
+  return values.filter((value) => {
+    const text = String(value || '').trim();
+    if (!text || text.length > 240) return false;
+    if (/^(?:T\d+:|[A-Z0-9_.:-]{4,})$/u.test(text)) return false;
+    if (/PARSER_|TASK_GRAPH|NO_EXECUTABLE_ACTION|SOURCE_ROLE|RECOVERED|FAIL_CLOSED|japanese_parser/i.test(text)) return false;
+    return /(?:未確認|未完了|未成立|まだ|終わっていない|完了していない|確認していない|\bpending\b|\bincomplete\b|not\s+yet|\bunconfirmed\b)/iu.test(text);
+  }).map((value) => `${lang === 'ja' ? '未確定条件' : 'Unresolved condition'}: ${value}`);
+}
+
 function throwIfRequestCancelled(signal) {
   if (!signal?.aborted) return;
   const error = new Error('Request cancelled');
@@ -89,9 +103,30 @@ class AsteraEngine extends CanonicalAsteraEngine {
     const packet = request.analysis_task_packet || {};
     const observable = packet.observable_material || request.observable_material || null;
     const intent = packet.analysis_intent || request.standalone_api_intent || null;
-    if (!observable || !intent) return judgment;
+    const next = { ...judgment };
+    const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
 
-    const next = { ...judgment, analysis_intent: intent, observable_material: observable };
+    if (packet.parser_projection_recovery?.applied === true) {
+      const premise = next['02_premise'];
+      const unresolvedItems = publicRecoveryUnresolvedItems(packet, outputLang);
+      if (premise && unresolvedItems.length) {
+        const items = uniqueStrings([...(premise.items || []), ...unresolvedItems]);
+        next['02_premise'] = { ...premise, items, summary: items.join(' / ') };
+      }
+      const facts = next['03_facts'];
+      const observableFactItems = uniqueStrings(observable?.claim_texts || []).map((value) =>
+        `${outputLang === 'ja' ? '入力記載（未検証）' : 'Input statement (unverified)'}: ${value}`
+      );
+      if (facts && observableFactItems.length) {
+        const items = uniqueStrings([...(facts.items || []), ...observableFactItems]);
+        next['03_facts'] = { ...facts, items, summary: items.join(' / ') };
+      }
+    }
+
+    if (!observable || !intent) return next;
+    next.analysis_intent = intent;
+    next.observable_material = observable;
+
     const purpose = next['01_purpose'];
     if (purpose) {
       const priorItems = Array.isArray(purpose.items) ? purpose.items : [];
@@ -109,7 +144,10 @@ class AsteraEngine extends CanonicalAsteraEngine {
       const existingCandidates = Array.isArray(comparison.comparison_candidates)
         ? comparison.comparison_candidates
         : [];
-      const candidates = uniqueStrings([...observable.candidates, ...existingCandidates]);
+      const candidates = uniqueStrings([...observable.candidates, ...existingCandidates]).filter((label) => {
+        const composite = /^(.+案)と(.+案)$/u.exec(label);
+        return !composite || !(observable.candidates.includes(composite[1]) && observable.candidates.includes(composite[2]));
+      });
       const existingMaterials = new Map(
         (Array.isArray(comparison.candidate_materials) ? comparison.candidate_materials : [])
           .map((item) => [String(item?.label || ''), item])
