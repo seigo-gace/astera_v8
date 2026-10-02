@@ -56,9 +56,9 @@ function overrideMaterialTask(task, intent) {
 }
 
 function detectedIntent(prepared, packet) {
-  return packet?.analysis_intent
-    || prepared?.standalone_api_intent
+  return prepared?.standalone_api_intent
     || prepared?.instruction_understanding?.analysis_intent
+    || packet?.analysis_intent
     || null;
 }
 
