@@ -109,6 +109,16 @@ test('conditions/exceptions/prohibitions remain semantic atoms instead of being 
   assert.ok((atoms.counts.PROHIBITION || 0) >= 1);
 });
 
+test('dependent Japanese continuation keeps literal message text inside one judgment request', () => {
+  const text = 'OptionがOFFの場合は、オプション名をオンにしてください。の表示を入れるようにしろ。';
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(text, 'ja');
+  assert.equal(atoms.request_atoms.length, 1, JSON.stringify(atoms.request_atoms, null, 2));
+  assert.match(atoms.request_atoms[0].text, /オプション名をオンにしてください/u);
+  assert.match(atoms.request_atoms[0].text, /表示を入れるようにしろ/u);
+  assert.equal(atoms.request_atoms[0].operation, 'implement');
+  assert.ok((atoms.request_atoms[0].merged_source_atom_ids || []).length >= 2);
+});
+
 test('source graph does not assign truth to user observations', () => {
   const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding('画像投稿後に線が出ることがあるので原因を確認して。', 'ja');
   const observations = atoms.atoms.filter((atom) => atom.type === 'OBSERVATION');
