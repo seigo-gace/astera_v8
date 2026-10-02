@@ -1,6 +1,6 @@
 # Astera v8 — 共通Domain Lens Genre Index
 
-Updated: 2026-09-26  
+Updated: 2026-10-03  
 Document ID: `astera-lens-genre-index`  
 Taxonomy Version: `1.0.0`
 
@@ -14,6 +14,7 @@ src/domain-template-router.js
 ```
 
 Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)  
+Universal target design: [`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)  
 Lens guide: [`DOMAIN_TEMPLATE_CATALOG.md`](DOMAIN_TEMPLATE_CATALOG.md)
 
 ---
@@ -38,7 +39,46 @@ Legacy v1 still contains `domain-lens-resolver.js` and corresponding tests. Thos
 
 ---
 
-## 2. Current router behavior
+## 2. Critical product boundary: G01-G38 is not the product scope
+
+The 38 Lens taxonomy is a **domain-material routing aid**. It must not become a whitelist of supported questions, document types, professions or judgment scenarios.
+
+Astera must accept arbitrary judgment-seeking input regardless of whether it is:
+
+- a clean report or noisy free-form message;
+- a design document, business document, legal text, scientific paper, plan, memo, audit record, personal question or another form;
+- Japanese or English;
+- short or long;
+- single-purpose or multi-purpose;
+- Human-authored or AI-authored.
+
+Correct semantic order:
+
+```text
+Source Graph / Semantic Atoms / Case Graph
+  ↓
+Request / Claim
+  ↓
+G01-G38 Lens routing
+  ↓
+Domain-specific required judgment material
+  ↓
+Evidence requirement / Risk / Inquiry / Comparison dimensions
+  ↓
+Main8 material sufficiency
+```
+
+A correct Lens classification is **not** proof that the final Main8 is useful or complete.
+
+The final quality question is:
+
+> Does the output contain the material actually required to judge this specific question?
+
+This is tested separately from Lens classification accuracy.
+
+---
+
+## 3. Current router behavior
 
 Current router id:
 
@@ -74,7 +114,7 @@ Do not create an `other`/`unknown` Lens merely to avoid abstention.
 
 ---
 
-## 3. Primary Lens一覧
+## 4. Primary Lens一覧
 
 | ID | 専門ジャンル | Lens Anchor Path |
 |---|---|---|
@@ -123,7 +163,53 @@ The detailed terms and per-Lens Fact/Risk/Multi/Inquiry/Compare/Evidence/Safety 
 
 ---
 
-## 4. Overlay Lens
+## 5. Domain-material sufficiency responsibility
+
+The target redesign requires each selected Lens to contribute **material requirements**, not just a label.
+
+Representative categories include:
+
+- domain-specific fact dimensions;
+- relevant counter/falsification conditions;
+- risk dimensions;
+- comparison dimensions;
+- authority/source classes;
+- freshness / effective-date requirements;
+- jurisdiction / population / environment / version scope;
+- specialist evidence expectations;
+- safety-critical uncertainty.
+
+These are composable with the universal operation-material ontology.
+
+Example:
+
+```text
+Request operation = compare
+Lens = G11 finance
+```
+
+may require generic comparison slots plus finance-specific period/accounting-basis/denominator/risk-assumption material.
+
+This is not an instruction to hard-code prose templates per Genre. The material contract is structured and source/evidence backed.
+
+---
+
+## 6. Cross-domain input
+
+One input may legitimately contain Requests/Claims from several Genres.
+
+Target behavior:
+
+- attach Lens context to the relevant Request/Claim;
+- preserve one Primary Lens where the router contract requires it, plus secondary/overlay context;
+- do not collapse cross-domain content into a generic primary-purpose string;
+- do not invent a 39th `other` Lens simply because the case spans multiple domains.
+
+Material sufficiency is evaluated by the union of relevant Request/Claim Lens requirements, not by a single global label alone.
+
+---
+
+## 7. Overlay Lens
 
 Current router defines:
 
@@ -139,7 +225,7 @@ Exact signals/risk/evidence/safety arrays are defined in `src/domain-template-ro
 
 ---
 
-## 5. Current output shape
+## 8. Current output shape
 
 Representative Judgment Material router result:
 
@@ -163,7 +249,7 @@ Exact output fields remain defined by current router code.
 
 ---
 
-## 6. Evidence Search connection
+## 9. Evidence Search connection
 
 Judgment Material Generation may include the selected Domain Lens in an Evidence Search request.
 
@@ -171,6 +257,7 @@ Evidence Search then decides Provider/query execution and Information Quality un
 
 ```text
 Lens routing
+→ domain-specific material requirement
 → Evidence Requirement
 → Evidence Search
 → Evidence quality/adoption
@@ -180,7 +267,7 @@ The Lens does not authorize an Evidence Candidate by itself.
 
 ---
 
-## 7. Evaluator-generation boundary
+## 10. Evaluator-generation boundary
 
 ### Generic v2
 
@@ -208,7 +295,7 @@ When reading old documents/tests, label this explicitly as **Legacy v1 evaluator
 
 ---
 
-## 8. Safety and decision boundary
+## 11. Safety and decision boundary
 
 Lens material may strengthen:
 
@@ -231,7 +318,21 @@ fabricated evidence
 
 ---
 
-## 9. Update rules
+## 12. Verification requirement
+
+The redesign requires separate verification for:
+
+1. Lens routing quality;
+2. domain-material requirement coverage;
+3. final Main8 material sufficiency.
+
+A test that only checks `primary.id === Gxx` cannot prove judgment-material quality.
+
+GitHub-self-executable regression must include Japanese and English, multiple lengths/styles and G01-G38 coverage with semantic/material-slot gold annotations rather than exact answer-template matching.
+
+---
+
+## 13. Update rules
 
 1. Keep `G01`–`G38` IDs stable unless an explicit taxonomy migration is approved.
 2. Update `src/all-domain-lens-catalog.js`, `src/domain-template-router.js`, related tests and this document together when current routing changes.
@@ -239,3 +340,5 @@ fabricated evidence
 4. Do not create an `other`/`unknown` Lens to hide weak classification; the router may abstain.
 5. Do not claim Generic v2 Lens enforcement from Legacy v1 tests.
 6. Do not duplicate the full per-Lens implementation arrays in README.
+7. Do not treat G01-G38 as a supported-document whitelist or Request parser.
+8. Do not treat correct Genre classification as proof of Main8 completion.
