@@ -11,7 +11,7 @@ const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?
 const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
 const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
-const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
+const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -197,7 +197,7 @@ function atomTypesFor(text) {
   if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
-  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
+  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
   if (/(?:許可|してよい|可能|\bmay\b|\bpermitted\b|\ballowed\b)/iu.test(value)) out.push('PERMISSION');
   if (/(?:維持|保持|残す|壊さない|変えない|\bpreserve\b|\bretain\b|\bkeep\b|without\s+changing|do\s+not\s+break)/iu.test(value)) out.push('PRESERVE');
   if (/(?:場合|なら|ならば|とき|たら|れば|\bif\b|\bwhen\b|\bunless\b|provided\s+that)/iu.test(value)) out.push('CONDITION');
