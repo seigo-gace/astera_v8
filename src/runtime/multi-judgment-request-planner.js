@@ -7,6 +7,7 @@ const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|�
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
 const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
 const CANONICAL_ACTIONS = new Set(['analyze','verify','compare','decide','improve','implement','integrate','migrate','remove','preserve','explain']);
+const SUPPORT_ACTIONS = new Set(['analyze','verify']);
 
 function norm(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -100,7 +101,8 @@ function extractJudgmentRequests(text) {
       request_text: requestText(span.text),
       action: requestAction(span.text),
       umbrella: UMBRELLA_MATERIAL.test(span.text),
-      source_origin: 'SOURCE_REQUEST_SPAN'
+      source_origin: 'SOURCE_REQUEST_SPAN',
+      parser_task_ids: []
     }));
   const substantive = candidates.filter((item) => !item.umbrella);
   const selected = substantive.length ? substantive : candidates;
@@ -111,6 +113,7 @@ function extractJudgmentRequests(text) {
     request_text: item.request_text,
     source_span: item.source_span,
     source_origin: item.source_origin,
+    parser_task_ids: [],
     external_evidence_requested: EXTERNAL_EVIDENCE_CUE.test(item.request_text)
   }));
 }
@@ -127,6 +130,8 @@ function parserJudgmentRequests(question, tasks = []) {
       source_span: sourceSpan || { start: Number.MAX_SAFE_INTEGER - index, end: Number.MAX_SAFE_INTEGER - index + sourceText.length, text: sourceText },
       source_origin: 'PARSER_TASK_GRAPH',
       parser_task_id: task.id || null,
+      parser_task_ids: task.id ? [String(task.id)] : [],
+      parser_external_action: task.external_action === true,
       external_evidence_requested: task.evidence_need?.required === true || EXTERNAL_EVIDENCE_CUE.test(sourceText)
     };
   }).filter(Boolean);
@@ -138,37 +143,82 @@ function sameSourceUnit(left, right) {
   const rightCoverage = overlap / Math.max(1, spanLength(right.source_span));
   return leftCoverage >= 0.6 && rightCoverage >= 0.35;
 }
-function mergeJudgmentRequests(question, sourceRequests = [], tasks = []) {
+function directParserRequest(parserRequest) {
+  return isRequestSpan(parserRequest.request_text)
+    || parserRequest.parser_external_action === true
+    || !SUPPORT_ACTIONS.has(String(parserRequest.action || 'analyze'));
+}
+function nearestPrecedingRequest(requests, parserRequest) {
+  const start = Number(parserRequest.source_span?.start || 0);
+  return [...requests]
+    .filter((request) => Number(request.source_span?.start || 0) <= start)
+    .sort((a, b) => Number(b.source_span?.start || 0) - Number(a.source_span?.start || 0))[0] || null;
+}
+function intentBackedMaterialRequest(question, intent, parserRequests) {
+  if (String(intent?.source || '') !== 'OBSERVABLE_MATERIAL' || !intent?.purpose) return null;
+  return {
+    id: 'R01', order: 1,
+    action: requestAction(intent.purpose),
+    request_text: String(intent.purpose),
+    source_span: { start: 0, end: question.length, text: question },
+    source_origin: 'OBSERVABLE_MATERIAL_INTENT',
+    parser_task_ids: unique(parserRequests.flatMap((request) => request.parser_task_ids || [])),
+    external_evidence_requested: parserRequests.some((request) => request.external_evidence_requested)
+  };
+}
+function mergeParserOnlyRequests(parserRequests = []) {
+  const merged = [];
+  for (const parserRequest of parserRequests) {
+    const existing = merged.find((request) => sameSourceUnit(request, parserRequest));
+    if (existing) {
+      existing.parser_task_ids = unique([...(existing.parser_task_ids || []), ...(parserRequest.parser_task_ids || [])]);
+      existing.external_evidence_requested = existing.external_evidence_requested || parserRequest.external_evidence_requested;
+      if (!SUPPORT_ACTIONS.has(parserRequest.action)) existing.action = parserRequest.action;
+      continue;
+    }
+    merged.push({ ...parserRequest, parser_task_ids: [...(parserRequest.parser_task_ids || [])] });
+  }
+  return merged;
+}
+function mergeJudgmentRequests(question, sourceRequests = [], tasks = [], intent = null) {
   const parserRequests = parserJudgmentRequests(question, tasks);
-  const merged = sourceRequests.map((request) => ({ ...request }));
-  const assignedParserIndexes = new Set();
-  for (const request of merged) {
-    const matches = parserRequests.map((parserRequest, index) => ({ parserRequest, index }))
-      .filter(({ parserRequest }) => sameSourceUnit(request, parserRequest));
-    if (matches.length === 1) {
-      const { parserRequest, index } = matches[0];
-      request.parser_task_id = parserRequest.parser_task_id;
-      request.action = parserRequest.action || request.action;
-      request.external_evidence_requested = request.external_evidence_requested || parserRequest.external_evidence_requested;
-      request.source_origin = 'PARSER_TASK_GRAPH_AND_SOURCE_SPAN';
-      assignedParserIndexes.add(index);
+  if (!sourceRequests.length) {
+    const intentRequest = intentBackedMaterialRequest(question, intent, parserRequests);
+    const base = intentRequest ? [intentRequest] : mergeParserOnlyRequests(parserRequests);
+    return base.map((item, index) => ({ ...item, id: `R${String(index + 1).padStart(2, '0')}`, order: index + 1 }));
+  }
+
+  const merged = sourceRequests.map((request) => ({ ...request, parser_task_ids: [] }));
+  for (const parserRequest of parserRequests) {
+    const overlapping = merged.filter((request) => sameSourceUnit(request, parserRequest));
+    if (overlapping.length === 1) {
+      const owner = overlapping[0];
+      owner.parser_task_ids = unique([...(owner.parser_task_ids || []), ...(parserRequest.parser_task_ids || [])]);
+      owner.external_evidence_requested = owner.external_evidence_requested || parserRequest.external_evidence_requested;
+      owner.source_origin = 'PARSER_TASK_GRAPH_AND_SOURCE_SPAN';
+      continue;
+    }
+    const covered = merged.filter((request) => spanOverlapRatio(parserRequest.source_span, request.source_span) >= 0.7);
+    if (covered.length >= 2) continue;
+    if (directParserRequest(parserRequest)) {
+      merged.push({ ...parserRequest, parser_task_ids: [...(parserRequest.parser_task_ids || [])] });
+      continue;
+    }
+    const owner = nearestPrecedingRequest(merged.filter((request) => request.source_origin !== 'PARSER_TASK_GRAPH'), parserRequest);
+    if (owner) {
+      owner.parser_task_ids = unique([...(owner.parser_task_ids || []), ...(parserRequest.parser_task_ids || [])]);
+      owner.external_evidence_requested = owner.external_evidence_requested || parserRequest.external_evidence_requested;
     }
   }
-  parserRequests.forEach((parserRequest, index) => {
-    if (assignedParserIndexes.has(index)) return;
-    const coveredSourceRequests = sourceRequests.filter((request) => spanOverlapRatio(parserRequest.source_span, request.source_span) >= 0.7);
-    if (coveredSourceRequests.length >= 2) return;
-    if (merged.some((request) => request.parser_task_id && request.parser_task_id === parserRequest.parser_task_id)) return;
-    merged.push(parserRequest);
-  });
+
   merged.sort((a, b) => Number(a.source_span?.start || 0) - Number(b.source_span?.start || 0) || Number(a.order || 0) - Number(b.order || 0));
-  const deduped = [];
-  for (const item of merged) {
-    if (item.parser_task_id && deduped.some((existing) => existing.parser_task_id === item.parser_task_id)) continue;
-    if (deduped.some((existing) => sameSourceUnit(existing, item) && norm(existing.request_text) === norm(item.request_text))) continue;
-    deduped.push(item);
-  }
-  return deduped.map((item, index) => ({ ...item, id: `R${String(index + 1).padStart(2, '0')}`, order: index + 1 }));
+  return merged.map((item, index) => ({
+    ...item,
+    id: `R${String(index + 1).padStart(2, '0')}`,
+    order: index + 1,
+    parser_task_ids: unique(item.parser_task_ids || []),
+    ...(unique(item.parser_task_ids || []).length === 1 ? { parser_task_id: unique(item.parser_task_ids || [])[0] } : {})
+  }));
 }
 function extractInputObservations(text, requests = []) {
   const requestSpans = requests.map((item) => item.source_span);
@@ -216,7 +266,8 @@ function requestRelations(requests = []) {
   return relations;
 }
 function parserDependencyRelations(requests = [], tasks = [], dependencies = []) {
-  const taskToRequest = new Map(requests.filter((request) => request.parser_task_id).map((request) => [String(request.parser_task_id), request.id]));
+  const taskToRequest = new Map();
+  for (const request of requests) for (const taskId of request.parser_task_ids || []) taskToRequest.set(String(taskId), request.id);
   const edges = [];
   for (const task of tasks) {
     for (const dependency of task.depends_on || []) edges.push({ from: String(dependency), to: String(task.id), type: 'PARSER_TASK_DEPENDENCY' });
@@ -240,10 +291,10 @@ function parserDependencyRelations(requests = [], tasks = [], dependencies = [])
   }
   return out;
 }
-function buildCaseModel(text, tasks = [], dependencies = []) {
+function buildCaseModel(text, tasks = [], dependencies = [], intent = null) {
   const question = String(text || '');
   const sourceRequests = extractJudgmentRequests(question);
-  const judgmentRequests = mergeJudgmentRequests(question, sourceRequests, tasks);
+  const judgmentRequests = mergeJudgmentRequests(question, sourceRequests, tasks, intent);
   const observations = extractInputObservations(question, judgmentRequests);
   const globalContext = extractGlobalContext(question);
   const relations = [...requestRelations(judgmentRequests), ...parserDependencyRelations(judgmentRequests, tasks, dependencies)];
@@ -265,16 +316,10 @@ function buildCaseModel(text, tasks = [], dependencies = []) {
     multi_judgment: judgmentRequests.length > 1
   };
 }
-function representedTaskIndex(tasks, request) {
-  if (request.parser_task_id) {
-    const exact = tasks.findIndex((task) => String(task.id) === String(request.parser_task_id));
-    if (exact >= 0) return exact;
-  }
-  return tasks.findIndex((task) => {
-    if (spanOverlapRatio(task?.source_span, request.source_span) >= 0.5) return true;
-    const raw = norm(task?.raw_text || task?.source_span?.text);
-    return raw && request.request_text && (raw.includes(request.request_text) || request.request_text.includes(raw));
-  });
+function requestTaskIndices(tasks, request) {
+  const ids = new Set((request.parser_task_ids || []).map(String));
+  if (ids.size) return tasks.map((task, index) => ids.has(String(task.id)) ? index : -1).filter((index) => index >= 0);
+  return tasks.map((task, index) => spanOverlapRatio(task?.source_span, request.source_span) >= 0.5 ? index : -1).filter((index) => index >= 0);
 }
 function globalFields(packet, caseModel) {
   const context = caseModel.global_context || {};
@@ -311,24 +356,10 @@ function recoveredTask(request, index, fields, caseModel) {
     constraints: fields.constraints,
     prohibitions: fields.prohibitions,
     preserve: fields.preserve,
-    replace: [],
-    verification: [],
-    completion_criteria: [],
-    success_criteria: [],
-    conditions: fields.conditions,
-    exceptions: fields.exceptions,
-    deadlines: fields.deadlines,
-    priority_records: [],
-    deliverables: [],
-    unresolved: fields.unresolved,
-    hard_blockers: [],
-    depends_on: [],
-    branches: [],
-    conditional_branch: null,
-    execution_gate: 'ALWAYS',
-    parallel_group: 'MULTI_JUDGMENT_REQUESTS',
-    supersedes: [],
-    superseded_by: [],
+    replace: [], verification: [], completion_criteria: [], success_criteria: [],
+    conditions: fields.conditions, exceptions: fields.exceptions, deadlines: fields.deadlines,
+    priority_records: [], deliverables: [], unresolved: fields.unresolved, hard_blockers: [], depends_on: [], branches: [],
+    conditional_branch: null, execution_gate: 'ALWAYS', parallel_group: 'MULTI_JUDGMENT_REQUESTS', supersedes: [], superseded_by: [],
     evidence_need: {
       required: evidenceRequired,
       queries: evidenceRequired ? [request.request_text] : [],
@@ -367,28 +398,43 @@ function recoveredGraph(tasks, caseModel) {
   }
   return { tasks: nextTasks, dependencies, execution_waves: waves, valid: true, cycle: [] };
 }
+function caseMapping(caseModel, tasks) {
+  const requestTaskIds = {};
+  const taskMapping = {};
+  for (const request of caseModel.judgment_requests || []) {
+    const known = new Set((request.parser_task_ids || []).map(String));
+    const ids = tasks.filter((task) => task.request_id === request.id || known.has(String(task.id))).map((task) => String(task.id));
+    requestTaskIds[request.id] = unique(ids);
+    if (requestTaskIds[request.id][0]) taskMapping[request.id] = requestTaskIds[request.id][0];
+  }
+  return { request_task_ids: requestTaskIds, task_mapping: taskMapping };
+}
 function expandMultiJudgmentRequest(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
   if (!question.trim()) return prepared;
   const packet = prepared.analysis_task_packet || {};
   const existingTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
-  const caseModel = buildCaseModel(question, existingTasks, packet.dependencies || []);
+  const intent = packet.analysis_intent || prepared.standalone_api_intent || prepared.instruction_understanding?.analysis_intent || null;
+  const caseModel = buildCaseModel(question, existingTasks, packet.dependencies || [], intent);
   const observable = {
     ...(packet.observable_material || prepared.observable_material || {}),
     case_model: caseModel,
     input_observations: (caseModel.observations || []).map((item) => item.text)
   };
+
   if (caseModel.request_count < 2) {
+    const mapping = caseMapping(caseModel, existingTasks);
+    const packetCaseModel = { ...caseModel, ...mapping, representation_mode: 'PARSER_TASKS_PRESERVED' };
     return {
       ...prepared,
-      observable_material: observable,
-      analysis_task_packet: { ...packet, observable_material: observable, case_model: caseModel }
+      observable_material: { ...observable, case_model: packetCaseModel },
+      analysis_task_packet: { ...packet, observable_material: { ...observable, case_model: packetCaseModel }, case_model: packetCaseModel }
     };
   }
 
-  const representation = caseModel.judgment_requests.map((request) => representedTaskIndex(existingTasks, request));
-  const allRepresented = representation.every((index) => index >= 0) && new Set(representation).size === caseModel.request_count;
+  const representation = caseModel.judgment_requests.map((request) => requestTaskIndices(existingTasks, request));
+  const allRepresented = representation.every((indices) => indices.length > 0);
   const fields = globalFields(packet, caseModel);
   let tasks;
   let dependencies;
@@ -396,12 +442,11 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   let branches;
   let branchGroups;
   if (allRepresented) {
-    tasks = existingTasks.map((task, index) => {
-      const requestIndex = representation.indexOf(index);
-      if (requestIndex < 0) return task;
-      const request = caseModel.judgment_requests[requestIndex];
-      return { ...task, request_id: request.id, purpose: request.request_text, user_goal: request.request_text };
+    const taskOwners = new Map();
+    caseModel.judgment_requests.forEach((request, requestIndex) => {
+      for (const taskIndex of representation[requestIndex]) if (!taskOwners.has(taskIndex)) taskOwners.set(taskIndex, request.id);
     });
+    tasks = existingTasks.map((task, index) => taskOwners.has(index) ? { ...task, request_id: taskOwners.get(index) } : task);
     dependencies = packet.dependencies || [];
     executionWaves = Array.isArray(packet.execution_waves) && packet.execution_waves.length ? packet.execution_waves.map((wave) => [...wave]) : [tasks.map((task) => task.id)];
     branches = packet.branches || [];
@@ -414,10 +459,11 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
     branches = [];
     branchGroups = [];
   }
-  const caseGoal = `入力内の${caseModel.request_count}件の要求を一つに潰さず、個別の判断材料として整理する`;
+  const mapping = caseMapping(caseModel, tasks);
+  const caseGoal = (caseModel.judgment_requests || []).map((request) => request.request_text).join(' / ');
   const packetCaseModel = {
     ...caseModel,
-    task_mapping: Object.fromEntries(tasks.filter((task) => task.request_id).map((task) => [task.request_id, task.id])),
+    ...mapping,
     representation_mode: allRepresented ? 'PARSER_TASKS_PRESERVED' : 'SOURCE_REQUESTS_RECOVERED'
   };
   const recovery = {
@@ -432,7 +478,7 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
     target: caseGoal,
     objective: caseGoal,
     user_goal: caseGoal,
-    observable_material: observable,
+    observable_material: { ...observable, case_model: packetCaseModel },
     instruction_understanding: {
       ...(prepared.instruction_understanding || {}),
       multi_judgment_request: recovery
@@ -445,7 +491,7 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       branches,
       branch_groups: branchGroups,
       user_goal: caseGoal,
-      observable_material: observable,
+      observable_material: { ...observable, case_model: packetCaseModel },
       case_model: packetCaseModel,
       constraints: fields.constraints,
       prohibitions: fields.prohibitions,
