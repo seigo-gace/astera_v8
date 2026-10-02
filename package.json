@@ -35,6 +35,7 @@
     "run:astera-effect-ablation": "node scripts/run-astera-effect-ablation.js",
     "verify:effect": "node scripts/verify-astera-effect.js",
     "verify:effect-unseen": "node scripts/verify-astera-effect-unseen.js",
+    "verify:universal-judgment": "node scripts/run-universal-judgment-gate.js",
     "test:purpose-effect": "node --test test/purpose-effect-story.test.js test/false-confirmation-effect.test.js test/evidence-lineage-effect.test.js test/human-reader-effect-boundary.test.js test/evidence-search-main-proxy.test.js test/api.test.js",
     "test:evaluator": "node --test src/quality-completion-evaluator/tests/**/*.test.js",
     "test:evaluator-api": "node --test src/quality-completion-evaluator/api/*.test.js",
