@@ -6,6 +6,7 @@ const UMBRELLA_MATERIAL = /(?:判断材料|decision\s+material)[^。！？!?]{0,
 const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|してください|please\b|should\b|need\s+to|must\b)/iu;
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
 const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
+const CANONICAL_ACTIONS = new Set(['analyze','verify','compare','decide','improve','implement','integrate','migrate','remove','preserve','explain']);
 
 function norm(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -48,6 +49,11 @@ function requestAction(text) {
   if (/(?:検討|考慮|吟味|consider|review)/iu.test(value)) return 'analyze';
   return 'analyze';
 }
+function canonicalTaskAction(task = {}, text = '') {
+  const raw = norm(task.action || task.intent_type || task.type).toLowerCase();
+  if (CANONICAL_ACTIONS.has(raw)) return raw;
+  return requestAction(`${task.action || ''} ${task.intent_type || ''} ${text}`);
+}
 function requestText(spanText) {
   return norm(spanText)
     .replace(/^[\s、,]*(?:また|さらに|加えて|そして|それと|あと|なお)\s*/u, '')
@@ -59,6 +65,32 @@ function isRequestSpan(text) {
   if (!value || PURE_PROHIBITION.test(value)) return false;
   return REQUEST_CUE.test(value);
 }
+function spanIntersection(left = {}, right = {}) {
+  const start = Math.max(Number(left.start || 0), Number(right.start || 0));
+  const end = Math.min(Number(left.end || 0), Number(right.end || 0));
+  return Math.max(0, end - start);
+}
+function spanLength(span = {}) {
+  return Math.max(0, Number(span.end || 0) - Number(span.start || 0));
+}
+function spanOverlapRatio(left = {}, right = {}) {
+  const overlap = spanIntersection(left, right);
+  if (!overlap) return 0;
+  return overlap / Math.max(1, spanLength(right));
+}
+function sourceSpanForTask(task = {}, question = '') {
+  const span = task.source_span || task.original_span || {};
+  const start = Number(span.start);
+  const end = Number(span.end);
+  if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+    return { start, end, text: String(span.text || span.source_text || question.slice(start, end)) };
+  }
+  const raw = norm(task.raw_text || span.text || span.source_text || task.purpose || task.objective || task.target);
+  if (!raw) return null;
+  const index = String(question).indexOf(raw);
+  if (index < 0) return null;
+  return { start: index, end: index + raw.length, text: String(question).slice(index, index + raw.length) };
+}
 function extractJudgmentRequests(text) {
   const spans = sentenceSpans(text);
   const candidates = spans
@@ -67,7 +99,8 @@ function extractJudgmentRequests(text) {
       source_span: span,
       request_text: requestText(span.text),
       action: requestAction(span.text),
-      umbrella: UMBRELLA_MATERIAL.test(span.text)
+      umbrella: UMBRELLA_MATERIAL.test(span.text),
+      source_origin: 'SOURCE_REQUEST_SPAN'
     }));
   const substantive = candidates.filter((item) => !item.umbrella);
   const selected = substantive.length ? substantive : candidates;
@@ -77,8 +110,65 @@ function extractJudgmentRequests(text) {
     action: item.action,
     request_text: item.request_text,
     source_span: item.source_span,
+    source_origin: item.source_origin,
     external_evidence_requested: EXTERNAL_EVIDENCE_CUE.test(item.request_text)
   }));
+}
+function parserJudgmentRequests(question, tasks = []) {
+  return tasks.map((task, index) => {
+    const sourceSpan = sourceSpanForTask(task, question);
+    const sourceText = requestText(sourceSpan?.text || task.raw_text || task.purpose || task.objective || task.target || '');
+    if (!sourceText) return null;
+    return {
+      id: '',
+      order: index + 1,
+      action: canonicalTaskAction(task, sourceText),
+      request_text: sourceText,
+      source_span: sourceSpan || { start: Number.MAX_SAFE_INTEGER - index, end: Number.MAX_SAFE_INTEGER - index + sourceText.length, text: sourceText },
+      source_origin: 'PARSER_TASK_GRAPH',
+      parser_task_id: task.id || null,
+      external_evidence_requested: task.evidence_need?.required === true || EXTERNAL_EVIDENCE_CUE.test(sourceText)
+    };
+  }).filter(Boolean);
+}
+function sameSourceUnit(left, right) {
+  const overlap = spanIntersection(left.source_span, right.source_span);
+  if (!overlap) return false;
+  const leftCoverage = overlap / Math.max(1, spanLength(left.source_span));
+  const rightCoverage = overlap / Math.max(1, spanLength(right.source_span));
+  return leftCoverage >= 0.6 && rightCoverage >= 0.35;
+}
+function mergeJudgmentRequests(question, sourceRequests = [], tasks = []) {
+  const parserRequests = parserJudgmentRequests(question, tasks);
+  const merged = sourceRequests.map((request) => ({ ...request }));
+  const assignedParserIndexes = new Set();
+  for (const request of merged) {
+    const matches = parserRequests.map((parserRequest, index) => ({ parserRequest, index }))
+      .filter(({ parserRequest }) => sameSourceUnit(request, parserRequest));
+    if (matches.length === 1) {
+      const { parserRequest, index } = matches[0];
+      request.parser_task_id = parserRequest.parser_task_id;
+      request.action = parserRequest.action || request.action;
+      request.external_evidence_requested = request.external_evidence_requested || parserRequest.external_evidence_requested;
+      request.source_origin = 'PARSER_TASK_GRAPH_AND_SOURCE_SPAN';
+      assignedParserIndexes.add(index);
+    }
+  }
+  parserRequests.forEach((parserRequest, index) => {
+    if (assignedParserIndexes.has(index)) return;
+    const coveredSourceRequests = sourceRequests.filter((request) => spanOverlapRatio(parserRequest.source_span, request.source_span) >= 0.7);
+    if (coveredSourceRequests.length >= 2) return;
+    if (merged.some((request) => request.parser_task_id && request.parser_task_id === parserRequest.parser_task_id)) return;
+    merged.push(parserRequest);
+  });
+  merged.sort((a, b) => Number(a.source_span?.start || 0) - Number(b.source_span?.start || 0) || Number(a.order || 0) - Number(b.order || 0));
+  const deduped = [];
+  for (const item of merged) {
+    if (item.parser_task_id && deduped.some((existing) => existing.parser_task_id === item.parser_task_id)) continue;
+    if (deduped.some((existing) => sameSourceUnit(existing, item) && norm(existing.request_text) === norm(item.request_text))) continue;
+    deduped.push(item);
+  }
+  return deduped.map((item, index) => ({ ...item, id: `R${String(index + 1).padStart(2, '0')}`, order: index + 1 }));
 }
 function extractInputObservations(text, requests = []) {
   const requestSpans = requests.map((item) => item.source_span);
@@ -125,30 +215,61 @@ function requestRelations(requests = []) {
   }
   return relations;
 }
-function buildCaseModel(text) {
+function parserDependencyRelations(requests = [], tasks = [], dependencies = []) {
+  const taskToRequest = new Map(requests.filter((request) => request.parser_task_id).map((request) => [String(request.parser_task_id), request.id]));
+  const edges = [];
+  for (const task of tasks) {
+    for (const dependency of task.depends_on || []) edges.push({ from: String(dependency), to: String(task.id), type: 'PARSER_TASK_DEPENDENCY' });
+  }
+  for (const edge of dependencies || []) {
+    if (!edge || typeof edge !== 'object') continue;
+    const from = edge.from || edge.source || edge.parent_task_id || edge.depends_on;
+    const to = edge.to || edge.target || edge.child_task_id || edge.task_id;
+    if (from && to) edges.push({ from: String(from), to: String(to), type: edge.type || 'PARSER_TASK_DEPENDENCY' });
+  }
+  const out = [];
+  const seen = new Set();
+  for (const edge of edges) {
+    const fromRequest = taskToRequest.get(edge.from);
+    const toRequest = taskToRequest.get(edge.to);
+    if (!fromRequest || !toRequest || fromRequest === toRequest) continue;
+    const key = `${fromRequest}|${toRequest}|${edge.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ from_request_id: fromRequest, to_request_id: toRequest, type: edge.type, reason: 'PARSER_TASK_GRAPH' });
+  }
+  return out;
+}
+function buildCaseModel(text, tasks = [], dependencies = []) {
   const question = String(text || '');
-  const judgmentRequests = extractJudgmentRequests(question);
+  const sourceRequests = extractJudgmentRequests(question);
+  const judgmentRequests = mergeJudgmentRequests(question, sourceRequests, tasks);
   const observations = extractInputObservations(question, judgmentRequests);
   const globalContext = extractGlobalContext(question);
+  const relations = [...requestRelations(judgmentRequests), ...parserDependencyRelations(judgmentRequests, tasks, dependencies)];
+  const seenRelations = new Set();
+  const requestRelationList = relations.filter((relation) => {
+    const key = `${relation.from_request_id}|${relation.to_request_id}|${relation.type}`;
+    if (seenRelations.has(key)) return false;
+    seenRelations.add(key);
+    return true;
+  });
   return {
     schema_version: 'astera.case-model.v1',
-    source: 'ORIGINAL_QUESTION',
+    source: tasks.length ? 'PARSER_TASK_GRAPH_WITH_SOURCE_RECOVERY' : 'ORIGINAL_QUESTION',
     request_count: judgmentRequests.length,
     judgment_requests: judgmentRequests,
     observations,
     global_context: globalContext,
-    request_relations: requestRelations(judgmentRequests),
+    request_relations: requestRelationList,
     multi_judgment: judgmentRequests.length > 1
   };
 }
-function spanOverlapRatio(left = {}, right = {}) {
-  const start = Math.max(Number(left.start || 0), Number(right.start || 0));
-  const end = Math.min(Number(left.end || 0), Number(right.end || 0));
-  if (end <= start) return 0;
-  const length = Math.max(1, Number(right.end || 0) - Number(right.start || 0));
-  return (end - start) / length;
-}
 function representedTaskIndex(tasks, request) {
+  if (request.parser_task_id) {
+    const exact = tasks.findIndex((task) => String(task.id) === String(request.parser_task_id));
+    if (exact >= 0) return exact;
+  }
   return tasks.findIndex((task) => {
     if (spanOverlapRatio(task?.source_span, request.source_span) >= 0.5) return true;
     const raw = norm(task?.raw_text || task?.source_span?.text);
@@ -250,9 +371,9 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
   if (!question.trim()) return prepared;
-  const caseModel = buildCaseModel(question);
   const packet = prepared.analysis_task_packet || {};
   const existingTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
+  const caseModel = buildCaseModel(question, existingTasks, packet.dependencies || []);
   const observable = {
     ...(packet.observable_material || prepared.observable_material || {}),
     case_model: caseModel,
@@ -353,5 +474,6 @@ module.exports = {
   extractJudgmentRequests,
   extractInputObservations,
   requestRelations,
+  mergeJudgmentRequests,
   expandMultiJudgmentRequest
 };
