@@ -180,7 +180,7 @@ function groupComparisonMaterial(taskResults = []) {
     dimensions: publicValues(taskResults.flatMap((taskResult) => taskResult?.comparison?.dimensions || []))
   };
 }
-function premiseLines(judgment, model, lang) {
+function premiseLines(model, lang) {
   const context = model.global_context || {};
   const lines = [];
   const push = (labelJa, labelEn, values) => {
@@ -192,11 +192,6 @@ function premiseLines(judgment, model, lang) {
   push('未確定事項', 'Unresolved', context.unresolved);
   push('成立条件', 'Condition', context.conditions);
   push('例外', 'Exception', context.exceptions);
-  for (const item of judgment['02_premise']?.items || []) {
-    const value = sanitizePublicValue(item);
-    if (!value || INTERNAL.test(value)) continue;
-    if (!lines.some((line) => line.includes(value))) lines.push(value);
-  }
   return unique(lines);
 }
 function evidenceText(entry, lang) {
@@ -232,9 +227,20 @@ function section01(model, lang) {
   return lines.join('\n');
 }
 function section02(judgment, model, lang) {
-  const lines = premiseLines(judgment, model, lang);
-  if (!lines.length) return `- ${lang === 'ja' ? '複数要求に共通して固定すべき期限・禁止・維持条件は入力から明示されていない。要求固有の条件は各要求に保持する。' : 'No cross-cutting deadline, prohibition, or preserve condition is explicit; request-specific conditions remain attached to each request.'}`;
-  return [`- ${lang === 'ja' ? '複数要求に共通して保持する条件' : 'Cross-cutting conditions to preserve'}:`, ...lines.map((line) => `  - ${line}`)].join('\n');
+  const globalLines = premiseLines(model, lang);
+  const requests = model.judgment_requests || [];
+  const lines = [`- ${lang === 'ja' ? '複数要求に共通して保持する条件' : 'Cross-cutting conditions to preserve'}:`];
+  if (globalLines.length) {
+    lines.push(...globalLines.map((line) => `  - ${line}`));
+  } else {
+    lines.push(`  - ${lang === 'ja' ? '共通条件として明示された期限・禁止・維持・成立条件はない。' : 'No deadline, prohibition, preserve, or condition is explicit as cross-cutting context.'}`);
+  }
+  lines.push(`- ${lang === 'ja' ? '判断要求ごとの固有条件' : 'Request-specific conditions'}:`);
+  for (const request of requests) {
+    const local = requestContextLines(request, lang);
+    lines.push(`  - ${request.id}: ${local.length ? local.join(' / ') : (lang === 'ja' ? '固有条件の明示なし。' : 'No request-specific condition is explicit.')}`);
+  }
+  return lines.join('\n');
 }
 function section03(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '利用者入力の観測と、各判断要求に紐づく実行Taskで得た事実材料を分ける' : 'Separate user observations from factual material produced by execution tasks for each judgment request'}:`];
