@@ -222,6 +222,34 @@ function atomTypesFor(text) {
   return [...new Set(out)];
 }
 
+function coalesceDependentRequestAtoms(requests, source) {
+  const sorted = [...requests].sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
+  const out = [];
+  for (const atom of sorted) {
+    const previous = out[out.length - 1];
+    const value = normalized(atom.text);
+    const directlyContinuesPrevious = previous
+      && atom.source_span.start === previous.source_span.end
+      && /^の/u.test(value);
+    if (!directlyContinuesPrevious) {
+      out.push(atom);
+      continue;
+    }
+    const start = previous.source_span.start;
+    const end = atom.source_span.end;
+    const text = source.slice(start, end);
+    out[out.length - 1] = {
+      ...previous,
+      operation: atom.operation || previous.operation,
+      source_span: { start, end },
+      text,
+      normalized_text: normalized(text),
+      merged_source_atom_ids: [...new Set([...(previous.merged_source_atom_ids || [previous.id]), atom.id])]
+    };
+  }
+  return out;
+}
+
 function buildSemanticAtoms(sourceGraph) {
   const source = sourceGraph?.source || '';
   const candidateNodes = (sourceGraph?.nodes || []).filter((node) => ['clause', 'sentence', 'heading', 'list_item'].includes(node.kind));
@@ -261,8 +289,10 @@ function buildSemanticAtoms(sourceGraph) {
     }
   }
 
-  const requests = atoms.filter((atom) => atom.type === 'REQUEST')
-    .sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
+  const requests = coalesceDependentRequestAtoms(
+    atoms.filter((atom) => atom.type === 'REQUEST'),
+    source
+  );
   return {
     schema: 'astera.semantic-atom-graph.v1',
     language: sourceGraph.language,
