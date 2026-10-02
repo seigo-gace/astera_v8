@@ -4,14 +4,14 @@
 // Original source is preserved exactly as received by JavaScript. Normalization is carried
 // separately. This layer does not establish truth and does not make final decisions.
 
-const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする)/u;
+const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする|確認する[。！？!?]?$|(?:か)?(?:見|み)て(?:ほしい)?(?:けど)?[。！？!?]?$)/u;
 const REQUEST_EN = /(?:\bplease\b|\bI\s+need\b|\bwe\s+need\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bidentify\b|\bstate\b|\bprovide\b|\breturn\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bsupport\b|\bmeasure\b|\bshow\b|\bdo\s+not\b|\bnever\b)/iu;
 const OBJECTIVE_JA = /(?:^|[【\s])(第?[一二三四五六七八九十0-9]+(?:の)?目的|目的[A-Za-z0-9一二三四五六七八九十]*)(?:は|:|：)/u;
 const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*(?::|\bis\s+to\b)/iu;
 const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
 const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
-const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
+const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -197,7 +197,7 @@ function atomTypesFor(text) {
   if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
-  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
+  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
   if (/(?:許可|してよい|可能|\bmay\b|\bpermitted\b|\ballowed\b)/iu.test(value)) out.push('PERMISSION');
   if (/(?:維持|保持|残す|壊さない|変えない|\bpreserve\b|\bretain\b|\bkeep\b|without\s+changing|do\s+not\s+break)/iu.test(value)) out.push('PRESERVE');
   if (/(?:場合|なら|ならば|とき|たら|れば|\bif\b|\bwhen\b|\bunless\b|provided\s+that)/iu.test(value)) out.push('CONDITION');
