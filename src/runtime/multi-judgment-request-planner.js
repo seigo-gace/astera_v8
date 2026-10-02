@@ -104,7 +104,7 @@ function extractGlobalContext(text) {
     if (/(?:変えない|変えず|変更しない|変更せず|維持|保持|残す|keep|preserve|retain|without\s+changing)/iu.test(value)) context.preserve.push(value);
     if (PURE_PROHIBITION.test(value)) context.prohibitions.push(value);
     if (/(?:未確認|未完了|未成立|終わっていない|完了していない|確認していない|not\s+yet|pending|incomplete)/iu.test(value)) context.unresolved.push(value);
-    if (/(?:場合|なら|ならば|とき|if\b|when\b|provided\s+that)/iu.test(value)) context.conditions.push(value);
+    if (/(?:場合|なら|ならば|とき|たら|れば|if\b|when\b|provided\s+that)/iu.test(value)) context.conditions.push(value);
     if (/(?:ただし|例外|except\b|however\b)/iu.test(value)) context.exceptions.push(value);
   }
   for (const key of Object.keys(context)) context[key] = unique(context[key]);
