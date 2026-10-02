@@ -22,11 +22,6 @@ function intersection(left = {}, right = {}) {
   const end = Math.min(Number(left.end || 0), Number(right.end || 0));
   return Math.max(0, end - start);
 }
-function contains(owner = {}, child = {}) {
-  const os = Number(owner.start); const oe = Number(owner.end);
-  const cs = Number(child.start); const ce = Number(child.end);
-  return [os, oe, cs, ce].every(Number.isFinite) && cs >= os && ce <= oe && ce > cs;
-}
 function sourceSpanForTask(task = {}, source = '') {
   const direct = task.source_span || task.original_span || {};
   const start = Number(direct.start);
@@ -56,15 +51,6 @@ function nextTaskNumber(tasks = []) {
 }
 function taskId(number) {
   return `T${String(number).padStart(2, '0')}`;
-}
-function atomIndex(understanding) {
-  const atoms = understanding?.semantic_atoms?.atoms || [];
-  const byType = new Map();
-  for (const atom of atoms) {
-    if (!byType.has(atom.type)) byType.set(atom.type, []);
-    byType.get(atom.type).push(atom);
-  }
-  return byType;
 }
 function requestRecords(understanding) {
   return (understanding?.semantic_atoms?.request_atoms || []).map((atom, index) => ({
@@ -172,7 +158,6 @@ function taskRequestScore(taskSpan, requestSpan) {
   if (!overlap) return 0;
   const requestCoverage = overlap / Math.max(1, spanLength(requestSpan));
   const taskCoverage = overlap / Math.max(1, spanLength(taskSpan));
-  // A whole-document fallback overlaps every request but has tiny taskCoverage and must not own them.
   if (requestCoverage < 0.45) return 0;
   if (taskCoverage < 0.15 && spanLength(taskSpan) > spanLength(requestSpan) * 3) return 0;
   return requestCoverage * 0.65 + taskCoverage * 0.35;
@@ -217,8 +202,7 @@ function recoveredTask(request, id) {
     constraints: unique([...(ctx.deadlines || []), ...(ctx.conditions || []), ...(ctx.obligations || [])]),
     prohibitions: unique(ctx.prohibitions || []),
     preserve: unique(ctx.preserve || []),
-    replace: [],
-    verification: [],
+    replace: [], verification: [],
     completion_criteria: unique(ctx.acceptance_criteria || []),
     success_criteria: unique(ctx.acceptance_criteria || []),
     conditions: unique(ctx.conditions || []),
@@ -240,11 +224,17 @@ function recoveredTask(request, id) {
     }
   };
 }
-function sequenceRelations(requests) {
+function sequenceRelations(requests, understanding) {
+  const sequenceOwners = new Set(
+    (understanding?.semantic_atoms?.atoms || [])
+      .filter((atom) => atom.type === 'SEQUENCE')
+      .map((atom) => nearestRequest(atom, requests)?.id)
+      .filter(Boolean)
+  );
   const relations = [];
   for (let i = 1; i < requests.length; i += 1) {
     const current = requests[i];
-    if (SEQUENCE_CUE.test(norm(current.request_text))) {
+    if (SEQUENCE_CUE.test(norm(current.request_text)) || sequenceOwners.has(current.id)) {
       relations.push({
         type: 'depends_on',
         from_request_id: requests[i - 1].id,
@@ -262,10 +252,7 @@ function buildWaves(tasks) {
   const waves = [];
   while (remaining.size) {
     const ready = [...remaining.values()].filter((task) => (task.depends_on || []).every((dep) => done.has(String(dep))));
-    if (!ready.length) {
-      // Preserve fail-closed behavior: do not invent an order through a cycle.
-      return { valid: false, waves: [], cycle: [...remaining.keys()] };
-    }
+    if (!ready.length) return { valid: false, waves: [], cycle: [...remaining.keys()] };
     const wave = ready.map((task) => String(task.id));
     waves.push(wave);
     for (const id of wave) { remaining.delete(id); done.add(id); }
@@ -316,7 +303,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
     request.parser_task_ids = unique([...request.parser_task_ids, ...ids]);
     if (ids[0]) firstTaskByRequest.set(request.id, ids[0]);
   }
-  const relations = sequenceRelations(requests);
+  const relations = sequenceRelations(requests, understanding);
   for (const relation of relations) {
     const fromTask = firstTaskByRequest.get(relation.from_request_id);
     const toTask = firstTaskByRequest.get(relation.to_request_id);
