@@ -14,7 +14,7 @@ function unique(values = []) {
 }
 function sentenceSpans(text) {
   const source = String(text || '');
-  const spans = [];
+  const rawSpans = [];
   const re = /[^。！？!?\n]+(?:[。！？!?]|$)/gu;
   for (const match of source.matchAll(re)) {
     const raw = match[0];
@@ -22,7 +22,18 @@ function sentenceSpans(text) {
     const right = raw.length - raw.trimEnd().length;
     const start = Number(match.index || 0) + left;
     const end = Number(match.index || 0) + raw.length - right;
-    if (end > start) spans.push({ start, end, text: source.slice(start, end) });
+    if (end > start) rawSpans.push({ start, end, text: source.slice(start, end) });
+  }
+  const spans = [];
+  for (const span of rawSpans) {
+    const value = norm(span.text);
+    const previous = spans.at(-1);
+    if (previous && /^(?:の|という|といった)/u.test(value)) {
+      previous.end = span.end;
+      previous.text = source.slice(previous.start, span.end);
+      continue;
+    }
+    spans.push({ ...span });
   }
   return spans;
 }
