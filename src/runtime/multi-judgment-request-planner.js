@@ -3,7 +3,7 @@
 const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|裏取り|調査|リサーチ|根拠|出典|公式(?:根拠|情報|Source)?|verify|validate|fact\s*check|research|investigate|evidence|source)/iu;
 const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:must\s+not|do\s+not|never)\b/iu;
 const UMBRELLA_MATERIAL = /(?:判断材料|decision\s+material)[^。！？!?]{0,100}(?:整理|まとめ|構造化|organize|structure)/iu;
-const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|してください|please\b|should\b|need\s+to|must\b)/iu;
+const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|レビュー(?:して|する|しろ|せよ)?|してください|please\b|should\b|need\s+to|must\b)/iu;
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
 const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
 const CANONICAL_ACTIONS = new Set(['analyze','verify','compare','decide','improve','implement','integrate','migrate','remove','preserve','explain']);
@@ -47,7 +47,7 @@ function requestAction(text) {
   if (/(?:検証|事実確認|ファクトチェック|裏取り|監査|確認|調査|リサーチ|verify|validate|audit|research|investigate|check)/iu.test(value)) return 'verify';
   if (/(?:追加|実装|作成|構築|入れ(?:る|て|ろ)|付け(?:る|て|ろ)|設け(?:る|て|ろ)|表示(?:する|して|しろ)|implement|build|create|add|display|show)/iu.test(value)) return 'implement';
   if (/(?:改善|改良|修正|見直|直(?:す|して|せ)|調整|整理|improve|fix|refactor|adjust|organize)/iu.test(value)) return 'improve';
-  if (/(?:検討|考慮|吟味|consider|review)/iu.test(value)) return 'analyze';
+  if (/(?:検討|考慮|吟味|レビュー|consider|review)/iu.test(value)) return 'analyze';
   return 'analyze';
 }
 function canonicalTaskAction(task = {}, text = '') {
@@ -154,14 +154,23 @@ function nearestPrecedingRequest(requests, parserRequest) {
     .filter((request) => Number(request.source_span?.start || 0) <= start)
     .sort((a, b) => Number(b.source_span?.start || 0) - Number(a.source_span?.start || 0))[0] || null;
 }
+function intentCanOwnParserTasks(intent, parserRequests) {
+  if (!intent?.purpose) return false;
+  const source = String(intent.source || '');
+  if (source === 'OBSERVABLE_MATERIAL') return true;
+  if (!['EXPLICIT_INSTRUCTION', 'EXPLICIT_PURPOSE_OVERRIDE'].includes(source)) return false;
+  const strong = parserRequests.filter((request) => directParserRequest(request) && !SUPPORT_ACTIONS.has(String(request.action || '')));
+  return strong.length <= 1;
+}
 function intentBackedMaterialRequest(question, intent, parserRequests) {
-  if (String(intent?.source || '') !== 'OBSERVABLE_MATERIAL' || !intent?.purpose) return null;
+  if (!intentCanOwnParserTasks(intent, parserRequests)) return null;
+  const source = String(intent.source || 'INTENT');
   return {
     id: 'R01', order: 1,
     action: requestAction(intent.purpose),
     request_text: String(intent.purpose),
     source_span: { start: 0, end: question.length, text: question },
-    source_origin: 'OBSERVABLE_MATERIAL_INTENT',
+    source_origin: `${source}_INTENT`,
     parser_task_ids: unique(parserRequests.flatMap((request) => request.parser_task_ids || [])),
     external_evidence_requested: parserRequests.some((request) => request.external_evidence_requested)
   };
@@ -424,12 +433,29 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   };
 
   if (caseModel.request_count < 2) {
-    const mapping = caseMapping(caseModel, existingTasks);
+    const singleRequest = caseModel.judgment_requests[0] || null;
+    const mappedTaskIds = new Set((singleRequest?.parser_task_ids || []).map(String));
+    const tasks = singleRequest
+      ? existingTasks.map((task) => mappedTaskIds.has(String(task.id)) ? { ...task, request_id: singleRequest.id } : task)
+      : existingTasks;
+    const mapping = caseMapping(caseModel, tasks);
     const packetCaseModel = { ...caseModel, ...mapping, representation_mode: 'PARSER_TASKS_PRESERVED' };
+    const singleGoal = cleanSingleGoal(singleRequest?.request_text);
+    const nextObservable = { ...observable, case_model: packetCaseModel };
     return {
       ...prepared,
-      observable_material: { ...observable, case_model: packetCaseModel },
-      analysis_task_packet: { ...packet, observable_material: { ...observable, case_model: packetCaseModel }, case_model: packetCaseModel }
+      ...(singleGoal ? { target: singleGoal, objective: singleGoal, user_goal: singleGoal } : {}),
+      observable_material: nextObservable,
+      standalone_api_intent: singleGoal && prepared.standalone_api_intent
+        ? { ...prepared.standalone_api_intent, purpose: singleGoal }
+        : prepared.standalone_api_intent,
+      analysis_task_packet: {
+        ...packet,
+        tasks,
+        ...(singleGoal ? { user_goal: singleGoal } : {}),
+        observable_material: nextObservable,
+        case_model: packetCaseModel
+      }
     };
   }
 
@@ -513,6 +539,10 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       }
     }
   };
+}
+function cleanSingleGoal(value) {
+  const goal = norm(value);
+  return goal && goal.length <= 2000 ? goal : '';
 }
 
 module.exports = {
