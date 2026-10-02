@@ -29,8 +29,8 @@ function labelOf(judgment, key) {
   return judgment?.[key]?.label || judgment?.[key]?.canonical_label || key;
 }
 function actionLabel(action, lang) {
-  const ja = { analyze: '検討・整理', verify: '検証', compare: '比較', implement: '実装・追加', improve: '改善・見直し', remove: '削除・除去' };
-  const en = { analyze: 'analyze', verify: 'verify', compare: 'compare', implement: 'implement/add', improve: 'improve/review', remove: 'remove' };
+  const ja = { analyze: '検討・整理', verify: '検証', compare: '比較', decide: '判断材料化', implement: '実装・追加', improve: '改善・見直し', integrate: '統合', migrate: '移行', remove: '削除・除去', preserve: '維持', explain: '説明' };
+  const en = { analyze: 'analyze', verify: 'verify', compare: 'compare', decide: 'decision material', implement: 'implement/add', improve: 'improve/review', integrate: 'integrate', migrate: 'migrate', remove: 'remove', preserve: 'preserve', explain: 'explain' };
   return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? '分析' : 'analyze');
 }
 function overlaps(left = {}, right = {}) {
@@ -41,53 +41,60 @@ function overlaps(left = {}, right = {}) {
 function observationsFor(model, request) {
   return (model.observations || []).filter((item) => overlaps(item.source_span, request.source_span));
 }
-function resultTaskMap(result = {}, model = {}) {
+function resultTaskGroups(result = {}, model = {}) {
   const byTask = new Map((result.task_results || []).map((item) => [String(item?.task?.id || ''), item]));
-  return new Map((model.judgment_requests || []).map((request) => {
-    const taskId = model.task_mapping?.[request.id] || null;
-    return [request.id, taskId ? byTask.get(String(taskId)) || null : null];
-  }));
+  const groups = new Map();
+  for (const request of model.judgment_requests || []) {
+    const ids = unique([
+      ...(model.request_task_ids?.[request.id] || []),
+      ...(request.parser_task_ids || []),
+      ...(model.task_mapping?.[request.id] ? [model.task_mapping[request.id]] : [])
+    ]);
+    const rows = ids.map((id) => byTask.get(String(id))).filter(Boolean);
+    for (const row of result.task_results || []) {
+      if (String(row?.task?.request_id || '') === String(request.id) && !rows.includes(row)) rows.push(row);
+    }
+    groups.set(request.id, rows);
+  }
+  return groups;
 }
 function itemText(item) {
   if (!item) return '';
   if (typeof item === 'string') return clean(item);
   return clean(item.text || item.raw_text || item.claim?.raw_text || item.claim?.text || item.impact || item.failure_condition || item.question || '');
 }
-function taskFacts(taskResult) {
-  if (!taskResult) return [];
-  return publicValues([
-    ...(taskResult.facts?.confirmed || []).map(itemText),
-    ...(taskResult.task?.premises || []).map(itemText)
-  ]);
+function groupFacts(taskResults = []) {
+  return publicValues(taskResults.flatMap((taskResult) => [
+    ...(taskResult?.facts?.confirmed || []).map(itemText),
+    ...(taskResult?.task?.premises || []).map(itemText)
+  ])).slice(0, 12);
 }
-function taskRisks(taskResult) {
-  if (!taskResult) return [];
-  return publicValues((taskResult.risks?.risks || []).map((risk) => itemText(risk))).slice(0, 6);
+function groupRisks(taskResults = []) {
+  return publicValues(taskResults.flatMap((taskResult) => (taskResult?.risks?.risks || []).map((risk) => itemText(risk)))).slice(0, 10);
 }
-function taskMissing(taskResult) {
-  if (!taskResult) return [];
-  return publicValues([
-    ...(taskResult.inquiry?.open_items || []).map(itemText),
-    ...(taskResult.inquiry?.missing_questions || []).map(itemText),
-    ...(taskResult.inquiry?.missing_fields || []).map(itemText)
-  ]).slice(0, 8);
+function groupMissing(taskResults = []) {
+  return publicValues(taskResults.flatMap((taskResult) => [
+    ...(taskResult?.inquiry?.open_items || []).map(itemText),
+    ...(taskResult?.inquiry?.missing_questions || []).map(itemText),
+    ...(taskResult?.inquiry?.missing_fields || []).map(itemText)
+  ])).slice(0, 12);
 }
-function taskCounterMaterial(taskResult) {
-  if (!taskResult) return [];
+function groupCounterMaterial(taskResults = []) {
   const values = [];
-  for (const perspective of taskResult.multi?.perspectives || []) {
-    values.push(...(Array.isArray(perspective?.failure_conditions) ? perspective.failure_conditions : []));
-    values.push(...(Array.isArray(perspective?.conditions) ? perspective.conditions : []));
-    if (typeof perspective?.focus === 'string') values.push(perspective.focus);
-    if (Array.isArray(perspective?.focus)) values.push(...perspective.focus);
+  for (const taskResult of taskResults) {
+    for (const perspective of taskResult?.multi?.perspectives || []) {
+      values.push(...(Array.isArray(perspective?.failure_conditions) ? perspective.failure_conditions : []));
+      values.push(...(Array.isArray(perspective?.conditions) ? perspective.conditions : []));
+      if (typeof perspective?.focus === 'string') values.push(perspective.focus);
+      if (Array.isArray(perspective?.focus)) values.push(...perspective.focus);
+    }
   }
-  return publicValues(values).slice(0, 6);
+  return publicValues(values).slice(0, 10);
 }
-function taskComparisonMaterial(taskResult) {
-  if (!taskResult) return { candidates: [], dimensions: [] };
+function groupComparisonMaterial(taskResults = []) {
   return {
-    candidates: publicValues((taskResult.comparison?.comparison_candidates || []).map((item) => typeof item === 'string' ? item : item?.label)),
-    dimensions: publicValues(taskResult.comparison?.dimensions || [])
+    candidates: publicValues(taskResults.flatMap((taskResult) => (taskResult?.comparison?.comparison_candidates || []).map((item) => typeof item === 'string' ? item : item?.label))),
+    dimensions: publicValues(taskResults.flatMap((taskResult) => taskResult?.comparison?.dimensions || []))
   };
 }
 function premiseLines(judgment, model, lang) {
@@ -126,44 +133,45 @@ function evidenceText(entry, lang) {
     : 'Accepted external evidence exists; verify its Claim mapping in the Evidence list.';
   return lang === 'ja' ? '根拠状態は未確定として保持する。' : 'Keep the evidence state unresolved.';
 }
+function groupEvidence(taskResults = [], lang) {
+  const states = unique(taskResults.map((taskResult) => evidenceText(taskResult?.evidence || null, lang)));
+  return states.length ? states : [evidenceText(null, lang)];
+}
 function section01(model, lang) {
   const requests = model.judgment_requests || [];
-  const lines = [`- ${lang === 'ja' ? `今回の入力は1件ではなく、${requests.length}件の判断要求を含む。` : `This input contains ${requests.length} separate judgment requests, not one.`}`];
+  const lines = [`- ${lang === 'ja' ? `今回の入力には${requests.length}件の判断要求がある。` : `This input contains ${requests.length} judgment requests.`}`];
   for (const request of requests) lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${clean(request.request_text)}`);
-  lines.push(`- ${lang === 'ja' ? '処理原則: 各要求を別Taskとして分析し、共通条件だけを共有する。1つの目的文へ潰さない。' : 'Processing rule: analyze each request as a separate task and share only cross-cutting constraints; do not collapse them into one purpose.'}`);
+  lines.push(`- ${lang === 'ja' ? '処理原則: 判断要求R##を一つに潰さず保持し、各R##に必要な実行Taskを1件以上紐付ける。実行Taskが複数でも、それだけで判断要求を水増ししない。' : 'Processing rule: preserve each R## judgment request and map one or more execution tasks to it. Multiple execution tasks do not create extra judgment requests by themselves.'}`);
   return lines.join('\n');
 }
 function section02(judgment, model, lang) {
   const lines = premiseLines(judgment, model, lang);
-  if (!lines.length) return `- ${lang === 'ja' ? '複数要求に共通して固定すべき期限・禁止・維持条件は入力から明示されていない。要求固有の条件は各要求本文に保持する。' : 'No cross-cutting deadline, prohibition, or preserve condition is explicit; request-specific conditions remain attached to each request.'}`;
+  if (!lines.length) return `- ${lang === 'ja' ? '複数要求に共通して固定すべき期限・禁止・維持条件は入力から明示されていない。要求固有の条件は各要求に保持する。' : 'No cross-cutting deadline, prohibition, or preserve condition is explicit; request-specific conditions remain attached to each request.'}`;
   return [`- ${lang === 'ja' ? '複数要求に共通して保持する条件' : 'Cross-cutting conditions to preserve'}:`, ...lines.map((line) => `  - ${line}`)].join('\n');
 }
-function section03(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? '利用者入力から保持した観測と、各要求で分析できた材料を分けて示す' : 'Separate user-supplied observations from material analyzed for each request'}:`];
-  const observations = model.observations || [];
-  if (observations.length) {
-    for (const item of observations) lines.push(`  - ${item.id}: ${clean(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
-  }
+function section03(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? '利用者入力の観測と、各判断要求に紐づく実行Taskで得た事実材料を分ける' : 'Separate user observations from factual material produced by execution tasks for each judgment request'}:`];
+  for (const item of model.observations || []) lines.push(`  - ${item.id}: ${clean(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
   for (const request of model.judgment_requests || []) {
-    const facts = taskFacts(taskMap.get(request.id));
+    const facts = groupFacts(groups.get(request.id) || []);
     lines.push(`  - ${request.id}: ${facts.length ? facts.join(' / ') : (lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.')}`);
   }
   lines.push(`- ${lang === 'ja' ? '区別: 利用者が要求したこと／利用者が観測したこと／コードや外部根拠で確認済みの事実を混ぜない。' : 'Boundary: keep requested behavior, user-observed state, and code/external-evidence-confirmed facts separate.'}`);
   return lines.join('\n');
 }
-function section04(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? '要求ごとに危険を分離し、別要求のRiskを混ぜない' : 'Keep risks separate per request instead of mixing risks across requests'}:`];
+function section04(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? '危険材料も判断要求ごとに分ける' : 'Keep risk material separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const risks = taskRisks(taskMap.get(request.id));
+    const risks = groupRisks(groups.get(request.id) || []);
     lines.push(`  - ${request.id}: ${risks.length ? risks.join(' / ') : (lang === 'ja' ? '案件固有Riskはまだ確認材料不足。' : 'Case-specific risk material is still insufficient.')}`);
   }
-  lines.push(`- ${lang === 'ja' ? '共通Risk: 複数要求を1件に潰すと、一部要求の消失、条件混同、根拠の誤流用が起きる。利用者報告の現象は原因確認前なので、発生原因を推測で確定しない。' : 'Common risk: collapsing multiple requests can drop requests, mix constraints, and reuse evidence incorrectly. User-reported symptoms do not establish their cause.'}`);
+  lines.push(`- ${lang === 'ja' ? '共通Risk: 複数要求を1件に潰すと、一部要求の消失、条件混同、別要求の根拠流用が起きる。利用者報告の現象は原因確認前なので、原因を推測で確定しない。' : 'Common risk: collapsing requests can drop requirements, mix constraints, or reuse evidence across requests. User-reported symptoms do not establish their cause.'}`);
   return lines.join('\n');
 }
-function section05(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? '各要求について、反対側・失敗側から確認する材料も別々に保持する' : 'Keep counter-check and failure-side material separate for each request'}:`];
+function section05(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? '各判断要求について反証・失敗側の材料を別々に保持する' : 'Keep counter-evidence and failure-side material separate for each judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const counter = taskCounterMaterial(taskMap.get(request.id));
+    const counter = groupCounterMaterial(groups.get(request.id) || []);
     const observations = observationsFor(model, request).map((item) => clean(item.text));
     lines.push(`  - ${request.id}: ${clean(request.request_text)}`);
     lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : (lang === 'ja' ? '現在挙動・影響範囲・例外条件・既存機能への副作用を確認する。' : 'Check current behavior, affected scope, exceptions, and side effects.')}`);
@@ -171,14 +179,14 @@ function section05(model, taskMap, lang) {
   }
   return lines.join('\n');
 }
-function section06(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、要求ごとの判断材料を並べる' : 'When there is no A/B candidate set, show decision material per request instead of ending with “no comparison candidates”'}:`];
+function section06(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在材料・不足材料・比較可能要素を出す' : 'Even without A/B candidates, show available, missing, and comparable material per judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const taskResult = taskMap.get(request.id);
+    const taskResults = groups.get(request.id) || [];
     const observations = observationsFor(model, request).map((item) => clean(item.text));
-    const facts = taskFacts(taskResult);
-    const missing = taskMissing(taskResult);
-    const comparison = taskComparisonMaterial(taskResult);
+    const facts = groupFacts(taskResults);
+    const missing = groupMissing(taskResults);
+    const comparison = groupComparisonMaterial(taskResults);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${clean(request.request_text)}`);
     lines.push(`    - ${lang === 'ja' ? '現在ある材料' : 'Material available now'}: ${unique([...observations, ...facts]).join(' / ') || (lang === 'ja' ? '要求本文のみ。現在実装・発生条件は未確認。' : 'Request text only; current implementation and trigger conditions are unverified.')}`);
@@ -188,38 +196,38 @@ function section06(model, taskMap, lang) {
   }
   return lines.join('\n');
 }
-function section07(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? '要求ごとに根拠状態を分離する' : 'Keep evidence status separate for each request'}:`];
+function section07(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const entry = taskMap.get(request.id)?.evidence || null;
-    lines.push(`  - ${request.id}: ${evidenceText(entry, lang)}`);
+    const states = groupEvidence(groups.get(request.id) || [], lang);
+    lines.push(`  - ${request.id}: ${states.join(' / ')}`);
   }
-  lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。必要な外部・コード根拠は成立したものだけEvidenceとして紐付ける。' : 'User input supports what was requested or observed, but does not automatically verify implementation facts or causes. Only accepted external/code evidence may be linked as Evidence.'}`);
+  lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。別R##のEvidenceを流用しない。' : 'User input supports what was requested or observed but does not verify implementation facts or causes. Evidence from one R## must not be silently reused for another.'}`);
   return lines.join('\n');
 }
-function section08(model, taskMap, lang) {
-  const lines = [`- ${lang === 'ja' ? '次に確認する内容も要求ごとに分ける' : 'Keep the next verification work separate per request'}:`];
+function section08(model, groups, lang) {
+  const lines = [`- ${lang === 'ja' ? '次の確認・実行も判断要求ごとに分ける' : 'Keep next verification/execution steps separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const missing = taskMissing(taskMap.get(request.id));
-    lines.push(`  - ${request.id}: ${lang === 'ja' ? `「${clean(request.request_text)}」について、${missing.length ? `未確認材料（${missing.join(' / ')}）を確認し、` : '現在実装→発生/適用条件→影響範囲→完了条件を確認し、'}確認済み材料だけを次の判断へ渡す。` : `For “${clean(request.request_text)}”, verify ${missing.length ? `the unresolved material (${missing.join(' / ')})` : 'current implementation → trigger/applicability conditions → affected scope → completion criteria'} and pass only verified material to the next judgment.`}`);
+    const missing = groupMissing(groups.get(request.id) || []);
+    lines.push(`  - ${request.id}: ${missing.length ? missing.join(' / ') : (lang === 'ja' ? `「${clean(request.request_text)}」について現在実装→発生/適用条件→影響範囲→完了条件を確認し、確認済み材料だけで判断する。` : `For “${clean(request.request_text)}”, verify current implementation, trigger/applicability conditions, affected scope, and completion criteria before judgment.`)}`);
   }
-  lines.push(`- ${lang === 'ja' ? '複数要求のうち1件が未確認でも、他の要求の材料で埋めない。未確認はその要求に残す。' : 'If one request remains unresolved, do not fill it with material from another request; keep the uncertainty attached to that request.'}`);
+  lines.push(`- ${lang === 'ja' ? 'ある判断要求が未確認でも、別要求の材料で穴埋めしない。未確認はそのR##に残す。' : 'If one judgment request remains unresolved, do not fill the gap with material from another request; keep the uncertainty on that R##.'}`);
   return lines.join('\n');
 }
 function renderMultiJudgmentMain8(judgment = {}, result = {}) {
   if (!isMultiJudgment(judgment)) return null;
   const model = modelOf(judgment);
   const lang = langOf(judgment);
-  const taskMap = resultTaskMap(result, model);
+  const groups = resultTaskGroups(result, model);
   const rendered = {
     '01_purpose': section01(model, lang),
     '02_premise': section02(judgment, model, lang),
-    '03_facts': section03(model, taskMap, lang),
-    '04_crisis': section04(model, taskMap, lang),
-    '05_opposition': section05(model, taskMap, lang),
-    '06_comparison': section06(model, taskMap, lang),
-    '07_evidence_status': section07(model, taskMap, lang),
-    '08_reinstruction': section08(model, taskMap, lang)
+    '03_facts': section03(model, groups, lang),
+    '04_crisis': section04(model, groups, lang),
+    '05_opposition': section05(model, groups, lang),
+    '06_comparison': section06(model, groups, lang),
+    '07_evidence_status': section07(model, groups, lang),
+    '08_reinstruction': section08(model, groups, lang)
   };
   const text = ORDER.map((key) => `${labelOf(judgment, key)}\n${rendered[key]}`).join('\n---\n');
   return {
@@ -232,9 +240,8 @@ function renderMultiJudgmentMain8(judgment = {}, result = {}) {
     format: judgment.format,
     text,
     compact_text: ORDER.map((key) => `${labelOf(judgment, key)}: ${rendered[key].replace(/\n\s*/g, ' / ')}`).join('\n'),
-    sections: ORDER.map((key) => ({ key, label: labelOf(judgment, key), text: rendered[key] })),
-    multi_judgment_case: { request_count: model.request_count, request_ids: (model.judgment_requests || []).map((item) => item.id) }
+    sections: ORDER.map((key) => ({ key, label: labelOf(judgment, key), text: rendered[key] }))
   };
 }
 
-module.exports = { renderMultiJudgmentMain8, isMultiJudgment };
+module.exports = { renderMultiJudgmentMain8, isMultiJudgment, resultTaskGroups };
