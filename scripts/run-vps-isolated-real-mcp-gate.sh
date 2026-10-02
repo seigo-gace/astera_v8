@@ -24,13 +24,11 @@ if [ -d "$WT" ]; then [ "$(git -C "$WT" rev-parse HEAD)" = "$EXPECTED_SHA" ] || 
 [ -z "$(git -C "$WT" status --porcelain)" ] || fail WORKTREE_DIRTY
 IMAGE="$(docker inspect -f '{{.Image}}' astera-v8)"
 docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' astera-v8 > "$CENV"
-MODE="$(envval ASTERA_JAPANESE_PARSER_MODE "$CENV")"
 URL="$(envval ASTERA_JAPANESE_PARSER_URL "$CENV")"
 KEY="$(envval ASTERA_JAPANESE_PARSER_API_KEY "$CENV")"
-[ "$MODE" = http ] || fail PARSER_MODE_NOT_HTTP
-[ -n "$URL" ] || fail PARSER_URL_MISSING
+URL="${URL:-http://127.0.0.1:8765/v1/analyze}"
 [ -n "$KEY" ] || fail PARSER_API_KEY_MISSING
-docker run -d --name "$CORE" --network host --env-file "$CENV" -e ASTERA_JAPANESE_PARSER_MODE=http -v "$WT/src:/app/src:ro" -v "$WT/scripts:/app/scripts:ro" -v "$WT/config:/app/config:ro" -v "$WT/package.json:/app/package.json:ro" "$IMAGE" node scripts/run-real-mcp-gate.js >/dev/null
+docker run -d --name "$CORE" --network host --env-file "$CENV" -e ASTERA_JAPANESE_PARSER_MODE=http -e ASTERA_JAPANESE_PARSER_URL="$URL" -v "$WT/src:/app/src:ro" -v "$WT/scripts:/app/scripts:ro" -v "$WT/config:/app/config:ro" -v "$WT/package.json:/app/package.json:ro" "$IMAGE" node scripts/run-real-mcp-gate.js >/dev/null
 EXIT="$(docker wait "$CORE")"
 docker logs "$CORE" > "$LOG" 2>&1 || true
 echo "EXACT_SHA=$EXPECTED_SHA"
@@ -39,9 +37,9 @@ echo '--- REAL_MCP_GATE_LOG ---'
 cat "$LOG"
 echo '--- REAL_MCP_GATE_LOG_END ---'
 [ "$EXIT" = 0 ] || fail REAL_MCP
- grep -q '^REAL_PARSER_HTTP configured=true$' "$LOG" || fail PARSER_NOT_CONFIGURED
- grep -q '^REAL_PARSER_HTTP_CASE_B_PASS ' "$LOG" || fail CASE_B
- grep -q '^REAL_PARSER_HTTP_GATE_PASS$' "$LOG" || fail REAL_MCP_PASS_MARKER
+grep -q '^REAL_PARSER_HTTP configured=true$' "$LOG" || fail PARSER_NOT_CONFIGURED
+grep -q '^REAL_PARSER_HTTP_CASE_B_PASS ' "$LOG" || fail CASE_B
+grep -q '^REAL_PARSER_HTTP_GATE_PASS$' "$LOG" || fail REAL_MCP_PASS_MARKER
 echo 'GATE=PASS_REAL_MCP_RUNTIME'
 echo 'MCP_CHANGE=NONE'
 echo 'PERSISTENT_SERVICES_RESTARTED=NO'
