@@ -49,13 +49,80 @@ function actionLabel(action, lang) {
   const en = { analyze: 'analyze', verify: 'verify', compare: 'compare', decide: 'decision material', implement: 'implement/add', improve: 'improve/review', integrate: 'integrate', migrate: 'migrate', remove: 'remove', preserve: 'preserve', explain: 'explain' };
   return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? '分析' : 'analyze');
 }
+function operationMissingMaterial(action, lang) {
+  const ja = {
+    analyze: '現在状態、対象範囲、利用者影響、望ましい状態、満たしたと判定できる完了条件',
+    decide: '判断対象、固定条件、未確定事項、比較可能な差、判断可能になる完了条件',
+    improve: '現在状態、問題が出る条件、対象範囲、利用者影響、改善後の状態、回帰を含む完了条件',
+    implement: '実装箇所・接続点、現在のイベント/データ経路、期待する挙動、既存機能への影響、受入・完了条件',
+    integrate: '接続点、入力/出力契約、既存経路、失敗時挙動、互換性、統合完了条件',
+    migrate: '現在状態と移行先、依存関係、移行順序、Rollback条件、互換性、完了条件',
+    remove: '不要物の正確な再現条件、生成元または発生源、CSS/style/layout・Component依存、削除影響、回帰確認条件',
+    verify: '検証対象、再現条件、確認するコード/Source/Record、成立条件、反証・例外、確認完了条件',
+    compare: '比較候補、比較軸、同一条件で測れる値、各候補の不足値、優劣を確定できない条件',
+    preserve: '維持対象、壊してはいけない境界、変更可能範囲、回帰確認、維持できたと判定する条件',
+    explain: '説明対象、前提、確認済みSource、用語の意味、対象範囲、まだ不明な点'
+  };
+  const en = {
+    analyze: 'current state, scope, user impact, desired state, and completion criteria',
+    decide: 'decision target, fixed conditions, unresolved items, comparable differences, and decision-ready criteria',
+    improve: 'current state, trigger conditions, scope, user impact, desired state, and regression-aware completion criteria',
+    implement: 'implementation/connection point, current event or data path, expected behavior, compatibility impact, and acceptance criteria',
+    integrate: 'integration point, input/output contract, existing path, failure behavior, compatibility, and completion criteria',
+    migrate: 'current and target states, dependencies, order, rollback conditions, compatibility, and completion criteria',
+    remove: 'exact reproduction, generating source, CSS/style/layout or component dependency, removal impact, and regression criteria',
+    verify: 'verification target, reproduction conditions, code/source/record to inspect, validity conditions, contrary evidence, and completion criteria',
+    compare: 'candidates, dimensions, same-condition measurements, missing values, and conditions that prevent a winner',
+    preserve: 'behavior to preserve, invariant boundary, editable scope, regression checks, and preservation criteria',
+    explain: 'subject, premises, verified sources, terminology, scope, and unresolved points'
+  };
+  return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? ja.analyze : en.analyze);
+}
+function operationCounterMaterial(action, lang) {
+  const ja = {
+    implement: '追加先を誤っていないか、OFF/失敗/未設定時に無反応や誤案内にならないか、既存操作を壊さないかを確認する。',
+    improve: '見直しで必要情報まで隠さないか、変更対象外まで変えないか、改善後に別の利用者影響を生まないかを確認する。',
+    remove: '見えている不要物だけを消して原因を残していないか、必要な境界やAttachment表示まで消さないか、再発しないかを確認する。',
+    verify: '支持材料だけでなく反証・例外・対象範囲違い・時点違いを同じ強さで確認する。',
+    compare: '単一指標だけで優劣を決めず、各候補を同一条件・同一軸で比較できているか確認する。',
+    integrate: '片側だけ正常でも契約不一致・失敗時処理・既存経路破壊がないか確認する。',
+    migrate: '移行成功だけでなくRollback不能、データ/契約互換性、途中状態の失敗を確認する。',
+    preserve: '維持対象を守るために必要な変更まで禁止していないか、境界外の副作用がないか確認する。',
+    explain: '説明が確認済み事実と未確認情報を混ぜていないか、対象範囲を越えて一般化していないか確認する。',
+    decide: '判断に都合のよい材料だけを残していないか、未確定事項を0や問題なしへ置き換えていないか確認する。',
+    analyze: '現在状態・例外・影響範囲・失敗条件を確認し、利用者報告から原因を推測確定しない。'
+  };
+  const en = {
+    implement: 'Check wrong insertion points, OFF/failure/unconfigured behavior, and regressions in existing actions.',
+    improve: 'Check whether useful information is hidden, out-of-scope behavior changes, or new user impact is introduced.',
+    remove: 'Check whether only the symptom is hidden, necessary UI boundaries are removed, or the defect can recur.',
+    verify: 'Check contrary evidence, exceptions, scope mismatches, and time mismatches as strongly as supporting material.',
+    compare: 'Do not choose by one metric; compare candidates under the same conditions and dimensions.',
+    integrate: 'Check contract mismatch, failure behavior, and regressions even when one side works.',
+    migrate: 'Check rollback failure, data/contract compatibility, and intermediate-state failures.',
+    preserve: 'Check whether preservation blocks necessary changes or causes side effects outside the protected boundary.',
+    explain: 'Check that verified facts and unresolved information remain separate and are not overgeneralized.',
+    decide: 'Check for selection bias and for unresolved items being converted into zero or no-problem assumptions.',
+    analyze: 'Check current state, exceptions, scope, and failure conditions without inferring causes from user reports.'
+  };
+  return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? ja.analyze : en.analyze);
+}
 function overlaps(left = {}, right = {}) {
   const start = Math.max(Number(left.start || 0), Number(right.start || 0));
   const end = Math.min(Number(left.end || 0), Number(right.end || 0));
   return end > start;
 }
 function observationsFor(model, request) {
-  return (model.observations || []).filter((item) => overlaps(item.source_span, request.source_span));
+  return (model.observations || []).filter((item) => (item.request_ids || []).includes(request.id) || overlaps(item.source_span, request.source_span));
+}
+function requestContextLines(request, lang) {
+  const context = request.local_context || {};
+  const pairs = lang === 'ja'
+    ? [['期限','deadlines'],['維持条件','preserve'],['禁止条件','prohibitions'],['未確定事項','unresolved'],['成立条件','conditions'],['例外','exceptions']]
+    : [['Deadline','deadlines'],['Preserve','preserve'],['Prohibition','prohibitions'],['Unresolved','unresolved'],['Condition','conditions'],['Exception','exceptions']];
+  const lines = [];
+  for (const [label, key] of pairs) for (const value of publicValues(context[key] || [])) lines.push(`${label}: ${value}`);
+  return unique(lines);
 }
 function resultTaskGroups(result = {}, model = {}) {
   const byTask = new Map((result.task_results || []).map((item) => [String(item?.task?.id || ''), item]));
@@ -149,9 +216,13 @@ function evidenceText(entry, lang) {
     : 'Accepted external evidence exists; verify its Claim mapping in the Evidence list.';
   return lang === 'ja' ? '根拠状態は未確定として保持する。' : 'Keep the evidence state unresolved.';
 }
-function groupEvidence(taskResults = [], lang) {
-  const states = unique(taskResults.map((taskResult) => evidenceText(taskResult?.evidence || null, lang)));
-  return states.length ? states : [evidenceText(null, lang)];
+function groupEvidence(taskResults = [], request = {}, lang) {
+  const entries = taskResults.map((taskResult) => taskResult?.evidence || null).filter(Boolean);
+  if (!entries.length) {
+    return [evidenceText({ search_state: request.external_evidence_requested === true ? 'NOT_EXECUTED' : 'NOT_REQUIRED' }, lang)];
+  }
+  const states = unique(entries.map((entry) => evidenceText(entry, lang)));
+  return states.length ? states : [evidenceText({ search_state: request.external_evidence_requested === true ? 'NOT_EXECUTED' : 'NOT_REQUIRED' }, lang)];
 }
 function section01(model, lang) {
   const requests = model.judgment_requests || [];
@@ -190,7 +261,7 @@ function section05(model, groups, lang) {
     const counter = groupCounterMaterial(groups.get(request.id) || []);
     const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
     lines.push(`  - ${request.id}: ${sanitizePublicValue(request.request_text)}`);
-    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : (lang === 'ja' ? '現在挙動・影響範囲・例外条件・既存機能への副作用を確認する。' : 'Check current behavior, affected scope, exceptions, and side effects.')}`);
+    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : operationCounterMaterial(request.action, lang)}`);
     if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告' : 'User report'}: ${observations.join(' / ')}`);
   }
   return lines.join('\n');
@@ -203,19 +274,21 @@ function section06(model, groups, lang) {
     const facts = groupFacts(taskResults);
     const missing = groupMissing(taskResults);
     const comparison = groupComparisonMaterial(taskResults);
+    const localContext = requestContextLines(request, lang);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${sanitizePublicValue(request.request_text)}`);
+    if (localContext.length) lines.push(`    - ${lang === 'ja' ? '要求固有条件' : 'Request-specific conditions'}: ${localContext.join(' / ')}`);
     lines.push(`    - ${lang === 'ja' ? '現在ある材料' : 'Material available now'}: ${unique([...observations, ...facts]).join(' / ') || (lang === 'ja' ? '要求本文のみ。現在実装・発生条件は未確認。' : 'Request text only; current implementation and trigger conditions are unverified.')}`);
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? 'まだ不足している材料' : 'Material still missing'}: ${missing.length ? missing.join(' / ') : (lang === 'ja' ? '現在実装、再現/適用条件、影響範囲、要求を満たしたと判定できる完了条件。' : 'Current implementation, reproduction/applicability conditions, affected scope, and completion criteria.')}`);
+    lines.push(`    - ${lang === 'ja' ? 'まだ不足している材料' : 'Material still missing'}: ${missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang)}`);
   }
   return lines.join('\n');
 }
 function section07(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const states = groupEvidence(groups.get(request.id) || [], lang);
+    const states = groupEvidence(groups.get(request.id) || [], request, lang);
     lines.push(`  - ${request.id}: ${states.join(' / ')}`);
   }
   lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。別R##のEvidenceを流用しない。' : 'User input supports what was requested or observed but does not verify implementation facts or causes. Evidence from one R## must not be silently reused for another.'}`);
@@ -225,7 +298,10 @@ function section08(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '次の確認・実行も判断要求ごとに分ける' : 'Keep next verification/execution steps separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
     const missing = groupMissing(groups.get(request.id) || []);
-    lines.push(`  - ${request.id}: ${missing.length ? missing.join(' / ') : (lang === 'ja' ? `「${sanitizePublicValue(request.request_text)}」について現在実装→発生/適用条件→影響範囲→完了条件を確認し、確認済み材料だけで判断する。` : `For “${sanitizePublicValue(request.request_text)}”, verify current implementation, trigger/applicability conditions, affected scope, and completion criteria before judgment.`)}`);
+    const localContext = requestContextLines(request, lang);
+    const next = missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang);
+    lines.push(`  - ${request.id}: ${lang === 'ja' ? `「${sanitizePublicValue(request.request_text)}」について、${next}を確認する。` : `For “${sanitizePublicValue(request.request_text)}”, verify ${next}.`}`);
+    if (localContext.length) lines.push(`    - ${lang === 'ja' ? '固定して保持する要求固有条件' : 'Request-specific conditions to preserve'}: ${localContext.join(' / ')}`);
   }
   lines.push(`- ${lang === 'ja' ? 'ある判断要求が未確認でも、別要求の材料で穴埋めしない。未確認はそのR##に残す。' : 'If one judgment request remains unresolved, do not fill the gap with material from another request; keep the uncertainty on that R##.'}`);
   return lines.join('\n');
