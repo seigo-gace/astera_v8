@@ -340,8 +340,11 @@ function shouldApplyUniversalCaseGraph(prepared, understanding, input = {}) {
   ].map(String).join(' ');
   return requests.length >= 2 || sourceLength >= 1200 || overall === 'PARTIAL' || /TIMEOUT|PARSER_ACTION_GUARD_BLOCKED|NO_EXECUTABLE_ACTION/iu.test(markers);
 }
-function recoveredCaseHardBlockers(values = []) {
-  return unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
+function recoveredCaseHardBlockers(values = [], overallStatus = '') {
+  const retained = unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
+  const overall = String(overallStatus || '').toUpperCase();
+  if (overall === 'PARTIAL') retained.push('parser_overall_status:PARTIAL');
+  return unique(retained);
 }
 function applyUniversalCaseGraph(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
@@ -462,7 +465,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
       conditions: contextUnion('conditions'),
       exceptions: contextUnion('exceptions'),
       unresolved: unique([...contextUnion('unresolved'), ...sourceUnresolved]),
-      hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || []),
+      hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || [], prepared?.instruction_understanding?.overall_status),
       universal_case_graph: {
         applied: true,
         schema: model.schema,
