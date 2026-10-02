@@ -62,6 +62,10 @@ Detailed reference: [`docs/modules/JUDGMENT_MATERIAL_GENERATION.md`](docs/module
 
 Approved redesign target (implementation pending): [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
 
+Research/theory/OSS evidence register: [`docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md`](docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md)
+
+Deterministic target algorithms: [`docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md`](docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md)
+
 The target redesign covers arbitrary-input Source Graph preservation, universal semantic atoms, Case Graph v2, Japanese/English parity, G01-G38 judgment-material sufficiency, evidence topology, GitHub-self-executable semantic verification, Full Runtime tracing and work-conserving DAG scheduling. It is a design authority, not proof that current source already implements those contracts.
 
 ---
@@ -183,13 +187,15 @@ scripts/                                validation / story / live / smoke runner
 docs/                                   documentation
 ```
 
-Cross-cutting target design:
+Cross-cutting redesign documents:
 
 ```text
 docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md
+docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md
+docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md
 ```
 
-This target design is where research-backed redesign rules, semantic quality gates, language/length/genre coverage requirements and Full Runtime performance architecture are maintained while implementation is pending.
+The architecture document owns the target boundaries, the research register owns external rationale/component evaluation, and the algorithm document owns deterministic target procedures/invariants. All remain implementation pending until source/tests/CI/runtime evidence reconcile them.
 
 Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md), not duplicated here.
 
@@ -207,6 +213,8 @@ Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs
 ```
 
 `docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved redesign target for the current change unit. Until its implementation is reconciled into current contracts/code/tests and the canonical architecture, it must be read as **target design / implementation pending**, never as evidence that the live product already satisfies it.
+
+`docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md` and `docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md` support that target; they do not supersede current implementation facts.
 
 Historical or generated material must not silently redefine current architecture.
 
