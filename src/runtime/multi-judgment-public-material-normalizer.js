@@ -14,10 +14,10 @@ function isMulti(model) {
 }
 function materialOntology(action, lang = 'ja') {
   const ja = {
-    analyze: '現在状態、対象範囲、利用者影響、望ましい状態、判断可能になる完了条件',
-    improve: '現在状態、表示・挙動の対象範囲、利用者影響、見せる情報と見せない内部情報の境界、改善後の状態、回帰を含む完了条件',
-    implement: '実装箇所・接続点、現在のイベントまたは操作経路、機能ON/OFFなどの発火条件、期待する表示・挙動、既存操作への影響、受入・完了条件',
-    remove: '正確な再現条件、不要物の発生源・生成元、UIならコンポーネント/CSS/style/layout等の生成経路、削除した場合の影響、再発しないことを確認する回帰条件',
+    analyze: '現状、対象範囲、利用者影響、望ましい状態、判断可能になる完了条件',
+    improve: '現状、対象範囲、利用者影響、見せる情報と見せない内部情報の境界、改善後の状態、回帰確認を含む完了条件',
+    implement: '実装箇所・接続点、イベント/操作経路、ON/OFFなどの発火条件、期待する表示・挙動、既存操作への影響、受入・完了条件',
+    remove: '再現条件、不要物の発生源・生成元、UIならcomponent/CSS/style/layout等の生成経路、削除した場合の影響、回帰確認条件',
     verify: '検証対象、再現条件、確認するコード・Source・Record、成立条件、反証・例外、確認完了条件',
     compare: '比較候補、比較軸、同一条件で測れる値、各候補の不足値、優劣を確定できない条件',
     decide: '判断対象、固定条件、未確定事項、比較可能な差、判断可能になる完了条件',
@@ -28,9 +28,9 @@ function materialOntology(action, lang = 'ja') {
   };
   const en = {
     analyze: 'current state, scope, user impact, desired state, and completion criteria',
-    improve: 'current state, affected display/behavior scope, user impact, user-visible/internal boundary, desired state, and regression-aware completion criteria',
-    implement: 'implementation/connection point, current event or interaction path, trigger state such as ON/OFF, expected behavior, compatibility impact, and acceptance criteria',
-    remove: 'exact reproduction, generating source, UI component/CSS/style/layout path when applicable, removal impact, and regression criteria',
+    improve: 'current state, affected scope, user impact, user-visible/internal boundary, desired state, and regression criteria',
+    implement: 'implementation/connection point, event/interaction path, ON/OFF trigger state, expected behavior, compatibility impact, and acceptance criteria',
+    remove: 'reproduction conditions, generating source, component/CSS/style/layout path, removal impact, and regression criteria',
     verify: 'verification target, reproduction conditions, code/source/record to inspect, validity conditions, contrary evidence, and completion criteria',
     compare: 'candidates, dimensions, same-condition measurements, missing values, and conditions preventing a winner',
     decide: 'decision target, fixed conditions, unresolved items, comparable differences, and decision-ready criteria',
@@ -45,7 +45,7 @@ function counterOntology(action, lang = 'ja') {
   const ja = {
     implement: '追加先を誤っていないか、OFF・失敗・未設定時に無反応や誤案内にならないか、既存操作を壊さないかを確認する。',
     improve: '見直しで必要情報まで隠さないか、変更対象外まで変えないか、改善後に別の利用者影響を生まないかを確認する。',
-    remove: '見えている不要物だけを消して原因を残していないか、必要な境界やAttachment表示まで消さないか、再発しないかを確認する。',
+    remove: '症状だけを隠す修正になっていないか、原因や必要な境界を残したままにしていないか、再発しないかを確認する。',
     verify: '支持材料だけでなく反証・例外・対象範囲違い・時点違いを同じ強さで確認する。',
     compare: '単一指標だけで優劣を決めず、各候補を同一条件・同一軸で比較できているか確認する。',
     integrate: '片側だけ正常でも契約不一致・失敗時処理・既存経路破壊がないか確認する。',
@@ -53,12 +53,12 @@ function counterOntology(action, lang = 'ja') {
     preserve: '維持対象を守るために必要な変更まで禁止していないか、境界外の副作用がないか確認する。',
     explain: '説明が確認済み事実と未確認情報を混ぜていないか、対象範囲を越えて一般化していないか確認する。',
     decide: '判断に都合のよい材料だけを残していないか、未確定事項を0や問題なしへ置き換えていないか確認する。',
-    analyze: '現在状態・例外・影響範囲・失敗条件を確認し、利用者報告から原因を推測確定しない。'
+    analyze: '現状・例外・影響範囲・失敗条件を確認し、利用者報告から原因を推測確定しない。'
   };
   const en = {
     implement: 'Check wrong insertion points, OFF/failure/unconfigured behavior, and regressions in existing actions.',
     improve: 'Check whether useful information is hidden, out-of-scope behavior changes, or new user impact is introduced.',
-    remove: 'Check whether only the symptom is hidden, necessary UI boundaries are removed, or the defect can recur.',
+    remove: 'Check whether the change only hides the symptom, leaves the cause or required boundaries intact, or can recur.',
     verify: 'Check contrary evidence, exceptions, scope mismatches, and time mismatches as strongly as supporting material.',
     compare: 'Do not choose by one metric; compare candidates under the same conditions and dimensions.',
     integrate: 'Check contract mismatch, failure behavior, and regressions even when one side works.',
@@ -69,6 +69,53 @@ function counterOntology(action, lang = 'ja') {
     analyze: 'Check current state, exceptions, scope, and failure conditions without inferring causes from user reports.'
   };
   return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? ja.analyze : en.analyze);
+}
+function semanticCounterSummary(request = {}, lang = 'ja') {
+  const text = clean(request.request_text || '');
+  const action = String(request.action || '');
+  if (lang === 'ja') {
+    if (action === 'improve' && /(?:見せる|表示)/u.test(text) && /(?:見せない|隠す|非表示)/u.test(text)) {
+      return '見せる/見せない境界を誤って必要情報まで隠さないか、対象外まで変えないかを確認する。';
+    }
+    if (action === 'implement' && /(?:トグル|ON|OFF|オン|オフ)/iu.test(text)) {
+      return 'ON/OFFの状態境界で、OFF・失敗・未設定時の表示や既存操作を壊さないか確認する。';
+    }
+    if (action === 'remove') return counterOntology(action, lang);
+  } else {
+    if (action === 'improve' && /(?:show|display|visible)/iu.test(text) && /(?:hide|hidden|not\s+show|invisible)/iu.test(text)) {
+      return 'Check the show/hide boundary so required information is not hidden and out-of-scope behavior is not changed.';
+    }
+    if (action === 'implement' && /(?:toggle|\bON\b|\bOFF\b)/iu.test(text)) {
+      return 'Check the ON/OFF state boundary, failure/unconfigured display behavior, and regressions in existing actions.';
+    }
+  }
+  return counterOntology(action, lang);
+}
+function nextStepOntology(request = {}, lang = 'ja') {
+  const text = clean(request.request_text || '');
+  const action = String(request.action || '');
+  if (lang === 'ja') {
+    if (action === 'improve' && /(?:見せる|表示)/u.test(text) && /(?:見せない|隠す|非表示)/u.test(text)) {
+      return '見せる/見せない境界を含む全体を点検し、現状・対象範囲・利用者影響と回帰を確認する';
+    }
+    if (action === 'implement' && /(?:トグル|ON|OFF|オン|オフ)/iu.test(text)) {
+      return 'OFF時の表示確認を含め、実装箇所・イベント/操作経路・ON/OFF・既存操作の回帰を確認する';
+    }
+    if (action === 'remove' && /(?:線|境界|罫線|border)/iu.test(text)) {
+      return '不要線の再現条件と発生源、component/CSS/style/layoutを確認し、削除後の回帰確認を行う';
+    }
+  } else {
+    if (action === 'improve' && /(?:show|display|visible)/iu.test(text) && /(?:hide|hidden|not\s+show|invisible)/iu.test(text)) {
+      return 'inspect the show/hide boundary across the affected scope and verify user impact and regression behavior';
+    }
+    if (action === 'implement' && /(?:toggle|\bON\b|\bOFF\b)/iu.test(text)) {
+      return 'verify OFF-state display behavior, the implementation/event path, ON/OFF handling, and regression behavior';
+    }
+    if (action === 'remove' && /(?:line|border|divider)/iu.test(text)) {
+      return 'verify the unwanted line reproduction/source, component/CSS/style/layout path, and regression after removal';
+    }
+  }
+  return materialOntology(action, lang);
 }
 function emptyCompletionPlaceholder(value) {
   return /^の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件/u.test(clean(value));
@@ -127,11 +174,13 @@ function normalizeSection05(section, model, lang) {
     let block = text.slice(start, end);
     const label = lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material';
     const extraLabel = lang === 'ja' ? '追加の反証材料' : 'Additional counter material';
+    const semantic = semanticCounterSummary(request, lang);
     block = block.split('\n').flatMap((line) => {
+      if (line.startsWith(marker)) return [`${line} / ${semantic}`];
       if (!line.includes(`${label}:`)) return [line];
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
-      const out = [`    - ${label}: ${counterOntology(request.action, lang)}`];
+      const out = [`    - ${label}: ${semantic}`];
       if (extras.length) out.push(`    - ${extraLabel}: ${[...new Set(extras)].join(' / ')}`);
       return out;
     }).join('\n');
@@ -148,12 +197,12 @@ function normalizeSection06(section, model, lang) {
     const nextMatch = /\n  - R\d{2} \[/.exec(text.slice(start + marker.length));
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
+    const ontology = materialOntology(request.action, lang);
     const lines = block.split('\n').filter((line) => {
       if (!/まだ不足している材料/.test(line)) return true;
       return usefulMissingLine(line.replace(/^.*まだ不足している材料\s*:\s*/u, ''), request.request_text);
-    });
+    }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);
     block = lines.join('\n');
-    const ontology = materialOntology(request.action, lang);
     if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
     text = text.slice(0, start) + block + text.slice(end);
   }
@@ -187,14 +236,19 @@ function normalizeSection08(section, model, lang) {
     const nextMatch = /\n(?:  - R\d{2}:|- )/.exec(text.slice(start + marker.length));
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
-    const ontology = materialOntology(request.action, lang);
+    const ontology = nextStepOntology(request, lang);
     block = block.split('\n').map((line) => {
       if (!/^\s*-\s*R\d{2}:/.test(line)) return line;
       return lang === 'ja'
-        ? `  - ${request.id}: 「${clean(request.request_text)}」について、${ontology}を確認する。`
-        : `  - ${request.id}: For “${clean(request.request_text)}”, verify ${ontology}.`;
+        ? `  - ${request.id}: 「${clean(request.request_text)}」について、${ontology}。`
+        : `  - ${request.id}: For “${clean(request.request_text)}”, ${ontology}.`;
     }).join('\n');
     text = text.slice(0, start) + block + text.slice(end);
+  }
+  if (lang === 'ja') {
+    text = text.replace(/^- ある判断要求が未確認でも、/mu, '- 共通: ある判断要求が未確認でも、');
+  } else {
+    text = text.replace(/^- If one judgment request remains unresolved,/miu, '- Common: If one judgment request remains unresolved,');
   }
   return text;
 }
