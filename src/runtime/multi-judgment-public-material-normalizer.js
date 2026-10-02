@@ -148,20 +148,74 @@ function usefulCounterPart(value, requestText = '') {
   if (nearRequestRestatement(text, requestText)) return false;
   return true;
 }
+function normalizeDigits(value) {
+  return String(value || '').replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 0xFF10)).replace('．', '.');
+}
+function quantityMaterial(model, lang = 'ja') {
+  const values = [];
+  const seen = new Set();
+  const pattern = /([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)[^0-9０-９。！？!?\n]{0,100}([0-9０-９]+(?:[.．][0-9０-９]+)?)\s*(件|人|回|日|時間|分|秒|円|万円|台|個|社|本|枚|%|％)/gu;
+  for (const observation of model.observations || []) {
+    const text = clean(observation?.text);
+    for (const match of text.matchAll(pattern)) {
+      const number = Number(normalizeDigits(match[2]));
+      if (!Number.isFinite(number)) continue;
+      const key = `${match[1]}|${number}|${match[3]}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      values.push({ label: match[1], number, unit: match[3], source: text });
+    }
+  }
+  if (values.length < 2) return '';
+  let pair = null;
+  for (let i = 0; i < values.length && !pair; i += 1) {
+    for (let j = i + 1; j < values.length; j += 1) {
+      if (values[i].label !== values[j].label && values[i].unit === values[j].unit) { pair = [values[i], values[j]]; break; }
+    }
+  }
+  if (!pair) return '';
+  const [a, b] = pair;
+  const diff = Math.abs(a.number - b.number);
+  const high = a.number >= b.number ? a : b;
+  const low = high === a ? b : a;
+  const ratio = low.number > 0 ? high.number / low.number : null;
+  const ratioText = ratio && Number.isFinite(ratio) ? ratio.toFixed(ratio >= 10 ? 1 : 2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1') : '';
+  return lang === 'ja'
+    ? `- 利用者入力から直接計算できる数量差: ${a.label}=${a.number}${a.unit}、${b.label}=${b.number}${b.unit}。差は${diff}${a.unit}${ratioText ? `で、多い側は少ない側の約${ratioText}倍` : ''}。これは入力材料からの算術であり、品質・法務安全性の優劣や外部確認済み事実を意味しない。`
+    : `- Quantity difference directly calculable from supplied input: ${a.label}=${a.number}${a.unit}, ${b.label}=${b.number}${b.unit}; difference=${diff}${a.unit}${ratioText ? ` and the larger value is about ${ratioText}x the smaller` : ''}. This is arithmetic over supplied material, not external verification or a quality/safety ranking.`;
+}
 function normalizeSection03(section, model, lang) {
-  if (lang !== 'ja') return section;
   const observations = (model.observations || []).map((item) => comparable(item?.text)).filter(Boolean);
-  return section.split('\n').map((line) => {
+  const observationById = new Map((model.observations || []).map((item) => [String(item?.id || ''), item]));
+  const lines = section.split('\n').map((line) => {
+    const observationMatch = /^  - (O\d{2}):\s*(.*)$/u.exec(line);
+    if (observationMatch) {
+      const item = observationById.get(observationMatch[1]);
+      if (item?.truth_state === 'INPUT_SUPPLIED_UNVERIFIED') {
+        const value = clean(observationMatch[2]).replace(/\s*\((?:利用者報告・外部未検証|user-reported, externally unverified)\)\s*$/iu, '');
+        return `  - ${observationMatch[1]}: ${value} (${lang === 'ja' ? '入力材料・外部未検証' : 'input-supplied, externally unverified'})`;
+      }
+      return line;
+    }
     const match = /^  - (R\d{2}):\s*(.*)$/u.exec(line);
     if (!match) return line;
     const request = (model.judgment_requests || []).find((item) => item.id === match[1]);
     const value = clean(match[2]);
     const asObservation = observations.includes(comparable(value));
     if (asObservation || nearRequestRestatement(value, request?.request_text || '')) {
-      return `  - ${match[1]}: 確認済み事実として追加できる材料はまだない。`;
+      return lang === 'ja'
+        ? `  - ${match[1]}: 確認済み事実として追加できる材料はまだない。`
+        : `  - ${match[1]}: No additional confirmed factual material is available yet.`;
     }
     return line;
-  }).join('\n');
+  });
+  const quantity = quantityMaterial(model, lang);
+  if (quantity && !lines.some((line) => line.includes('直接計算できる数量差') || line.includes('Quantity difference directly calculable'))) {
+    const boundaryIndex = lines.findIndex((line) => /^- (?:区別|Boundary)/u.test(line));
+    if (boundaryIndex >= 0) lines.splice(boundaryIndex, 0, quantity);
+    else lines.push(quantity);
+  }
+  return lines.join('\n');
 }
 function normalizeSection05(section, model, lang) {
   let text = section;
