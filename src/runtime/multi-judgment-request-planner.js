@@ -3,7 +3,7 @@
 const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|裏取り|調査|リサーチ|根拠|出典|公式(?:根拠|情報|Source)?|verify|validate|fact\s*check|research|investigate|evidence|source)/iu;
 const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:must\s+not|do\s+not|never)\b/iu;
 const UMBRELLA_MATERIAL = /(?:判断材料|decision\s+material)[^。！？!?]{0,100}(?:整理|まとめ|構造化|organize|structure)/iu;
-const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|レビュー(?:して|する|しろ|せよ)?|してください|please\b|should\b|need\s+to|must\b)/iu;
+const REQUEST_CUE = /(?:してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|レビュー(?:して|する|しろ|せよ)?|please\b|should\b|need\s+to|must\b)/iu;
 const REQUEST_CONTINUATIVE_CUE = /(?:見直し|改善し|修正し|調整し|検討し|確認し|調査し|比較し|整理し|表示し|追加し|実装し|対応し|削除し|除去し|消し|外し|なくし)(?:て)?$/iu;
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
 const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
@@ -528,7 +528,7 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   if (!question.trim()) return prepared;
   const packet = prepared.analysis_task_packet || {};
   const existingTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
-  const intent = packet.analysis_intent || prepared.standalone_api_intent || prepared.instruction_understanding?.analysis_intent || null;
+  const intent = prepared.standalone_api_intent || prepared.instruction_understanding?.analysis_intent || packet.analysis_intent || null;
   const caseModel = buildCaseModel(question, existingTasks, packet.dependencies || [], intent);
   const observable = {
     ...(packet.observable_material || prepared.observable_material || {}),
@@ -561,7 +561,9 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   }
 
   const representation = caseModel.judgment_requests.map((request) => requestTaskIndices(existingTasks, request));
-  const allRepresented = representation.every((indices) => indices.length > 0);
+  const representedTaskIndexes = representation.flat();
+  const allRepresented = representation.every((indices) => indices.length > 0)
+    && new Set(representedTaskIndexes).size === representedTaskIndexes.length;
   const global = globalFields(packet, caseModel);
   let tasks;
   let dependencies;
