@@ -166,7 +166,7 @@ function buildSourceGraph(input, languageHint = '') {
 function operationFor(text) {
   const value = normalized(text);
   if (/(?:比較|比べ|compare|versus|\bvs\.?\b)/iu.test(value)) return 'compare';
-  if (/(?:削除|除去|なくす|消す|外す|remove|delete|eliminate)/iu.test(value)) return 'remove';
+  if (/(?:削除|除去|なくす|なくせ|なくして|消す|消して|外す|外して|remove|delete|eliminate)/iu.test(value)) return 'remove';
   if (/(?:検証|事実確認|確認|調査|監査|verify|validate|research|investigate|audit|check)/iu.test(value)) return 'verify';
   if (/(?:追加|実装|作成|構築|表示|implement|build|create|add|display|show)/iu.test(value)) return 'implement';
   if (/(?:改善|修正|見直|直す|調整|整理|improve|fix|refactor|adjust|organize)/iu.test(value)) return 'improve';
