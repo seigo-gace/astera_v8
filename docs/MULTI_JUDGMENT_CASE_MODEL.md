@@ -283,7 +283,11 @@ The live output exposed defects that source-only tests had not yet closed:
 - a generic internal phrase `Alternative evidence angle` leaked into public counter-material;
 - option/image requests did not expose enough operation-specific information requirements for a human or AI to continue judgment reliably.
 
-The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects. Source tests and CI must pass on the exact correction revision, and the isolated VPS gate must then pass the same original input before runtime completion is claimed.
+The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects.
+
+Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. The documentation-complete exact head `e61b98c7f55cb8bab3635f2c4a50f32d2a70bfd7` passed Astera Verify #449 / run `36973017937`, including source tests, Initial Fast Path, real Japanese Parser build/release, real HTTP smoke, and unseen-effect release gate.
+
+The remaining authority boundary is the isolated exact-head VPS multi-judgment gate using the same original App input. Runtime completion is not claimed until that gate passes.
 
 ## Regression authority
 
