@@ -174,8 +174,9 @@ function summarizePairs(caseResults) {
 }
 
 function writeJson(name, value) {
-  fs.mkdirSync(ARTIFACT_ROOT, { recursive: true });
-  fs.writeFileSync(path.join(ARTIFACT_ROOT, name), JSON.stringify(value, null, 2));
+  const target = path.join(ARTIFACT_ROOT, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(value, null, 2));
 }
 
 async function main() {
@@ -283,9 +284,7 @@ async function main() {
   writeJson('summary.json', summary);
   writeJson('failures.json', failures.map(({ material, ...rest }) => rest));
   writeJson('case-results.json', results);
-  for (const r of results) {
-    writeJson(`cases/${r.case_id}.json`, r);
-  }
+  for (const r of results) writeJson(`cases/${r.case_id}.json`, r);
 
   console.log(`UNIVERSAL_TOTAL=${summary.total}`);
   console.log(`UNIVERSAL_PASS=${summary.pass}`);
