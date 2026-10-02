@@ -252,9 +252,13 @@ function normalizeSection06(section, model, lang) {
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
     const ontology = materialOntology(request.action, lang);
+    const missingLabel = lang === 'ja'
+      ? /(?:まだ不足している材料|追加で必要な材料)/u
+      : /(?:Material still missing|Additional material required)/iu;
     const lines = block.split('\n').filter((line) => {
-      if (!/まだ不足している材料/.test(line)) return true;
-      return usefulMissingLine(line.replace(/^.*まだ不足している材料\s*:\s*/u, ''), request.request_text);
+      if (!missingLabel.test(line)) return true;
+      const raw = line.slice(line.indexOf(':') + 1);
+      return usefulMissingLine(raw, request.request_text);
     }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);
     block = lines.join('\n');
     if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
@@ -262,8 +266,25 @@ function normalizeSection06(section, model, lang) {
   }
   return text;
 }
+function sourceBackedEvidenceSummary(model, lang) {
+  const values = [];
+  for (const observation of model.observations || []) {
+    const text = clean(observation?.text);
+    if (text) values.push(text);
+  }
+  for (const request of model.judgment_requests || []) {
+    if (String(request.action || '') !== 'compare') continue;
+    const text = clean(request.request_text || '');
+    if (text) values.push(text);
+  }
+  const uniqueValues = [...new Set(values)].slice(0, 8);
+  if (!uniqueValues.length) return '';
+  return lang === 'ja'
+    ? `- 利用者入力として与えられた材料: ${uniqueValues.join(' / ')}。これは利用者入力の条件・観測・比較要求を保持したもので、外部確認済みの根拠ではない。根拠なし・未確定の部分を推測で確定しない。`
+    : `- Material supplied by the user: ${uniqueValues.join(' / ')}. This preserves input conditions, observations, and comparison requests; it is not externally verified evidence. Do not infer unresolved facts without evidence.`;
+}
 function normalizeSection07(section, model, lang) {
-  return section.split('\n').map((line) => {
+  const lines = section.split('\n').map((line) => {
     const match = /^  - (R\d{2}):\s*(.*)$/u.exec(line);
     if (!match) return line;
     const request = (model.judgment_requests || []).find((item) => item.id === match[1]);
@@ -279,7 +300,12 @@ function normalizeSection07(section, model, lang) {
     return lang === 'ja'
       ? `  - ${match[1]}: ${intent} 内部TaskのEvidence検索状態を要求レベルの外部Evidence要求へ昇格せず、実装事実・原因は未確認として分離する。`
       : `  - ${match[1]}: ${intent} Do not promote internal Task evidence-search state into a request-level external-evidence requirement; implementation facts and causes remain separately unverified.`;
-  }).join('\n');
+  });
+  const sourceSummary = sourceBackedEvidenceSummary(model, lang);
+  if (sourceSummary && !lines.some((line) => line.includes(lang === 'ja' ? '利用者入力として与えられた材料' : 'Material supplied by the user'))) {
+    lines.push(sourceSummary);
+  }
+  return lines.join('\n');
 }
 function normalizeSection08(section, model, lang) {
   let text = section;
@@ -313,7 +339,7 @@ function scrubNoise(text) {
     .replace(/Alternative evidence angle/giu, '')
     .replace(/\s*\/\s*\/\s*/g, ' / ')
     .replace(/:\s*\/\s*/g, ': ')
-    .replace(/\n[ \t]*-\s*まだ不足している材料\s*:\s*の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する。?/gu, '')
+    .replace(/\n[ \t]*-\s*(?:まだ不足している材料|追加で必要な材料)\s*:\s*の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する。?/gu, '')
     .replace(/\n[ \t]*-?\s*の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する。?/gu, '')
     .replace(/\n[ \t]*-\s*$/gmu, '')
     .replace(/\n{3,}/g, '\n\n');
