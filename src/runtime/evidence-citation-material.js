@@ -180,7 +180,7 @@ function renderEvidenceTrailer(citationMaterial) {
 function attachEvidenceCitations(out = {}) {
   if (!out?.result?.judgment || !out?.material?.text) return out;
   const lang = String(out.result.judgment.output_language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
-  const multiMaterial = renderMultiJudgmentMain8(out.result.judgment);
+  const multiMaterial = renderMultiJudgmentMain8(out.result.judgment, out.result);
   const baseMaterial = multiMaterial || out.material;
   const evidenceCitations = buildEvidenceCitationMaterial(out.result);
   const main8Text = annotateMain8Text(baseMaterial.text, evidenceCitations, lang);
