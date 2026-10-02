@@ -1,5 +1,7 @@
 'use strict';
 
+const { expandMultiJudgmentRequest } = require('./multi-judgment-request-planner');
+
 const MATERIAL_TENSION = /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED|parser_task_graph_empty/i;
 const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|裏取り|調査|リサーチ|根拠|出典|公式(?:根拠|情報|Source)?|verify|validate|fact\s*check|research|investigate|evidence|source)/iu;
 
@@ -139,7 +141,9 @@ function recoverPartialParserMaterial(prepared, input = {}) {
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
   const candidates = inlineCandidates(question);
   const claims = claimTexts(question);
-  if (!shouldRecover(prepared, question, candidates, claims)) return prepared;
+  if (!shouldRecover(prepared, question, candidates, claims)) {
+    return expandMultiJudgmentRequest(prepared, input);
+  }
 
   const packet = prepared.analysis_task_packet;
   const originalTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
@@ -203,7 +207,7 @@ function recoverPartialParserMaterial(prepared, input = {}) {
     recovered_task_id: id,
     external_evidence_requested: needsExternalEvidence
   };
-  return {
+  const recovered = {
     ...prepared,
     target: task.target,
     objective: purpose,
@@ -232,6 +236,7 @@ function recoverPartialParserMaterial(prepared, input = {}) {
       task_graph_validation: { ...(packet.task_graph_validation || {}), valid: true, cycle: [], dependency_count: 0, wave_count: 1, branch_count: 0, reference_resolution_count: 0 }
     }
   };
+  return expandMultiJudgmentRequest(recovered, input);
 }
 
 module.exports = { recoverPartialParserMaterial, taskUnionCoverage, inlineCandidates, comparisonDimensions, contracts, externalEvidenceRequested };
