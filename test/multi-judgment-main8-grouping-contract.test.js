@@ -16,8 +16,8 @@ function taskResult(id, requestId, fact, risk, missing) {
   };
 }
 
-test('case Main8 aggregates several execution tasks into one R## without losing another request', () => {
-  const model = {
+function baseModel() {
+  return {
     schema_version: 'astera.case-model.v1',
     multi_judgment: true,
     request_count: 2,
@@ -30,11 +30,17 @@ test('case Main8 aggregates several execution tasks into one R## without losing 
     observations: [],
     global_context: { deadlines: [], preserve: [], prohibitions: [], unresolved: [], conditions: [], exceptions: [] }
   };
-  const judgment = {
+}
+function judgmentFor(model) {
+  return {
     output_language: 'ja',
     observable_material: { case_model: model },
     order: ['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']
   };
+}
+
+test('case Main8 aggregates several execution tasks into one R## without losing another request', () => {
+  const model = baseModel();
   const result = {
     task_results: [
       taskResult('T01', 'R01', '設定の現在値', '設定確認なしで変更する危険', '設定の適用範囲'),
@@ -43,7 +49,7 @@ test('case Main8 aggregates several execution tasks into one R## without losing 
     ]
   };
 
-  const out = renderMultiJudgmentMain8(judgment, result);
+  const out = renderMultiJudgmentMain8(judgmentFor(model), result);
   assert.ok(out);
   assert.equal(out.sections.length, 8);
   assert.equal((out.text.match(/\n---\n/g) || []).length, 7);
@@ -57,4 +63,36 @@ test('case Main8 aggregates several execution tasks into one R## without losing 
   assert.match(next, /R01:.*設定の適用範囲.*回帰試験結果/u);
   assert.match(next, /R02:.*ログ保持期間/u);
   assert.doesNotMatch(out.text, /claim_id|SearchExecution|EvidenceQuality|INSUFFICIENT_/u);
+});
+
+test('case Main8 removes runtime IDs and internal projection labels without deleting useful remainder', () => {
+  const model = baseModel();
+  const hash = 'a'.repeat(64);
+  const r1 = taskResult(
+    'T01',
+    'R01',
+    `Task T01 ${hash} HAS_STATE 設定値を確認できた`,
+    'T01:deliverable: 設定変更前の回帰Riskを確認する',
+    'T01:completion_criteria: 既存動作の回帰試験結果'
+  );
+  r1.multi.perspectives = [{
+    focus: 'Counter: 既存利用者への影響を確認する',
+    failure_conditions: ['Alternative evidence angle: 別経路の設定状態も確認する'],
+    conditions: []
+  }];
+  const result = {
+    task_results: [
+      r1,
+      taskResult('T02', 'R01', '修正後の挙動', '副作用確認が必要', '完了条件の確認'),
+      taskResult('T03', 'R02', 'ログの保存状態', '監査欠落Risk', '保持期間の確認')
+    ]
+  };
+
+  const out = renderMultiJudgmentMain8(judgmentFor(model), result);
+  assert.match(out.text, /設定値を確認できた/u);
+  assert.match(out.text, /設定変更前の回帰Riskを確認する/u);
+  assert.match(out.text, /既存動作の回帰試験結果/u);
+  assert.match(out.text, /既存利用者への影響を確認する/u);
+  assert.match(out.text, /別経路の設定状態も確認する/u);
+  assert.doesNotMatch(out.text, /[0-9a-f]{64}|HAS_STATE|Task\s+T\d+|T\d+:(?:deliverable|completion_criteria|success_criteria)|\bCounter\b|Alternative evidence angle/u);
 });
