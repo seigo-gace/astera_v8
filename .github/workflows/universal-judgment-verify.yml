@@ -60,7 +60,24 @@ jobs:
           npm run verify:universal-judgment
           rc=$?
           mkdir -p artifacts/universal-judgment-v1
-          printf '%s\n' "$rc" > artifacts/universal-judgment-v1/exit-code.txt
+          printf '%s\n' "$rc" > artifacts/universal-judgment-v1/semantic-exit-code.txt
+          exit "$rc"
+
+      - name: Run universal judgment metamorphic gate
+        id: metamorphic
+        continue-on-error: true
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
+          ASTERA_UNIVERSAL_ARTIFACT_ROOT: artifacts/universal-judgment-v1
+        shell: bash
+        run: |
+          set +e
+          npm run verify:universal-metamorphic
+          rc=$?
+          mkdir -p artifacts/universal-judgment-v1
+          printf '%s\n' "$rc" > artifacts/universal-judgment-v1/metamorphic-exit-code.txt
           exit "$rc"
 
       - name: Upload universal judgment artifacts
@@ -72,15 +89,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Enforce universal judgment gate result
+      - name: Enforce universal judgment gates
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          rc="$(cat artifacts/universal-judgment-v1/exit-code.txt 2>/dev/null || printf '2')"
-          if [ "$rc" != "0" ]; then
-            echo "Universal Judgment Gate failed with exit code $rc. Inspect the uploaded artifact."
-            exit "$rc"
+          semantic="$(cat artifacts/universal-judgment-v1/semantic-exit-code.txt 2>/dev/null || printf '2')"
+          metamorphic="$(cat artifacts/universal-judgment-v1/metamorphic-exit-code.txt 2>/dev/null || printf '2')"
+          if [ "$semantic" != "0" ] || [ "$metamorphic" != "0" ]; then
+            echo "Universal Judgment gates failed: semantic=$semantic metamorphic=$metamorphic. Inspect the uploaded artifact."
+            exit 1
           fi
 
       - name: Stop Japanese Parser HTTP runtime
