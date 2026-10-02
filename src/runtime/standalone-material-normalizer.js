@@ -49,6 +49,18 @@ function candidateLabelAllowed(label) {
   return /[\p{L}\p{N}]/u.test(label);
 }
 
+function suppressCompositeCandidateAliases(values = []) {
+  const labels = unique(values.filter(candidateLabelAllowed));
+  const present = new Set(labels);
+  return labels.filter((label) => {
+    const ja = /^(.+案)と(.+案)$/u.exec(label);
+    if (ja && present.has(ja[1]) && present.has(ja[2])) return false;
+    const en = /^(.+?)\s+(?:and|vs\.?|versus)\s+(.+)$/iu.exec(label);
+    if (en && present.has(en[1]) && present.has(en[2])) return false;
+    return true;
+  });
+}
+
 function extractObservableCandidates(text) {
   const labels = [];
   const value = norm(text);
@@ -67,7 +79,7 @@ function extractObservableCandidates(text) {
   for (const match of value.matchAll(/(?:^|[、,。\s])([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)(?=は|が|を|と|、|,|。|\s)/gu)) {
     labels.push(match[1]);
   }
-  return unique(labels.filter(candidateLabelAllowed)).slice(0, 32);
+  return suppressCompositeCandidateAliases(labels).slice(0, 32);
 }
 
 function claimSignal(line) {
