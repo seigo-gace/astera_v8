@@ -29,7 +29,8 @@ test('punctuation inside requested UI wording does not create a phantom judgment
   const model = buildCaseModel(input);
   assert.equal(model.request_count, 3, JSON.stringify(model, null, 2));
   assert.match(model.judgment_requests[1].request_text, /オンにしてください/);
-  assert.ok(model.global_context.conditions.some((item) => /オフ/.test(item)));
+  assert.equal(model.global_context.conditions.some((item) => /オフ/.test(item)), false, 'request-local toggle condition must not leak into global context');
+  assert.ok(model.judgment_requests[1].local_context.conditions.some((item) => /オフ/.test(item)), 'toggle condition must remain attached to R02');
   assert.deepEqual(model.request_relations, [], 'toggle condition is request-local and must not become a dependency on the previous request');
 });
 
