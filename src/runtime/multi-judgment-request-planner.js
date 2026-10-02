@@ -5,6 +5,7 @@ const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^�
 const UMBRELLA_MATERIAL = /(?:判断材料|decision\s+material)[^。！？!?]{0,100}(?:整理|まとめ|構造化|organize|structure)/iu;
 const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|してください|please\b|should\b|need\s+to|must\b)/iu;
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
+const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
 
 function norm(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -110,6 +111,20 @@ function extractGlobalContext(text) {
   for (const key of Object.keys(context)) context[key] = unique(context[key]);
   return context;
 }
+function requestRelations(requests = []) {
+  const relations = [];
+  for (let index = 1; index < requests.length; index += 1) {
+    const current = requests[index];
+    if (!PREVIOUS_REQUEST_SEQUENCE.test(norm(current.source_span?.text || current.request_text))) continue;
+    relations.push({
+      from_request_id: requests[index - 1].id,
+      to_request_id: current.id,
+      type: 'EXPLICIT_SEQUENCE',
+      reason: 'SOURCE_SEQUENCE_CUE'
+    });
+  }
+  return relations;
+}
 function buildCaseModel(text) {
   const question = String(text || '');
   const judgmentRequests = extractJudgmentRequests(question);
@@ -122,6 +137,7 @@ function buildCaseModel(text) {
     judgment_requests: judgmentRequests,
     observations,
     global_context: globalContext,
+    request_relations: requestRelations(judgmentRequests),
     multi_judgment: judgmentRequests.length > 1
   };
 }
@@ -151,12 +167,11 @@ function globalFields(packet, caseModel) {
     unresolved: unique([...(packet.unresolved || []), ...(context.unresolved || [])])
   };
 }
-function recoveredTask(request, index, fields, caseModel, baseTask = {}) {
+function recoveredTask(request, index, fields, caseModel) {
   const id = `T${String(index + 1).padStart(2, '0')}`;
   const localObservations = (caseModel.observations || []).filter((item) => spanOverlapRatio(item.source_span, request.source_span) > 0);
   const evidenceRequired = request.external_evidence_requested === true;
   return {
-    ...baseTask,
     id,
     order: index + 1,
     request_id: request.id,
@@ -171,19 +186,19 @@ function recoveredTask(request, index, fields, caseModel, baseTask = {}) {
     source_role: 'DIRECT_INPUT',
     source_axes: { container_role: ['PLAIN_CONTAINER'], content_role: ['INSTRUCTION_OR_REQUEST'], quotation_role: ['DIRECT'] },
     actionable: true,
-    premises: unique([...(baseTask.premises || []), ...localObservations.map((item) => item.text)]),
+    premises: unique(localObservations.map((item) => item.text)),
     constraints: fields.constraints,
     prohibitions: fields.prohibitions,
     preserve: fields.preserve,
-    replace: baseTask.replace || [],
-    verification: baseTask.verification || [],
-    completion_criteria: baseTask.completion_criteria || [],
-    success_criteria: baseTask.success_criteria || [],
+    replace: [],
+    verification: [],
+    completion_criteria: [],
+    success_criteria: [],
     conditions: fields.conditions,
     exceptions: fields.exceptions,
     deadlines: fields.deadlines,
-    priority_records: baseTask.priority_records || [],
-    deliverables: baseTask.deliverables || [],
+    priority_records: [],
+    deliverables: [],
     unresolved: fields.unresolved,
     hard_blockers: [],
     depends_on: [],
@@ -199,12 +214,37 @@ function recoveredTask(request, index, fields, caseModel, baseTask = {}) {
       reasons: evidenceRequired ? ['EXPLICIT_EXTERNAL_EVIDENCE_REQUEST'] : []
     },
     field_provenance: {
-      ...(baseTask.field_provenance || {}),
       purpose: [{ source: 'ORIGINAL_QUESTION_REQUEST_SPAN', request_id: request.id }],
       target: [{ source: 'ORIGINAL_QUESTION_REQUEST_SPAN', request_id: request.id }],
       case_model: [{ source: 'ASTERA_MULTI_JUDGMENT_REQUEST_PLANNER', request_id: request.id }]
     }
   };
+}
+function recoveredGraph(tasks, caseModel) {
+  const taskByRequest = new Map(tasks.map((task) => [task.request_id, task.id]));
+  const dependencies = [];
+  for (const relation of caseModel.request_relations || []) {
+    const from = taskByRequest.get(relation.from_request_id);
+    const to = taskByRequest.get(relation.to_request_id);
+    if (from && to && from !== to) dependencies.push({ from, to, type: relation.type, reason: relation.reason });
+  }
+  const incoming = new Map(tasks.map((task) => [task.id, []]));
+  for (const edge of dependencies) incoming.get(edge.to)?.push(edge.from);
+  const nextTasks = tasks.map((task) => ({
+    ...task,
+    depends_on: unique(incoming.get(task.id) || []),
+    parallel_group: (incoming.get(task.id) || []).length ? null : 'MULTI_JUDGMENT_REQUESTS'
+  }));
+  const remaining = new Set(nextTasks.map((task) => task.id));
+  const done = new Set();
+  const waves = [];
+  while (remaining.size) {
+    const wave = nextTasks.filter((task) => remaining.has(task.id) && (task.depends_on || []).every((id) => done.has(id))).map((task) => task.id);
+    if (!wave.length) return { tasks: nextTasks, dependencies, execution_waves: [], valid: false, cycle: [...remaining] };
+    waves.push(wave);
+    for (const id of wave) { remaining.delete(id); done.add(id); }
+  }
+  return { tasks: nextTasks, dependencies, execution_waves: waves, valid: true, cycle: [] };
 }
 function expandMultiJudgmentRequest(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
@@ -218,8 +258,7 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
     case_model: caseModel,
     input_observations: (caseModel.observations || []).map((item) => item.text)
   };
-  const attachOnly = caseModel.request_count < 2;
-  if (attachOnly) {
+  if (caseModel.request_count < 2) {
     return {
       ...prepared,
       observable_material: observable,
@@ -231,18 +270,29 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
   const allRepresented = representation.every((index) => index >= 0) && new Set(representation).size === caseModel.request_count;
   const fields = globalFields(packet, caseModel);
   let tasks;
+  let dependencies;
+  let executionWaves;
+  let branches;
+  let branchGroups;
   if (allRepresented) {
     tasks = existingTasks.map((task, index) => {
       const requestIndex = representation.indexOf(index);
       if (requestIndex < 0) return task;
       const request = caseModel.judgment_requests[requestIndex];
-      return { ...task, request_id: request.id, purpose: request.request_text, user_goal: request.request_text, parallel_group: task.parallel_group || 'MULTI_JUDGMENT_REQUESTS' };
+      return { ...task, request_id: request.id, purpose: request.request_text, user_goal: request.request_text };
     });
+    dependencies = packet.dependencies || [];
+    executionWaves = Array.isArray(packet.execution_waves) && packet.execution_waves.length ? packet.execution_waves.map((wave) => [...wave]) : [tasks.map((task) => task.id)];
+    branches = packet.branches || [];
+    branchGroups = packet.branch_groups || [];
   } else {
-    const baseTask = existingTasks[0] || {};
-    tasks = caseModel.judgment_requests.map((request, index) => recoveredTask(request, index, fields, caseModel, baseTask));
+    const graph = recoveredGraph(caseModel.judgment_requests.map((request, index) => recoveredTask(request, index, fields, caseModel)), caseModel);
+    tasks = graph.tasks;
+    dependencies = graph.dependencies;
+    executionWaves = graph.execution_waves;
+    branches = [];
+    branchGroups = [];
   }
-  const taskIds = tasks.map((task) => task.id);
   const caseGoal = `入力内の${caseModel.request_count}件の要求を一つに潰さず、個別の判断材料として整理する`;
   const packetCaseModel = {
     ...caseModel,
@@ -269,10 +319,10 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
     analysis_task_packet: {
       ...packet,
       tasks,
-      dependencies: [],
-      execution_waves: [taskIds],
-      branches: [],
-      branch_groups: [],
+      dependencies,
+      execution_waves: executionWaves,
+      branches,
+      branch_groups: branchGroups,
       user_goal: caseGoal,
       observable_material: observable,
       case_model: packetCaseModel,
@@ -287,11 +337,11 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span })),
       task_graph_validation: {
         ...(packet.task_graph_validation || {}),
-        valid: true,
-        cycle: [],
-        dependency_count: 0,
-        wave_count: 1,
-        branch_count: 0,
+        valid: executionWaves.length > 0,
+        cycle: executionWaves.length ? [] : tasks.map((task) => task.id),
+        dependency_count: dependencies.length,
+        wave_count: executionWaves.length,
+        branch_count: branches.length,
         multi_judgment_request_count: caseModel.request_count
       }
     }
@@ -302,5 +352,6 @@ module.exports = {
   buildCaseModel,
   extractJudgmentRequests,
   extractInputObservations,
+  requestRelations,
   expandMultiJudgmentRequest
 };
