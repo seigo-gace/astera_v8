@@ -18,7 +18,7 @@ function byId(id) {
 
 function assertLossless(row) {
   const graph = buildSourceGraph(row.input, row.language);
-  assert.equal(graph.source, row.input.normalize('NFKC').replace(/\r\n?/g, '\n'));
+  assert.equal(graph.source, row.input, `${row.id} original source changed`);
   assert.equal(graph.language, row.language);
   assert.equal(graph.source_length, graph.source.length);
   assert.ok(graph.nodes.length > 1);
@@ -47,6 +47,14 @@ for (const id of [
     assertLossless(byId(id));
   });
 }
+
+test('source graph preserves original Unicode while keeping separate normalized text', () => {
+  const input = '＋ボタン\r\nＡＢＣとABCを区別して保持する。';
+  const graph = buildSourceGraph(input, 'ja');
+  assert.equal(graph.source, input);
+  assert.notEqual(graph.normalized_source, input);
+  assert.equal(graph.nodes[0].text, input);
+});
 
 test('language detection distinguishes Japanese and English without document-type assumptions', () => {
   assert.equal(detectLanguage('契約条項の適用判断について確認する。'), 'ja');
