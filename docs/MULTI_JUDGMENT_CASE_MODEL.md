@@ -93,6 +93,11 @@ The action class is a finite execution ontology, currently including structural 
 - implement
 - improve
 - remove
+- decide
+- integrate
+- migrate
+- preserve
+- explain
 
 These classes are not answer templates. New user content does not require a new response template. The content remains source-backed text attached to the request span.
 
@@ -151,6 +156,23 @@ Projection rule:
 
 This prevents the former failure mode where partial recovery replaced an entire multi-request input with one synthetic full-input Task.
 
+### Parser fragment normalization
+
+A Parser execution Task is not automatically a user judgment request.
+
+If a short Parser-only Task span is strictly contained inside one source-backed request and represents only an internal sub-action of that request, it is folded into the owning `R##` instead of becoming a phantom extra judgment unit. The Parser Task itself remains executable and traceable; only the public Case Model request count is normalized.
+
+Example:
+
+```text
+Source-backed R01: userに見せるもの、見せないものを徹底的に見直して検討しろ
+Parser subtask:  検討しろ
+```
+
+The second line may be a valid Parser execution Task, but it is not a second user judgment request. The Case Model therefore keeps one R01 and lets R01 own the relevant Parser Task IDs.
+
+The same boundary applies to Evidence semantics. An internal Task may require verification for canonical processing, but this does not mean the user explicitly requested external Evidence. Request-level `external_evidence_requested` is true only when source-backed wording explicitly requests verification/research/evidence, or the Task carries the explicit external-evidence reason. A generic internal `evidence_need.required=true` cannot silently become a user-facing external-search requirement.
+
 ## Task graph and parallelism
 
 Multiple requests are not automatically synonymous with parallel execution.
@@ -189,6 +211,22 @@ The multi-judgment layer does not replace these lanes. It ensures that they rece
 
 Case-level rendering uses the actual Task results where available. It does not merely repeat request text inside an eight-section template.
 
+## Finite operation-material ontology
+
+Astera does not try to maintain an infinite set of answer templates for every possible user scenario.
+
+Instead, a finite operation ontology defines the categories of material that must be known before each structural action can be judged. Source-backed request content remains variable and unlimited; only the information categories are finite.
+
+Examples:
+
+- `improve`: current state, affected scope, user impact, user-visible/internal boundary, desired state, regression-aware completion criteria.
+- `implement`: implementation/connection point, current event or interaction path, trigger state such as ON/OFF, expected behavior, compatibility impact, acceptance criteria.
+- `remove`: exact reproduction, generating source, UI component/CSS/style/layout path when applicable, removal impact, regression criteria.
+- `verify`: verification target, reproduction conditions, code/source/record to inspect, validity conditions, contrary evidence, completion criteria.
+- `compare`: candidates, comparison dimensions, same-condition measurements, missing values, and conditions that prevent a justified winner.
+
+These categories guide Inquiry and public missing-material projection. They do not manufacture facts, select a candidate, or replace five-stage analysis. A line such as an empty `の完了・合格条件を明示する` placeholder is invalid public material and must be removed rather than shown as if it were analysis.
+
 ## Main8 projection
 
 Main8 remains exactly eight sections. Multi-request inputs do not create one Main8 per request and do not create a ninth section.
@@ -197,16 +235,16 @@ Instead, Main8 is the case-level projection and keeps each `R##` visible inside 
 
 Required behavior includes:
 
-- section 01: enumerate the distinct requested judgment units;
+- section 01: enumerate the distinct requested judgment units and make clear that one post was not collapsed into one request;
 - section 02: preserve shared constraints and unresolved conditions;
 - section 03: separate user-reported observations from analyzed / verified facts;
 - section 04: keep risks attributable to the appropriate request;
 - section 05: keep counter-check / failure-side material per request without exposing internal perspective-template fields;
-- section 06: if the case is not an A/B comparison, show decision material per request instead of only saying “no comparison candidates”;
+- section 06: if the case is not an A/B comparison, show decision material per request instead of only saying “no comparison candidates”; for missing information, use the finite operation-material ontology rather than an empty template sentence;
 - section 07: keep Evidence status per request and preserve the user-input vs verified-fact boundary;
-- section 08: keep next verification / execution material per request.
+- section 08: keep next verification / execution material per request and state what information would make that request judgment-ready.
 
-Internal runtime fields such as `Task Wave`, raw Claim IDs, `INSUFFICIENT_TRADE_OFF_MATERIAL`, `SearchExecution`, `EvidenceQuality`, Parser blocker tokens, or internal perspective class names are not user-facing judgment material.
+Internal runtime fields such as `Task Wave`, raw Claim IDs, `INSUFFICIENT_TRADE_OFF_MATERIAL`, `SearchExecution`, `EvidenceQuality`, Parser blocker tokens, internal perspective class names, and generic placeholders such as `Alternative evidence angle` are not user-facing judgment material.
 
 ## Evidence boundary
 
@@ -236,6 +274,8 @@ The regression suite covers:
 - one post containing several explicit requests preserves all of them;
 - request count is not hard-coded to three;
 - punctuation inside desired UI wording does not create phantom requests;
+- a Parser sub-action inside one source-backed request does not become a phantom extra judgment request;
+- internal Evidence need does not become user-level external-Evidence intent without an explicit external-evidence signal;
 - request-local conditions do not become false cross-request dependencies;
 - explicit sequence cues produce dependencies rather than unsafe parallel execution;
 - a Parser result that collapses several requests is recovered into distinct Tasks;
@@ -243,6 +283,8 @@ The regression suite covers:
 - every recovered Task runs through the five-stage path;
 - Main8 keeps all request units visible;
 - Main8 uses per-Task five-stage material where available;
+- non-comparison requests receive operation-specific judgment information requirements instead of a repeated generic fallback;
+- empty completion placeholders and generic internal perspective text do not leak into public material;
 - internal template / runtime diagnostic fields do not leak into public Main8;
 - Evidence status and Evidence citations remain attributable to the correct request / Claim.
 
