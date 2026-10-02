@@ -5,6 +5,12 @@ const { buildUniversalSourceUnderstanding } = require('./universal-source-graph'
 const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|裏取り|調査|リサーチ|根拠|出典|公式(?:根拠|情報|Source)?|\bverify\b|\bvalidate\b|fact\s*check|\bresearch\b|\binvestigate\b|\bevidence\b|\bsource\b)/iu;
 const GLOBAL_SCOPE_CUE = /(?:全体|すべて|全て|全部|共通|各要求|全要求|各Task|各タスク|globally|across\s+all|all\s+requests|every\s+request)/iu;
 const SEQUENCE_CUE = /^(?:その後|次に|続いて|最後に)|\b(?:after|then|next|finally|subsequently)\b/iu;
+const USER_OBSERVATION_CUE = /(?:(?:した|している|すると|したら|したところ|した際|した時)[^。！？!?]{0,120}(?:が|は)[^。！？!?]{0,80}(?:はいる|入る|入った|出る|出た|表示される|表示された|残る|残った|消える|消えた|起きる|起きた|なる|なった|動かない|反応しない)|(?:when|after)\b[^.!?]{0,120}\b(?:appears?|shows?|remains?|disappears?|fails?|breaks?|does\s+not|doesn't)\b)/iu;
+const CONTEXT_ATOM_TYPES = new Set([
+  'PROHIBITION', 'PRESERVE', 'CONDITION', 'EXCEPTION', 'OBLIGATION', 'PERMISSION',
+  'UNRESOLVED', 'DEADLINE', 'ACCEPTANCE_CRITERION', 'RISK_SIGNAL', 'EVIDENCE_REQUIREMENT',
+  'OBSERVATION', 'ASSUMPTION', 'QUESTION', 'SCOPE', 'STAKEHOLDER'
+]);
 
 function norm(value) {
   return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -149,6 +155,18 @@ function attachSemanticOwnership(understanding, requests) {
   for (const request of requests) {
     request.objectives = request.objectives.length ? request.objectives : [request.request_text];
     for (const key of Object.keys(request.local_context)) request.local_context[key] = unique(request.local_context[key]);
+    const alreadyObserved = observations.some((item) => intersection(item.source_span, request.source_span) > 0);
+    if (!alreadyObserved && USER_OBSERVATION_CUE.test(norm(request.request_text))) {
+      observations.push({
+        id: `O${String(++observationIndex).padStart(2, '0')}`,
+        text: request.request_text,
+        source_span: { ...request.source_span },
+        source_atom_id: request.source_atom_id,
+        truth_state: 'USER_REPORTED_UNVERIFIED',
+        request_ids: [request.id],
+        inference: 'SOURCE_REPORTED_EVENT_WITH_REQUEST'
+      });
+    }
   }
   for (const key of Object.keys(globalContext)) globalContext[key] = unique(globalContext[key]);
   return { globalContext, observations };
@@ -162,19 +180,49 @@ function taskRequestScore(taskSpan, requestSpan) {
   if (taskCoverage < 0.15 && spanLength(taskSpan) > spanLength(requestSpan) * 3) return 0;
   return requestCoverage * 0.65 + taskCoverage * 0.35;
 }
-function mapParserTasks(tasks, requests, source) {
+function semanticContextForSpan(understanding, span) {
+  return (understanding?.semantic_atoms?.atoms || [])
+    .filter((atom) => CONTEXT_ATOM_TYPES.has(atom.type) && intersection(atom.source_span, span) > 0)
+    .map((atom) => ({ id: atom.id, type: atom.type, text: atom.text, source_span: atom.source_span }));
+}
+function syntheticDocumentTask(task, span, source) {
+  const observableSource = String(task?.observable_material?.source || '');
+  const provenance = Object.values(task?.field_provenance || {}).flat().map((item) => String(item?.source || ''));
+  const wholeDocument = source.length > 0 && span.start === 0 && span.end === source.length;
+  return wholeDocument && (observableSource === 'ORIGINAL_QUESTION' || provenance.includes('STANDALONE_API_AUTO_MATERIAL'));
+}
+function mapParserTasks(tasks, requests, source, understanding = null) {
   const mapped = [];
   const dropped = [];
+  const absorbed = [];
   for (const task of tasks || []) {
     const span = sourceSpanForTask(task, source);
     if (!span) { dropped.push({ task_id: task.id, reason: 'NO_SOURCE_SPAN' }); continue; }
+    if (requests.length > 1 && syntheticDocumentTask(task, span, source)) {
+      absorbed.push({ task_id: task.id, reason: 'SYNTHETIC_DOCUMENT_SCOPE_REPLACED_BY_CASE_GRAPH', source_span: span });
+      continue;
+    }
     let owner = null;
     let score = 0;
     for (const request of requests) {
       const next = taskRequestScore(span, request.source_span);
       if (next > score) { score = next; owner = request; }
     }
-    if (!owner) { dropped.push({ task_id: task.id, reason: 'BROAD_OR_UNMAPPED_SOURCE_SPAN', source_span: span }); continue; }
+    if (!owner) {
+      const contextAtoms = semanticContextForSpan(understanding, span);
+      if (contextAtoms.length) {
+        absorbed.push({
+          task_id: task.id,
+          reason: 'SEMANTIC_CONTEXT_NOT_INDEPENDENT_REQUEST',
+          source_span: span,
+          semantic_atom_ids: contextAtoms.map((atom) => atom.id),
+          semantic_atom_types: unique(contextAtoms.map((atom) => atom.type))
+        });
+      } else {
+        dropped.push({ task_id: task.id, reason: 'BROAD_OR_UNMAPPED_SOURCE_SPAN', source_span: span });
+      }
+      continue;
+    }
     owner.parser_task_ids = unique([...owner.parser_task_ids, task.id]);
     const sourceSemantic = owner.objectives?.[0] || owner.request_text;
     const previousProvenance = task.field_provenance || {};
@@ -201,7 +249,7 @@ function mapParserTasks(tasks, requests, source) {
       score
     });
   }
-  return { mapped, dropped };
+  return { mapped, dropped, absorbed };
 }
 function recoveredTask(request, id) {
   const ctx = request.local_context || {};
@@ -309,7 +357,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
   const { globalContext, observations } = attachSemanticOwnership(understanding, requests);
   const packet = prepared.analysis_task_packet;
   const originalTasks = Array.isArray(packet.tasks) ? packet.tasks : [];
-  const { mapped, dropped } = mapParserTasks(originalTasks, requests, source);
+  const { mapped, dropped, absorbed } = mapParserTasks(originalTasks, requests, source, understanding);
   let nextNumber = nextTaskNumber(originalTasks);
   const tasks = mapped.map((row) => ({ ...row.task }));
   for (const request of requests) {
@@ -364,6 +412,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
     parser_task_mapping: {
       original_task_ids: originalTasks.map((task) => task.id),
       retained_task_ids: mapped.map((row) => row.task.id),
+      absorbed_tasks: absorbed,
       dropped_tasks: dropped,
       recovered_request_ids: requests.filter((request) => !mapped.some((row) => row.owner.id === request.id)).map((request) => request.id)
     }
@@ -410,6 +459,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
         schema: model.schema,
         request_count: requests.length,
         retained_parser_tasks: mapped.length,
+        absorbed_parser_tasks: absorbed.length,
         dropped_parser_tasks: dropped.length,
         recovered_requests: model.parser_task_mapping.recovered_request_ids,
         source_length: source.length
