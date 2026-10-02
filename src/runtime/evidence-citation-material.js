@@ -1,6 +1,7 @@
 'use strict';
 
 const { renderMultiJudgmentMain8 } = require('./multi-judgment-main8-renderer');
+const { normalizeMultiJudgmentPublicMaterial } = require('./multi-judgment-public-material-normalizer');
 
 const SECTION_KEYS = Object.freeze([
   '01_purpose','02_premise','03_facts','04_crisis',
@@ -180,7 +181,10 @@ function renderEvidenceTrailer(citationMaterial) {
 function attachEvidenceCitations(out = {}) {
   if (!out?.result?.judgment || !out?.material?.text) return out;
   const lang = String(out.result.judgment.output_language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
-  const multiMaterial = renderMultiJudgmentMain8(out.result.judgment, out.result);
+  const renderedMultiMaterial = renderMultiJudgmentMain8(out.result.judgment, out.result);
+  const multiMaterial = renderedMultiMaterial
+    ? normalizeMultiJudgmentPublicMaterial(renderedMultiMaterial, out.result.judgment)
+    : null;
   const baseMaterial = multiMaterial || out.material;
   const evidenceCitations = buildEvidenceCitationMaterial(out.result);
   const main8Text = annotateMain8Text(baseMaterial.text, evidenceCitations, lang);
