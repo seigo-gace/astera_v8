@@ -1,0 +1,88 @@
+name: Universal Judgment Verify
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  universal-judgment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build real Japanese Parser HTTP runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/seigo-gace/Deterministic-Japanese-Parser-MCP.git /tmp/djpmcp-http-src
+          cd /tmp/djpmcp-http-src
+          git fetch --depth 1 origin 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          git checkout --detach 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          docker build -f Dockerfile.http -t djpmcp-http-universal-ci .
+          docker run -d --rm \
+            --name djpmcp-http-universal-ci \
+            -p 127.0.0.1:8765:8765 \
+            -e DJPMCP_HTTP_API_KEY=ci-only-key \
+            -e DJPMCP_HTTP_ALLOWED_HOSTS=127.0.0.1:8765,localhost:8765 \
+            djpmcp-http-universal-ci
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8765/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs djpmcp-http-universal-ci
+          exit 1
+
+      - name: Run universal judgment semantic gate
+        id: universal
+        continue-on-error: true
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
+          ASTERA_UNIVERSAL_ARTIFACT_ROOT: artifacts/universal-judgment-v1
+        shell: bash
+        run: |
+          set +e
+          npm run verify:universal-judgment
+          rc=$?
+          mkdir -p artifacts/universal-judgment-v1
+          printf '%s\n' "$rc" > artifacts/universal-judgment-v1/exit-code.txt
+          exit "$rc"
+
+      - name: Upload universal judgment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: universal-judgment-v1-${{ github.sha }}
+          path: artifacts/universal-judgment-v1
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce universal judgment gate result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rc="$(cat artifacts/universal-judgment-v1/exit-code.txt 2>/dev/null || printf '2')"
+          if [ "$rc" != "0" ]; then
+            echo "Universal Judgment Gate failed with exit code $rc. Inspect the uploaded artifact."
+            exit "$rc"
+          fi
+
+      - name: Stop Japanese Parser HTTP runtime
+        if: always()
+        run: docker rm -f djpmcp-http-universal-ci >/dev/null 2>&1 || true
