@@ -216,7 +216,7 @@ function atomTypesFor(text) {
   if (/(?:stakeholder|利害関係者|利用者|顧客|患者|住民|従業員)/iu.test(value)) out.push('STAKEHOLDER');
   if (/\d+(?:\.\d+)?\s*(?:%|％|件|人|回|日|時間|分|秒|円|万円|台|個|社|本|枚|ms|s\b)/iu.test(value)) out.push('QUANTITATIVE_VALUE');
   if (/(?:危険|リスク|\brisk\b|\bharm\b|failure\s+mode|故障)/iu.test(value)) out.push('RISK_SIGNAL');
-  if (/(?:未確認|未確定|未成立|不明|\bunknown\b|\bunresolved\b|not\s+yet|\bpending\b)/iu.test(value)) out.push('UNRESOLVED');
+  if (/(?:未確認|未確定|未成立|未完了|未終了|未解決|不明|まだ[^。！？!?]{0,80}(?:終わっていない|完了していない|済んでいない|終了していない|解決していない|確定していない|確認できていない)|\bunknown\b|\bunresolved\b|not\s+yet|\bpending\b|(?:has|have)\s+not\s+been\s+(?:finished|completed|resolved|confirmed|verified)|(?:is|are)\s+not\s+(?:finished|complete|completed|resolved|confirmed|verified))/iu.test(value)) out.push('UNRESOLVED');
   if (/(?:上記|前述|それ|これ|同じ|\bprevious\b|\babove\b|\bthat\b|\bthose\b)/iu.test(value)) out.push('REFERENCE');
   if (!out.includes('OBSERVATION') && /(?:である|です|だった|\bwas\b|\bis\b|\bare\b)/iu.test(value) && !isRequestText(value)) out.push('CLAIM');
   return [...new Set(out)];
