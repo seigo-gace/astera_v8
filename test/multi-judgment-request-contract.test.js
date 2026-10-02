@@ -73,6 +73,7 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(packet.tasks[2].purpose, /線/);
     assert.ok((packet.case_model.observations || []).some((item) => /画像/.test(item.text) && /線/.test(item.text)));
     const [r1, r2, r3] = packet.case_model.judgment_requests;
+    assert.deepEqual([r1.external_evidence_requested, r2.external_evidence_requested, r3.external_evidence_requested], [false, false, false]);
     assert.ok((r2.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r2.local_context, null, 2));
     assert.ok(!(r1.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r1.local_context, null, 2));
     assert.ok(!(r3.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r3.local_context, null, 2));
@@ -101,6 +102,10 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(sections[5], /R01[\s\S]*判断に必要な確認材料/u);
     assert.match(sections[5], /R02[\s\S]*実装箇所・接続点/u);
     assert.match(sections[5], /R03[\s\S]*正確な再現条件/u);
+    assert.match(sections[6], /R01:[^\n]*外部Evidenceを明示要求していない/u);
+    assert.match(sections[6], /R02:[^\n]*外部Evidenceを明示要求していない/u);
+    assert.match(sections[6], /R03:[^\n]*外部Evidenceを明示要求していない/u);
+    assert.doesNotMatch(sections[6], /R0[123]:[^\n]*(?:外部根拠は成立していない|外部確認は未実行)/u);
     assert.match(sections[7], /R01[\s\S]*現在状態/u);
     assert.match(sections[7], /R02[\s\S]*実装箇所・接続点/u);
     assert.match(sections[7], /R03[\s\S]*正確な再現条件/u);
