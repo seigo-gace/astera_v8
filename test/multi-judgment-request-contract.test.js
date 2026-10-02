@@ -72,10 +72,21 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(packet.tasks[2].purpose, /画像/);
     assert.match(packet.tasks[2].purpose, /線/);
     assert.ok((packet.case_model.observations || []).some((item) => /画像/.test(item.text) && /線/.test(item.text)));
+    assert.ok((packet.case_model.global_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(packet.case_model.global_context, null, 2));
     assert.equal(out.result.five_stage.tasks.length, 3);
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     const rendered = String(out.material.main8_text || out.material.text || '');
-    assert.doesNotMatch(rendered, /INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=/u);
+    assert.equal((rendered.match(/^---$/gm) || []).length, 7, rendered);
+    assert.match(rendered, /1件ではなく、3件の判断要求/);
+    assert.match(rendered, /R01[^\n]*見せるもの/);
+    assert.match(rendered, /R02[^\n]*オプション/);
+    assert.match(rendered, /R02[^\n]*オンにしてください/);
+    assert.match(rendered, /R03[^\n]*画像/);
+    assert.match(rendered, /R03[^\n]*線/);
+    assert.match(rendered, /各要求を別Taskとして分析/);
+    assert.match(rendered, /利用者報告・外部未検証/);
+    assert.match(rendered, /要求ごとに根拠状態を分離/);
+    assert.doesNotMatch(rendered, /INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION/u);
   } finally {
     await engine.destroy();
   }
