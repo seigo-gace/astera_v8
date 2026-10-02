@@ -89,7 +89,7 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(rendered, /R03[^\n]*線/);
     assert.match(rendered, /判断要求R##|各判断要求/u);
     assert.match(rendered, /利用者報告・外部未検証/);
-    assert.match(rendered, /根拠成立状態.*判断要求|判断要求ごと.*根拠/u);
+    assert.match(rendered, /要求ごとに根拠状態を分離/u);
     assert.doesNotMatch(rendered, /INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION/u);
   } finally {
     await engine.destroy();
