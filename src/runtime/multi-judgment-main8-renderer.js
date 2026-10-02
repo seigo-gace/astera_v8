@@ -107,6 +107,25 @@ function operationCounterMaterial(action, lang) {
   };
   return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? ja.analyze : en.analyze);
 }
+function comparisonMissingForDimension(dimension, lang) {
+  const value = clean(dimension);
+  if (lang === 'ja') {
+    if (/作業時間|工数|時間|期間|納期/u.test(value)) return '候補ごとの1件あたり作業時間、レビュー時間、修正時間';
+    if (/法務|契約|規約|コンプライアンス|legal/iu.test(value)) return '候補ごとの法務確認結果、問題になる条項・表現、未解決論点';
+    if (/利用者理解|理解度|可読|分かり|ユーザー|user/iu.test(value)) return '対象利用者の理解度、問い合わせ網羅率、重複、読みやすさを同じ条件で比較した結果';
+    if (/費用|コスト|価格|料金/u.test(value)) return '候補ごとの総費用と内訳を同じ前提で算出した値';
+    if (/性能|速度|latency|throughput|精度/iu.test(value)) return '同一条件で測定した候補別の実測値と測定条件';
+    if (/安全|リスク|risk/iu.test(value)) return '候補ごとの発生条件、影響範囲、回避条件、未確認事項';
+    return `「${value}」を候補間で同じ条件で比較できる具体値・観測結果`;
+  }
+  if (/time|effort|duration|deadline/iu.test(value)) return 'per-item work time, review time, and rework time for each candidate';
+  if (/legal|policy|contract|compliance/iu.test(value)) return 'legal review result per candidate, relevant wording or clauses, and unresolved legal points';
+  if (/understand|readab|user/iu.test(value)) return 'measured user understanding, coverage, duplication, and readability under the same conditions';
+  if (/cost|price|fee/iu.test(value)) return 'total cost and cost breakdown for each candidate under the same assumptions';
+  if (/performance|speed|latency|throughput|accuracy/iu.test(value)) return 'candidate measurements under identical benchmark conditions';
+  if (/risk|safety/iu.test(value)) return 'trigger conditions, impact, mitigations, and unresolved items per candidate';
+  return `concrete measurements for “${value}” under the same comparison conditions`;
+}
 function overlaps(left = {}, right = {}) {
   const start = Math.max(Number(left.start || 0), Number(right.start || 0));
   const end = Math.min(Number(left.end || 0), Number(right.end || 0));
@@ -319,7 +338,7 @@ function section05(model, groups, lang) {
   return lines.join('\n');
 }
 function section06(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在材料・不足材料・比較可能要素を出す' : 'Even without A/B candidates, show available, missing, and comparable material per judgment request'}:`];
+  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在分かること・まだ言えないこと・追加で必要な材料を分ける' : 'Even without A/B candidates, separate what is known, what cannot yet be concluded, and what additional material is required for each judgment request'}:`];
   for (const request of model.judgment_requests || []) {
     const taskResults = groups.get(request.id) || [];
     const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
@@ -327,13 +346,27 @@ function section06(model, groups, lang) {
     const missing = groupMissing(taskResults);
     const comparison = groupComparisonMaterial(taskResults);
     const localContext = requestContextLines(request, lang);
+    const available = unique([...observations, ...facts]);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${sanitizePublicValue(request.request_text)}`);
     if (localContext.length) lines.push(`    - ${lang === 'ja' ? '要求固有条件' : 'Request-specific conditions'}: ${localContext.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? '現在ある材料' : 'Material available now'}: ${unique([...observations, ...facts]).join(' / ') || (lang === 'ja' ? '要求本文のみ。現在実装・発生条件は未確認。' : 'Request text only; current implementation and trigger conditions are unverified.')}`);
+    lines.push(`    - ${lang === 'ja' ? '現在分かること' : 'What is currently known'}: ${available.join(' / ') || (lang === 'ja' ? '要求本文と明示条件は保持しているが、現在実装・発生条件・原因は未確認。' : 'The request and explicit conditions are preserved, but current implementation, trigger conditions, and causes remain unverified.')}`);
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? 'まだ不足している材料' : 'Material still missing'}: ${missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang)}`);
+    if (String(request.action || '') === 'compare') {
+      const dimensions = comparison.dimensions.length ? comparison.dimensions : [];
+      const unknown = lang === 'ja'
+        ? `${dimensions.length ? dimensions.join('・') : '各比較軸'}について、入力中の件数・数量差だけでは候補の優劣、品質、安全性、法務上の妥当性をまだ確定できない。`
+        : `For ${dimensions.length ? dimensions.join(', ') : 'the comparison dimensions'}, input counts or quantities alone cannot establish superiority, quality, safety, or legal validity.`;
+      const required = dimensions.length
+        ? dimensions.map((dimension) => comparisonMissingForDimension(dimension, lang))
+        : [operationMissingMaterial(request.action, lang)];
+      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${unknown}`);
+      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${unique([...missing, ...required]).join(' / ')}`);
+    } else {
+      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${lang === 'ja' ? '現在状態・原因・実装経路・完了条件を確認していないため、要求を満たしているか、どの変更が必要かはまだ確定できない。' : 'Current state, causes, implementation path, and completion conditions have not been verified, so compliance and required changes cannot yet be concluded.'}`);
+      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang)}`);
+    }
   }
   return lines.join('\n');
 }
