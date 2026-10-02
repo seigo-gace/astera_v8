@@ -266,6 +266,25 @@ consumer_scope = HUMAN_AND_AI_SAME_MATERIAL
 
 Machine-readable Evidence metadata may accompany that same material so an App or another AI can replay Source verification without changing the meaning of the judgment material.
 
+## Live failure authority and correction boundary
+
+The first exact-SHA isolated VPS run for this Case Model failed at `e19dfa72beeeaa73728f911607461d7c70c0e4b5` with:
+
+```text
+MULTI_CHECK=FAIL:request_count_material,per_request_evidence,r02_substantive_material,r03_substantive_material
+GATE=FAIL_MULTI_JUDGMENT
+```
+
+The live output exposed defects that source-only tests had not yet closed:
+
+- a Parser-only `検討しろ` subtask was surfaced as a fourth user judgment request;
+- internal Task Evidence need was being interpreted as user-requested external Evidence for the option/image requests;
+- non-comparison requests still received a broken generic missing-material placeholder;
+- a generic internal phrase `Alternative evidence angle` leaked into public counter-material;
+- option/image requests did not expose enough operation-specific information requirements for a human or AI to continue judgment reliably.
+
+The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects. Source tests and CI must pass on the exact correction revision, and the isolated VPS gate must then pass the same original input before runtime completion is claimed.
+
 ## Regression authority
 
 The regression suite covers:
