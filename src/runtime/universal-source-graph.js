@@ -10,7 +10,8 @@ const OBJECTIVE_JA = /(?:^|[【\s])(第?[一二三四五六七八九十0-9]+(?:�
 const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*(?::|\bis\s+to\b)/iu;
 const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
-const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
+const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
+const PURE_PROHIBITION = /(?:しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -186,6 +187,7 @@ function isRequestText(text) {
   if (objectiveCue(value)) return true;
   if (FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value)) return true;
   if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement)/iu.test(value)) return false;
+  if (FORMAL_REQUEST_TAIL_JA.test(value)) return true;
   return REQUEST_JA.test(value) || REQUEST_EN.test(value);
 }
 
