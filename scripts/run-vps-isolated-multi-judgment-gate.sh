@@ -57,6 +57,17 @@ for a,b in need:
 if '1件ではなく、3件の判断要求' not in main: bad.append('request_count_material')
 if '要求ごとに根拠状態を分離' not in main: bad.append('per_request_evidence')
 if not re.search(r'オフ.+(?:条件|オンにしてください)|(?:条件).+オフ',main,re.S): bad.append('toggle_condition')
+if len(sections)==8:
+    purpose,premise,facts,risks,counter,material,evidence,nextwork=sections
+    if not all(token in purpose for token in ('R01','R02','R03')): bad.append('purpose_request_enumeration')
+    if not re.search(r'R03[\s\S]*(?:利用者報告|画像)[\s\S]*線',facts): bad.append('r03_observation_boundary')
+    if not re.search(r'R01[\s\S]*(?:現在状態|表示|利用者影響|見せる)',material): bad.append('r01_substantive_material')
+    if not re.search(r'R02[\s\S]*(?:実装箇所|接続点|イベント|操作経路|現在の挙動)',material): bad.append('r02_substantive_material')
+    if not re.search(r'R02[\s\S]*オフ[\s\S]*オンにしてください',material): bad.append('r02_local_condition_material')
+    if not re.search(r'R03[\s\S]*(?:再現条件|発生源|生成元|CSS|style|layout|コンポーネント)',material,re.I): bad.append('r03_substantive_material')
+    for rid in ('R01','R02','R03'):
+        if rid not in nextwork: bad.append(f'{rid.lower()}_nextwork_missing')
+    if not re.search(r'R01[\s\S]*R02[\s\S]*R03',evidence): bad.append('request_evidence_partition')
 leak=re.compile(r'INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|candidate_id|binding_id',re.I)
 if leak.search(main): bad.append('internal_template_leak')
 if ev.get('schema_version')!='astera.evidence-citation.v1': bad.append('evidence_schema')
