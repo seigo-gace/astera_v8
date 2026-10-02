@@ -150,7 +150,7 @@ Projection rule:
 1. Detect source-backed judgment requests.
 2. Compare them against Parser-produced Tasks using source-span representation.
 3. If all requests are distinctly represented, preserve the Parser Task graph, dependencies, branches, and execution waves.
-4. If the Parser collapses several source-backed requests into fewer Tasks, recover the missing judgment units from the original source spans.
+4. If the Parser collapses several requests into fewer Tasks, recover the missing judgment units from the original source spans.
 5. Recovery creates clean Tasks from the affected request spans; request-specific material from the Parser's first Task is not copied into every recovered Task.
 6. Recovery is traceable through `multi_judgment_recovery` and `representation_mode`.
 
@@ -285,7 +285,7 @@ The live output exposed defects that source-only tests had not yet closed:
 
 The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects.
 
-Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Documentation-only successors through `616de3c412e332bc208ac78443ef7c883ac5f7e4` also passed exact-head CI. Repaired source head `768f75e8255374a9514b77343e896aa7c185bbdc` passed Astera Verify #453 / run `36973743504`, including source tests, Initial Fast Path hard gate, real Japanese Parser build/release gate, real HTTP smoke, and unseen-effect release gate. Documentation checkpoint `745a293062924ce69c221bf0bad91eba586d7269` then passed Astera Verify #454 / run `36976502437` with the same complete workflow. The isolated exact-head VPS multi-judgment gate is the only remaining runtime authority for this correction.
+Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Documentation-only successors through `616de3c412e332bc208ac78443ef7c883ac5f7e4` also passed exact-head CI. Repaired source head `768f75e8255374a9514b77343e896aa7c185bbdc` passed Astera Verify #453 / run `36973743504`, including source tests, Initial Fast Path hard gate, real Japanese Parser build/release gate, real HTTP smoke, and unseen-effect release gate. Documentation checkpoint `745a293062924ce69c221bf0bad91eba586d7269` passed Astera Verify #454 / run `36976502437`. Current exact head `cee719541026858856dfda749fd6bb7c8900ce40` passed Astera Verify #455 / run `36976805715` with the same complete workflow. The isolated exact-head VPS multi-judgment gate is the only remaining runtime authority for this correction.
 
 ## Regression authority
 
