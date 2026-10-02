@@ -60,6 +60,10 @@ These implement dependency validation, Wave ordering, bounded concurrency, overl
 
 Detailed reference: [`docs/modules/JUDGMENT_MATERIAL_GENERATION.md`](docs/modules/JUDGMENT_MATERIAL_GENERATION.md)
 
+Approved redesign target (implementation pending): [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
+
+The target redesign covers arbitrary-input Source Graph preservation, universal semantic atoms, Case Graph v2, Japanese/English parity, G01-G38 judgment-material sufficiency, evidence topology, GitHub-self-executable semantic verification, Full Runtime tracing and work-conserving DAG scheduling. It is a design authority, not proof that current source already implements those contracts.
+
 ---
 
 ## 3. Evidence Search
@@ -179,6 +183,14 @@ scripts/                                validation / story / live / smoke runner
 docs/                                   documentation
 ```
 
+Cross-cutting target design:
+
+```text
+docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md
+```
+
+This target design is where research-backed redesign rules, semantic quality gates, language/length/genre coverage requirements and Full Runtime performance architecture are maintained while implementation is pending.
+
 Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md), not duplicated here.
 
 ---
@@ -193,6 +205,8 @@ Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs
 5. README.md / STRUCTURE.md / user-facing references
 6. archive / historical artifacts
 ```
+
+`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved redesign target for the current change unit. Until its implementation is reconciled into current contracts/code/tests and the canonical architecture, it must be read as **target design / implementation pending**, never as evidence that the live product already satisfies it.
 
 Historical or generated material must not silently redefine current architecture.
 
