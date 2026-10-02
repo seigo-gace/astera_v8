@@ -1,6 +1,6 @@
 # Astera v8 — Canonical System Architecture
 
-Updated: 2026-09-26  
+Updated: 2026-10-03  
 Repository: `seigo-gace/astera_v8`
 
 > This document is the canonical repository architecture reference for Astera v8.
@@ -29,6 +29,31 @@ Input
 ```
 
 The independent Evaluation / Verification Module may additionally evaluate an artifact, implementation, test, operation or research result against explicit Profile / Measurements / Evidence.
+
+### 1.1 Current approved redesign target
+
+The current change unit has an approved redesign target:
+
+[`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
+
+Status of that document is **APPROVED TARGET DESIGN / IMPLEMENTATION PENDING**.
+
+It extends the Judgment Material Generation target toward:
+
+- arbitrary input form rather than document-type-specific support;
+- Japanese/English parity;
+- clean/noisy/long/multi-request input preservation;
+- lossless Source Graph and universal semantic atoms;
+- Request/Objective/Task separation through Case Graph v2;
+- G01-G38 domain-material sufficiency rather than classification-only success;
+- Claim/Evidence topology and strict provenance;
+- question-specific Main8 material sufficiency;
+- work-conserving dependency execution and Full Runtime tracing;
+- GitHub-self-executable semantic/performance verification.
+
+The target document does **not** prove that the current source implements these contracts. Until implementation, tests, CI and exact-runtime evidence are reconciled, current code behavior remains governed by the current contracts described in this canonical architecture.
+
+The product-level completion criterion for the redesign is output quality: eight headings, a selected Lens, generated Tasks, HTTP 200 or green CI alone are not sufficient. The Main8 output must contain the material actually required for the receiving Human/Main AI to judge the specific question without fabricated evidence or hidden semantic loss.
 
 ---
 
@@ -90,9 +115,13 @@ Shared utilities, Parser, Logging, LLM adapters and deployment services are not 
 
 Detailed reference: [`modules/JUDGMENT_MATERIAL_GENERATION.md`](modules/JUDGMENT_MATERIAL_GENERATION.md)
 
+Target redesign: [`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
+
 ### 4.1 Purpose
 
 Convert an input into deterministic Task / Claim / Evidence Requirement and produce Main8 material while preserving uncertainty and external final decision authority.
+
+The approved redesign further requires that arbitrary input be preserved into source-backed semantic units before Task projection, so a long or multi-purpose input is not collapsed into one generic Task or one global purpose.
 
 ### 4.2 Responsibilities
 
@@ -121,6 +150,18 @@ Convert an input into deterministic Task / Claim / Evidence Requirement and prod
 - Human Reader presentation signals without fact mutation
 - Main8 framing
 
+Target-design additions, not yet implementation proof:
+
+- lossless Source Graph preservation
+- universal semantic atom projection
+- Request/Objectives/internal-Task separation
+- Japanese/English semantic parity
+- operation + G01-G38 material sufficiency
+- Claim/Evidence sub-question topology
+- work-conserving DAG scheduling
+- Full Runtime stage tracing
+- GitHub-self-executable semantic/performance corpus gates
+
 ### 4.3 Prohibited responsibilities
 
 - Final decision
@@ -136,6 +177,8 @@ Convert an input into deterministic Task / Claim / Evidence Requirement and prod
 ## 5. Deterministic Task execution
 
 Task decomposition is not merely a list split. Multi-Task requests are executed as a validated dependency graph.
+
+Current implementation:
 
 ```text
 Task Graph
@@ -160,6 +203,8 @@ Invariants:
 
 This execution control is part of Judgment Material Generation runtime correctness, not a fourth module.
 
+The approved target redesign preserves these dependency-safety invariants but replaces coarse whole-Wave waiting as execution authority with a work-conserving ready-queue DAG scheduler after implementation proof. Wave identity may remain trace metadata. Worker Threads remain for CPU-intensive JS; HTTP Parser/Evidence waits remain async I/O and are not moved to Workers merely for supposed speedup.
+
 ---
 
 ## 6. Module 2 — Evidence Search
@@ -183,6 +228,8 @@ Route A provides domain authority and specialist records.
 Route B provides current and generally searchable information.
 
 They are complementary, not duplicate copies of the same search.
+
+The approved redesign may generate several evidence sub-questions for one complex Claim when direct verification is insufficient. Those sub-questions are internal retrieval topology nodes, not new user Requests.
 
 ### 6.3 Responsibilities
 
@@ -210,6 +257,8 @@ A retrieved Candidate is not automatically Evidence.
 A result that does not satisfy the final adoption contract must not expose candidates as adopted evidence at the Module boundary.
 
 No evidence must never be silently promoted to confirmed fact.
+
+Evidence remains attributable to original Claim/Request provenance. Evidence from one Request must not silently satisfy another unrelated Request.
 
 ### 6.5 Information Quality contract
 
@@ -427,6 +476,11 @@ Domain Lens does not:
 - admit Evidence
 - own Generic v2 scoring
 - produce a final decision
+- define the supported document types
+- define Request count
+- prove final Main8 material sufficiency merely by classifying the Genre correctly
+
+G01-G38 is domain-material routing, not product scope. Arbitrary document/input forms must be normalized before Lens routing.
 
 Generic Evaluation v2 is Profile / Measurements / Evidence based. Legacy v1 Domain Lens behavior must not be silently treated as a Generic v2 invariant.
 
@@ -469,6 +523,8 @@ Compare produces material, not ranking or winner selection.
 
 Main8 output preserves external-only decision authority and no normative decision generation.
 
+For the approved redesign, exactly eight sections remain mandatory but are not sufficient for semantic PASS. Request coverage, constraint preservation, Observation/Fact/Evidence boundaries, question-specific Risk/opposition/comparison material, missing-material accuracy, evidence attribution, public/internal separation and useful next verification must also satisfy the material-sufficiency contract.
+
 ---
 
 ## 14. Human Reader boundary
@@ -483,6 +539,8 @@ It must not mutate:
 - constraints
 - source authority
 - final decision
+
+Human and Main AI consume the same semantic judgment material. Machine metadata may accompany it but must not require a second interpretation of a different semantic answer.
 
 ---
 
@@ -505,6 +563,8 @@ Keep at least:
 - Generic evaluation invalid input
 - Generic evaluation failed
 - Generic evaluation hard block
+
+For the target redesign, Parser `PARTIAL`/`TIMEOUT` is not permission to collapse all long input into one synthetic full-input Task. Valid parsed material remains usable and uncovered Source Graph regions require bounded recovery.
 
 ---
 
@@ -560,6 +620,17 @@ Relevant proof includes:
 - required live gates
 - actual service bind/exposure verification
 
+The approved redesign adds proof requirements for:
+
+- Japanese/English semantic parity;
+- clean/noisy/1k/5k/10k+ multi-request preservation;
+- G01-G38 material sufficiency rather than classification-only checks;
+- semantic-gold corpus and metamorphic robustness;
+- PARTIAL/TIMEOUT recovery without whole-input collapse;
+- Full Runtime phase trace and critical-path evidence;
+- GitHub-self-executable semantic/performance artifacts;
+- ready-queue scheduling correctness after implementation.
+
 `NOT RUN` is not `PASS`.
 
 ---
@@ -581,6 +652,13 @@ Do not introduce:
 - Recursive Generic Evaluator ↔ Evidence Search calls
 - Legacy v1 behavior silently relabeled as Generic v2
 - Paid provider/payment execution inside the deterministic free Evidence Search path
+- document-type-specific hard-coded semantic branches
+- fixture-text-specific behavior
+- fixed Request count used as semantic policy
+- Parser failure mapped to one synthetic full-input Task
+- Fast Path latency presented as Full Runtime latency
+- Worker Threads used as an I/O acceleration substitute
+- Master Terminal as the normal regression executor when GitHub CI can execute the same verification
 
 ---
 
@@ -595,6 +673,10 @@ Module details:
 - [`modules/JUDGMENT_MATERIAL_GENERATION.md`](modules/JUDGMENT_MATERIAL_GENERATION.md)
 - [`modules/EVIDENCE_SEARCH.md`](modules/EVIDENCE_SEARCH.md)
 - [`modules/EVALUATION_VERIFICATION.md`](modules/EVALUATION_VERIFICATION.md)
+
+Approved redesign target:
+
+- [`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
 
 HTTP details:
 
@@ -612,5 +694,7 @@ When repository documents conflict, use this order:
 4. Module-specific documents / API Reference
 5. README / STRUCTURE / user-facing references
 6. Historical documents / archive
+
+`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved target-design authority for the current redesign but remains explicitly **implementation pending**. It does not override current implementation facts until reconciled and verified.
 
 Product-facing documentation describes the completed Product Contract. Development audit findings and unfinished implementation deltas are tracked separately from this document.
