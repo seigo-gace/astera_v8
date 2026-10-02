@@ -269,10 +269,19 @@ function buildSemanticAtoms(sourceGraph) {
       const key = `${type}:${node.source_span.start}:${node.source_span.end}`;
       if (seen.has(key)) continue;
       if (type === 'REQUEST') {
-        const contained = atoms.find((atom) => atom.type === 'REQUEST'
+        const contained = atoms.filter((atom) => atom.type === 'REQUEST'
           && atom.source_span.start >= node.source_span.start
           && atom.source_span.end <= node.source_span.end);
-        if (contained) continue;
+        if (contained.length === 1 && node.kind === 'sentence') {
+          const existing = contained[0];
+          existing.operation = operationFor(node.text);
+          existing.source_node_id = node.id;
+          existing.source_span = { ...node.source_span };
+          existing.text = source.slice(node.source_span.start, node.source_span.end);
+          existing.normalized_text = node.normalized_text;
+          continue;
+        }
+        if (contained.length) continue;
       }
       seen.add(key);
       atoms.push({
