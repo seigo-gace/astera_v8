@@ -9,6 +9,7 @@ const {
   observeDocumentMaterial,
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
+const { applyUniversalCaseGraph } = require('./runtime/universal-case-graph');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
 const { normalizeMultiJudgmentPublicMaterial } = require('./runtime/multi-judgment-public-material-normalizer');
@@ -65,7 +66,10 @@ class AsteraEngine extends CanonicalAsteraEngine {
   async prepareRequest(input = {}) {
     const prepared = await super.prepareRequest(input);
     const normalized = ensureStandaloneDecisionMaterialRequest(prepared, input);
-    const recovered = recoverPartialParserMaterial(normalized, input);
+    const universal = applyUniversalCaseGraph(normalized, input);
+    const recovered = universal?.analysis_task_packet?.universal_case_graph?.applied === true
+      ? universal
+      : recoverPartialParserMaterial(universal, input);
     const caseNormalized = normalizeMultiJudgmentCase(recovered, input);
     return applyExplicitPurposeControl(caseNormalized, input.purpose);
   }
@@ -258,6 +262,7 @@ class AsteraEngine extends CanonicalAsteraEngine {
         ? { ...final.runtime, progressive: true, initial_duration_ms: initial.runtime.duration_ms }
         : final?.runtime
     };
+
     if (typeof executionContext.onRevision === 'function') {
       await executionContext.onRevision(revision);
     }
