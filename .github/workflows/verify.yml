@@ -25,7 +25,19 @@ jobs:
           node-version: "22"
 
       - name: Run source tests
-        run: npm run verify:source
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run verify:source 2>&1 | tee /tmp/astera-verify-source.log
+
+      - name: Upload source-test failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: astera-source-test-failure
+          path: /tmp/astera-verify-source.log
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Run Initial Fast Path performance hard gate
         run: npm run verify:performance
