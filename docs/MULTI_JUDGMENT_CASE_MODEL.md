@@ -285,7 +285,7 @@ The live output exposed defects that source-only tests had not yet closed:
 
 The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects.
 
-Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. The documentation checkpoint `e61b98c7f55cb8bab3635f2c4a50f32d2a70bfd7` passed Astera Verify #449 / run `36973017937`. The current exact branch head is the documentation-only successor `1c2d9ce7e410dfe44c6a29ddeab6c8364ad9b507`; its exact-head CI and isolated VPS gate remain separate authorities and must both pass before runtime completion is claimed.
+Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Subsequent documentation-only checkpoints also passed exact-head CI through `08bbe1c3c80acb24ceb30e4ba373b51a0390881e` / Astera Verify #451. The next exact-head isolated VPS gate remains the separate runtime authority; runtime completion is not claimed until that gate passes.
 
 ## Regression authority
 
