@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
-const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
+const AsteraEngine = require('../src/astera-engine');
 const { bootstrapRuntimeEnv } = require('../src/evidence-search/api/runtime-client');
 const {
   JapaneseParserMCPClient,
@@ -196,11 +196,12 @@ async function main() {
   }
 
   const parserClient = new JapaneseParserMCPClient({ mode: 'http', url, apiKey });
-  const engine = new CanonicalAsteraEngine({
+  const engine = new AsteraEngine({
     poolSize: 4,
     logger: silentLogger,
     japaneseParserClient: parserClient,
-    japaneseParserOptions: { mode: 'http', url, apiKey }
+    japaneseParserOptions: { mode: 'http', url, apiKey },
+    evidenceSearchClient: null
   });
 
   const results = [];
