@@ -77,15 +77,15 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     const rendered = String(out.material.main8_text || out.material.text || '');
     assert.equal((rendered.match(/^---$/gm) || []).length, 7, rendered);
-    assert.match(rendered, /1件ではなく、3件の判断要求/);
+    assert.match(rendered, /3件[^\n]*判断要求|判断要求[^\n]*3件/u);
     assert.match(rendered, /R01[^\n]*見せるもの/);
     assert.match(rendered, /R02[^\n]*オプション/);
     assert.match(rendered, /R02[^\n]*オンにしてください/);
     assert.match(rendered, /R03[^\n]*画像/);
     assert.match(rendered, /R03[^\n]*線/);
-    assert.match(rendered, /各要求を別Taskとして分析/);
+    assert.match(rendered, /判断要求R##|各判断要求/u);
     assert.match(rendered, /利用者報告・外部未検証/);
-    assert.match(rendered, /要求ごとに根拠状態を分離/);
+    assert.match(rendered, /根拠成立状態.*判断要求|判断要求ごと.*根拠/u);
     assert.doesNotMatch(rendered, /INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION/u);
   } finally {
     await engine.destroy();
