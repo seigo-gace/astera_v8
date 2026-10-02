@@ -80,7 +80,9 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.equal(out.result.five_stage.tasks.length, 3);
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     const rendered = String(out.material.main8_text || out.material.text || '');
+    const sections = rendered.split('\n---\n');
     assert.equal((rendered.match(/^---$/gm) || []).length, 7, rendered);
+    assert.equal(sections.length, 8, rendered);
     assert.match(rendered, /3件[^\n]*判断要求|判断要求[^\n]*3件/u);
     assert.match(rendered, /R01[^\n]*見せるもの/);
     assert.match(rendered, /R02[^\n]*オプション/);
@@ -90,6 +92,21 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(rendered, /判断要求R##|各判断要求/u);
     assert.match(rendered, /利用者報告・外部未検証/);
     assert.match(rendered, /要求ごとに根拠状態を分離/u);
+    assert.match(sections[2], /O01:[^\n]*画像[^\n]*線[^\n]*利用者報告・外部未検証/u);
+    assert.match(sections[2], /R03:\s*確認済み事実として追加できる材料はまだない。/u);
+    assert.doesNotMatch(sections[2], /R03:\s*画像を投稿した/u);
+    assert.match(sections[4], /R01[\s\S]*必要情報まで隠さない/u);
+    assert.match(sections[4], /R02[\s\S]*OFF・失敗・未設定/u);
+    assert.match(sections[4], /R03[\s\S]*原因を残していない/u);
+    assert.match(sections[5], /R01[\s\S]*判断に必要な確認材料/u);
+    assert.match(sections[5], /R02[\s\S]*実装箇所・接続点/u);
+    assert.match(sections[5], /R03[\s\S]*正確な再現条件/u);
+    assert.match(sections[7], /R01[\s\S]*現在状態/u);
+    assert.match(sections[7], /R02[\s\S]*実装箇所・接続点/u);
+    assert.match(sections[7], /R03[\s\S]*正確な再現条件/u);
+    assert.ok(sections[7].indexOf('R03:') < sections[7].indexOf('ある判断要求が未確認'), sections[7]);
+    assert.ok(sections[7].indexOf('正確な再現条件') < sections[7].indexOf('ある判断要求が未確認'), sections[7]);
+    assert.doesNotMatch(rendered, /Alternative evidence angle|の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する|反例\s*条件不成立\s*例外|肯定形|否定形/u);
     assert.doesNotMatch(rendered, /INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION/u);
   } finally {
     await engine.destroy();
