@@ -10,6 +10,7 @@ const {
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
+const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
 const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
@@ -64,7 +65,8 @@ class AsteraEngine extends CanonicalAsteraEngine {
     const prepared = await super.prepareRequest(input);
     const normalized = ensureStandaloneDecisionMaterialRequest(prepared, input);
     const recovered = recoverPartialParserMaterial(normalized, input);
-    return applyExplicitPurposeControl(recovered, input.purpose);
+    const caseNormalized = normalizeMultiJudgmentCase(recovered, input);
+    return applyExplicitPurposeControl(caseNormalized, input.purpose);
   }
 
   processInitial(input = {}, caller = { id: 'unknown' }) {
