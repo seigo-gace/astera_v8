@@ -82,10 +82,10 @@ if len(sections)==8:
     r3mat=nextwork.find('正確な再現条件')
     if footer < 0 or r3 < 0 or r3mat < 0 or not (r3 < r3mat < footer): bad.append('r03_nextwork_ownership')
     if not re.search(r'R01[\s\S]*R02[\s\S]*R03',evidence): bad.append('request_evidence_partition')
-    for rid in ('R02','R03'):
+    for rid in ('R01','R02','R03'):
         line=re.search(rf'^  - {rid}:.*$',evidence,re.M)
         if not line or '利用者は外部Evidenceを明示要求していない' not in line.group(0): bad.append(f'{rid.lower()}_external_evidence_intent')
-        if line and '外部根拠は成立していない' in line.group(0): bad.append(f'{rid.lower()}_internal_evidence_failure_promoted')
+        if line and re.search(r'外部根拠は成立していない|外部確認は未実行',line.group(0)): bad.append(f'{rid.lower()}_internal_evidence_failure_promoted')
 leak=re.compile(r'INSUFFICIENT_TRADE_OFF_MATERIAL|confirmed_claim_ids|support_evidence_refs|Task Wave|SearchExecution=|EvidenceQuality=|PARSER_|NO_EXECUTABLE_ACTION|candidate_id|binding_id',re.I)
 if leak.search(main): bad.append('internal_template_leak')
 if ev.get('schema_version')!='astera.evidence-citation.v1': bad.append('evidence_schema')
