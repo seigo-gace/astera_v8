@@ -51,7 +51,8 @@ function candidateLabelAllowed(label) {
 
 function extractObservableCandidates(text) {
   const labels = [];
-  for (const rawLine of norm(text).split('\n')) {
+  const value = norm(text);
+  for (const rawLine of value.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
     let match = line.match(/^\s*(?:[-*・●▪◦]|\d{1,2}[.)．]|#{1,6})\s*(?:\*\*)?([^：:\n*]{2,80}?)(?:\*\*)?\s*[：:]\s*\S/u);
@@ -60,7 +61,13 @@ function extractObservableCandidates(text) {
     const label = cleanCandidateLabel(match[1]);
     if (candidateLabelAllowed(label)) labels.push(label);
   }
-  return unique(labels).slice(0, 32);
+  for (const match of value.matchAll(/([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)と([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)(?=を|で|について|の|、|,|。|\s)/gu)) {
+    labels.push(match[1], match[2]);
+  }
+  for (const match of value.matchAll(/(?:^|[、,。\s])([A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案)(?=は|が|を|と|、|,|。|\s)/gu)) {
+    labels.push(match[1]);
+  }
+  return unique(labels.filter(candidateLabelAllowed)).slice(0, 32);
 }
 
 function claimSignal(line) {
@@ -88,6 +95,21 @@ function extractObservableClaimTexts(text) {
 function detectDimensions(text) {
   const value = norm(text);
   const dimensions = [];
+  const jaComparison = /[A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案と[A-Za-zＡ-Ｚａ-ｚ0-9０-９一-龠ぁ-んァ-ヶ]{1,24}案を([^。！？\n]{2,160}?)で(?:比較|比べ)/u.exec(value)
+    || /比較軸(?:は|:|=)\s*([^。！？\n]{2,160})/u.exec(value);
+  if (jaComparison?.[1]) {
+    for (const part of jaComparison[1].split(/\s*(?:と|、|,|・|\/|／)\s*/u)) {
+      const item = norm(part);
+      if (item) dimensions.push(item);
+    }
+  }
+  const enComparison = /(?:compare|evaluate)\b[^.!?\n]{0,160}?\b(?:by|on|across|in\s+terms\s+of)\s+([^.!?\n]{2,180})/iu.exec(value);
+  if (enComparison?.[1]) {
+    for (const part of enComparison[1].split(/\s*(?:,|;|\band\b|\/|\|)\s*/iu)) {
+      const item = norm(part);
+      if (item) dimensions.push(item);
+    }
+  }
   if (/(?:RAM|VRAM|GB|GiB|メモリ)/iu.test(value)) dimensions.push('メモリ要件');
   if (/(?:parameter|パラメータ|\b\d+(?:\.\d+)?B\b|MoE)/iu.test(value)) dimensions.push('モデル規模');
   if (/(?:tok(?:en)?s?\/s|TOPS|倍|benchmark|ベンチマーク|性能)/iu.test(value)) dimensions.push('性能・Benchmark条件');
