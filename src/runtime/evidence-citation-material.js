@@ -1,5 +1,7 @@
 'use strict';
 
+const { renderMultiJudgmentMain8 } = require('./multi-judgment-main8-renderer');
+
 const SECTION_KEYS = Object.freeze([
   '01_purpose','02_premise','03_facts','04_crisis',
   '05_opposition','06_comparison','07_evidence_status','08_reinstruction'
@@ -178,8 +180,10 @@ function renderEvidenceTrailer(citationMaterial) {
 function attachEvidenceCitations(out = {}) {
   if (!out?.result?.judgment || !out?.material?.text) return out;
   const lang = String(out.result.judgment.output_language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
+  const multiMaterial = renderMultiJudgmentMain8(out.result.judgment);
+  const baseMaterial = multiMaterial || out.material;
   const evidenceCitations = buildEvidenceCitationMaterial(out.result);
-  const main8Text = annotateMain8Text(out.material.text, evidenceCitations, lang);
+  const main8Text = annotateMain8Text(baseMaterial.text, evidenceCitations, lang);
   const evidenceText = renderEvidenceTrailer(evidenceCitations);
   const textWithEvidence = `${main8Text}\n${evidenceText}`;
   const judgment = { ...out.result.judgment, evidence_citations: evidenceCitations };
@@ -191,6 +195,7 @@ function attachEvidenceCitations(out = {}) {
     result: { ...out.result, judgment, evidence_citations: evidenceCitations },
     material: {
       ...out.material,
+      ...(multiMaterial || {}),
       text: textWithEvidence,
       main8_text: main8Text,
       evidence_text: evidenceText,
