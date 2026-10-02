@@ -4,8 +4,10 @@ const EXTERNAL_EVIDENCE_CUE = /(?:検証|事実確認|ファクトチェック|�
 const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:must\s+not|do\s+not|never)\b/iu;
 const UMBRELLA_MATERIAL = /(?:判断材料|decision\s+material)[^。！？!?]{0,100}(?:整理|まとめ|構造化|organize|structure)/iu;
 const REQUEST_CUE = /(?:して(?:ください|くれ|ほしい)?|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|レビュー(?:して|する|しろ|せよ)?|してください|please\b|should\b|need\s+to|must\b)/iu;
+const REQUEST_CONTINUATIVE_CUE = /(?:見直し|改善し|修正し|調整し|検討し|確認し|調査し|比較し|整理し|表示し|追加し|実装し|対応し|削除し|除去し|消し|外し|なくし)(?:て)?$/iu;
 const ISSUE_CUE = /(?:エラー|失敗|できない|表示されない|表示される|出る|でる|入る|はいる|崩れる|消える|残る|線|不具合|問題|error|fail|broken|unexpected|line\b|artifact)/iu;
 const PREVIOUS_REQUEST_SEQUENCE = /^(?:その後|次に|続いて|最後に)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:完了|終了|確認|成功|失敗)[^。！？!?]{0,30}(?:後|たら|れば)|(?:前(?:の|述)|直前|上記|それ|これ)[^。！？!?]{0,60}(?:してから|終わったら)/iu;
+const GLOBAL_SCOPE_CUE = /(?:全体|すべて|全て|全部|共通|各要求|全要求|各Task|各タスク|globally|across\s+all|all\s+requests|every\s+request)/iu;
 const CANONICAL_ACTIONS = new Set(['analyze','verify','compare','decide','improve','implement','integrate','migrate','remove','preserve','explain']);
 const SUPPORT_ACTIONS = new Set(['analyze','verify']);
 
@@ -43,7 +45,7 @@ function sentenceSpans(text) {
 function requestAction(text) {
   const value = norm(text);
   if (/(?:比較|比べ|compare|versus|\bvs\.?\b)/iu.test(value)) return 'compare';
-  if (/(?:削除|除去|なく(?:す|せ)|消(?:す|して|せ)|外(?:す|して|せ)|remove|delete|eliminate)/iu.test(value)) return 'remove';
+  if (/(?:削除|除去|なく(?:す|せ|し)|消(?:す|して|せ|し)|外(?:す|して|せ|し)|remove|delete|eliminate)/iu.test(value)) return 'remove';
   if (/(?:検証|事実確認|ファクトチェック|裏取り|監査|確認|調査|リサーチ|verify|validate|audit|research|investigate|check)/iu.test(value)) return 'verify';
   if (/(?:追加|実装|作成|構築|入れ(?:る|て|ろ)|付け(?:る|て|ろ)|設け(?:る|て|ろ)|表示(?:する|して|しろ)|implement|build|create|add|display|show)/iu.test(value)) return 'implement';
   if (/(?:改善|改良|修正|見直|直(?:す|して|せ)|調整|整理|improve|fix|refactor|adjust|organize)/iu.test(value)) return 'improve';
@@ -64,7 +66,8 @@ function requestText(spanText) {
 function isRequestSpan(text) {
   const value = norm(text);
   if (!value || PURE_PROHIBITION.test(value)) return false;
-  return REQUEST_CUE.test(value);
+  const trimmed = value.replace(/[。！？!?]+$/u, '');
+  return REQUEST_CUE.test(value) || REQUEST_CONTINUATIVE_CUE.test(trimmed);
 }
 function spanIntersection(left = {}, right = {}) {
   const start = Math.max(Number(left.start || 0), Number(right.start || 0));
@@ -79,6 +82,9 @@ function spanOverlapRatio(left = {}, right = {}) {
   if (!overlap) return 0;
   return overlap / Math.max(1, spanLength(right));
 }
+function spansOverlap(left = {}, right = {}) {
+  return spanIntersection(left, right) > 0;
+}
 function sourceSpanForTask(task = {}, question = '') {
   const span = task.source_span || task.original_span || {};
   const start = Number(span.start);
@@ -92,9 +98,71 @@ function sourceSpanForTask(task = {}, question = '') {
   if (index < 0) return null;
   return { start: index, end: index + raw.length, text: String(question).slice(index, index + raw.length) };
 }
+function commaChunks(span, source) {
+  const chunks = [];
+  let cursor = span.start;
+  const text = source.slice(span.start, span.end);
+  for (const match of text.matchAll(/[、,;；]+/gu)) {
+    const boundary = span.start + Number(match.index || 0);
+    const raw = source.slice(cursor, boundary);
+    const left = raw.length - raw.trimStart().length;
+    const right = raw.length - raw.trimEnd().length;
+    if (boundary - right > cursor + left) chunks.push({ start: cursor + left, end: boundary - right, text: source.slice(cursor + left, boundary - right) });
+    cursor = boundary + match[0].length;
+  }
+  const raw = source.slice(cursor, span.end);
+  const left = raw.length - raw.trimStart().length;
+  const right = raw.length - raw.trimEnd().length;
+  if (span.end - right > cursor + left) chunks.push({ start: cursor + left, end: span.end - right, text: source.slice(cursor + left, span.end - right) });
+  return chunks;
+}
+function requestAtoms(span, source) {
+  const chunks = commaChunks(span, source);
+  const requestIndexes = chunks.map((chunk, index) => isRequestSpan(chunk.text) ? index : -1).filter((index) => index >= 0);
+  if (requestIndexes.length <= 1) return isRequestSpan(span.text) || requestIndexes.length === 1 ? [span] : [];
+  const atoms = [];
+  let pendingStart = null;
+  for (const chunk of chunks) {
+    if (isRequestSpan(chunk.text)) {
+      const start = pendingStart == null ? chunk.start : pendingStart;
+      atoms.push({ start, end: chunk.end, text: source.slice(start, chunk.end) });
+      pendingStart = null;
+    } else if (pendingStart == null) {
+      pendingStart = chunk.start;
+    }
+  }
+  if (pendingStart != null && atoms.length) {
+    const last = atoms[atoms.length - 1];
+    last.end = span.end;
+    last.text = source.slice(last.start, span.end);
+  }
+  return atoms;
+}
+function emptyContext() {
+  return { deadlines: [], preserve: [], prohibitions: [], unresolved: [], conditions: [], exceptions: [] };
+}
+function addContextValue(context, value) {
+  const text = requestText(value);
+  if (!text) return context;
+  if (/(?:期限|締切|納期|までに|今日中|明日まで|今週中|来週|来月|deadline|due\s+date|\bby\s+\w+)/iu.test(text)) context.deadlines.push(text);
+  if (/(?:変えない|変えず|変更しない|変更せず|維持|保持|残す|keep|preserve|retain|without\s+changing)/iu.test(text)) context.preserve.push(text);
+  if (PURE_PROHIBITION.test(text)) context.prohibitions.push(text);
+  if (/(?:未確認|未完了|未成立|終わっていない|完了していない|確認していない|not\s+yet|pending|incomplete)/iu.test(text)) context.unresolved.push(text);
+  if (/(?:場合|なら|ならば|とき|たら|れば|if\b|when\b|provided\s+that)/iu.test(text)) context.conditions.push(text);
+  if (/(?:ただし|例外|except\b|however\b)/iu.test(text)) context.exceptions.push(text);
+  return context;
+}
+function finalizeContext(context) {
+  for (const key of Object.keys(context)) context[key] = unique(context[key]);
+  return context;
+}
+function contextForRequest(request) {
+  return finalizeContext(addContextValue(emptyContext(), request.source_span?.text || request.request_text));
+}
 function extractJudgmentRequests(text) {
-  const spans = sentenceSpans(text);
-  const candidates = spans
+  const source = String(text || '');
+  const candidates = sentenceSpans(source)
+    .flatMap((span) => requestAtoms(span, source))
     .filter((span) => isRequestSpan(span.text))
     .map((span) => ({
       source_span: span,
@@ -106,23 +174,26 @@ function extractJudgmentRequests(text) {
     }));
   const substantive = candidates.filter((item) => !item.umbrella);
   const selected = substantive.length ? substantive : candidates;
-  return selected.map((item, index) => ({
-    id: `R${String(index + 1).padStart(2, '0')}`,
-    order: index + 1,
-    action: item.action,
-    request_text: item.request_text,
-    source_span: item.source_span,
-    source_origin: item.source_origin,
-    parser_task_ids: [],
-    external_evidence_requested: EXTERNAL_EVIDENCE_CUE.test(item.request_text)
-  }));
+  return selected.map((item, index) => {
+    const request = {
+      id: `R${String(index + 1).padStart(2, '0')}`,
+      order: index + 1,
+      action: item.action,
+      request_text: item.request_text,
+      source_span: item.source_span,
+      source_origin: item.source_origin,
+      parser_task_ids: [],
+      external_evidence_requested: EXTERNAL_EVIDENCE_CUE.test(item.request_text)
+    };
+    return { ...request, local_context: contextForRequest(request) };
+  });
 }
 function parserJudgmentRequests(question, tasks = []) {
   return tasks.map((task, index) => {
     const sourceSpan = sourceSpanForTask(task, question);
     const sourceText = requestText(sourceSpan?.text || task.raw_text || task.purpose || task.objective || task.target || '');
     if (!sourceText) return null;
-    return {
+    const request = {
       id: '',
       order: index + 1,
       action: canonicalTaskAction(task, sourceText),
@@ -134,6 +205,7 @@ function parserJudgmentRequests(question, tasks = []) {
       parser_external_action: task.external_action === true,
       external_evidence_requested: task.evidence_need?.required === true || EXTERNAL_EVIDENCE_CUE.test(sourceText)
     };
+    return { ...request, local_context: contextForRequest(request) };
   }).filter(Boolean);
 }
 function sameSourceUnit(left, right) {
@@ -165,15 +237,16 @@ function intentCanOwnParserTasks(intent, parserRequests) {
 function intentBackedMaterialRequest(question, intent, parserRequests) {
   if (!intentCanOwnParserTasks(intent, parserRequests)) return null;
   const source = String(intent.source || 'INTENT');
-  return {
+  const request = {
     id: 'R01', order: 1,
     action: requestAction(intent.purpose),
     request_text: String(intent.purpose),
     source_span: { start: 0, end: question.length, text: question },
     source_origin: `${source}_INTENT`,
-    parser_task_ids: unique(parserRequests.flatMap((request) => request.parser_task_ids || [])),
-    external_evidence_requested: parserRequests.some((request) => request.external_evidence_requested)
+    parser_task_ids: unique(parserRequests.flatMap((item) => item.parser_task_ids || [])),
+    external_evidence_requested: parserRequests.some((item) => item.external_evidence_requested)
   };
+  return { ...request, local_context: emptyContext() };
 }
 function mergeParserOnlyRequests(parserRequests = []) {
   const merged = [];
@@ -226,39 +299,33 @@ function mergeJudgmentRequests(question, sourceRequests = [], tasks = [], intent
     id: `R${String(index + 1).padStart(2, '0')}`,
     order: index + 1,
     parser_task_ids: unique(item.parser_task_ids || []),
-    ...(unique(item.parser_task_ids || []).length === 1 ? { parser_task_id: unique(item.parser_task_ids || [])[0] } : {})
+    ...(unique(item.parser_task_ids || []).length === 1 ? { parser_task_id: unique(item.parser_task_ids || [])[0] } : {}),
+    local_context: item.local_context || contextForRequest(item)
   }));
 }
 function extractInputObservations(text, requests = []) {
-  const requestSpans = requests.map((item) => item.source_span);
   const out = [];
   for (const span of sentenceSpans(text)) {
     const value = requestText(span.text);
     if (!ISSUE_CUE.test(value)) continue;
-    const isRequest = requestSpans.some((item) => item.start === span.start && item.end === span.end);
+    const hits = requests.filter((item) => spansOverlap(item.source_span, span));
     out.push({
       id: `O${String(out.length + 1).padStart(2, '0')}`,
       text: value,
       source_span: span,
-      source_type: isRequest ? 'USER_REPORTED_STATE_WITH_REQUEST' : 'USER_REPORTED_STATE'
+      request_ids: hits.map((item) => item.id),
+      source_type: hits.length ? 'USER_REPORTED_STATE_WITH_REQUEST' : 'USER_REPORTED_STATE'
     });
   }
   return out;
 }
-function extractGlobalContext(text) {
-  const context = { deadlines: [], preserve: [], prohibitions: [], unresolved: [], conditions: [], exceptions: [] };
+function extractGlobalContext(text, requests = []) {
+  const context = emptyContext();
   for (const span of sentenceSpans(text)) {
-    const value = requestText(span.text);
-    if (!value) continue;
-    if (/(?:期限|締切|納期|までに|今日中|明日まで|今週中|来週|来月|deadline|due\s+date|\bby\s+\w+)/iu.test(value)) context.deadlines.push(value);
-    if (/(?:変えない|変えず|変更しない|変更せず|維持|保持|残す|keep|preserve|retain|without\s+changing)/iu.test(value)) context.preserve.push(value);
-    if (PURE_PROHIBITION.test(value)) context.prohibitions.push(value);
-    if (/(?:未確認|未完了|未成立|終わっていない|完了していない|確認していない|not\s+yet|pending|incomplete)/iu.test(value)) context.unresolved.push(value);
-    if (/(?:場合|なら|ならば|とき|たら|れば|if\b|when\b|provided\s+that)/iu.test(value)) context.conditions.push(value);
-    if (/(?:ただし|例外|except\b|however\b)/iu.test(value)) context.exceptions.push(value);
+    const overlapsRequest = requests.some((request) => spansOverlap(request.source_span, span));
+    if (!overlapsRequest || GLOBAL_SCOPE_CUE.test(span.text)) addContextValue(context, span.text);
   }
-  for (const key of Object.keys(context)) context[key] = unique(context[key]);
-  return context;
+  return finalizeContext(context);
 }
 function requestRelations(requests = []) {
   const relations = [];
@@ -305,7 +372,7 @@ function buildCaseModel(text, tasks = [], dependencies = [], intent = null) {
   const sourceRequests = extractJudgmentRequests(question);
   const judgmentRequests = mergeJudgmentRequests(question, sourceRequests, tasks, intent);
   const observations = extractInputObservations(question, judgmentRequests);
-  const globalContext = extractGlobalContext(question);
+  const globalContext = extractGlobalContext(question, judgmentRequests);
   const relations = [...requestRelations(judgmentRequests), ...parserDependencyRelations(judgmentRequests, tasks, dependencies)];
   const seenRelations = new Set();
   const requestRelationList = relations.filter((relation) => {
@@ -330,22 +397,42 @@ function requestTaskIndices(tasks, request) {
   if (ids.size) return tasks.map((task, index) => ids.has(String(task.id)) ? index : -1).filter((index) => index >= 0);
   return tasks.map((task, index) => spanOverlapRatio(task?.source_span, request.source_span) >= 0.5 ? index : -1).filter((index) => index >= 0);
 }
-function globalFields(packet, caseModel) {
-  const context = caseModel.global_context || {};
+function contextFields(context = {}) {
   return {
-    constraints: unique([...(packet.constraints || []), ...(context.deadlines || [])]),
-    prohibitions: unique([...(packet.prohibitions || []), ...(context.prohibitions || [])]),
-    preserve: unique([...(packet.preserve || []), ...(context.preserve || [])]),
-    deadlines: unique([...(packet.deadlines || []), ...(context.deadlines || [])]),
-    conditions: unique([...(packet.conditions || []), ...(context.conditions || [])]),
-    exceptions: unique([...(packet.exceptions || []), ...(context.exceptions || [])]),
-    unresolved: unique([...(packet.unresolved || []), ...(context.unresolved || [])])
+    constraints: unique(context.deadlines || []),
+    prohibitions: unique(context.prohibitions || []),
+    preserve: unique(context.preserve || []),
+    deadlines: unique(context.deadlines || []),
+    conditions: unique(context.conditions || []),
+    exceptions: unique(context.exceptions || []),
+    unresolved: unique(context.unresolved || [])
   };
 }
-function recoveredTask(request, index, fields, caseModel) {
+function localOnlyValues(caseModel, field) {
+  const contextKey = field === 'constraints' ? 'deadlines' : field;
+  const global = new Set(caseModel.global_context?.[contextKey] || []);
+  return new Set((caseModel.judgment_requests || []).flatMap((request) => request.local_context?.[contextKey] || []).filter((value) => !global.has(value)));
+}
+function globalFields(packet, caseModel) {
+  const context = contextFields(caseModel.global_context || {});
+  const out = {};
+  for (const field of Object.keys(context)) {
+    const localOnly = localOnlyValues(caseModel, field);
+    out[field] = unique([...(packet[field] || []).filter((value) => !localOnly.has(value)), ...(context[field] || [])]);
+  }
+  return out;
+}
+function fieldsForRequest(request, global, caseModel) {
+  const local = contextFields(request.local_context || {});
+  const out = {};
+  for (const field of Object.keys(global)) out[field] = unique([...(global[field] || []), ...(local[field] || [])]);
+  return out;
+}
+function recoveredTask(request, index, global, caseModel) {
   const id = `T${String(index + 1).padStart(2, '0')}`;
-  const localObservations = (caseModel.observations || []).filter((item) => spanOverlapRatio(item.source_span, request.source_span) > 0);
+  const localObservations = (caseModel.observations || []).filter((item) => (item.request_ids || []).includes(request.id) || spansOverlap(item.source_span, request.source_span));
   const evidenceRequired = request.external_evidence_requested === true;
+  const fields = fieldsForRequest(request, global, caseModel);
   return {
     id,
     order: index + 1,
@@ -377,9 +464,19 @@ function recoveredTask(request, index, fields, caseModel) {
     field_provenance: {
       purpose: [{ source: 'ORIGINAL_QUESTION_REQUEST_SPAN', request_id: request.id }],
       target: [{ source: 'ORIGINAL_QUESTION_REQUEST_SPAN', request_id: request.id }],
+      local_context: [{ source: 'ORIGINAL_QUESTION_REQUEST_SPAN', request_id: request.id }],
       case_model: [{ source: 'ASTERA_MULTI_JUDGMENT_REQUEST_PLANNER', request_id: request.id }]
     }
   };
+}
+function scopePreservedTask(task, request, global, caseModel) {
+  const fields = fieldsForRequest(request, global, caseModel);
+  const out = { ...task, request_id: request.id };
+  for (const field of Object.keys(fields)) {
+    const localOnly = localOnlyValues(caseModel, field);
+    out[field] = unique([...(task[field] || []).filter((value) => !localOnly.has(value)), ...(fields[field] || [])]);
+  }
+  return out;
 }
 function recoveredGraph(tasks, caseModel) {
   const taskByRequest = new Map(tasks.map((task) => [task.request_id, task.id]));
@@ -418,6 +515,13 @@ function caseMapping(caseModel, tasks) {
   }
   return { request_task_ids: requestTaskIds, task_mapping: taskMapping };
 }
+function cleanSingleGoal(value) {
+  const goal = norm(value);
+  return goal && goal.length <= 2000 ? goal : '';
+}
+function preferredSingleGoal(packet, request, intent) {
+  return cleanSingleGoal(intent?.purpose) || cleanSingleGoal(packet.user_goal) || cleanSingleGoal(request?.request_text);
+}
 function expandMultiJudgmentRequest(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
   const question = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
@@ -440,15 +544,12 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       : existingTasks;
     const mapping = caseMapping(caseModel, tasks);
     const packetCaseModel = { ...caseModel, ...mapping, representation_mode: 'PARSER_TASKS_PRESERVED' };
-    const singleGoal = cleanSingleGoal(singleRequest?.request_text);
+    const singleGoal = preferredSingleGoal(packet, singleRequest, intent);
     const nextObservable = { ...observable, case_model: packetCaseModel };
     return {
       ...prepared,
       ...(singleGoal ? { target: singleGoal, objective: singleGoal, user_goal: singleGoal } : {}),
       observable_material: nextObservable,
-      standalone_api_intent: singleGoal && prepared.standalone_api_intent
-        ? { ...prepared.standalone_api_intent, purpose: singleGoal }
-        : prepared.standalone_api_intent,
       analysis_task_packet: {
         ...packet,
         tasks,
@@ -461,7 +562,7 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
 
   const representation = caseModel.judgment_requests.map((request) => requestTaskIndices(existingTasks, request));
   const allRepresented = representation.every((indices) => indices.length > 0);
-  const fields = globalFields(packet, caseModel);
+  const global = globalFields(packet, caseModel);
   let tasks;
   let dependencies;
   let executionWaves;
@@ -472,13 +573,17 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
     caseModel.judgment_requests.forEach((request, requestIndex) => {
       for (const taskIndex of representation[requestIndex]) if (!taskOwners.has(taskIndex)) taskOwners.set(taskIndex, request.id);
     });
-    tasks = existingTasks.map((task, index) => taskOwners.has(index) ? { ...task, request_id: taskOwners.get(index) } : task);
+    tasks = existingTasks.map((task, index) => {
+      if (!taskOwners.has(index)) return task;
+      const request = caseModel.judgment_requests.find((item) => item.id === taskOwners.get(index));
+      return scopePreservedTask(task, request, global, caseModel);
+    });
     dependencies = packet.dependencies || [];
     executionWaves = Array.isArray(packet.execution_waves) && packet.execution_waves.length ? packet.execution_waves.map((wave) => [...wave]) : [tasks.map((task) => task.id)];
     branches = packet.branches || [];
     branchGroups = packet.branch_groups || [];
   } else {
-    const graph = recoveredGraph(caseModel.judgment_requests.map((request, index) => recoveredTask(request, index, fields, caseModel)), caseModel);
+    const graph = recoveredGraph(caseModel.judgment_requests.map((request, index) => recoveredTask(request, index, global, caseModel)), caseModel);
     tasks = graph.tasks;
     dependencies = graph.dependencies;
     executionWaves = graph.execution_waves;
@@ -519,13 +624,13 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       user_goal: caseGoal,
       observable_material: { ...observable, case_model: packetCaseModel },
       case_model: packetCaseModel,
-      constraints: fields.constraints,
-      prohibitions: fields.prohibitions,
-      preserve: fields.preserve,
-      deadlines: fields.deadlines,
-      conditions: fields.conditions,
-      exceptions: fields.exceptions,
-      unresolved: fields.unresolved,
+      constraints: global.constraints,
+      prohibitions: global.prohibitions,
+      preserve: global.preserve,
+      deadlines: global.deadlines,
+      conditions: global.conditions,
+      exceptions: global.exceptions,
+      unresolved: global.unresolved,
       multi_judgment_recovery: recovery,
       source_spans: tasks.map((task) => ({ task_id: task.id, ...task.source_span })),
       task_graph_validation: {
@@ -539,10 +644,6 @@ function expandMultiJudgmentRequest(prepared, input = {}) {
       }
     }
   };
-}
-function cleanSingleGoal(value) {
-  const goal = norm(value);
-  return goal && goal.length <= 2000 ? goal : '';
 }
 
 module.exports = {
