@@ -176,7 +176,30 @@ function mapParserTasks(tasks, requests, source) {
     }
     if (!owner) { dropped.push({ task_id: task.id, reason: 'BROAD_OR_UNMAPPED_SOURCE_SPAN', source_span: span }); continue; }
     owner.parser_task_ids = unique([...owner.parser_task_ids, task.id]);
-    mapped.push({ task: { ...task, request_id: owner.id, source_span: span }, owner, score });
+    const sourceSemantic = owner.objectives?.[0] || owner.request_text;
+    const previousProvenance = task.field_provenance || {};
+    mapped.push({
+      task: {
+        ...task,
+        request_id: owner.id,
+        source_span: span,
+        purpose: sourceSemantic,
+        objective: sourceSemantic,
+        field_provenance: {
+          ...previousProvenance,
+          purpose: [
+            ...(previousProvenance.purpose || []),
+            { source: 'UNIVERSAL_SOURCE_GRAPH', source_atom_id: owner.source_atom_id }
+          ],
+          objective: [
+            ...(previousProvenance.objective || []),
+            { source: 'UNIVERSAL_SOURCE_GRAPH', source_atom_id: owner.source_atom_id }
+          ]
+        }
+      },
+      owner,
+      score
+    });
   }
   return { mapped, dropped };
 }
