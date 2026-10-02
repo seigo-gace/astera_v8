@@ -9,8 +9,24 @@ const INTERNAL = /PARSER_|TASK_GRAPH|MATERIAL_ONLY|INSUFFICIENT_|RETRIEVAL_FAILE
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
+function sanitizePublicValue(value) {
+  let text = clean(value);
+  if (!text) return '';
+  text = text
+    .replace(/\b[0-9a-f]{64}\b/giu, '')
+    .replace(/\bHAS_STATE\b/giu, '')
+    .replace(/\bTask\s+T\d+\b/giu, '')
+    .replace(/\bT\d+\s*:\s*(?:deliverable|completion_criteria|success_criteria|verification|missing|unresolved)\b\s*[:=]?/giu, '')
+    .replace(/\b(?:deliverable|completion_criteria|success_criteria)\b\s*[:=]?/giu, '')
+    .replace(/^(?:Counter|Alternative evidence angle)\s*[:：-]?\s*/giu, '')
+    .replace(/\s*:\s*:/g, ':')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[:：;\-\s]+|[:：;\-\s]+$/g, '')
+    .trim();
+  return text;
+}
 function unique(values = []) {
-  return [...new Set(values.map(clean).filter(Boolean))];
+  return [...new Set(values.map(sanitizePublicValue).filter(Boolean))];
 }
 function publicValues(values = []) {
   return unique(values).filter((value) => !INTERNAL.test(value) && value !== '-');
@@ -60,8 +76,8 @@ function resultTaskGroups(result = {}, model = {}) {
 }
 function itemText(item) {
   if (!item) return '';
-  if (typeof item === 'string') return clean(item);
-  return clean(item.text || item.raw_text || item.claim?.raw_text || item.claim?.text || item.impact || item.failure_condition || item.question || '');
+  if (typeof item === 'string') return sanitizePublicValue(item);
+  return sanitizePublicValue(item.text || item.raw_text || item.claim?.raw_text || item.claim?.text || item.impact || item.failure_condition || item.question || '');
 }
 function groupFacts(taskResults = []) {
   return publicValues(taskResults.flatMap((taskResult) => [
@@ -110,7 +126,7 @@ function premiseLines(judgment, model, lang) {
   push('成立条件', 'Condition', context.conditions);
   push('例外', 'Exception', context.exceptions);
   for (const item of judgment['02_premise']?.items || []) {
-    const value = clean(item);
+    const value = sanitizePublicValue(item);
     if (!value || INTERNAL.test(value)) continue;
     if (!lines.some((line) => line.includes(value))) lines.push(value);
   }
@@ -140,7 +156,7 @@ function groupEvidence(taskResults = [], lang) {
 function section01(model, lang) {
   const requests = model.judgment_requests || [];
   const lines = [`- ${lang === 'ja' ? `今回の入力には${requests.length}件の判断要求がある。` : `This input contains ${requests.length} judgment requests.`}`];
-  for (const request of requests) lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${clean(request.request_text)}`);
+  for (const request of requests) lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${sanitizePublicValue(request.request_text)}`);
   lines.push(`- ${lang === 'ja' ? '処理原則: 判断要求R##を一つに潰さず保持し、各R##に必要な実行Taskを1件以上紐付ける。実行Taskが複数でも、それだけで判断要求を水増ししない。' : 'Processing rule: preserve each R## judgment request and map one or more execution tasks to it. Multiple execution tasks do not create extra judgment requests by themselves.'}`);
   return lines.join('\n');
 }
@@ -151,7 +167,7 @@ function section02(judgment, model, lang) {
 }
 function section03(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '利用者入力の観測と、各判断要求に紐づく実行Taskで得た事実材料を分ける' : 'Separate user observations from factual material produced by execution tasks for each judgment request'}:`];
-  for (const item of model.observations || []) lines.push(`  - ${item.id}: ${clean(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
+  for (const item of model.observations || []) lines.push(`  - ${item.id}: ${sanitizePublicValue(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
     lines.push(`  - ${request.id}: ${facts.length ? facts.join(' / ') : (lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.')}`);
@@ -172,8 +188,8 @@ function section05(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '各判断要求について反証・失敗側の材料を別々に保持する' : 'Keep counter-evidence and failure-side material separate for each judgment request'}:`];
   for (const request of model.judgment_requests || []) {
     const counter = groupCounterMaterial(groups.get(request.id) || []);
-    const observations = observationsFor(model, request).map((item) => clean(item.text));
-    lines.push(`  - ${request.id}: ${clean(request.request_text)}`);
+    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
+    lines.push(`  - ${request.id}: ${sanitizePublicValue(request.request_text)}`);
     lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : (lang === 'ja' ? '現在挙動・影響範囲・例外条件・既存機能への副作用を確認する。' : 'Check current behavior, affected scope, exceptions, and side effects.')}`);
     if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告' : 'User report'}: ${observations.join(' / ')}`);
   }
@@ -183,12 +199,12 @@ function section06(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在材料・不足材料・比較可能要素を出す' : 'Even without A/B candidates, show available, missing, and comparable material per judgment request'}:`];
   for (const request of model.judgment_requests || []) {
     const taskResults = groups.get(request.id) || [];
-    const observations = observationsFor(model, request).map((item) => clean(item.text));
+    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
     const facts = groupFacts(taskResults);
     const missing = groupMissing(taskResults);
     const comparison = groupComparisonMaterial(taskResults);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
-    lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${clean(request.request_text)}`);
+    lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${sanitizePublicValue(request.request_text)}`);
     lines.push(`    - ${lang === 'ja' ? '現在ある材料' : 'Material available now'}: ${unique([...observations, ...facts]).join(' / ') || (lang === 'ja' ? '要求本文のみ。現在実装・発生条件は未確認。' : 'Request text only; current implementation and trigger conditions are unverified.')}`);
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
@@ -209,7 +225,7 @@ function section08(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '次の確認・実行も判断要求ごとに分ける' : 'Keep next verification/execution steps separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
     const missing = groupMissing(groups.get(request.id) || []);
-    lines.push(`  - ${request.id}: ${missing.length ? missing.join(' / ') : (lang === 'ja' ? `「${clean(request.request_text)}」について現在実装→発生/適用条件→影響範囲→完了条件を確認し、確認済み材料だけで判断する。` : `For “${clean(request.request_text)}”, verify current implementation, trigger/applicability conditions, affected scope, and completion criteria before judgment.`)}`);
+    lines.push(`  - ${request.id}: ${missing.length ? missing.join(' / ') : (lang === 'ja' ? `「${sanitizePublicValue(request.request_text)}」について現在実装→発生/適用条件→影響範囲→完了条件を確認し、確認済み材料だけで判断する。` : `For “${sanitizePublicValue(request.request_text)}”, verify current implementation, trigger/applicability conditions, affected scope, and completion criteria before judgment.`)}`);
   }
   lines.push(`- ${lang === 'ja' ? 'ある判断要求が未確認でも、別要求の材料で穴埋めしない。未確認はそのR##に残す。' : 'If one judgment request remains unresolved, do not fill the gap with material from another request; keep the uncertainty on that R##.'}`);
   return lines.join('\n');
@@ -244,4 +260,4 @@ function renderMultiJudgmentMain8(judgment = {}, result = {}) {
   };
 }
 
-module.exports = { renderMultiJudgmentMain8, isMultiJudgment, resultTaskGroups };
+module.exports = { renderMultiJudgmentMain8, isMultiJudgment, resultTaskGroups, sanitizePublicValue };
