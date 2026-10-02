@@ -38,10 +38,13 @@ function materialOntology(action, lang = 'ja') {
   };
   return (lang === 'ja' ? ja : en)[String(action || '')] || (lang === 'ja' ? ja.analyze : en.analyze);
 }
+function emptyCompletionPlaceholder(value) {
+  return /^の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件/u.test(clean(value));
+}
 function usefulMissingLine(value) {
   const text = clean(value);
   if (!text) return false;
-  if (/^の(?:完了|合格|受入)条件/u.test(text)) return false;
+  if (emptyCompletionPlaceholder(text)) return false;
   if (/^Alternative evidence angle$/iu.test(text)) return false;
   if (/^反例\s*条件不成立\s*例外$/u.test(text)) return false;
   return true;
@@ -56,7 +59,6 @@ function normalizeSection06(section, model, lang) {
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
     const lines = block.split('\n').filter((line) => {
-      if (/まだ不足している材料\s*:\s*の(?:完了|合格|受入)条件/u.test(line)) return false;
       if (!/まだ不足している材料/.test(line)) return true;
       return usefulMissingLine(line.replace(/^.*まだ不足している材料\s*:\s*/u, ''));
     });
@@ -91,8 +93,8 @@ function scrubNoise(text) {
     .replace(/Alternative evidence angle/giu, '')
     .replace(/\s*\/\s*\/\s*/g, ' / ')
     .replace(/:\s*\/\s*/g, ': ')
-    .replace(/\n[ \t]*-\s*まだ不足している材料\s*:\s*の(?:完了|合格|受入)条件を明示する。?/gu, '')
-    .replace(/\n[ \t]*-?\s*の(?:完了|合格|受入)条件を明示する。?/gu, '')
+    .replace(/\n[ \t]*-\s*まだ不足している材料\s*:\s*の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する。?/gu, '')
+    .replace(/\n[ \t]*-?\s*の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する。?/gu, '')
     .replace(/\n[ \t]*-\s*$/gmu, '')
     .replace(/\n{3,}/g, '\n\n');
 }
@@ -126,5 +128,6 @@ function normalizeMultiJudgmentPublicMaterial(material, judgment = {}) {
 module.exports = {
   normalizeMultiJudgmentPublicMaterial,
   materialOntology,
-  usefulMissingLine
+  usefulMissingLine,
+  emptyCompletionPlaceholder
 };
