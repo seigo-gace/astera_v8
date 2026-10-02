@@ -55,7 +55,11 @@ function normalizeSection06(section, model, lang) {
     const nextMatch = /\n  - R\d{2} \[/.exec(text.slice(start + marker.length));
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
-    const lines = block.split('\n').filter((line) => !(/まだ不足している材料/.test(line) && !usefulMissingLine(line.replace(/^.*まだ不足している材料\s*:\s*/u, ''))));
+    const lines = block.split('\n').filter((line) => {
+      if (/まだ不足している材料\s*:\s*の(?:完了|合格|受入)条件/u.test(line)) return false;
+      if (!/まだ不足している材料/.test(line)) return true;
+      return usefulMissingLine(line.replace(/^.*まだ不足している材料\s*:\s*/u, ''));
+    });
     block = lines.join('\n');
     const ontology = materialOntology(request.action, lang);
     if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
@@ -87,7 +91,9 @@ function scrubNoise(text) {
     .replace(/Alternative evidence angle/giu, '')
     .replace(/\s*\/\s*\/\s*/g, ' / ')
     .replace(/:\s*\/\s*/g, ': ')
+    .replace(/\n[ \t]*-\s*まだ不足している材料\s*:\s*の(?:完了|合格|受入)条件を明示する。?/gu, '')
     .replace(/\n[ \t]*-?\s*の(?:完了|合格|受入)条件を明示する。?/gu, '')
+    .replace(/\n[ \t]*-\s*$/gmu, '')
     .replace(/\n{3,}/g, '\n\n');
 }
 function normalizeMultiJudgmentPublicMaterial(material, judgment = {}) {
