@@ -41,6 +41,9 @@ function materialOntology(action, lang = 'ja') {
 function emptyCompletionPlaceholder(value) {
   return /^の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件/u.test(clean(value));
 }
+function containsCompletionPlaceholder(value) {
+  return /の(?:完了|合格|受入)(?:・(?:完了|合格|受入))*条件を明示する/u.test(clean(value));
+}
 function usefulMissingLine(value) {
   const text = clean(value);
   if (!text) return false;
@@ -77,12 +80,21 @@ function normalizeSection08(section, model, lang) {
     if (start < 0) continue;
     const nextMatch = /\n  - R\d{2}:/.exec(text.slice(start + marker.length));
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
-    const block = text.slice(start, end);
+    let block = text.slice(start, end);
+    if (lang === 'ja') {
+      block = block.split('\n').map((line) => {
+        if (!containsCompletionPlaceholder(line)) return line;
+        if (/^\s*-\s*R\d{2}:/.test(line)) {
+          return `  - ${request.id}: 「${clean(request.request_text)}」について、判断に必要な確認材料を確認する。`;
+        }
+        return '';
+      }).filter(Boolean).join('\n');
+    }
     const ontology = materialOntology(request.action, lang);
     if (!block.includes(ontology)) {
-      const insert = `\n    - ${lang === 'ja' ? '判断可能にするため確認する材料' : 'Material to verify before judgment'}: ${ontology}`;
-      text = text.slice(0, end) + insert + text.slice(end);
+      block += `\n    - ${lang === 'ja' ? '判断可能にするため確認する材料' : 'Material to verify before judgment'}: ${ontology}`;
     }
+    text = text.slice(0, start) + block + text.slice(end);
   }
   return text;
 }
