@@ -241,7 +241,7 @@ Required behavior includes:
 - section 04: keep risks attributable to the appropriate request;
 - section 05: keep counter-check / failure-side material per request without exposing internal perspective-template fields;
 - section 06: if the case is not an A/B comparison, show decision material per request instead of only saying “no comparison candidates”; for missing information, use the finite operation-material ontology rather than an empty template sentence;
-- section 07: keep Evidence status per request and preserve the user-input vs verified-fact boundary;
+- section 07: keep Evidence status per request, preserve the user-input vs verified-fact boundary, and preserve request-level external-Evidence intent. If the user did not explicitly request external Evidence, an internal Task search failure must not be presented as though the user requested external Evidence and that request failed. Accepted Evidence may still be reported as additional verified material when it actually exists;
 - section 08: keep next verification / execution material per request and state what information would make that request judgment-ready. Empty completion placeholders are invalid even when embedded inside a longer reinstruction sentence and must be replaced with request-specific verification material.
 
 Internal runtime fields such as `Task Wave`, raw Claim IDs, `INSUFFICIENT_TRADE_OFF_MATERIAL`, `SearchExecution`, `EvidenceQuality`, Parser blocker tokens, internal perspective class names, and generic placeholders such as `Alternative evidence angle` are not user-facing judgment material.
@@ -254,7 +254,7 @@ Each accepted external Evidence item is linked to the actual Claim and relevant 
 
 User input itself can support “this is what the user requested/reported”, but it cannot be promoted into external or code-level verification.
 
-The Evidence Citation boundary must preserve the already-normalized public Multi-Judgment Main8 semantics. If Citation processing reconstructs a Multi-Judgment Main8 before mapping sources, that reconstruction must pass through the same public-material normalizer before it replaces the current material. Citation attachment must not reintroduce removed placeholders, internal perspective phrases, stale request-count wording, or pre-normalization evidence wording.
+The Evidence Citation boundary must preserve the already-normalized public Multi-Judgment Main8 semantics. If Citation processing reconstructs a Multi-Judgment Main8 before mapping sources, that reconstruction must pass through the same public-material normalizer before it replaces the current material. Citation attachment must not reintroduce removed placeholders, internal perspective phrases, stale request-count wording, pre-normalization evidence wording, or internal Task search failures as false request-level external-Evidence failures.
 
 ## Human and AI consumer contract
 
@@ -287,11 +287,12 @@ The live output exposed defects that source-only tests had not yet closed:
 - a generic internal phrase `Alternative evidence angle` leaked into public counter-material;
 - option/image requests did not expose enough operation-specific information requirements for a human or AI to continue judgment reliably;
 - Citation attachment could restore pre-normalization public Main8 after those corrections had already been applied;
-- section 08 could retain an empty completion placeholder when it was embedded inside a longer R## reinstruction sentence.
+- section 08 could retain an empty completion placeholder when it was embedded inside a longer R## reinstruction sentence;
+- a later live PASS at `0a35d7ea3d5f7a3d893eb0592b9f6d34c2f56849` still showed section 07 wording that promoted internal Task Evidence failure into apparent request-level external-Evidence failure for R02/R03, so that PASS was not accepted as semantic completion.
 
-The correction is not a scenario-specific App template. It consists of Parser-fragment normalization, the finite operation-material ontology, Citation-boundary normalization, and embedded-placeholder removal described above. Regression coverage locks the exact live defects and now exercises `attachEvidenceCitations()` as a final public boundary instead of testing only the normalizer in isolation.
+The correction is not a scenario-specific App template. It consists of Parser-fragment normalization, the finite operation-material ontology, Citation-boundary normalization, embedded-placeholder removal, observation/fact separation, substantive counter-material normalization, and request-level external-Evidence status normalization described above. Regression coverage locks the exact live defects and exercises `attachEvidenceCitations()` as a final public boundary instead of testing only the normalizer in isolation.
 
-Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Repaired source head `768f75e8255374a9514b77343e896aa7c185bbdc` passed Astera Verify #453 / run `36973743504`. Source-equivalent checkpoint `1844d965ad4931fd49986c0a9f3f6c3bf8056827` passed Astera Verify #462 / run `36978085321` but failed the isolated VPS gate, exposing the Citation-boundary overwrite. Citation-boundary and section-08 corrections through `1aa2c9a0b40761cee258fe09ef850ab6139bd4bb` passed Astera Verify #466 / run `36992767655`, including source tests, Initial Fast Path hard gate, real Japanese Parser build/release gate, real HTTP smoke, and unseen-effect release gate. The isolated exact-head VPS multi-judgment gate remains the runtime authority and is still required before these corrections are treated as live-runtime proven.
+Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Repaired source head `768f75e8255374a9514b77343e896aa7c185bbdc` passed Astera Verify #453 / run `36973743504`. Source-equivalent checkpoint `1844d965ad4931fd49986c0a9f3f6c3bf8056827` passed Astera Verify #462 / run `36978085321` but failed the isolated VPS gate, exposing the Citation-boundary overwrite. Citation-boundary and section-08 corrections through `1aa2c9a0b40761cee258fe09ef850ab6139bd4bb` passed Astera Verify #466 / run `36992767655`, including source tests, Initial Fast Path hard gate, real Japanese Parser build/release gate, real HTTP smoke, and unseen-effect release gate. Public-material corrections through `0a35d7ea3d5f7a3d893eb0592b9f6d34c2f56849` passed Astera Verify #470 / run `36997775151` and passed the strengthened isolated VPS gate, but manual Main8 review rejected section 07 request-level external-Evidence semantics. The request-intent correction and regression/gate hardening through `5643b1e44a44cfb7efa75147af8253f0ed8d1cc9` passed Astera Verify #473 / run `36999697160`. Exact-head isolated runtime verification is still required on the final documentation-inclusive revision before semantic completion.
 
 ## Regression authority
 
@@ -303,6 +304,7 @@ The regression suite covers:
 - punctuation inside desired UI wording does not create phantom requests;
 - a Parser sub-action inside one source-backed request does not become a phantom extra judgment request;
 - internal Evidence need does not become user-level external-Evidence intent without an explicit external-evidence signal;
+- internal Task Evidence failure is not presented as a request-level external-Evidence failure when the user did not request external Evidence;
 - request-local conditions do not become false cross-request dependencies;
 - explicit sequence cues produce dependencies rather than unsafe parallel execution;
 - a Parser result that collapses several requests is recovered into distinct Tasks;
