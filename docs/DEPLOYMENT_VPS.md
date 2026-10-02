@@ -1,6 +1,6 @@
 # Astera v8 — VPS Deployment Guide
 
-Updated: 2026-09-26
+Updated: 2026-10-02
 
 This guide covers the Astera v8 **production target composition**. It does not define external product/account/payment systems.
 
@@ -185,6 +185,22 @@ Do not collapse these into a single “Astera is healthy” claim if one service
 ### Core
 
 Verify authenticated `/process` behavior and Main8 order.
+
+### Japanese Parser exact-SHA isolated gate
+
+When the release boundary requires proof that the real private Japanese Parser HTTP runtime is usable from the current Astera source, use `scripts/run-vps-isolated-real-mcp-gate.sh` with an explicit `EXPECTED_SHA`.
+
+The gate:
+
+- fail-closes unless the remote branch HEAD equals `EXPECTED_SHA`;
+- creates a detached worktree under `/home/admin1/projects/astera_v8/.worktrees/`;
+- reuses the existing Astera image and Core environment without modifying the running Core container;
+- requires the real Parser listener on `127.0.0.1:8765` and executes `scripts/run-real-mcp-gate.js` through HTTP mode;
+- bind-mounts the exact-SHA Astera `src/`, `scripts/`, `config/`, and `package.json` read-only;
+- creates only a temporary verification container and removes it on completion;
+- does not restart/recreate persistent Astera services and does not modify the Deterministic Japanese Parser MCP project.
+
+A PASS requires `REAL_PARSER_HTTP configured=true`, the real Parser case PASS marker, `REAL_PARSER_HTTP_GATE_PASS`, and container exit `0`. Source/CI success alone does not replace this VPS Runtime evidence when the real Parser boundary is part of the acceptance criteria.
 
 ### Evaluator
 
