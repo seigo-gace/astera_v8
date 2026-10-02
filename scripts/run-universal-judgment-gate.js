@@ -31,7 +31,9 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /RETRIEVAL_FAILED/iu,
   /INSUFFICIENT_TRADE_OFF_MATERIAL/iu,
   /Alternative evidence angle/iu,
+  /\b(?:PARSE|PARSER|TASK_GRAPH|SCOPE)_[A-Z0-9_]+\b/u,
   /stack trace/iu,
+  /\bat\s+\S+\s+\([^\n)]+:\d+:\d+\)/u,
   /\/home\/[^\s]+/u
 ];
 
@@ -89,6 +91,22 @@ function anchorCoverage(text, anchors) {
   return { matched, ratio: matched.length / anchors.length };
 }
 
+function patternMatches(pattern, text) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const re = new RegExp(pattern.source, flags);
+  return [...String(text || '').matchAll(re)].map((match) => String(match[0] || '')).filter(Boolean);
+}
+
+function novelPatternMatches(patterns, material, input) {
+  const inputText = normalize(input);
+  const found = [];
+  for (const pattern of patterns) {
+    const matches = patternMatches(pattern, material);
+    if (matches.some((fragment) => !inputText.includes(normalize(fragment)))) found.push(pattern.source);
+  }
+  return found;
+}
+
 function evaluateCase(testCase, out, durationMs) {
   const result = out?.result || {};
   const material = String(out?.material?.text || '');
@@ -118,10 +136,10 @@ function evaluateCase(testCase, out, durationMs) {
     failures.push({ code: 'DOMAIN_MATERIAL_INSUFFICIENT', genre: expected.genre || null, matched_terms: materialTerms, expected_terms: expected.material_terms });
   }
 
-  const leaked = INTERNAL_PUBLIC_PATTERNS.filter((re) => re.test(material)).map((re) => re.source);
+  const leaked = novelPatternMatches(INTERNAL_PUBLIC_PATTERNS, material, testCase.input);
   if (leaked.length) failures.push({ code: 'INTERNAL_PUBLIC_LEAK', patterns: leaked });
 
-  const finalDecision = FINAL_DECISION_PATTERNS.filter((re) => re.test(material)).map((re) => re.source);
+  const finalDecision = novelPatternMatches(FINAL_DECISION_PATTERNS, material, testCase.input);
   if (finalDecision.length) failures.push({ code: 'FINAL_DECISION_AUTHORITY_VIOLATION', patterns: finalDecision });
 
   if (expected.evidence_requested === false) {
