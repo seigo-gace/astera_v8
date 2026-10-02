@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeMultiJudgmentCase } = require('../src/runtime/multi-judgment-case-normalizer');
 const { normalizeMultiJudgmentPublicMaterial } = require('../src/runtime/multi-judgment-public-material-normalizer');
+const { attachEvidenceCitations } = require('../src/runtime/evidence-citation-material');
 
 test('small parser subtask is folded into its source-backed judgment request without enabling external evidence', () => {
   const prepared = {
@@ -74,4 +75,58 @@ test('multi-judgment public material states exact request count, per-request evi
   assert.match(out.text, /R02[\s\S]*実装箇所・接続点[\s\S]*イベントまたは操作経路[\s\S]*ON\/OFF/);
   assert.match(out.text, /R03[\s\S]*再現条件[\s\S]*発生源・生成元[\s\S]*CSS\/style\/layout/);
   assert.doesNotMatch(out.text, /Alternative evidence angle|の完了・合格条件を明示する/);
+});
+
+test('evidence citation boundary preserves normalized multi-judgment public material', () => {
+  const model = {
+    request_count: 3,
+    multi_judgment: true,
+    judgment_requests: [
+      { id: 'R01', order: 1, action: 'improve', request_text: '表示を見直す', local_context: {} },
+      { id: 'R02', order: 2, action: 'implement', request_text: 'OFF時にON案内を表示する', local_context: { conditions: ['オプションがOFFの時に案内を表示する'] } },
+      { id: 'R03', order: 3, action: 'remove', request_text: '画像投稿後の不要線をなくす', local_context: {} }
+    ],
+    observations: [{ id: 'O01', text: '画像投稿後に不要線が見える', request_ids: ['R03'] }],
+    global_context: {},
+    request_relations: [],
+    request_task_ids: { R01: ['T01'], R02: ['T02'], R03: ['T03'] },
+    task_mapping: { R01: 'T01', R02: 'T02', R03: 'T03' }
+  };
+  const labels = [
+    ['01_purpose', '01 本当の目的'],
+    ['02_premise', '02 前提不足'],
+    ['03_facts', '03 事実確認'],
+    ['04_crisis', '04 危機察知'],
+    ['05_opposition', '05 反対視点'],
+    ['06_comparison', '06 比較案'],
+    ['07_evidence_status', '07 根拠成立状態'],
+    ['08_reinstruction', '08 主役AI／利用者への再指示']
+  ];
+  const judgment = Object.fromEntries(labels.map(([key, label]) => [key, { label }]));
+  judgment.output_language = 'ja';
+  judgment.observable_material = { case_model: model };
+
+  const taskResult = (id, requestId) => ({
+    task: { id, request_id: requestId, premises: [] },
+    facts: { confirmed: [] },
+    risks: { risks: [] },
+    multi: { perspectives: [{ failure_conditions: ['Alternative evidence angle'] }] },
+    inquiry: { open_items: [{ text: 'の完了・合格条件を明示する。' }], missing_questions: [], missing_fields: [] },
+    comparison: { comparison_candidates: [], dimensions: [] },
+    canonical: { records: [] }
+  });
+
+  const result = {
+    judgment,
+    task_results: [taskResult('T01', 'R01'), taskResult('T02', 'R02'), taskResult('T03', 'R03')]
+  };
+  const out = attachEvidenceCitations({ result, material: { text: 'pre-citation material' } });
+
+  assert.match(out.material.main8_text, /1件ではなく、3件の判断要求/);
+  assert.match(out.material.main8_text, /要求ごとに根拠状態を分離/);
+  assert.match(out.material.main8_text, /R01[\s\S]*見せる情報と見せない内部情報/);
+  assert.match(out.material.main8_text, /R02[\s\S]*実装箇所・接続点[\s\S]*ON\/OFF/);
+  assert.match(out.material.main8_text, /R03[\s\S]*発生源・生成元[\s\S]*CSS\/style\/layout/);
+  assert.doesNotMatch(out.material.main8_text, /Alternative evidence angle|の完了・合格条件を明示する/);
+  assert.equal(out.material.evidence_contract, 'astera.evidence-citation.v1');
 });
