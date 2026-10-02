@@ -285,7 +285,7 @@ The live output exposed defects that source-only tests had not yet closed:
 
 The correction is not a scenario-specific App template. It consists of Parser-fragment normalization plus the finite operation-material ontology described above. Regression coverage locks the exact live defects.
 
-Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Documentation-only successors through `616de3c412e332bc208ac78443ef7c883ac5f7e4` also passed exact-head CI; Astera Verify #452 / run `36973534614` is the current Source/CI authority. The isolated exact-head VPS multi-judgment gate is the only remaining runtime authority for this correction.
+Correction source revision `1ccddd9b8fb046c1053140a1d9575058687e448a` passed Astera Verify #447 / run `36972700333`. Documentation-only successors through `616de3c412e332bc208ac78443ef7c883ac5f7e4` also passed exact-head CI. Current repaired exact head `768f75e8255374a9514b77343e896aa7c185bbdc` passed Astera Verify #453 / run `36973743504`, including source tests, Initial Fast Path hard gate, real Japanese Parser build/release gate, real HTTP smoke, and unseen-effect release gate. The isolated exact-head VPS multi-judgment gate is the only remaining runtime authority for this correction.
 
 ## Regression authority
 
