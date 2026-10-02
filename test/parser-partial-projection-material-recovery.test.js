@@ -107,7 +107,8 @@ test('partial Japanese parser projection recovers source-backed Case Graph mater
       global_unresolved: packet.case_model?.global_context?.unresolved || []
     }, null, 2));
     assert.deepEqual(packet.observable_material.candidates, ['A案', 'B案']);
-    assert.ok((packet.hard_blockers || []).some((item) => /parser_overall_status:PARTIAL/i.test(String(item))), JSON.stringify(packet.hard_blockers, null, 2));
+    assert.equal(packet.universal_case_graph?.parser_overall_status, 'PARTIAL', JSON.stringify(packet.universal_case_graph, null, 2));
+    assert.ok(!(packet.hard_blockers || []).some((item) => /parser_overall_status:PARTIAL/i.test(String(item))), 'parser PARTIAL is recovery diagnostic metadata, not a hard execution blocker');
     assert.ok(!(packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'recovered source-backed requests must not inherit obsolete parser action blockers');
 
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
