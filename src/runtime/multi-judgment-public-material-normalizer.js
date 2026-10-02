@@ -129,9 +129,13 @@ function nearRequestRestatement(value, requestText = '') {
   if (!text || !request) return false;
   return text === request || request.includes(text) || text.includes(request);
 }
+function internalMarker(value) {
+  return /^(?:PARSE|PARSER|TASK_GRAPH|SCOPE)_[A-Z0-9_]+$/u.test(clean(value));
+}
 function usefulMissingLine(value, requestText = '') {
   const text = clean(value);
   if (!text) return false;
+  if (internalMarker(text)) return false;
   if (emptyCompletionPlaceholder(text) || containsCompletionPlaceholder(text)) return false;
   if (/^Alternative evidence angle$/iu.test(text)) return false;
   if (/^反例\s*条件不成立\s*例外$/u.test(text)) return false;
@@ -141,6 +145,7 @@ function usefulMissingLine(value, requestText = '') {
 function usefulCounterPart(value, requestText = '') {
   const text = clean(value);
   if (!text) return false;
+  if (internalMarker(text)) return false;
   if (/Alternative evidence angle/iu.test(text)) return false;
   if (/反例\s*条件不成立\s*例外/u.test(text)) return false;
   if (/(?:肯定形|否定形)\s*$/u.test(text)) return false;
@@ -255,10 +260,17 @@ function normalizeSection06(section, model, lang) {
     const missingLabel = lang === 'ja'
       ? /(?:まだ不足している材料|追加で必要な材料)/u
       : /(?:Material still missing|Additional material required)/iu;
-    const lines = block.split('\n').filter((line) => {
-      if (!missingLabel.test(line)) return true;
-      const raw = line.slice(line.indexOf(':') + 1);
-      return usefulMissingLine(raw, request.request_text);
+    const lines = block.split('\n').flatMap((line) => {
+      if (!missingLabel.test(line)) return [line];
+      const colon = line.indexOf(':');
+      if (colon < 0) return [line];
+      const prefix = line.slice(0, colon + 1);
+      const parts = line.slice(colon + 1)
+        .split(/\s*\/\s*/u)
+        .map(clean)
+        .filter((part) => usefulMissingLine(part, request.request_text));
+      if (!parts.length) return [];
+      return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
     }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);
     block = lines.join('\n');
     if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
