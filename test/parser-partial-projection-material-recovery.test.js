@@ -98,7 +98,8 @@ test('partial Japanese parser projection recovers source-backed Case Graph mater
     assert.ok(packet.deadlines.some((item) => /来週金曜/.test(item)));
     assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)), JSON.stringify(packet.unresolved, null, 2));
     assert.deepEqual(packet.observable_material.candidates, ['A案', 'B案']);
-    assert.ok((packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'parser tension must remain traceable internally');
+    assert.ok((packet.hard_blockers || []).some((item) => /parser_overall_status:PARTIAL/i.test(String(item))), JSON.stringify(packet.hard_blockers, null, 2));
+    assert.ok(!(packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'recovered source-backed requests must not inherit obsolete parser action blockers');
 
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     assert.equal(observedLaneExecution?.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
