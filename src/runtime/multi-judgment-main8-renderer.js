@@ -194,6 +194,47 @@ function premiseLines(model, lang) {
   push('例外', 'Exception', context.exceptions);
   return unique(lines);
 }
+function caseContextValues(model, key) {
+  return publicValues([
+    ...(model.global_context?.[key] || []),
+    ...(model.judgment_requests || []).flatMap((request) => request.local_context?.[key] || [])
+  ]);
+}
+function caseRiskLines(model, lang) {
+  const lines = [];
+  const unresolved = caseContextValues(model, 'unresolved');
+  const preserve = caseContextValues(model, 'preserve');
+  const compareRequests = (model.judgment_requests || []).filter((request) => String(request.action || '') === 'compare');
+  const compareText = compareRequests.map((request) => sanitizePublicValue(request.request_text)).join(' / ');
+  const quantitative = publicValues((model.observations || [])
+    .map((item) => item?.text)
+    .filter((text) => /\d+(?:\.\d+)?\s*(?:件|人|回|日|時間|分|秒|円|万円|台|個|社|本|枚|%|％)/u.test(String(text || ''))));
+
+  for (const value of unresolved) {
+    lines.push(lang === 'ja'
+      ? `未確定事項「${value}」を確認前に確定・断定扱いしない。`
+      : `Do not treat unresolved item “${value}” as confirmed before verification.`);
+  }
+  for (const value of preserve) {
+    lines.push(lang === 'ja'
+      ? `維持条件「${value}」を壊す変更を判断材料上の安全な選択肢として扱わない。`
+      : `Do not treat a change that breaks preserve condition “${value}” as a safe option.`);
+  }
+  if (quantitative.length && compareRequests.length) {
+    if (lang === 'ja') {
+      const dimensions = publicValues([
+        /作業時間|工数|時間/u.test(compareText) ? '作業時間' : '',
+        /法務|legal/iu.test(compareText) ? '法務リスク' : '',
+        /利用者理解|理解度|可読|ユーザー|user/iu.test(compareText) ? '利用者理解' : ''
+      ]);
+      const axes = dimensions.length ? dimensions.join('・') : '比較軸';
+      lines.push(`入力材料「${quantitative.join(' / ')}」の件数・数量差だけで${axes}の優劣を断定しない。各軸は同一条件の確認材料が揃うまで未確認として分離する。`);
+    } else {
+      lines.push(`Do not infer superiority on comparison dimensions from input quantity differences alone (“${quantitative.join(' / ')}”); keep each dimension unverified until same-condition material exists.`);
+    }
+  }
+  return unique(lines);
+}
 function evidenceText(entry, lang) {
   const search = clean(entry?.search_state);
   const state = clean(entry?.source_status || entry?.state || entry?.status);
@@ -257,6 +298,11 @@ function section04(model, groups, lang) {
   for (const request of model.judgment_requests || []) {
     const risks = groupRisks(groups.get(request.id) || []);
     lines.push(`  - ${request.id}: ${risks.length ? risks.join(' / ') : (lang === 'ja' ? '案件固有Riskはまだ確認材料不足。' : 'Case-specific risk material is still insufficient.')}`);
+  }
+  const sourceRisks = caseRiskLines(model, lang);
+  if (sourceRisks.length) {
+    lines.push(`- ${lang === 'ja' ? '入力条件・未確定事項から直接保持するRisk' : 'Risks preserved directly from input constraints and unresolved items'}:`);
+    lines.push(...sourceRisks.map((risk) => `  - ${risk}`));
   }
   lines.push(`- ${lang === 'ja' ? '共通Risk: 複数要求を1件に潰すと、一部要求の消失、条件混同、別要求の根拠流用が起きる。利用者報告の現象は原因確認前なので、原因を推測で確定しない。' : 'Common risk: collapsing requests can drop requirements, mix constraints, or reuse evidence across requests. User-reported symptoms do not establish their cause.'}`);
   return lines.join('\n');
