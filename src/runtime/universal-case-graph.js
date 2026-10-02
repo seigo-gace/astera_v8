@@ -9,7 +9,7 @@ const USER_OBSERVATION_CUE = /(?:(?:した|している|すると|したら|し�
 const CONTEXT_ATOM_TYPES = new Set([
   'PROHIBITION', 'PRESERVE', 'CONDITION', 'EXCEPTION', 'OBLIGATION', 'PERMISSION',
   'UNRESOLVED', 'DEADLINE', 'ACCEPTANCE_CRITERION', 'RISK_SIGNAL', 'EVIDENCE_REQUIREMENT',
-  'OBSERVATION', 'ASSUMPTION', 'QUESTION', 'SCOPE', 'STAKEHOLDER'
+  'OBSERVATION', 'ASSUMPTION', 'QUESTION', 'SCOPE', 'STAKEHOLDER', 'CLAIM', 'QUANTITATIVE_VALUE'
 ]);
 
 function norm(value) {
@@ -120,6 +120,28 @@ function attachSemanticOwnership(understanding, requests) {
   };
   const observations = [];
   let observationIndex = 0;
+  const pushObservation = (atom, text, truthState, owner, global, inference = null) => {
+    const start = Number(atom?.source_span?.start);
+    const end = Number(atom?.source_span?.end);
+    const existing = observations.find((item) => Number(item.source_span?.start) === start && Number(item.source_span?.end) === end && item.text === text);
+    if (existing) {
+      existing.source_atom_ids = unique([...(existing.source_atom_ids || [existing.source_atom_id]), atom.id]);
+      if (truthState === 'USER_REPORTED_UNVERIFIED') existing.truth_state = truthState;
+      return existing;
+    }
+    const item = {
+      id: `O${String(++observationIndex).padStart(2, '0')}`,
+      text,
+      source_span: { ...atom.source_span, text: atom.text },
+      source_atom_id: atom.id,
+      source_atom_ids: [atom.id],
+      truth_state: truthState,
+      request_ids: owner && !global ? [owner.id] : []
+    };
+    if (inference) item.inference = inference;
+    observations.push(item);
+    return item;
+  };
 
   for (const atom of atoms) {
     if (atom.type === 'REQUEST') continue;
@@ -136,14 +158,11 @@ function attachSemanticOwnership(understanding, requests) {
       continue;
     }
     if (atom.type === 'OBSERVATION') {
-      observations.push({
-        id: `O${String(++observationIndex).padStart(2, '0')}`,
-        text,
-        source_span: { ...atom.source_span, text: atom.text },
-        source_atom_id: atom.id,
-        truth_state: 'USER_REPORTED_UNVERIFIED',
-        request_ids: owner && !global ? [owner.id] : []
-      });
+      pushObservation(atom, text, 'USER_REPORTED_UNVERIFIED', owner, global);
+      continue;
+    }
+    if (atom.type === 'CLAIM' || atom.type === 'QUANTITATIVE_VALUE') {
+      pushObservation(atom, text, 'INPUT_SUPPLIED_UNVERIFIED', owner, global, 'SOURCE_BACKED_INPUT_MATERIAL');
       continue;
     }
     const key = contextKey(atom.type);
@@ -157,15 +176,14 @@ function attachSemanticOwnership(understanding, requests) {
     for (const key of Object.keys(request.local_context)) request.local_context[key] = unique(request.local_context[key]);
     const alreadyObserved = observations.some((item) => intersection(item.source_span, request.source_span) > 0);
     if (!alreadyObserved && USER_OBSERVATION_CUE.test(norm(request.request_text))) {
-      observations.push({
-        id: `O${String(++observationIndex).padStart(2, '0')}`,
-        text: request.request_text,
-        source_span: { ...request.source_span },
-        source_atom_id: request.source_atom_id,
-        truth_state: 'USER_REPORTED_UNVERIFIED',
-        request_ids: [request.id],
-        inference: 'SOURCE_REPORTED_EVENT_WITH_REQUEST'
-      });
+      pushObservation(
+        { id: request.source_atom_id, source_span: request.source_span, text: request.request_text },
+        request.request_text,
+        'USER_REPORTED_UNVERIFIED',
+        request,
+        false,
+        'SOURCE_REPORTED_EVENT_WITH_REQUEST'
+      );
     }
   }
   for (const key of Object.keys(globalContext)) globalContext[key] = unique(globalContext[key]);
@@ -340,11 +358,8 @@ function shouldApplyUniversalCaseGraph(prepared, understanding, input = {}) {
   ].map(String).join(' ');
   return requests.length >= 2 || sourceLength >= 1200 || overall === 'PARTIAL' || /TIMEOUT|PARSER_ACTION_GUARD_BLOCKED|NO_EXECUTABLE_ACTION/iu.test(markers);
 }
-function recoveredCaseHardBlockers(values = [], overallStatus = '') {
-  const retained = unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
-  const overall = String(overallStatus || '').toUpperCase();
-  if (overall === 'PARTIAL') retained.push('parser_overall_status:PARTIAL');
-  return unique(retained);
+function recoveredCaseHardBlockers(values = []) {
+  return unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
 }
 function applyUniversalCaseGraph(prepared, input = {}) {
   if (!prepared?.analysis_task_packet) return prepared;
@@ -441,6 +456,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
       .filter((atom) => atom.type === 'UNRESOLVED')
       .map((atom) => atom.text)
   );
+  const parserOverallStatus = String(prepared?.instruction_understanding?.overall_status || '').toUpperCase() || 'UNKNOWN';
 
   return {
     ...prepared,
@@ -465,7 +481,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
       conditions: contextUnion('conditions'),
       exceptions: contextUnion('exceptions'),
       unresolved: unique([...contextUnion('unresolved'), ...sourceUnresolved]),
-      hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || [], prepared?.instruction_understanding?.overall_status),
+      hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || []),
       universal_case_graph: {
         applied: true,
         schema: model.schema,
@@ -474,7 +490,8 @@ function applyUniversalCaseGraph(prepared, input = {}) {
         absorbed_parser_tasks: absorbed.length,
         dropped_parser_tasks: dropped.length,
         recovered_requests: model.parser_task_mapping.recovered_request_ids,
-        source_length: source.length
+        source_length: source.length,
+        parser_overall_status: parserOverallStatus
       },
       task_graph_validation: {
         ...(packet.task_graph_validation || {}),
