@@ -12,7 +12,7 @@ function textOf(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-test('partial Japanese parser projection becomes substantive unified Main8 material instead of template leakage', async () => {
+test('partial Japanese parser projection recovers source-backed Case Graph material without template leakage', async () => {
   const question = [
     '来週金曜までにFAQへ新しい問い合わせ例を追加するための判断材料を整理して。',
     '公開済みの返金ポリシー文言は変えない。',
@@ -79,19 +79,24 @@ test('partial Japanese parser projection becomes substantive unified Main8 mater
     const out = await engine.process({ question, language: 'ja' }, { id: 'partial-parser-material-recovery' });
     assert.equal(out.result.type, 'cognitive_map');
     const packet = out.result.analysis_task_packet;
-    assert.equal(packet.parser_projection_recovery?.applied, true);
-    assert.equal(packet.parser_projection_recovery?.replaced_partial_projection, true);
-    assert.equal(packet.parser_projection_recovery?.external_evidence_requested, false);
-    assert.ok(packet.parser_projection_recovery.task_union_coverage_ratio < 0.75);
-    assert.equal(packet.tasks.length, 1);
-    assert.equal(packet.tasks[0].action, 'compare');
-    assert.equal(packet.tasks[0].evidence_need?.required, false);
+    assert.equal(packet.universal_case_graph?.applied, true, JSON.stringify(packet.universal_case_graph, null, 2));
+    assert.equal(packet.case_model?.schema, 'astera.case-graph.v2');
+    assert.equal(packet.case_model?.request_count, 2, JSON.stringify(packet.case_model, null, 2));
+    assert.equal(packet.case_model?.multi_judgment, true);
+    assert.equal(packet.case_model?.parser_task_mapping?.retained_task_ids?.length, 0, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.equal(packet.case_model?.parser_task_mapping?.dropped_tasks?.length, 1, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.deepEqual(new Set(packet.case_model?.parser_task_mapping?.recovered_request_ids || []), new Set(['R01', 'R02']));
+    assert.equal(packet.tasks.length, 2, JSON.stringify(packet.tasks, null, 2));
+    assert.ok(packet.tasks.some((item) => item.action === 'compare'));
+    assert.ok(packet.tasks.some((item) => /FAQ|問い合わせ例/u.test(String(item.purpose || item.objective || item.target || ''))));
+    assert.ok(packet.tasks.every((item) => item.evidence_need?.required === false));
+    assert.ok(packet.tasks.every((item) => String(item.raw_text || '') !== question), 'whole-input fallback task must not return');
     assert.match(packet.user_goal, /FAQ/);
     assert.match(packet.user_goal, /問い合わせ例/);
     assert.match(packet.user_goal, /追加/);
     assert.ok(packet.preserve.some((item) => /返金ポリシー/.test(item) && /変えない/.test(item)));
     assert.ok(packet.deadlines.some((item) => /来週金曜/.test(item)));
-    assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)));
+    assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)), JSON.stringify(packet.unresolved, null, 2));
     assert.deepEqual(packet.observable_material.candidates, ['A案', 'B案']);
     assert.ok((packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'parser tension must remain traceable internally');
 
@@ -99,8 +104,8 @@ test('partial Japanese parser projection becomes substantive unified Main8 mater
     assert.equal(observedLaneExecution?.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
     assert.equal(observedLaneExecution?.lane_count, 5);
     assert.equal(new Set((observedLaneExecution?.telemetry || []).map((item) => item.thread_id)).size, 5);
-    const task = out.result.task_results[0];
-    assert.ok(task);
+    const task = out.result.task_results.find((item) => (item.comparison?.comparison_candidates || []).includes('A案'));
+    assert.ok(task, JSON.stringify(out.result.task_results, null, 2));
     assert.equal(task.evidence?.search_state, 'NOT_REQUIRED');
     assert.ok((task.comparison?.comparison_candidates || []).includes('A案'));
     assert.ok((task.comparison?.comparison_candidates || []).includes('B案'));
