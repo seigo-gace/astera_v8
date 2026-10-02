@@ -99,7 +99,13 @@ test('partial Japanese parser projection recovers source-backed Case Graph mater
     assert.match(packet.user_goal, /追加/);
     assert.ok(packet.preserve.some((item) => /返金ポリシー/.test(item) && /変えない/.test(item)));
     assert.ok(packet.deadlines.some((item) => /来週金曜/.test(item)));
-    assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)), JSON.stringify(packet.unresolved, null, 2));
+    assert.ok(packet.unresolved.some((item) => /法務確認/.test(item)), JSON.stringify({
+      unresolved: packet.unresolved,
+      semantic_counts: out.result.request_model?.universal_semantic_atoms?.counts || null,
+      unresolved_atoms: (out.result.request_model?.universal_semantic_atoms?.atoms || []).filter((item) => item.type === 'UNRESOLVED'),
+      request_local_unresolved: (packet.case_model?.judgment_requests || []).map((item) => ({ id: item.id, unresolved: item.local_context?.unresolved || [] })),
+      global_unresolved: packet.case_model?.global_context?.unresolved || []
+    }, null, 2));
     assert.deepEqual(packet.observable_material.candidates, ['A案', 'B案']);
     assert.ok((packet.hard_blockers || []).some((item) => /parser_overall_status:PARTIAL/i.test(String(item))), JSON.stringify(packet.hard_blockers, null, 2));
     assert.ok(!(packet.hard_blockers || []).some((item) => /NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/.test(String(item))), 'recovered source-backed requests must not inherit obsolete parser action blockers');
