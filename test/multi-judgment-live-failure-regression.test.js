@@ -77,14 +77,14 @@ test('multi-judgment public material states exact request count, per-request evi
   assert.doesNotMatch(out.text, /Alternative evidence angle|の完了・合格条件を明示する/);
 });
 
-test('evidence citation boundary preserves normalized multi-judgment public material', () => {
+test('evidence citation boundary preserves normalized multi-judgment public material and request-level external-evidence intent', () => {
   const model = {
     request_count: 3,
     multi_judgment: true,
     judgment_requests: [
-      { id: 'R01', order: 1, action: 'improve', request_text: '表示を見直す', local_context: {} },
-      { id: 'R02', order: 2, action: 'implement', request_text: 'OFF時にON案内を表示する', local_context: { conditions: ['オプションがOFFの時に案内を表示する'] } },
-      { id: 'R03', order: 3, action: 'remove', request_text: '画像投稿後の不要線をなくす', local_context: {} }
+      { id: 'R01', order: 1, action: 'improve', request_text: '表示を見直す', external_evidence_requested: false, local_context: {} },
+      { id: 'R02', order: 2, action: 'implement', request_text: 'OFF時にON案内を表示する', external_evidence_requested: false, local_context: { conditions: ['オプションがOFFの時に案内を表示する'] } },
+      { id: 'R03', order: 3, action: 'remove', request_text: '画像投稿後の不要線をなくす', external_evidence_requested: false, local_context: {} }
     ],
     observations: [{ id: 'O01', text: '画像投稿後に不要線が見える', request_ids: ['R03'] }],
     global_context: {},
@@ -106,27 +106,37 @@ test('evidence citation boundary preserves normalized multi-judgment public mate
   judgment.output_language = 'ja';
   judgment.observable_material = { case_model: model };
 
-  const taskResult = (id, requestId) => ({
+  const taskResult = (id, requestId, evidence = null) => ({
     task: { id, request_id: requestId, premises: [] },
     facts: { confirmed: [] },
     risks: { risks: [] },
     multi: { perspectives: [{ failure_conditions: ['Alternative evidence angle'] }] },
     inquiry: { open_items: [{ text: 'の完了・合格条件を明示する。' }], missing_questions: [], missing_fields: [] },
     comparison: { comparison_candidates: [], dimensions: [] },
-    canonical: { records: [] }
+    canonical: { records: [] },
+    evidence
   });
 
+  const internalEvidenceFailure = { search_state: 'FAILED', source_status: 'REJECTED' };
   const result = {
     judgment,
-    task_results: [taskResult('T01', 'R01'), taskResult('T02', 'R02'), taskResult('T03', 'R03')]
+    task_results: [
+      taskResult('T01', 'R01'),
+      taskResult('T02', 'R02', internalEvidenceFailure),
+      taskResult('T03', 'R03', internalEvidenceFailure)
+    ]
   };
   const out = attachEvidenceCitations({ result, material: { text: 'pre-citation material' } });
+  const evidenceSection = String(out.material.main8_text || '').split('\n---\n')[6] || '';
 
   assert.match(out.material.main8_text, /1件ではなく、3件の判断要求/);
   assert.match(out.material.main8_text, /要求ごとに根拠状態を分離/);
   assert.match(out.material.main8_text, /R01[\s\S]*見せる情報と見せない内部情報/);
   assert.match(out.material.main8_text, /R02[\s\S]*実装箇所・接続点[\s\S]*ON\/OFF/);
   assert.match(out.material.main8_text, /R03[\s\S]*発生源・生成元[\s\S]*CSS\/style\/layout/);
+  assert.match(evidenceSection, /R02:[^\n]*利用者は外部Evidenceを明示要求していない/u);
+  assert.match(evidenceSection, /R03:[^\n]*利用者は外部Evidenceを明示要求していない/u);
+  assert.doesNotMatch(evidenceSection, /R0[23]:[^\n]*外部根拠は成立していない/u);
   assert.doesNotMatch(out.material.main8_text, /Alternative evidence angle|の完了・合格条件を明示する/);
   assert.equal(out.material.evidence_contract, 'astera.evidence-citation.v1');
 });
