@@ -72,7 +72,11 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(packet.tasks[2].purpose, /画像/);
     assert.match(packet.tasks[2].purpose, /線/);
     assert.ok((packet.case_model.observations || []).some((item) => /画像/.test(item.text) && /線/.test(item.text)));
-    assert.ok((packet.case_model.global_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(packet.case_model.global_context, null, 2));
+    const [r1, r2, r3] = packet.case_model.judgment_requests;
+    assert.ok((r2.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r2.local_context, null, 2));
+    assert.ok(!(r1.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r1.local_context, null, 2));
+    assert.ok(!(r3.local_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(r3.local_context, null, 2));
+    assert.ok(!(packet.case_model.global_context?.conditions || []).some((item) => /オフ/.test(item)), JSON.stringify(packet.case_model.global_context, null, 2));
     assert.equal(out.result.five_stage.tasks.length, 3);
     assert.deepEqual(out.result.five_stage.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
     const rendered = String(out.material.main8_text || out.material.text || '');
