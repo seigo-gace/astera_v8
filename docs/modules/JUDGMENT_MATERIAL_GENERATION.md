@@ -4,6 +4,7 @@
 
 - Canonical architecture: [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
 - Approved redesign target: [`../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
+- Judgment Material Basis correction contract: [`../JUDGMENT_MATERIAL_BASIS_CONTRACT.md`](../JUDGMENT_MATERIAL_BASIS_CONTRACT.md)
 - Multi-Judgment compatibility contract: [`../MULTI_JUDGMENT_CASE_MODEL.md`](../MULTI_JUDGMENT_CASE_MODEL.md)
 - File ownership map: [`../MODULE_MAP.md`](../MODULE_MAP.md)
 - Evidence Search: [`EVIDENCE_SEARCH.md`](EVIDENCE_SEARCH.md)
@@ -11,6 +12,8 @@
 - HTTP contract: [`../API_REFERENCE.md`](../API_REFERENCE.md)
 
 `UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the **approved redesign target / implementation pending** contract for the current change unit. It must not be read as proof that current source already satisfies the target.
+
+For Material Requirement composition, [`../JUDGMENT_MATERIAL_BASIS_CONTRACT.md`](../JUDGMENT_MATERIAL_BASIS_CONTRACT.md) is the active correction contract. Any older wording that can be read as `Operation + G01-G38 alone determines required material` is superseded by that contract. The original v4 38-genre / four-level Domain Classification, the additive G01-G38 Genre Lens, and Evidence Search 38-root / 363-unit coverage are separate structures and must not be conflated.
 
 ---
 
@@ -43,6 +46,8 @@ Current/target共通の必須Effect:
 - Evidence Search状態とClaim Confirmationを分離する
 - 不確実性を`UNDETERMINED`として残す
 - 日本語/英語、Clean/Noisy、短文/長文、G01-G38で同じ意味契約を維持する
+- 同じTop-level Genreでも、判断対象・成果物・行為・状況が違えば必要判断材料を分離する
+- 原v4 4階層Domain ClassificationをGenre Lens代表Pathで代用しない
 - 最終判断権をHuman / Main AI / Calling Systemへ残す
 
 ---
@@ -123,7 +128,15 @@ Judgment Case Graph v2
 ↓
 Request-local Objectives / Constraints / Relations
 ↓
-Operation + G01-G38 Material Requirements
+Judgment Material Basis
+  ├─ Universal semantics
+  ├─ Judgment operation
+  ├─ Original v4 four-level Domain Classification
+  ├─ Subject / Object / Artifact semantics
+  ├─ Decision context
+  └─ Claim-local Evidence Requirement / Evidence Search Unit(s)
+↓
+Case-specific Material Requirements
 ↓
 Claim / Evidence Topology
 ↓
@@ -138,7 +151,9 @@ Exact Main8
 External final decision
 ```
 
-Detailed schema and migration stages are owned by [`../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md).
+The previous shorthand `Operation + G01-G38 Material Requirements` is not a sufficient architecture definition. G01-G38 Genre Lens remains additive specialist context, but it is not the original four-level classification and it does not by itself define material sufficiency.
+
+Detailed schema and migration stages are owned by [`../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](../UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md), with the active Material Basis correction fixed by [`../JUDGMENT_MATERIAL_BASIS_CONTRACT.md`](../JUDGMENT_MATERIAL_BASIS_CONTRACT.md).
 
 ### 5.1 Source Graph target
 
@@ -187,7 +202,7 @@ UNRESOLVED
 REFERENCE
 ```
 
-Document type is not part of the semantic scope boundary.
+Document type is not part of the semantic scope boundary. Subject/Object/Artifact semantics are an open material-basis axis and must not become a finite supported-document whitelist.
 
 ### 5.3 Case Graph target
 
@@ -309,22 +324,38 @@ Equivalent Japanese/English fixtures should preserve equivalent Request/Objectiv
 
 ---
 
-## 8. Domain Lens
+## 8. Domain classification / Genre Lens / Evidence Search boundary
+
+These are separate structures.
+
+### 8.1 Original Domain Classification
+
+The original v4 **38-genre / four-level Domain Classification** determines the specialist classification path. It must remain independent and complete. If its authority cannot resolve the path, use an explicit unresolved state rather than fabricating deeper nodes.
+
+A `path_key` selected only as a Genre Lens representative anchor with `path_resolution=GENRE_LENS_ANCHOR` is not proof that the original four-level classification was resolved.
+
+### 8.2 Genre Lens
 
 - Primary: `G01`〜`G38`
 - Secondary: 補助候補
 - Overlay: Primaryを置き換えず追加
 
-Domain Lensは「そのClaim/Requestを判断するために何を確認すべきか」を追加します。
+Genre Lensは「そのClaim/Requestを判断するために何を確認すべきか」を追加する専門視点です。
 
 It is **not**:
 
+- the original four-level Domain Classification;
 - the semantic parser;
 - Request-count authority;
 - a document-type whitelist;
-- proof that Main8 is decision-ready.
+- proof that Main8 is decision-ready;
+- a complete Material Requirement by itself.
 
-Taxonomy詳細: [`../LENS_GENRE_INDEX.md`](../LENS_GENRE_INDEX.md)
+Taxonomy/Lens index: [`../LENS_GENRE_INDEX.md`](../LENS_GENRE_INDEX.md)
+
+### 8.3 Evidence Search coverage
+
+Evidence Search has a separate 38-root / 363 Knowledge/Search Unit coverage ledger. Its units identify relevant authority/search spaces, including jurisdiction/version dimensions where required. They do not replace Domain Classification and do not by themselves define the complete material basis.
 
 ---
 
@@ -415,7 +446,9 @@ next verification useful
 public/internal boundary valid
 ```
 
-Operation-specific and G01-G38 domain-specific material slots are composable; they are not fixed answer templates.
+Material slots are composed from Universal semantics + Judgment operation + original four-level Domain Classification + Subject/Object/Artifact semantics + Decision context + claim-local Evidence Requirement. Genre Lens may enrich those slots but cannot replace any missing axis.
+
+A minimum keyword match, a G01-G38 assignment or an eight-heading shape is a smoke/regression signal only; none is final proof of case-specific sufficiency.
 
 ---
 
@@ -432,6 +465,7 @@ language_detection
 parser_wait
 semantic_atoms
 case_graph
+material_basis
 lens_route
 claim_extract
 evidence_plan
@@ -466,10 +500,12 @@ Target corpus matrix covers:
 - independent / ordered / conditional / exception relations;
 - Evidence none / explicit / mixed;
 - all G01-G38;
+- multiple subordinate specialist classifications within the same top-level Genre;
+- multiple Subject/Object/Artifact kinds within the same top-level Genre and operation;
 - Human-like / AI-generated structured documents;
 - mixed operations.
 
-Gold annotations specify semantic structures/material slots, not exact prose strings.
+Gold annotations specify semantic structures/material requirement nodes, not exact prose strings. Existing `material_terms` checks may remain smoke/regression signals while the requirement-node sufficiency gate is built, but they are not final product-level proof.
 
 GitHub Actions must emit inspectable artifacts so GPT can run the loop:
 
@@ -497,7 +533,7 @@ Master Terminal remains only for live/private runtime boundaries that GitHub can
 - `src/canonical-astera-engine-base.js`
 - `src/canonical-engine-support.js`
 
-### Input / Task
+### Input / Task / Material Basis
 
 - `src/input-understanding.js`
 - `src/deterministic-task-decomposer.js`
@@ -508,8 +544,9 @@ Master Terminal remains only for live/private runtime boundaries that GitHub can
 - `src/runtime/canonical-task-executor.js`
 - `src/runtime/canonical-wave-executor.js`
 - `src/runtime/concurrency-policy.js`
+- `src/runtime/judgment-material-basis.js`
 
-Target implementation may add Source Graph / semantic atom / Case Graph v2 files. Exact filenames are implementation work; this document does not invent completed files.
+Target implementation may add/recover Source Graph / semantic atom / original four-level Domain Classification / Case Graph v2 files. Exact unresolved taxonomy files are not invented by this document.
 
 ### Claim / Evidence binding
 
@@ -558,29 +595,3 @@ Target implementation may add Source Graph / semantic atom / Case Graph v2 files
 ## 16. Verification anchors
 
 Current representative tests remain useful, but the redesign requires new semantic corpus/trace gates before completion.
-
-Current examples:
-
-- `test/public-decision-boundary.test.js`
-- `test/material-only-public-projection.test.js`
-- `test/decision-authority-boundary.test.js`
-- `test/canonical-main8-trace.test.js`
-- `test/canonical-runtime-flow-regression.test.js`
-- `test/canonical-v4-pipeline-regression.test.js`
-- `test/task-decomposition-canon-regression.test.js`
-- `test/canonical-parallel-execution.test.js`
-- `test/canonical-decision-materials-load.test.js`
-
-Target verification must additionally prove:
-
-- long/noisy and long/clean multi-request preservation;
-- JA/EN parity;
-- G01-G38 material sufficiency;
-- PARTIAL/TIMEOUT recovery without one-Task collapse;
-- semantic gold/material-slot coverage;
-- metamorphic robustness;
-- Full Runtime stage timing;
-- ready-queue dependency correctness;
-- GitHub-self-executable artifacts/logs.
-
-Test existence is not PASS. Current SHA must produce actual evidence.
