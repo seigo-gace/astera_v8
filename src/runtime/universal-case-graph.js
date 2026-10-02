@@ -433,6 +433,11 @@ function applyUniversalCaseGraph(prepared, input = {}) {
     ...(globalContext[key] || []),
     ...requests.flatMap((request) => request.local_context?.[key] || [])
   ]);
+  const sourceUnresolved = unique(
+    (understanding?.semantic_atoms?.atoms || [])
+      .filter((atom) => atom.type === 'UNRESOLVED')
+      .map((atom) => atom.text)
+  );
 
   return {
     ...prepared,
@@ -456,7 +461,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
       deadlines: contextUnion('deadlines'),
       conditions: contextUnion('conditions'),
       exceptions: contextUnion('exceptions'),
-      unresolved: contextUnion('unresolved'),
+      unresolved: unique([...contextUnion('unresolved'), ...sourceUnresolved]),
       hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || []),
       universal_case_graph: {
         applied: true,
