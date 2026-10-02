@@ -11,6 +11,7 @@ const {
 } = require('./runtime/standalone-material-normalizer');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
+const { normalizeMultiJudgmentPublicMaterial } = require('./runtime/multi-judgment-public-material-normalizer');
 const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
@@ -219,7 +220,8 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   material(judgment) {
-    return normalizeUnifiedMain8Material(renderUnifiedMain8(judgment));
+    const rendered = normalizeUnifiedMain8Material(renderUnifiedMain8(judgment));
+    return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
   }
 
   externalBrief(judgment) {
