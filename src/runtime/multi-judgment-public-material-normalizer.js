@@ -159,6 +159,25 @@ function normalizeSection06(section, model, lang) {
   }
   return text;
 }
+function normalizeSection07(section, model, lang) {
+  return section.split('\n').map((line) => {
+    const match = /^  - (R\d{2}):\s*(.*)$/u.exec(line);
+    if (!match) return line;
+    const request = (model.judgment_requests || []).find((item) => item.id === match[1]);
+    if (!request || request.external_evidence_requested === true) return line;
+    const current = clean(match[2]);
+    const accepted = lang === 'ja'
+      ? /成立した外部根拠候補がある/u.test(current)
+      : /Accepted external evidence exists/iu.test(current);
+    const intent = lang === 'ja'
+      ? '利用者は外部Evidenceを明示要求していない。'
+      : 'The user did not explicitly request external evidence.';
+    if (accepted) return `  - ${match[1]}: ${intent} ${current}`;
+    return lang === 'ja'
+      ? `  - ${match[1]}: ${intent} 内部TaskのEvidence検索状態を要求レベルの外部Evidence要求へ昇格せず、実装事実・原因は未確認として分離する。`
+      : `  - ${match[1]}: ${intent} Do not promote internal Task evidence-search state into a request-level external-evidence requirement; implementation facts and causes remain separately unverified.`;
+  }).join('\n');
+}
 function normalizeSection08(section, model, lang) {
   let text = section;
   for (const request of model.judgment_requests || []) {
@@ -207,6 +226,7 @@ function normalizeMultiJudgmentPublicMaterial(material, judgment = {}) {
   sections[2] = normalizeSection03(sections[2], model, lang);
   sections[4] = normalizeSection05(sections[4], model, lang);
   sections[5] = normalizeSection06(sections[5], model, lang);
+  sections[6] = normalizeSection07(sections[6], model, lang);
   sections[7] = normalizeSection08(sections[7], model, lang);
   const text = scrubNoise(sections.join('\n---\n'));
   const nextSections = text.split('\n---\n');
