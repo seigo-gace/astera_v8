@@ -1,19 +1,19 @@
 'use strict';
 
-// Universal, source-backed structural understanding for arbitrary judgment-seeking text.
-// This module is deterministic and document-type agnostic. It preserves original spans first,
-// then projects reusable semantic atoms. It does not decide truth or final outcomes.
+// Lossless, deterministic structural understanding for arbitrary judgment-seeking text.
+// Original source is preserved exactly as received by JavaScript. Normalization is carried
+// separately. This layer does not establish truth and does not make final decisions.
 
-const REQUEST_JA = /(?:してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする)/u;
-const REQUEST_EN = /(?:\bplease\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bsupport\b|\bmeasure\b|\bdo\s+not\b|\bnever\b)/iu;
+const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする)/u;
+const REQUEST_EN = /(?:\bplease\b|\bI\s+need\b|\bwe\s+need\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bidentify\b|\bstate\b|\bprovide\b|\breturn\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bsupport\b|\bmeasure\b|\bshow\b|\bdo\s+not\b|\bnever\b)/iu;
 const OBJECTIVE_JA = /(?:^|[【\s])(第?[一二三四五六七八九十0-9]+(?:の)?目的|目的[A-Za-z0-9一二三四五六七八九十]*)(?:は|:|：)/u;
-const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*:/iu;
-const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,100}(?:する|である|こと)/u;
-const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b)/iu;
-const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|禁止|せず|出さない)|(?:\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu;
+const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*(?::|\bis\s+to\b)/iu;
+const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
+const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
+const PURE_PROHIBITION = /(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
 
-function normalizeText(value) {
-  return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n');
+function normalized(value) {
+  return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
 }
 
 function detectLanguage(text, hint = '') {
@@ -29,14 +29,13 @@ function detectLanguage(text, hint = '') {
 
 function pushNode(nodes, kind, start, end, text, parentId, order, extra = {}) {
   if (!(Number.isFinite(start) && Number.isFinite(end) && end > start)) return null;
-  const id = `S${String(nodes.length + 1).padStart(5, '0')}`;
   const node = {
-    id,
+    id: `S${String(nodes.length + 1).padStart(5, '0')}`,
     kind,
     order,
     source_span: { start, end },
     text,
-    normalized_text: String(text || '').normalize('NFKC').trim(),
+    normalized_text: normalized(text),
     parent_id: parentId || null,
     ...extra
   };
@@ -46,15 +45,14 @@ function pushNode(nodes, kind, start, end, text, parentId, order, extra = {}) {
 
 function lineSpans(source) {
   const spans = [];
-  let start = 0;
-  const re = /.*(?:\n|$)/gu;
-  for (const match of source.matchAll(re)) {
-    if (!match[0]) continue;
-    const raw = match[0];
-    const end = start + raw.length;
-    const text = raw.endsWith('\n') ? raw.slice(0, -1) : raw;
-    spans.push({ start, end: start + text.length, text });
-    start = end;
+  let cursor = 0;
+  while (cursor < source.length) {
+    const nl = source.indexOf('\n', cursor);
+    const endWithNl = nl < 0 ? source.length : nl + 1;
+    let contentEnd = nl < 0 ? source.length : nl;
+    if (contentEnd > cursor && source[contentEnd - 1] === '\r') contentEnd -= 1;
+    spans.push({ start: cursor, end: contentEnd, line_end: endWithNl, text: source.slice(cursor, contentEnd) });
+    cursor = endWithNl;
   }
   return spans;
 }
@@ -62,7 +60,7 @@ function lineSpans(source) {
 function classifyBlock(text) {
   const value = String(text || '').trim();
   if (!value) return 'blank';
-  if (/^(?:#{1,6}\s+|【[^】]+】|(?:第?[一二三四五六七八九十0-9]+(?:章|節|項|の目的)|Objective\s+\w+|Requirement\s+\w*)\s*[:：]?)/iu.test(value)) return 'heading';
+  if (/^(?:#{1,6}\s+|【[^】]+】|(?:第?[一二三四五六七八九十0-9]+(?:章|節|項|の目的)|Objective\s+\w+|Requirement\s+\w*)\s*(?::|：|is\s+to)?)/iu.test(value)) return 'heading';
   if (/^(?:[-*+•]|\d+[.)]|[一二三四五六七八九十]+[.)、]|[A-Za-z][.)])\s*/u.test(value)) return 'list_item';
   return 'paragraph';
 }
@@ -111,10 +109,10 @@ function clauseSpansInRange(source, range) {
 }
 
 function buildSourceGraph(input, languageHint = '') {
-  const source = normalizeText(input);
+  const source = String(input ?? '');
   const language = detectLanguage(source, languageHint);
   const nodes = [];
-  const root = pushNode(nodes, 'document', 0, source.length, source, null, 0, { language });
+  const root = source.length ? pushNode(nodes, 'document', 0, source.length, source, null, 0, { language }) : null;
   const lines = lineSpans(source);
   let blockOrder = 0;
   let active = null;
@@ -146,9 +144,10 @@ function buildSourceGraph(input, languageHint = '') {
     for (const sentence of sentences) {
       const sentenceNode = pushNode(nodes, 'sentence', sentence.start, sentence.end, sentence.text, blockNode.id, ++sentenceOrder, { language });
       if (!sentenceNode) continue;
-      const clauses = clauseSpansInRange(source, sentence);
       let clauseOrder = 0;
-      for (const clause of clauses) pushNode(nodes, 'clause', clause.start, clause.end, clause.text, sentenceNode.id, ++clauseOrder, { language });
+      for (const clause of clauseSpansInRange(source, sentence)) {
+        pushNode(nodes, 'clause', clause.start, clause.end, clause.text, sentenceNode.id, ++clauseOrder, { language });
+      }
     }
   }
 
@@ -157,36 +156,43 @@ function buildSourceGraph(input, languageHint = '') {
     language,
     source_length: source.length,
     source,
+    normalized_source: normalized(source),
     root_id: root?.id || null,
     nodes
   };
 }
 
 function operationFor(text) {
-  const value = String(text || '').normalize('NFKC');
+  const value = normalized(text);
   if (/(?:比較|比べ|compare|versus|\bvs\.?\b)/iu.test(value)) return 'compare';
   if (/(?:削除|除去|なくす|消す|外す|remove|delete|eliminate)/iu.test(value)) return 'remove';
   if (/(?:検証|事実確認|確認|調査|監査|verify|validate|research|investigate|audit|check)/iu.test(value)) return 'verify';
   if (/(?:追加|実装|作成|構築|表示|implement|build|create|add|display|show)/iu.test(value)) return 'implement';
   if (/(?:改善|修正|見直|直す|調整|整理|improve|fix|refactor|adjust|organize)/iu.test(value)) return 'improve';
   if (/(?:計画|plan|roadmap)/iu.test(value)) return 'plan';
+  if (/(?:判断|決める|decide|decision)/iu.test(value)) return 'decide';
   return 'analyze';
 }
 
+function objectiveCue(value) {
+  return OBJECTIVE_JA.test(value)
+    || OBJECTIVE_EN.test(value)
+    || /(?:本当の目的|最終的に欲しい状態|the\s+goal\s+is|the\s+objective\s+is)/iu.test(value);
+}
+
 function isRequestText(text) {
-  const value = String(text || '').normalize('NFKC').trim();
+  const value = normalized(text);
   if (!value) return false;
-  const objective = OBJECTIVE_JA.test(value) || OBJECTIVE_EN.test(value);
-  const formal = FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value);
-  if (objective || formal) return true;
-  if (PURE_PROHIBITION.test(value) && !(REQUEST_JA.test(value) || REQUEST_EN.test(value))) return false;
+  if (objectiveCue(value)) return true;
+  if (FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value)) return true;
+  if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement)/iu.test(value)) return false;
   return REQUEST_JA.test(value) || REQUEST_EN.test(value);
 }
 
 function atomTypesFor(text) {
-  const value = String(text || '').normalize('NFKC').trim();
+  const value = normalized(text);
   const out = [];
-  if (OBJECTIVE_JA.test(value) || OBJECTIVE_EN.test(value) || /(?:本当の目的|最終的に欲しい状態|the\s+goal\s+is|the\s+objective\s+is)/iu.test(value)) out.push('OBJECTIVE');
+  if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
   if (/(?:禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
@@ -197,20 +203,30 @@ function atomTypesFor(text) {
   if (/(?:受入条件|完了条件|合格条件|Acceptance\s+Criteria|completion\s+criteria|pass\s+criteria)/iu.test(value)) out.push('ACCEPTANCE_CRITERION');
   if (/(?:根拠|出典|Evidence|source|事実確認|ファクトチェック|裏取り|\bverify\b|\bvalidation\b)/iu.test(value)) out.push('EVIDENCE_REQUIREMENT');
   if (/(?:観測|報告|ように見える|ことがある|発生した|エラー|不具合|seems|appears|sometimes|observed|reported|failure|error)/iu.test(value)) out.push('OBSERVATION');
+  if (/(?:仮定|想定|おそらく|推測|assume|assumption|probably|likely)/iu.test(value)) out.push('ASSUMPTION');
+  if (/[?？]$/u.test(value) || /(?:何|なぜ|どの|どれ|どう|\bwhat\b|\bwhy\b|\bwhich\b|\bhow\b)/iu.test(value)) out.push('QUESTION');
+  if (/(?:比較軸|評価軸|criterion|criteria|dimension)/iu.test(value)) out.push('COMPARISON_CRITERION');
+  if (/(?:候補|案A|案B|option\s+[A-Z0-9]|candidate)/iu.test(value)) out.push('COMPARISON_CANDIDATE');
   if (/(?:期限|締切|納期|までに|deadline|due\s+date|\bby\s+\d|\bby\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))/iu.test(value)) out.push('DEADLINE');
-  if (/(?:依存|前提として|その後|次に|最後に|depends?\s+on|after\b|before\b|then\b|finally\b)/iu.test(value)) out.push('DEPENDENCY');
+  if (/(?:依存|前提として|depends?\s+on)/iu.test(value)) out.push('DEPENDENCY');
+  if (/(?:その後|次に|最後に|\bafter\b|\bbefore\b|\bthen\b|\bfinally\b)/iu.test(value)) out.push('SEQUENCE');
+  if (/(?:管轄|jurisdiction|法域|地域|\bscope\b|範囲)/iu.test(value)) out.push('SCOPE');
+  if (/(?:stakeholder|利害関係者|利用者|顧客|患者|住民|従業員)/iu.test(value)) out.push('STAKEHOLDER');
+  if (/\d+(?:\.\d+)?\s*(?:%|％|件|人|回|日|時間|分|秒|円|万円|台|個|社|本|枚|ms|s\b)/iu.test(value)) out.push('QUANTITATIVE_VALUE');
+  if (/(?:危険|リスク|\brisk\b|\bharm\b|failure\s+mode|故障)/iu.test(value)) out.push('RISK_SIGNAL');
+  if (/(?:未確認|未確定|未成立|不明|\bunknown\b|\bunresolved\b|not\s+yet|\bpending\b)/iu.test(value)) out.push('UNRESOLVED');
+  if (/(?:上記|前述|それ|これ|同じ|\bprevious\b|\babove\b|\bthat\b|\bthose\b)/iu.test(value)) out.push('REFERENCE');
+  if (!out.includes('OBSERVATION') && /(?:である|です|だった|\bwas\b|\bis\b|\bare\b)/iu.test(value) && !isRequestText(value)) out.push('CLAIM');
   return [...new Set(out)];
 }
 
 function buildSemanticAtoms(sourceGraph) {
   const source = sourceGraph?.source || '';
-  const candidateNodes = (sourceGraph?.nodes || []).filter((node) => node.kind === 'clause' || node.kind === 'sentence' || node.kind === 'heading' || node.kind === 'list_item');
+  const candidateNodes = (sourceGraph?.nodes || []).filter((node) => ['clause', 'sentence', 'heading', 'list_item'].includes(node.kind));
   const atoms = [];
   const seen = new Set();
   let order = 0;
 
-  // Prefer the smallest source-backed unit for request extraction. Parent sentence atoms remain
-  // available for types not already represented by a child span.
   const sorted = [...candidateNodes].sort((a, b) => {
     const al = a.source_span.end - a.source_span.start;
     const bl = b.source_span.end - b.source_span.start;
@@ -243,7 +259,8 @@ function buildSemanticAtoms(sourceGraph) {
     }
   }
 
-  const requests = atoms.filter((atom) => atom.type === 'REQUEST').sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
+  const requests = atoms.filter((atom) => atom.type === 'REQUEST')
+    .sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
   return {
     schema: 'astera.semantic-atom-graph.v1',
     language: sourceGraph.language,
