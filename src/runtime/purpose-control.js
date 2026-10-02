@@ -55,9 +55,39 @@ function overrideMaterialTask(task, intent) {
   };
 }
 
+function detectedIntent(prepared, packet) {
+  return packet?.analysis_intent
+    || prepared?.standalone_api_intent
+    || prepared?.instruction_understanding?.analysis_intent
+    || null;
+}
+
+function preserveDetectedSingleCasePurpose(prepared) {
+  if (!prepared || typeof prepared !== 'object') return prepared;
+  const packet = prepared.analysis_task_packet && typeof prepared.analysis_task_packet === 'object'
+    ? prepared.analysis_task_packet
+    : null;
+  if (!packet || packet.case_model?.multi_judgment === true || Number(packet.case_model?.request_count || 0) > 1) return prepared;
+  const intent = detectedIntent(prepared, packet);
+  const purpose = String(intent?.purpose || '').trim();
+  if (!purpose) return prepared;
+  const nextPacket = { ...packet, user_goal: purpose, analysis_intent: intent };
+  return {
+    ...prepared,
+    objective: purpose,
+    user_goal: purpose,
+    analysis_task_packet: nextPacket,
+    instruction_understanding: {
+      ...(prepared.instruction_understanding || {}),
+      analysis_intent: intent
+    },
+    standalone_api_intent: prepared.standalone_api_intent || intent
+  };
+}
+
 function applyExplicitPurposeControl(prepared, value) {
   const intent = explicitPurposeIntent(value);
-  if (!intent) return prepared;
+  if (!intent) return preserveDetectedSingleCasePurpose(prepared);
   if (!prepared || typeof prepared !== 'object') return prepared;
 
   const packet = prepared.analysis_task_packet && typeof prepared.analysis_task_packet === 'object'
@@ -75,6 +105,7 @@ function applyExplicitPurposeControl(prepared, value) {
   return {
     ...prepared,
     objective: intent.purpose,
+    user_goal: intent.purpose,
     ...(nextPacket ? { analysis_task_packet: nextPacket } : {}),
     instruction_understanding: {
       ...(prepared.instruction_understanding || {}),
