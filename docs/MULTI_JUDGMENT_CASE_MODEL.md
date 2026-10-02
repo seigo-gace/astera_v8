@@ -187,7 +187,7 @@ Compare
 
 The multi-judgment layer does not replace these lanes. It ensures that they receive the correct per-request material.
 
-Case-level rendering must use the actual Task results where available. It must not merely repeat request text inside an eight-section template.
+Case-level rendering uses the actual Task results where available. It does not merely repeat request text inside an eight-section template.
 
 ## Main8 projection
 
@@ -230,7 +230,7 @@ Machine-readable Evidence metadata may accompany that same material so an App or
 
 ## Regression authority
 
-The regression suite must cover at least:
+The regression suite covers:
 
 - a single request remains a single request;
 - one post containing several explicit requests preserves all of them;
@@ -239,10 +239,14 @@ The regression suite must cover at least:
 - request-local conditions do not become false cross-request dependencies;
 - explicit sequence cues produce dependencies rather than unsafe parallel execution;
 - a Parser result that collapses several requests is recovered into distinct Tasks;
+- recovered request-specific material does not leak from the first Task into later Tasks;
 - every recovered Task runs through the five-stage path;
 - Main8 keeps all request units visible;
+- Main8 uses per-Task five-stage material where available;
 - internal template / runtime diagnostic fields do not leak into public Main8;
 - Evidence status and Evidence citations remain attributable to the correct request / Claim.
+
+Exact-head runtime authority is intentionally separate from Source/CI authority. The isolated VPS multi-judgment gate must be run on the exact revision before this behavior is treated as live-runtime proven.
 
 ## Decision boundary
 
