@@ -84,7 +84,10 @@ test('partial Japanese parser projection recovers source-backed Case Graph mater
     assert.equal(packet.case_model?.request_count, 2, JSON.stringify(packet.case_model, null, 2));
     assert.equal(packet.case_model?.multi_judgment, true);
     assert.equal(packet.case_model?.parser_task_mapping?.retained_task_ids?.length, 0, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
-    assert.equal(packet.case_model?.parser_task_mapping?.dropped_tasks?.length, 1, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.equal(packet.case_model?.parser_task_mapping?.dropped_tasks?.length, 0, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.equal(packet.case_model?.parser_task_mapping?.absorbed_tasks?.length, 2, JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.ok(packet.case_model?.parser_task_mapping?.absorbed_tasks?.some((item) => item.reason === 'SEMANTIC_CONTEXT_NOT_INDEPENDENT_REQUEST' && (item.semantic_atom_types || []).includes('PROHIBITION')), JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
+    assert.ok(packet.case_model?.parser_task_mapping?.absorbed_tasks?.some((item) => item.reason === 'SYNTHETIC_DOCUMENT_SCOPE_REPLACED_BY_CASE_GRAPH'), JSON.stringify(packet.case_model?.parser_task_mapping, null, 2));
     assert.deepEqual(new Set(packet.case_model?.parser_task_mapping?.recovered_request_ids || []), new Set(['R01', 'R02']));
     assert.equal(packet.tasks.length, 2, JSON.stringify(packet.tasks, null, 2));
     assert.ok(packet.tasks.some((item) => item.action === 'compare'));
