@@ -1,6 +1,7 @@
 'use strict';
 
 const { PURPOSE } = require('./standalone-material-normalizer');
+const { attachMaterialRequirementGraph } = require('./material-requirement-graph');
 
 const PURPOSE_MODES = Object.freeze([
   'review',
@@ -87,7 +88,7 @@ function preserveDetectedSingleCasePurpose(prepared) {
 
 function applyExplicitPurposeControl(prepared, value) {
   const intent = explicitPurposeIntent(value);
-  if (!intent) return preserveDetectedSingleCasePurpose(prepared);
+  if (!intent) return attachMaterialRequirementGraph(preserveDetectedSingleCasePurpose(prepared));
   if (!prepared || typeof prepared !== 'object') return prepared;
 
   const packet = prepared.analysis_task_packet && typeof prepared.analysis_task_packet === 'object'
@@ -102,7 +103,7 @@ function applyExplicitPurposeControl(prepared, value) {
     }
     : null;
 
-  return {
+  const controlled = {
     ...prepared,
     objective: intent.purpose,
     user_goal: intent.purpose,
@@ -113,6 +114,7 @@ function applyExplicitPurposeControl(prepared, value) {
     },
     standalone_api_intent: intent
   };
+  return attachMaterialRequirementGraph(controlled);
 }
 
 module.exports = {
