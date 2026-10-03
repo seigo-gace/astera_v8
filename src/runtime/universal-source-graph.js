@@ -298,7 +298,8 @@ function coalesceDependentRequestAtoms(requests, source) {
 
 function hasIndependentMaterialSubject(text) {
   const value = normalized(text);
-  if (/\b(?:for|in|about|regarding)\s+(?!the\s+(?:decision|answer|output|material|evidence|case)\b)[a-z0-9][^,.;!?]{2,}/iu.test(value)) return true;
+  const subjectCandidate = value.replace(/\b(?:in|for)\s+(?:the\s+)?(?:eight[- ]section|8[- ]section|main8)\s+(?:material|output|response)\b/giu, '');
+  if (/\b(?:for|in|about|regarding)\s+(?!the\s+(?:decision|answer|output|material|evidence|case)\b)[a-z0-9][^,.;!?]{2,}/iu.test(subjectCandidate)) return true;
   if (/(?:について|に関する|における)[^。！？!?]{0,40}(?:リスク|危険|比較軸|評価軸|根拠)/u.test(value)) return true;
   if (/[^。！？!?]{2,40}の(?:リスク|危険|比較軸|評価軸|根拠)/u.test(value)) return true;
   return false;
