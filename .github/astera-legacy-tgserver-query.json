@@ -1,0 +1,9 @@
+{
+  "schema": "astera.legacy-tgserver-query/v1",
+  "module": "development",
+  "query": "",
+  "severity": "",
+  "from": "",
+  "to": "",
+  "limit": 100
+}
