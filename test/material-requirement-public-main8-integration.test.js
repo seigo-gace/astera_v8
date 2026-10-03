@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const AsteraEngine = require('../src/astera-engine');
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
+const { projectFiveLaneMaterialToMain8 } = require('../src/runtime/five-lane-main8-projection');
 
 const silentLogger = { write() {} };
 const caller = { id: 'material-main8-test', is_global: true, plan: 'admin' };
@@ -71,4 +72,18 @@ test('Requirement Graph reaches public Main8 only through five-lane processing a
   } finally {
     await engine.destroy();
   }
+});
+
+test('Compare lane dimensions stay internal for verify tasks and become public for explicit compare tasks', () => {
+  const judgment = { '06_comparison': { dimensions: [] } };
+  const laneResult = (action) => ({
+    task: { action },
+    lanes: { compare: { dimensions: ['安全性', 'Cost'] } }
+  });
+
+  const verifyProjection = projectFiveLaneMaterialToMain8(judgment, [laneResult('verify')]);
+  assert.deepEqual(verifyProjection['06_comparison'].dimensions, []);
+
+  const compareProjection = projectFiveLaneMaterialToMain8(judgment, [laneResult('compare')]);
+  assert.deepEqual(compareProjection['06_comparison'].dimensions, ['安全性', 'Cost']);
 });
