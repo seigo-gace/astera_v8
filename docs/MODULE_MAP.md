@@ -44,10 +44,20 @@ src/runtime/canonical-task-admission.js
 src/runtime/canonical-task-executor.js
 src/runtime/canonical-wave-executor.js
 src/runtime/concurrency-policy.js
+src/runtime/five-stage-executor.js
+src/runtime/five-stage-worker.js
+src/runtime/material-requirement-graph.js
+src/runtime/specialist-requirement-refiner.js
+src/runtime/material-requirement-five-lane-bridge.js
+src/runtime/purpose-control.js
 src/worker-pool.js
 ```
 
 Task execution ownership includes Dependency validation、Wave ordering、bounded concurrency、admission、overload rejection、dependency skip propagation、cancellation handlingです。
+
+Material Requirement Graphは、判断に必要な条件・不足を**5 Laneより前**で明示する前処理／診断Contractです。`material-requirement-five-lane-bridge.js`は、決定基準・失格条件などの未解決な構造要件をTask Contextへ戻し、通常のCanonical処理と`Fact / Risk / Multi / Inquiry / Compare`を経由させます。Requirement GraphからMain8へ直接投影する経路はCanonical Product Flowではありません。
+
+Pre-search時点のEvidence/Observation不足をFinal Main8へ固定表示せず、外部Evidenceの成立状態はEvidence Search → Binding → G1-G7 Claim ConfirmationのCurrent結果を正とします。G01-G38の専門材料もRequirement Graphから二重注入せず、既存Lens Plan → Five Lane経路を正とします。
 
 ### Claim / evidence requirement / confirmation
 
