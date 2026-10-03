@@ -75,6 +75,19 @@ function normalize(value) {
     .trim();
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isAsciiControlledTerm(value) {
+  return /^[a-z0-9.+#&-]+(?: [a-z0-9.+#&-]+)*$/i.test(String(value || ''));
+}
+
+function asciiBoundaryMatch(text, term) {
+  if (!isAsciiControlledTerm(term)) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}(?=$|[^a-z0-9])`, 'i').test(text);
+}
+
 function ngrams(value, n = 3) {
   const text = normalize(value).replace(/\s+/g, '');
   if (!text) return new Set();
@@ -129,11 +142,8 @@ function scoreGenre(genre, text) {
   for (const rawTerm of genre.terms || []) {
     const term = normalize(rawTerm);
     if (!term) continue;
-    const shortAsciiToken = /^[a-z0-9.+#-]{1,3}$/.test(term);
-    const shortAsciiBoundaryMatch = shortAsciiToken
-      ? new RegExp(`(^|[^a-z0-9.+#-])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^a-z0-9.+#-])`, 'i').test(normalizedText)
-      : false;
-    const exactMatch = shortAsciiToken ? shortAsciiBoundaryMatch : normalizedText.includes(term);
+    const asciiControlled = isAsciiControlledTerm(term);
+    const exactMatch = asciiControlled ? asciiBoundaryMatch(normalizedText, term) : normalizedText.includes(term);
     if (exactMatch) {
       const compactLength = term.replace(/\s/g, '').length;
       score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
