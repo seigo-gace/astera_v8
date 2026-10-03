@@ -13,7 +13,8 @@ const { applyUniversalCaseGraph } = require('./runtime/universal-case-graph');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
 const { normalizeMultiJudgmentPublicMaterial } = require('./runtime/multi-judgment-public-material-normalizer');
-const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
+const { renderFiveLaneMain8 } = require('./runtime/five-lane-main8-material-renderer');
+const { projectFiveLaneMaterialToMain8 } = require('./runtime/five-lane-main8-projection');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const { isPublicStructuralGapLabel } = require('./runtime/material-requirement-five-lane-bridge');
@@ -109,7 +110,7 @@ class AsteraEngine extends CanonicalAsteraEngine {
     const packet = request.analysis_task_packet || {};
     const observable = packet.observable_material || request.observable_material || null;
     const intent = packet.analysis_intent || request.standalone_api_intent || null;
-    const next = { ...judgment };
+    const next = projectFiveLaneMaterialToMain8({ ...judgment }, args.taskResults || []);
     const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
 
     const fiveLaneStructuralGaps = uniqueStrings(
@@ -237,7 +238,7 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   material(judgment) {
-    const rendered = normalizeUnifiedMain8Material(renderUnifiedMain8(judgment));
+    const rendered = normalizeUnifiedMain8Material(renderFiveLaneMain8(judgment));
     return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
   }
 
