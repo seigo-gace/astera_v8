@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const AsteraEngine = require('../src/astera-engine');
+const { routeDomainTemplates } = require('../src/domain-template-router');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 
 const silentLogger = { write() {}, async flush() {} };
@@ -38,6 +39,20 @@ test('explicit comparison-axis requirement exposes G06 compare-lane dimensions w
   const out = await run(domainPrompt('G06', '社会施策の判断'));
   assert.match(out.material.text, /判断・比較で揃える専門軸/u);
   assert.match(out.material.text, /公平性/u);
+  assert.equal(out.result.comparison.selected_candidate, null);
+  assert.deepEqual(out.result.comparison.candidate_ranking, []);
+});
+
+test('G34 emergency response plan routes to public safety and preserves emergency breadth material', async () => {
+  const question = domainPrompt('G34', '緊急対応計画の判断');
+  const routed = routeDomainTemplates({ question });
+  assert.equal(routed.primary?.id, 'G34');
+  assert.equal(routed.classification_basis, 'PUBLIC_SAFETY_EMERGENCY_CANONICAL_HINT');
+
+  const out = await run(question);
+  assert.match(out.material.text, /Hazard・危険/u);
+  assert.match(out.material.text, /Response Capacity・対応能力/u);
+  assert.match(out.material.text, /Escalation・エスカレーション/u);
   assert.equal(out.result.comparison.selected_candidate, null);
   assert.deepEqual(out.result.comparison.candidate_ranking, []);
 });
