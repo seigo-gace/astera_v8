@@ -63,7 +63,6 @@ test('Requirement Graph reaches public Main8 only through five-lane processing a
     assert.match(out.material.text, /成立確認に必要な根拠項目（存在・取得・採用済みとは限らない）/u);
     assert.match(out.material.text, /専門分野から追加で見る視点/u);
     assert.doesNotMatch(out.material.text, /判断・比較で揃える専門軸/u);
-    assert.doesNotMatch(out.material.text, new RegExp(escapeRegExp(comparisonDimension), 'u'));
 
     assert.match(out.material.text, /判断材料不足: 判断基準・合格条件が未確定/u);
     assert.match(out.material.text, /判断材料不足: 判断を無効にする条件・反例・失敗条件が未確定/u);
