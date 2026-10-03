@@ -17,10 +17,6 @@ const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-rendere
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const {
-  projectMaterialRequirementsToMain8,
-  mergeProjectionIntoRenderedMain8
-} = require('./runtime/material-requirement-main8-projection');
-const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
 } = require('./runtime/purpose-control');
@@ -114,13 +110,6 @@ class AsteraEngine extends CanonicalAsteraEngine {
     const intent = packet.analysis_intent || request.standalone_api_intent || null;
     const next = { ...judgment };
     const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
-    const materialRequirementProjection = projectMaterialRequirementsToMain8(
-      packet.material_requirement_graph,
-      { lang: outputLang }
-    );
-    if (materialRequirementProjection.request_count > 0) {
-      next.material_requirement_projection = materialRequirementProjection;
-    }
 
     if (packet.parser_projection_recovery?.applied === true) {
       const premise = next['02_premise'];
@@ -236,8 +225,7 @@ class AsteraEngine extends CanonicalAsteraEngine {
 
   material(judgment) {
     const rendered = normalizeUnifiedMain8Material(renderUnifiedMain8(judgment));
-    const projected = mergeProjectionIntoRenderedMain8(rendered, judgment.material_requirement_projection);
-    return normalizeMultiJudgmentPublicMaterial(projected, judgment);
+    return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
   }
 
   externalBrief(judgment) {
