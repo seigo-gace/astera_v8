@@ -33,8 +33,8 @@ test('Japanese judgment-material shaping sentence stays with its owning decision
 
 test('material instruction with its own explicit subject remains an independent request', () => {
   const inputs = [
-    'Review the API migration. Identify material risks for the payment migration.',
-    'Review Project A. State comparison dimensions for Project B.'
+    'Review the API migration; Identify material risks for the payment migration.',
+    'Review Project A; State comparison dimensions for Project B.'
   ];
   for (const input of inputs) {
     const understanding = buildUniversalSourceUnderstanding(input, 'en');
