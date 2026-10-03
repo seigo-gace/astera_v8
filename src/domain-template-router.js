@@ -110,12 +110,18 @@ function genreTermFrequency(term) {
   return genreTermFrequencyCache.get(term) || 0;
 }
 
-function exactTermWeight(term) {
+function isGenreIdentityTerm(genre, term) {
+  if (genreTermFrequency(term) !== 1) return false;
+  const identity = normalize(`${genre?.name || ''} ${genre?.anchor_title || ''}`);
+  return identity.includes(term);
+}
+
+function exactTermWeight(term, genre) {
   const compactLength = term.replace(/\s/g, '').length;
   if (isAsciiControlledTerm(term)) {
     return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
   }
-  if (compactLength >= 2 && genreTermFrequency(term) === 1) {
+  if (compactLength >= 2 && isGenreIdentityTerm(genre, term)) {
     return compactLength >= 4 ? 16 : 10;
   }
   return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
@@ -178,7 +184,7 @@ function scoreGenre(genre, text) {
     const asciiControlled = isAsciiControlledTerm(term);
     const exactMatch = asciiControlled ? asciiBoundaryMatch(normalizedText, term) : normalizedText.includes(term);
     if (exactMatch) {
-      score += exactTermWeight(term);
+      score += exactTermWeight(term, genre);
       exactHits += 1;
       matched.push(rawTerm);
       continue;
