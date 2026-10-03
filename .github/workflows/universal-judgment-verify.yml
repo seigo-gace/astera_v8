@@ -46,6 +46,23 @@ jobs:
           docker logs djpmcp-http-universal-ci
           exit 1
 
+      - name: Run Material Requirement accounting gate
+        id: material_requirements
+        continue-on-error: true
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: ci-only-key
+          ASTERA_UNIVERSAL_ARTIFACT_ROOT: artifacts/universal-judgment-v1
+        shell: bash
+        run: |
+          set +e
+          node scripts/run-material-requirement-diagnostics-gate.js
+          rc=$?
+          mkdir -p artifacts/universal-judgment-v1
+          printf '%s\n' "$rc" > artifacts/universal-judgment-v1/material-requirement-exit-code.txt
+          exit "$rc"
+
       - name: Run universal judgment semantic gate
         id: universal
         continue-on-error: true
@@ -94,10 +111,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          requirements="$(cat artifacts/universal-judgment-v1/material-requirement-exit-code.txt 2>/dev/null || printf '2')"
           semantic="$(cat artifacts/universal-judgment-v1/semantic-exit-code.txt 2>/dev/null || printf '2')"
           metamorphic="$(cat artifacts/universal-judgment-v1/metamorphic-exit-code.txt 2>/dev/null || printf '2')"
-          if [ "$semantic" != "0" ] || [ "$metamorphic" != "0" ]; then
-            echo "Universal Judgment gates failed: semantic=$semantic metamorphic=$metamorphic. Inspect the uploaded artifact."
+          if [ "$requirements" != "0" ] || [ "$semantic" != "0" ] || [ "$metamorphic" != "0" ]; then
+            echo "Universal Judgment gates failed: material_requirements=$requirements semantic=$semantic metamorphic=$metamorphic. Inspect the uploaded artifact."
             exit 1
           fi
 
