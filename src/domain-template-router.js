@@ -1,6 +1,7 @@
 'use strict';
 
 const { TAXONOMY_VERSION, GENRE_LENSES } = require('./all-domain-lens-catalog');
+const { aliasesForGenre } = require('./domain-identity-aliases');
 
 function rx(pattern) {
   return new RegExp(pattern, 'i');
@@ -127,6 +128,11 @@ function exactTermWeight(term, genre) {
   return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
 }
 
+function aliasWeight(alias) {
+  const compactLength = alias.replace(/\s/g, '').length;
+  return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : 8;
+}
+
 function ngrams(value, n = 3) {
   const text = normalize(value).replace(/\s+/g, '');
   if (!text) return new Set();
@@ -174,6 +180,7 @@ function scoreGenre(genre, text) {
   const queryTokens = new Set(normalizedText.split(' ').filter(Boolean));
   const queryNgrams = ngrams(normalizedText);
   const anchor = normalize(genre.anchor_title);
+  const identityAliases = aliasesForGenre(genre.id);
   let score = normalizedText.includes(anchor) ? 1000 : 0;
   let exactHits = normalizedText.includes(anchor) ? 1 : 0;
   const matched = [];
@@ -195,7 +202,16 @@ function scoreGenre(genre, text) {
     }
   }
 
-  const termNgrams = ngrams([genre.name, genre.anchor_title, ...(genre.terms || [])].join(' '));
+  const catalogTerms = new Set((genre.terms || []).map((term) => normalize(term)).filter(Boolean));
+  for (const rawAlias of identityAliases) {
+    const alias = normalize(rawAlias);
+    if (!alias || catalogTerms.has(alias) || !asciiBoundaryMatch(normalizedText, alias)) continue;
+    score += aliasWeight(alias);
+    exactHits += 1;
+    matched.push(rawAlias);
+  }
+
+  const termNgrams = ngrams([genre.name, genre.anchor_title, ...(genre.terms || []), ...identityAliases].join(' '));
   const overlap = [...queryNgrams].filter((item) => termNgrams.has(item)).length;
   const denominator = Math.max(1, new Set([...queryNgrams, ...termNgrams]).size);
   const similarity = overlap / denominator;
