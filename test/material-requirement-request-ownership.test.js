@@ -31,10 +31,10 @@ test('Japanese judgment-material shaping sentence stays with its owning decision
   assert.ok(materialAtoms(understanding).length >= 1, JSON.stringify(understanding.semantic_atoms, null, 2));
 });
 
-test('material instruction with its own explicit subject remains an independent request', () => {
+test('material instruction with its own explicit subject remains an independent request across normal English periods', () => {
   const inputs = [
-    'Review the API migration; Identify material risks for the payment migration.',
-    'Review Project A; State comparison dimensions for Project B.'
+    'Review the API migration. Identify material risks for the payment migration.',
+    'Review Project A. State comparison dimensions for Project B.'
   ];
   for (const input of inputs) {
     const understanding = buildUniversalSourceUnderstanding(input, 'en');
