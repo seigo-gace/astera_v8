@@ -27,7 +27,11 @@ test('one Japanese decision request with material-shaping requirements still act
   assert.equal(out.analysis_task_packet.universal_case_graph?.applied, true);
   assert.equal(out.analysis_task_packet.case_model?.request_count, 1);
   const request = out.analysis_task_packet.case_model?.judgment_requests?.[0];
-  assert.ok((request?.local_context?.material_requirements || []).length >= 2, JSON.stringify(request, null, 2));
+  const requirements = request?.local_context?.material_requirements || [];
+  assert.ok(requirements.length >= 1, JSON.stringify(request, null, 2));
+  assert.match(requirements.join(' / '), /比較に必要な軸/u);
+  assert.match(requirements.join(' / '), /必要な根拠/u);
+  assert.match(requirements.join(' / '), /次に確認する材料/u);
   assert.equal(out.analysis_task_packet.tasks.length, 1);
   assert.deepEqual(out.analysis_task_packet.tasks[0].material_requirements, request.local_context.material_requirements);
 });
