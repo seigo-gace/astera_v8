@@ -9,7 +9,8 @@ const USER_OBSERVATION_CUE = /(?:(?:した|している|すると|したら|し�
 const CONTEXT_ATOM_TYPES = new Set([
   'PROHIBITION', 'PRESERVE', 'CONDITION', 'EXCEPTION', 'OBLIGATION', 'PERMISSION',
   'UNRESOLVED', 'DEADLINE', 'ACCEPTANCE_CRITERION', 'RISK_SIGNAL', 'EVIDENCE_REQUIREMENT',
-  'OBSERVATION', 'ASSUMPTION', 'QUESTION', 'SCOPE', 'STAKEHOLDER', 'CLAIM', 'QUANTITATIVE_VALUE'
+  'OBSERVATION', 'ASSUMPTION', 'QUESTION', 'SCOPE', 'STAKEHOLDER', 'CLAIM', 'QUANTITATIVE_VALUE',
+  'MATERIAL_REQUIREMENT'
 ]);
 
 function norm(value) {
@@ -72,7 +73,8 @@ function requestRecords(understanding) {
     objectives: [],
     local_context: {
       deadlines: [], preserve: [], prohibitions: [], unresolved: [], conditions: [], exceptions: [],
-      obligations: [], permissions: [], acceptance_criteria: [], assumptions: [], questions: [], risk_signals: []
+      obligations: [], permissions: [], acceptance_criteria: [], assumptions: [], questions: [], risk_signals: [],
+      material_requirements: []
     }
   }));
 }
@@ -101,6 +103,12 @@ function nearestRequest(atom, requests) {
   }
   return best;
 }
+function explicitMaterialOwner(atom, requests) {
+  if (atom?.type !== 'MATERIAL_REQUIREMENT') return null;
+  const ownerAtomId = String(atom?.material_requirement_owner_atom_id || '').trim();
+  if (!ownerAtomId) return null;
+  return requests.find((request) => String(request.source_atom_id) === ownerAtomId) || null;
+}
 function pushContext(target, key, text) {
   if (!target[key]) target[key] = [];
   target[key] = unique([...target[key], text]);
@@ -109,14 +117,16 @@ function contextKey(type) {
   return ({
     DEADLINE: 'deadlines', PRESERVE: 'preserve', PROHIBITION: 'prohibitions', UNRESOLVED: 'unresolved',
     CONDITION: 'conditions', EXCEPTION: 'exceptions', OBLIGATION: 'obligations', PERMISSION: 'permissions',
-    ACCEPTANCE_CRITERION: 'acceptance_criteria', ASSUMPTION: 'assumptions', QUESTION: 'questions', RISK_SIGNAL: 'risk_signals'
+    ACCEPTANCE_CRITERION: 'acceptance_criteria', ASSUMPTION: 'assumptions', QUESTION: 'questions', RISK_SIGNAL: 'risk_signals',
+    MATERIAL_REQUIREMENT: 'material_requirements'
   })[type] || null;
 }
 function attachSemanticOwnership(understanding, requests) {
   const atoms = understanding?.semantic_atoms?.atoms || [];
   const globalContext = {
     deadlines: [], preserve: [], prohibitions: [], unresolved: [], conditions: [], exceptions: [],
-    obligations: [], permissions: [], acceptance_criteria: [], assumptions: [], questions: [], risk_signals: []
+    obligations: [], permissions: [], acceptance_criteria: [], assumptions: [], questions: [], risk_signals: [],
+    material_requirements: []
   };
   const observations = [];
   let observationIndex = 0;
@@ -147,8 +157,10 @@ function attachSemanticOwnership(understanding, requests) {
     if (atom.type === 'REQUEST') continue;
     const text = String(atom.text || '').trim();
     if (!text) continue;
-    const owner = nearestRequest(atom, requests);
-    const global = GLOBAL_SCOPE_CUE.test(norm(text));
+    const owner = explicitMaterialOwner(atom, requests) || nearestRequest(atom, requests);
+    const global = atom.type === 'MATERIAL_REQUIREMENT'
+      ? false
+      : GLOBAL_SCOPE_CUE.test(norm(text));
     if (atom.type === 'OBJECTIVE') {
       if (owner && !global) owner.objectives = unique([...owner.objectives, text]);
       continue;
@@ -251,6 +263,10 @@ function mapParserTasks(tasks, requests, source, understanding = null) {
         source_span: span,
         purpose: sourceSemantic,
         objective: sourceSemantic,
+        material_requirements: unique([
+          ...(task.material_requirements || []),
+          ...(owner.local_context?.material_requirements || [])
+        ]),
         field_provenance: {
           ...previousProvenance,
           purpose: [
@@ -299,6 +315,7 @@ function recoveredTask(request, id) {
     deadlines: unique(ctx.deadlines || []),
     priority_records: [], deliverables: [],
     unresolved: unique(ctx.unresolved || []),
+    material_requirements: unique(ctx.material_requirements || []),
     hard_blockers: [], depends_on: [], branches: [], conditional_branch: null,
     execution_gate: 'ALWAYS', parallel_group: null, supersedes: [], superseded_by: [],
     evidence_need: {
@@ -350,13 +367,19 @@ function buildWaves(tasks) {
 }
 function shouldApplyUniversalCaseGraph(prepared, understanding, input = {}) {
   const requests = understanding?.semantic_atoms?.request_atoms || [];
+  const materialRequirements = (understanding?.semantic_atoms?.atoms || [])
+    .filter((atom) => atom.type === 'MATERIAL_REQUIREMENT' && atom.material_requirement_owner_atom_id);
   const sourceLength = String(input.question ?? prepared?.original_question ?? '').length;
   const overall = String(prepared?.instruction_understanding?.overall_status || '').toUpperCase();
   const markers = [
     ...(prepared?.analysis_task_packet?.hard_blockers || []),
     ...(prepared?.analysis_task_packet?.unresolved || [])
   ].map(String).join(' ');
-  return requests.length >= 2 || sourceLength >= 1200 || overall === 'PARTIAL' || /TIMEOUT|PARSER_ACTION_GUARD_BLOCKED|NO_EXECUTABLE_ACTION/iu.test(markers);
+  return requests.length >= 2
+    || (requests.length >= 1 && materialRequirements.length > 0)
+    || sourceLength >= 1200
+    || overall === 'PARTIAL'
+    || /TIMEOUT|PARSER_ACTION_GUARD_BLOCKED|NO_EXECUTABLE_ACTION/iu.test(markers);
 }
 function recoveredCaseHardBlockers(values = []) {
   return unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
@@ -480,6 +503,7 @@ function applyUniversalCaseGraph(prepared, input = {}) {
       deadlines: contextUnion('deadlines'),
       conditions: contextUnion('conditions'),
       exceptions: contextUnion('exceptions'),
+      material_requirements: contextUnion('material_requirements'),
       unresolved: unique([...contextUnion('unresolved'), ...sourceUnresolved]),
       hard_blockers: recoveredCaseHardBlockers(packet.hard_blockers || []),
       universal_case_graph: {
