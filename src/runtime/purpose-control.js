@@ -3,6 +3,7 @@
 const { PURPOSE } = require('./standalone-material-normalizer');
 const { attachMaterialRequirementGraph } = require('./material-requirement-graph');
 const { refinePreparedMaterialRequirements } = require('./specialist-requirement-refiner');
+const { bridgeMaterialRequirementsIntoFiveLanes } = require('./material-requirement-five-lane-bridge');
 
 const PURPOSE_MODES = Object.freeze([
   'review',
@@ -88,7 +89,8 @@ function preserveDetectedSingleCasePurpose(prepared) {
 }
 
 function attachAndRefine(prepared) {
-  return refinePreparedMaterialRequirements(attachMaterialRequirementGraph(prepared));
+  const refined = refinePreparedMaterialRequirements(attachMaterialRequirementGraph(prepared));
+  return bridgeMaterialRequirementsIntoFiveLanes(refined);
 }
 
 function applyExplicitPurposeControl(prepared, value) {
