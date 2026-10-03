@@ -16,6 +16,7 @@ const { normalizeMultiJudgmentPublicMaterial } = require('./runtime/multi-judgme
 const { renderUnifiedMain8 } = require('./runtime/unified-main8-material-renderer');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
+const { isPublicStructuralGapLabel } = require('./runtime/material-requirement-five-lane-bridge');
 const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
@@ -110,6 +111,18 @@ class AsteraEngine extends CanonicalAsteraEngine {
     const intent = packet.analysis_intent || request.standalone_api_intent || null;
     const next = { ...judgment };
     const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
+
+    const fiveLaneStructuralGaps = uniqueStrings(
+      (args.taskResults || []).flatMap((result) => result?.lanes?.inquiry?.missing_fields || [])
+    ).filter((value) => isPublicStructuralGapLabel(value, outputLang));
+    const fiveLanePremise = next['02_premise'];
+    if (fiveLanePremise && fiveLaneStructuralGaps.length) {
+      const projected = fiveLaneStructuralGaps.map((value) =>
+        `${outputLang === 'ja' ? '判断材料不足' : 'Missing judgment material'}: ${value}`
+      );
+      const items = uniqueStrings([...(fiveLanePremise.items || []), ...projected]);
+      next['02_premise'] = { ...fiveLanePremise, items, summary: items.join(' / ') };
+    }
 
     if (packet.parser_projection_recovery?.applied === true) {
       const premise = next['02_premise'];
