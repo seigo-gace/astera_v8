@@ -15,6 +15,10 @@ const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行
 const MATERIAL_SHAPING_JA = /(?:現在分かっている事実|確認済み(?:の)?事実|未確認(?:事項|項目|点)?|未解決(?:事項|項目|点)?|主要(?:な)?(?:危険|リスク)|反対側から確認すべき条件|反証条件|失格条件|比較に必要な軸|比較軸|評価軸|必要な根拠|根拠(?:の)?成立状態|根拠状態|次に確認する(?:材料|事項|項目))/u;
 const MATERIAL_SHAPING_EN = /(?:known facts?|confirmed facts?|unresolved (?:items?|issues?|questions?)|material risks?|disconfirming conditions?|falsification conditions?|comparison dimensions?|comparison criteria|evaluation criteria|evidence requirements?|evidence status|what should be verified next|what to verify next)/iu;
 const MATERIAL_DIRECTIVE = /(?:分け|区別|整理|示|列挙|明示|確認|\bseparate\b|\bdistinguish\b|\bidentify\b|\bstate\b|\blist\b|\bshow\b|\bprovide\b|\bindicate\b|\bsay\b|\bverify\b)/iu;
+const ENGLISH_ABBREVIATIONS = new Set([
+  'e.g.', 'i.e.', 'etc.', 'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'sr.', 'jr.',
+  'vs.', 'no.', 'fig.', 'inc.', 'ltd.', 'co.', 'st.'
+]);
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -69,18 +73,55 @@ function classifyBlock(text) {
   return 'paragraph';
 }
 
+function englishPeriodBoundary(text, index) {
+  if (text[index] !== '.') return false;
+  const previous = text[index - 1] || '';
+  const next = text[index + 1] || '';
+  if (/\d/u.test(previous) && /\d/u.test(next)) return false;
+  if (next && !/\s/u.test(next)) return false;
+
+  const prefix = text.slice(0, index + 1);
+  const token = (prefix.match(/(?:^|\s)([A-Za-z][A-Za-z.]*)\.$/u) || [])[1];
+  if (token && ENGLISH_ABBREVIATIONS.has(`${token.toLowerCase()}.`)) return false;
+  if (/(?:^|\s)[A-Z]\.$/u.test(prefix)) return false;
+  return true;
+}
+
 function sentenceSpansInRange(source, range) {
   const text = source.slice(range.start, range.end);
   const spans = [];
-  const re = /[^。！？!?\n]+(?:[。！？!?]+|$)/gu;
-  for (const match of text.matchAll(re)) {
-    const raw = match[0];
+  let cursor = 0;
+
+  const pushSpan = (endExclusive) => {
+    const raw = text.slice(cursor, endExclusive);
     const left = raw.length - raw.trimStart().length;
     const right = raw.length - raw.trimEnd().length;
-    const start = range.start + Number(match.index || 0) + left;
-    const end = range.start + Number(match.index || 0) + raw.length - right;
+    const start = range.start + cursor + left;
+    const end = range.start + endExclusive - right;
     if (end > start) spans.push({ start, end, text: source.slice(start, end) });
+    cursor = endExclusive;
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '\n') {
+      pushSpan(index);
+      cursor = index + 1;
+      continue;
+    }
+    if (/[。！？!?]/u.test(char)) {
+      let end = index + 1;
+      while (end < text.length && /[。！？!?]/u.test(text[end])) end += 1;
+      pushSpan(end);
+      index = end - 1;
+      continue;
+    }
+    if (char === '.' && englishPeriodBoundary(text, index)) {
+      pushSpan(index + 1);
+    }
   }
+
+  if (cursor < text.length) pushSpan(text.length);
   if (!spans.length && range.end > range.start) spans.push({ start: range.start, end: range.end, text: source.slice(range.start, range.end) });
   return spans;
 }
