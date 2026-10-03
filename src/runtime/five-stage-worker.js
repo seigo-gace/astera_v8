@@ -1,7 +1,7 @@
 'use strict';
 
 const { parentPort, threadId } = require('node:worker_threads');
-const { compileLensPlan } = require('../lens-plan');
+const { compileLensPlan, lensPlanEntries } = require('../lens-plan');
 const {
   factLane,
   riskLane,
@@ -55,15 +55,26 @@ function wait(ms) {
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
+function factRequirements(domain) {
+  return Object.freeze(lensPlanEntries(domain, 'fact').map((entry) => Object.freeze({
+    item: entry.value,
+    status: 'REQUIRES_CONFIRMATION',
+    source: 'LENS_PLAN',
+    lens_sources: entry.sources || []
+  })));
+}
+
 async function runLane(lane, payload) {
   const normalized = normalizePayload(payload);
   const startedAt = Date.now();
   await wait(normalized.probeDelayMs);
   let value;
   switch (lane) {
-    case 'fact':
-      value = factLane(normalized.claims, normalized.results, normalized.domain);
+    case 'fact': {
+      const base = factLane(normalized.claims, normalized.results, normalized.domain);
+      value = Object.freeze({ ...base, fact_requirements: factRequirements(normalized.domain) });
       break;
+    }
     case 'risk':
       value = riskLane(normalized.claims, normalized.results, normalized.task, normalized.domain);
       break;
