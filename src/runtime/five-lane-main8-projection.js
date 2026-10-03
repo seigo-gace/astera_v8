@@ -18,6 +18,15 @@ function itemsFromLane(taskResults, lane, field, mapper = (value) => value) {
   ));
 }
 
+function taskNeedsComparison(result = {}) {
+  const action = clean(result?.task?.action || result?.task?.operation).toLowerCase();
+  if (/^(?:compare|comparison|比較)$/u.test(action)) return true;
+  if (array(result?.task?.candidates).length >= 2) return true;
+  if (array(result?.lanes?.compare?.comparison_candidates).length >= 2) return true;
+  if (array(result?.lanes?.compare?.candidate_materials).length >= 2) return true;
+  return false;
+}
+
 function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   const next = { ...judgment };
 
@@ -29,7 +38,9 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   ));
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
   const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
-  const comparisonDimensions = itemsFromLane(taskResults, 'compare', 'dimensions');
+  const comparisonDimensions = unique(array(taskResults)
+    .filter(taskNeedsComparison)
+    .flatMap((result) => array(result?.lanes?.compare?.dimensions)));
 
   if (next['03_facts']) {
     next['03_facts'] = { ...next['03_facts'], fact_requirements: factRequirements };
@@ -59,5 +70,6 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
 }
 
 module.exports = {
+  taskNeedsComparison,
   projectFiveLaneMaterialToMain8
 };
