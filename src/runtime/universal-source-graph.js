@@ -19,6 +19,7 @@ const ENGLISH_ABBREVIATIONS = new Set([
   'e.g.', 'i.e.', 'etc.', 'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'sr.', 'jr.',
   'vs.', 'no.', 'fig.', 'inc.', 'ltd.', 'co.', 'st.'
 ]);
+const ENGLISH_LABELLED_SINGLE_LETTER = /(?:^|\s)(?:project|option|plan|case|candidate|version|phase|model|system|approach|proposal|scenario|route|track|group|item|step|section|part)\s+[A-Z]\.$/iu;
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -83,6 +84,7 @@ function englishPeriodBoundary(text, index) {
   const prefix = text.slice(0, index + 1);
   const token = (prefix.match(/(?:^|\s)([A-Za-z][A-Za-z.]*)\.$/u) || [])[1];
   if (token && ENGLISH_ABBREVIATIONS.has(`${token.toLowerCase()}.`)) return false;
+  if (ENGLISH_LABELLED_SINGLE_LETTER.test(prefix)) return true;
   if (/(?:^|\s)[A-Z]\.$/u.test(prefix)) return false;
   return true;
 }
