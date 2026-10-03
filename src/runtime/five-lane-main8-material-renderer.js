@@ -32,6 +32,7 @@ function renderFiveLaneMain8(judgment = {}) {
   const sections = sectionByKey(rendered);
 
   const factRequirements = unique(judgment['03_facts']?.fact_requirements || []);
+  const riskRequirements = unique(judgment['04_crisis']?.risk_requirements || []);
   const domainPerspectives = unique(judgment['05_opposition']?.domain_perspectives || []);
   const dimensions = unique(judgment['06_comparison']?.dimensions || []);
   const evidenceRequirements = unique(judgment['07_evidence_status']?.evidence_requirements || []);
@@ -47,6 +48,18 @@ function renderFiveLaneMain8(judgment = {}) {
       factRequirements
     );
     sections.set('03_facts', section);
+  }
+
+  if (sections.has('04_crisis') && riskRequirements.length) {
+    const section = sections.get('04_crisis');
+    section.text = appendBlock(
+      section.text,
+      lang === 'ja'
+        ? '専門分野上、確認が必要な危険・失敗条件（発生確定ではない）'
+        : 'Domain risk and failure checks (not confirmed occurrences)',
+      riskRequirements
+    );
+    sections.set('04_crisis', section);
   }
 
   if (sections.has('05_opposition') && domainPerspectives.length) {
