@@ -314,13 +314,15 @@ function medicalSafetyFallback(scored = [], overlays = []) {
 }
 
 function publicSafetyFallback(scored = [], routeText = '') {
-  if (!rx('鑑識|forensic|犯罪|捜査|警察|Evidence chain|chain of custody|現金.*なくな|レジログ').test(routeText)) return null;
+  const emergencyPlan = rx('緊急対応計画|危機対応計画|緊急時対応計画|emergency response plan|public safety response plan').test(routeText);
+  const forensicSignal = rx('鑑識|forensic|犯罪|捜査|警察|Evidence chain|chain of custody|現金.*なくな|レジログ').test(routeText);
+  if (!emergencyPlan && !forensicSignal) return null;
   const candidate = scored.find((item) => item.genre?.id === 'G34');
-  if (!candidate || candidate.score < 2) return null;
+  if (!candidate || (!emergencyPlan && candidate.score < 2)) return null;
   return publicGenre({
     ...candidate,
-    classification_basis: 'PUBLIC_SAFETY_CANONICAL_HINT',
-    confidence: 0.52,
+    classification_basis: emergencyPlan ? 'PUBLIC_SAFETY_EMERGENCY_CANONICAL_HINT' : 'PUBLIC_SAFETY_CANONICAL_HINT',
+    confidence: emergencyPlan ? 0.62 : 0.52,
     taxonomy_review_required: true
   });
 }
