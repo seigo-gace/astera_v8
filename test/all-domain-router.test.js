@@ -86,6 +86,22 @@ test('弱い一般語だけでは38 Genreへ強制分類せずABSTAINする', ()
   assert.match(result.lens_text, /primary=ABSTAIN/);
 });
 
+test('Catalog内で一意な短い日本語専門語は文字数だけを理由に弱信号へ落とさない', () => {
+  const cases = [
+    ['百科情報の改訂判断について判断材料が欲しい。', 'G01'],
+    ['公共AI方針の倫理判断について判断材料が欲しい。', 'G02'],
+    ['行動介入の採用判断について判断材料が欲しい。', 'G03'],
+    ['法律上の責任判断について判断材料が欲しい。', 'G08'],
+    ['医療現場の運用判断について判断材料が欲しい。', 'G23']
+  ];
+  for (const [question, expectedId] of cases) {
+    const result = routeDomainTemplates({ question });
+    assert.equal(result.primary?.id, expectedId, `${question}: ${result.primary?.id}`);
+    assert.equal(result.taxonomy_review_required, false, `${question}: confidence=${result.confidence}`);
+    assert.ok(result.confidence >= 0.72, `${question}: confidence=${result.confidence}`);
+  }
+});
+
 test('短いASCII分類語を単語途中で誤発火させない', () => {
   const result = routeDomainTemplates({ question: 'Maintenance procedure and reliability review for industrial equipment' });
   assert.notEqual(result.primary?.id, 'G30');
