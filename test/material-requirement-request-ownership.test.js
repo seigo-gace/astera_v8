@@ -31,6 +31,13 @@ test('Japanese judgment-material shaping sentence stays with its owning decision
   assert.ok(materialAtoms(understanding).length >= 1, JSON.stringify(understanding.semantic_atoms, null, 2));
 });
 
+test('Main8 output-container wording stays inside the owning English decision request', () => {
+  const input = '[G29] I need decision material for software architecture change. Do not make the final decision. Separate known facts from unresolved items, identify material risks and disconfirming conditions, state comparison dimensions, evidence requirements and evidence status, and say what should be verified next in the eight-section material.';
+  const understanding = buildUniversalSourceUnderstanding(input, 'en');
+  assert.equal(understanding.semantic_atoms.request_atoms.length, 1, JSON.stringify(understanding.semantic_atoms, null, 2));
+  assert.equal(isMaterialShapingDirective('and say what should be verified next in the eight-section material.'), true);
+});
+
 test('material instruction with its own explicit subject remains an independent request across normal English periods', () => {
   const inputs = [
     'Review the API migration. Identify material risks for the payment migration.',
