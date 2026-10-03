@@ -79,6 +79,7 @@ function normalize(value) {
 function routingSignalText(value) {
   return String(value || '')
     .replace(/判断材料(?:化)?/gu, ' ')
+    .replace(/次に確認する(?:材料|事項|項目)/gu, ' ')
     .replace(/\b(?:judgment|decision)[ -]materials?\b/giu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -386,7 +387,8 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
     for (const overlay of overlays) {
       lines.push(`overlay.${overlay.id}.risk_lens=${overlay.risk_lens.join(' / ')}`);
       lines.push(`overlay.${overlay.id}.evidence_to_collect=${overlay.evidence_to_collect.join(' / ')}`);
-      lines.push(`overlay.${overlay.id}.safety_gate=${overlay.safety_gate.join(' / ')}`);
+      lines.push(`overlay.${overlay.id}.safety_gate=${overlay.safety_gate.join(' / ')}`
+      );
     }
   }
   return lines.join('\n');
