@@ -75,6 +75,14 @@ function normalize(value) {
     .trim();
 }
 
+function routingSignalText(value) {
+  return String(value || '')
+    .replace(/判断材料(?:化)?/gu, ' ')
+    .replace(/\b(?:judgment|decision)[ -]materials?\b/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -362,7 +370,7 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
 
 function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
-  const routeText = normalized.core_request.trim();
+  const routeText = routingSignalText(normalized.core_request);
   if (!normalize(routeText)) {
     return {
       router: 'all_domain_lens_router_v2',
