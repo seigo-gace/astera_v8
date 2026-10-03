@@ -8,6 +8,21 @@ const STRUCTURAL_GAP_KINDS = new Set([
   'COMPARISON_BASIS'
 ]);
 
+const PUBLIC_GAP_LABELS = Object.freeze({
+  ja: Object.freeze({
+    JUDGMENT_OPERATION: '判断方法（検証・比較・計画など）が未確定',
+    DECISION_CRITERION: '判断基準・合格条件が未確定',
+    FALSIFICATION_OR_DISQUALIFIER: '判断を無効にする条件・反例・失敗条件が未確定',
+    COMPARISON_BASIS: '比較軸・比較条件が未確定'
+  }),
+  en: Object.freeze({
+    JUDGMENT_OPERATION: 'The judgment operation is unresolved.',
+    DECISION_CRITERION: 'The decision criteria / acceptance conditions are unresolved.',
+    FALSIFICATION_OR_DISQUALIFIER: 'The invalidating condition, counterexample, or failure condition is unresolved.',
+    COMPARISON_BASIS: 'The common comparison dimensions / conditions are unresolved.'
+  })
+});
+
 function array(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -31,20 +46,18 @@ function languageOf(prepared = {}) {
   return value.split('-')[0] === 'ja' ? 'ja' : 'en';
 }
 
+function normalizedLanguage(lang) {
+  return clean(lang || 'ja').toLowerCase().split('-')[0] === 'ja' ? 'ja' : 'en';
+}
+
 function publicGapLabel(kind, lang) {
-  const ja = {
-    JUDGMENT_OPERATION: '判断方法（検証・比較・計画など）が未確定',
-    DECISION_CRITERION: '判断基準・合格条件が未確定',
-    FALSIFICATION_OR_DISQUALIFIER: '判断を無効にする条件・反例・失敗条件が未確定',
-    COMPARISON_BASIS: '比較軸・比較条件が未確定'
-  };
-  const en = {
-    JUDGMENT_OPERATION: 'The judgment operation is unresolved.',
-    DECISION_CRITERION: 'The decision criteria / acceptance conditions are unresolved.',
-    FALSIFICATION_OR_DISQUALIFIER: 'The invalidating condition, counterexample, or failure condition is unresolved.',
-    COMPARISON_BASIS: 'The common comparison dimensions / conditions are unresolved.'
-  };
-  return (lang === 'ja' ? ja : en)[kind] || '';
+  return PUBLIC_GAP_LABELS[normalizedLanguage(lang)][kind] || '';
+}
+
+function isPublicStructuralGapLabel(value, lang) {
+  const normalized = clean(value);
+  if (!normalized) return false;
+  return Object.values(PUBLIC_GAP_LABELS[normalizedLanguage(lang)]).includes(normalized);
 }
 
 function structuralGapNodes(requestGraph = {}) {
@@ -97,7 +110,9 @@ function bridgeMaterialRequirementsIntoFiveLanes(prepared = {}) {
 module.exports = {
   GAP_STATES,
   STRUCTURAL_GAP_KINDS,
+  PUBLIC_GAP_LABELS,
   publicGapLabel,
+  isPublicStructuralGapLabel,
   structuralGapNodes,
   bridgeMaterialRequirementsIntoFiveLanes
 };
