@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evaluation.result.v2",
+  "type": "object",
+  "required": ["schema_version","status","evaluation_complete","ai_used","judgment","audit","result_hash"],
+  "properties": {
+    "schema_version": {"const":"astera.evaluation.result.v2"},
+    "status": {"enum":["PASSED","REVISION_REQUIRED","BLOCKED","EVALUATION_FAILED","INVALID_INPUT"]},
+    "evaluation_complete": {"type":"boolean"},
+    "ai_used": {"const":false},
+    "scores": {"type":"object"},
+    "dimensions": {"type":"array"},
+    "measurements": {"type":"object"},
+    "evidence": {"type":"object"},
+    "blocking": {"type":"array"},
+    "judgment": {"type":"object"},
+    "audit": {"type":"object"},
+    "result_hash": {"type":"string","pattern":"^[a-f0-9]{64}$"}
+  }
+}

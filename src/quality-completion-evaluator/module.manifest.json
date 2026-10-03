@@ -1,1 +1,35 @@
-{"module_id":"quality-completion-evaluator","display_name":"ASTERA 品質・完成度採点Module","version":"1.0.0","runtime":"node>=20","entrypoint":"index.js","module_type":"internal","responsibilities":["input_validation","requirement_mapping","evidence_verification","quality_scoring","completion_scoring","blocking_detection"],"prohibited_actions":["artifact_auto_modification","repository_commit","repository_push","deployment","rubric_auto_change","evidence_fabrication"]}
+{
+  "module_id": "evaluation-verification-engine",
+  "display_name": "ASTERA 汎用判定・検証Module",
+  "version": "2.0.0",
+  "runtime": "node>=22",
+  "entrypoint": "index.js",
+  "module_type": "internal",
+  "ai_used": false,
+  "responsibilities": [
+    "input_validation",
+    "profile_loading",
+    "existing_evidence_search_api_consumption",
+    "evidence_registry_construction",
+    "evidence_binding_construction",
+    "evidence_registry_verification",
+    "evidence_binding_verification",
+    "metric_scoring",
+    "blocking_detection",
+    "deterministic_judgment",
+    "audit_result"
+  ],
+  "prohibited_actions": [
+    "evidence_search_module_modification",
+    "internal_auth_policy_modification",
+    "artifact_auto_modification",
+    "repository_commit",
+    "repository_push",
+    "deployment",
+    "profile_auto_change",
+    "evidence_fabrication",
+    "ai_inference"
+  ],
+  "legacy_contracts": ["astera.quality-completion.request.v1"],
+  "generic_contract": "astera.evaluation.request.v2"
+}

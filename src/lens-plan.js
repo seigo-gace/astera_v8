@@ -12,6 +12,38 @@ const CHANNEL_FIELDS = Object.freeze({
   safety: 'safety_gate'
 });
 
+// Additive breadth only. The canonical G34 genre explicitly covers Public Safety,
+// Forensics and Emergency. Its representative catalog profile is forensics-heavy,
+// so these entries keep emergency-response judgment material inside the same G34
+// authority without deleting or replacing the existing forensic lens.
+const GENRE_BREADTH_AUGMENTATIONS = Object.freeze({
+  G34: Object.freeze({
+    id: 'G34-BREADTH-EMERGENCY',
+    name: 'G34 Public Safety / Emergency Breadth',
+    fact_lens: Object.freeze(['Hazard・危険', 'Response Capacity・対応能力']),
+    risk_lens: Object.freeze(['Escalation・エスカレーション']),
+    multi_lens: Object.freeze(['Emergency Responder・緊急対応者']),
+    inquiry_lens: Object.freeze([
+      '現在のHazard・危険範囲は何か',
+      'Response Capacity・対応能力は十分か',
+      'Escalation・エスカレーション条件は何か'
+    ]),
+    compare_lens: Object.freeze([
+      'Human Safety・人命安全',
+      'Response Capacity・対応能力',
+      'Escalation Control・エスカレーション制御',
+      'Response Time・対応時間',
+      'Recovery・復旧性'
+    ]),
+    evidence_to_collect: Object.freeze([
+      'Emergency Response Plan・緊急対応計画',
+      'Incident Log・対応記録',
+      '訓練記録'
+    ]),
+    safety_gate: Object.freeze(['Escalationと二次被害を確認する'])
+  })
+});
+
 function clean(value) {
   return String(value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
@@ -25,8 +57,11 @@ function sourceDescriptor(lens, tier) {
 }
 
 function sourceLenses(domain = {}) {
+  const primaryId = String(domain.primary?.id || '');
+  const breadth = GENRE_BREADTH_AUGMENTATIONS[primaryId] || null;
   return [
     ...(domain.primary ? [{ lens: domain.primary, tier: 'PRIMARY' }] : []),
+    ...(breadth ? [{ lens: breadth, tier: 'PRIMARY_BREADTH' }] : []),
     ...(Array.isArray(domain.secondary) ? domain.secondary.map((lens) => ({ lens, tier: 'SECONDARY' })) : []),
     ...(Array.isArray(domain.overlays) ? domain.overlays.map((lens) => ({ lens, tier: 'OVERLAY' })) : [])
   ];
@@ -82,6 +117,7 @@ function lensPlanValues(domain = {}, channel) {
 
 module.exports = {
   CHANNEL_FIELDS,
+  GENRE_BREADTH_AUGMENTATIONS,
   compileLensPlan,
   lensPlanEntries,
   lensPlanValues

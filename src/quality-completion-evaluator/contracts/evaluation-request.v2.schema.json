@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "astera.evaluation.request.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","evaluation_id","evaluation_time","subject","profile_id","measurements"],
+  "properties": {
+    "schema_version": {"const":"astera.evaluation.request.v2"},
+    "evaluation_id": {"type":"string","minLength":1},
+    "evaluation_time": {"type":"string","format":"date-time"},
+    "project_id": {"type":["string","null"]},
+    "task_id": {"type":["string","null"]},
+    "run_id": {"type":["string","null"]},
+    "trace_id": {"type":["string","null"]},
+    "subject": {"type":"object","additionalProperties":true,"required":["subject_id","subject_type"],"properties":{"subject_id":{"type":"string","minLength":1},"subject_type":{"type":"string","minLength":1},"subject_version":{}}},
+    "profile_id": {"type":"string","minLength":1},
+    "measurements": {
+      "type":"array",
+      "items": {
+        "type":"object",
+        "additionalProperties":false,
+        "required":["measurement_id","metric_id","value","provenance","measurement_hash"],
+        "properties": {
+          "measurement_id":{"type":"string","minLength":1},
+          "metric_id":{"type":"string","minLength":1},
+          "value":{"type":["number","boolean"]},
+          "unit":{"type":["string","null"]},
+          "evidence_refs":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+          "evidence_claim_refs":{"type":"array","items":{"type":"string","minLength":1},"uniqueItems":true},
+          "provenance":{"type":"object","additionalProperties":true,"required":["collector_id","collected_at"],"properties":{"collector_id":{"type":"string","minLength":1},"collected_at":{"type":"string","format":"date-time"}}},
+          "measurement_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "evidence_search": {
+      "type":"object",
+      "additionalProperties":false,
+      "required":["request"],
+      "properties": {
+        "request":{"type":"object"}
+      }
+    },
+    "evidence_registry": {"type":"object"},
+    "evidence_bindings": {"type":"object"},
+    "metadata": {"type":"object"}
+  },
+  "oneOf": [
+    {
+      "required":["evidence_search"],
+      "not":{"anyOf":[{"required":["evidence_registry"]},{"required":["evidence_bindings"]}]}
+    },
+    {
+      "required":["evidence_registry","evidence_bindings"],
+      "not":{"required":["evidence_search"]}
+    }
+  ]
+}

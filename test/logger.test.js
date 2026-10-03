@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const Logger = require('../src/logger');
+const LogOutbox = require('../src/logging/outbox');
 
 test('Logger caches until TGserver accepts, masks secrets, then removes the cache', async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-outbox-'));
@@ -123,6 +124,39 @@ test('Logger removes expired outbox records instead of replaying them', async ()
     await logger.flush(1000);
     assert.equal(deliveries, 0);
     assert.deepEqual(fs.readdirSync(cacheDir), []);
+  } finally {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('LogOutbox recover treats ENOENT as an empty outbox', (t) => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-outbox-recover-enoent-'));
+  try {
+    const outbox = new LogOutbox({ dir: cacheDir });
+    t.mock.method(fs, 'readdirSync', () => {
+      const error = new Error('missing directory');
+      error.code = 'ENOENT';
+      throw error;
+    });
+    assert.deepEqual(outbox.recover(), []);
+  } finally {
+    fs.rmSync(cacheDir, { recursive: true, force: true });
+  }
+});
+
+test('LogOutbox recover preserves non-ENOENT filesystem failures', (t) => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astera-outbox-recover-eacces-'));
+  try {
+    const outbox = new LogOutbox({ dir: cacheDir });
+    t.mock.method(fs, 'readdirSync', () => {
+      const error = new Error('permission denied');
+      error.code = 'EACCES';
+      throw error;
+    });
+    assert.throws(
+      () => outbox.recover(),
+      (error) => error?.code === 'EACCES'
+    );
   } finally {
     fs.rmSync(cacheDir, { recursive: true, force: true });
   }

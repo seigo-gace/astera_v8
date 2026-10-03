@@ -1,10 +1,11 @@
 {
-  "name": "@astera/quality-completion-evaluator",
-  "version": "1.0.0",
-  "description": "ASTERA internal deterministic quality/completion scorer with shared 38-genre lenses",
+  "name": "@astera/evaluation-verification-engine",
+  "version": "2.0.0",
+  "description": "Deterministic non-AI evaluation and verification engine with evidence-backed scoring and hard blocking",
   "main": "index.js",
   "type": "commonjs",
   "bin": {
+    "astera-evaluate": "./cli/evaluate.js",
     "astera-qce": "./cli/evaluate.js"
   },
   "scripts": {
@@ -15,11 +16,9 @@
     "test:integration": "node --test tests/integration/*.test.js",
     "test:regression": "node --test tests/regression/*.test.js",
     "smoke": "node -e \"const{baseDesignRequest}=require('./tests/fixtures/factory');process.stdout.write(JSON.stringify(baseDesignRequest())+'\\n');\" | node cli/evaluate.js",
-    "verify": "node --check index.js && node --check evaluator-engine.js && node --check domain-lens-resolver.js && npm test && npm run smoke"
+    "verify": "node --check index.js && node --check evaluator-engine.js && node --check generic/evaluator-engine.js && npm test && npm run smoke"
   },
-  "engines": {
-    "node": ">=22.0.0"
-  },
+  "engines": {"node": ">=22.0.0"},
   "license": "UNLICENSED",
   "private": true
 }

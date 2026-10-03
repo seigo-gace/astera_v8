@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
+const { FiveStageExecutor } = require('./five-stage-executor');
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -30,6 +31,17 @@ class CanonicalTaskExecutor {
     this.slots = [];
     this.sequence = 0;
     this.destroyed = false;
+    this.enableFiveStageParallel = options.enableFiveStageParallel !== false;
+    this.fiveStageExecutor = this.enableFiveStageParallel
+      ? new FiveStageExecutor({
+          timeoutMs: this.timeoutMs,
+          maxQueuePerLane: positiveInteger(options.fiveStageQueueSize, Math.max(this.maxQueue, 16)),
+          workerFactory: options.fiveStageWorkerFactory,
+          workerFile: options.fiveStageWorkerFile,
+          logger: this.logger,
+          probeDelayMs: options.fiveStageProbeDelayMs || 0
+        })
+      : null;
   }
 
   _log(type, payload = {}) {
@@ -217,7 +229,7 @@ class CanonicalTaskExecutor {
     }
   }
 
-  exec(operation, payload, options = {}) {
+  _execSingle(operation, payload, options = {}) {
     if (this.destroyed) return Promise.reject(executorError('EXECUTOR_DESTROYED', 'Canonical task executor is destroyed'));
     const active = this.slots.filter((slot) => slot.busy).length;
     const dispatchableSlots = Math.max(0, this.size - active);
@@ -246,6 +258,30 @@ class CanonicalTaskExecutor {
     });
   }
 
+  async _projectCanonicalTask(payload, options = {}) {
+    const evaluated = await this._execSingle('EVALUATE_CANONICAL_TASK', payload, options);
+    if (!this.fiveStageExecutor) {
+      return this._execSingle('PROJECT_CANONICAL_TASK', payload, options);
+    }
+    const stage = await this.fiveStageExecutor.exec({
+      task: payload.task,
+      canonical: evaluated.canonical
+    }, options);
+    return {
+      canonical: evaluated.canonical,
+      lanes: stage.lanes,
+      perspective_expansion: evaluated.perspective_expansion,
+      lane_execution: stage.lane_execution
+    };
+  }
+
+  exec(operation, payload, options = {}) {
+    if (operation === 'PROJECT_CANONICAL_TASK' && this.enableFiveStageParallel) {
+      return this._projectCanonicalTask(payload, options);
+    }
+    return this._execSingle(operation, payload, options);
+  }
+
   stats() {
     return {
       size: this.size,
@@ -253,7 +289,8 @@ class CanonicalTaskExecutor {
       ready: this.slots.filter((slot) => slot.ready).length,
       busy: this.slots.filter((slot) => slot.busy).length,
       queued: this.queue.length,
-      destroyed: this.destroyed
+      destroyed: this.destroyed,
+      five_stage: this.fiveStageExecutor?.stats() || null
     };
   }
 
@@ -266,16 +303,19 @@ class CanonicalTaskExecutor {
       job.reject(error);
     }
     const workers = this.slots.splice(0);
-    await Promise.allSettled(workers.map(async (slot) => {
-      slot.retired = true;
-      if (slot.current) {
-        clearTimeout(slot.current.timer);
-        slot.current.cleanupAbort?.();
-        slot.current.reject(error);
-        slot.current = null;
-      }
-      await slot.worker.terminate();
-    }));
+    await Promise.allSettled([
+      ...workers.map(async (slot) => {
+        slot.retired = true;
+        if (slot.current) {
+          clearTimeout(slot.current.timer);
+          slot.current.cleanupAbort?.();
+          slot.current.reject(error);
+          slot.current = null;
+        }
+        await slot.worker.terminate();
+      }),
+      this.fiveStageExecutor ? this.fiveStageExecutor.destroy() : Promise.resolve()
+    ]);
   }
 }
 

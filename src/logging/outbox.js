@@ -39,7 +39,12 @@ class LogOutbox {
 
   recover() {
     let names = [];
-    try { names = fs.readdirSync(this.dir); } catch (_) { return []; }
+    try {
+      names = fs.readdirSync(this.dir);
+    } catch (error) {
+      if (error?.code === 'ENOENT') return [];
+      throw error;
+    }
     const now = Date.now();
     const entries = [];
     for (const name of names) {

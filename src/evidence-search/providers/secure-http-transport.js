@@ -3,9 +3,14 @@
 const dns = require('node:dns').promises;
 const https = require('node:https');
 const net = require('node:net');
+const crypto = require('node:crypto');
 
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_REDIRECTS = 2;
+const DEFAULT_SOURCE_CACHE_MAX_ENTRIES = 256;
+const DEFAULT_SOURCE_CACHE_TTL_MS = 2000;
+const SENSITIVE_REQUEST_HEADERS = new Set(['authorization', 'cookie', 'x-api-key', 'api-key', 'proxy-authorization']);
+const sourceResponseCache = new Map();
 
 function ipv4Number(address) {
   return address.split('.').reduce((value, part) => (value * 256) + Number(part), 0) >>> 0;
@@ -162,6 +167,58 @@ function requestOnce(url, address, options) {
   });
 }
 
+function nonNegativeInteger(value, fallback = 0) {
+  const parsed = value === undefined || value === null || value === '' ? fallback : Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function hasSensitiveRequestHeaders(headers = {}) {
+  return Object.keys(headers).some((name) => SENSITIVE_REQUEST_HEADERS.has(String(name).toLowerCase()));
+}
+
+function sourceCacheKey(url, headers, maxBytes) {
+  const normalizedHeaders = Object.entries(headers || {})
+    .map(([key, value]) => [String(key).toLowerCase(), String(value)])
+    .sort(([left], [right]) => left.localeCompare(right));
+  return crypto.createHash('sha256').update(JSON.stringify([url.toString(), normalizedHeaders, maxBytes])).digest('hex');
+}
+
+function cloneCachedResponse(value, cacheState) {
+  return Object.freeze({
+    url: value.url,
+    status: value.status,
+    headers: Object.freeze({ ...value.headers }),
+    body: Buffer.from(value.body),
+    cache: Object.freeze(cacheState)
+  });
+}
+
+function getCachedSource(key, now) {
+  const item = sourceResponseCache.get(key);
+  if (!item) return null;
+  if (item.expires_at <= now) {
+    sourceResponseCache.delete(key);
+    return null;
+  }
+  sourceResponseCache.delete(key);
+  sourceResponseCache.set(key, item);
+  return item;
+}
+
+function setCachedSource(key, value, ttlMs, now, maxEntries) {
+  sourceResponseCache.delete(key);
+  sourceResponseCache.set(key, {
+    value: { url: value.url, status: value.status, headers: { ...value.headers }, body: Buffer.from(value.body) },
+    stored_at: now,
+    expires_at: now + ttlMs
+  });
+  while (sourceResponseCache.size > maxEntries) sourceResponseCache.delete(sourceResponseCache.keys().next().value);
+}
+
+function clearSourceResponseCache() {
+  sourceResponseCache.clear();
+}
+
 async function secureGet(rawUrl, options = {}) {
   const allowedHosts = new Set((options.allowedHosts || []).map((host) => String(host).toLowerCase()));
   if (!allowedHosts.size) {
@@ -172,15 +229,34 @@ async function secureGet(rawUrl, options = {}) {
   const maximumRedirects = Math.max(0, Number(options.maximumRedirects ?? DEFAULT_REDIRECTS));
   const maxBytes = Math.max(1, Number(options.maxBytes || DEFAULT_MAX_BYTES));
   const timeoutMs = Math.max(100, Number(options.timeoutMs || 2500));
+  const realTransportDefaultTtlMs = options.request
+    ? 0
+    : nonNegativeInteger(process.env.ASTERA_SOURCE_HTTP_CACHE_TTL_MS, DEFAULT_SOURCE_CACHE_TTL_MS);
+  const cacheTtlMs = nonNegativeInteger(options.cacheTtlMs, realTransportDefaultTtlMs);
+  const cacheMaxEntries = Math.max(1, nonNegativeInteger(options.cacheMaxEntries, DEFAULT_SOURCE_CACHE_MAX_ENTRIES));
   const headers = {
     Accept: 'application/json, application/feed+json, application/xml, text/xml, text/plain;q=0.8',
     'User-Agent': 'ASTERA-EvidenceSearch/2.4',
     ...(options.headers || {})
   };
+  const cacheEligible = cacheTtlMs > 0 && !hasSensitiveRequestHeaders(headers);
 
   let current = String(rawUrl);
   for (let redirectCount = 0; redirectCount <= maximumRedirects; redirectCount += 1) {
     const url = validateUrl(current, allowedHosts);
+    const cacheKey = cacheEligible ? sourceCacheKey(url, headers, maxBytes) : null;
+    const now = Date.now();
+    if (cacheKey) {
+      const cached = getCachedSource(cacheKey, now);
+      if (cached) {
+        return cloneCachedResponse(cached.value, {
+          status: 'HIT',
+          stored_at: cached.stored_at,
+          expires_at: cached.expires_at
+        });
+      }
+    }
+
     const address = await resolvePublicAddress(url.hostname, options.lookup || dns.lookup);
     const response = await (options.request || requestOnce)(url, address, {
       headers,
@@ -203,17 +279,23 @@ async function secureGet(rawUrl, options = {}) {
       current = new URL(location, url).toString();
       continue;
     }
-    return Object.freeze({
+    const result = Object.freeze({
       url: url.toString(),
       status: response.status,
       headers: Object.freeze({ ...response.headers }),
-      body: response.body
+      body: response.body,
+      cache: Object.freeze({ status: 'MISS', stored_at: null, expires_at: null })
     });
+    if (cacheKey && response.status >= 200 && response.status < 300 && !response.headers['set-cookie']) {
+      setCachedSource(cacheKey, result, cacheTtlMs, now, cacheMaxEntries);
+    }
+    return result;
   }
   throw new Error('unreachable redirect state');
 }
 
 module.exports = {
+  clearSourceResponseCache,
   createPinnedLookup,
   isPublicIp,
   resolvePublicAddress,
