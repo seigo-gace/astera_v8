@@ -12,6 +12,9 @@ const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入�
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
 const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
 const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
+const MATERIAL_SHAPING_JA = /(?:現在分かっている事実|確認済み(?:の)?事実|未確認(?:事項|項目|点)?|未解決(?:事項|項目|点)?|主要(?:な)?(?:危険|リスク)|反対側から確認すべき条件|反証条件|失格条件|比較に必要な軸|比較軸|評価軸|必要な根拠|根拠(?:の)?成立状態|根拠状態|次に確認する(?:材料|事項|項目))/u;
+const MATERIAL_SHAPING_EN = /(?:known facts?|confirmed facts?|unresolved (?:items?|issues?|questions?)|material risks?|disconfirming conditions?|falsification conditions?|comparison dimensions?|comparison criteria|evaluation criteria|evidence requirements?|evidence status|what should be verified next|what to verify next)/iu;
+const MATERIAL_DIRECTIVE = /(?:分け|区別|整理|示|列挙|明示|確認|\bseparate\b|\bdistinguish\b|\bidentify\b|\bstate\b|\blist\b|\bshow\b|\bprovide\b|\bindicate\b|\bsay\b|\bverify\b)/iu;
 
 function normalized(value) {
   return String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
@@ -250,6 +253,39 @@ function coalesceDependentRequestAtoms(requests, source) {
   return out;
 }
 
+function hasIndependentMaterialSubject(text) {
+  const value = normalized(text);
+  if (/\b(?:for|in|about|regarding)\s+(?!the\s+(?:decision|answer|output|material|evidence|case)\b)[a-z0-9][^,.;!?]{2,}/iu.test(value)) return true;
+  if (/(?:について|に関する|における)[^。！？!?]{0,40}(?:リスク|危険|比較軸|評価軸|根拠)/u.test(value)) return true;
+  return false;
+}
+
+function isMaterialShapingDirective(text) {
+  const value = normalized(text);
+  if (!value || !MATERIAL_DIRECTIVE.test(value)) return false;
+  if (!(MATERIAL_SHAPING_JA.test(value) || MATERIAL_SHAPING_EN.test(value))) return false;
+  return !hasIndependentMaterialSubject(value);
+}
+
+function partitionMaterialShapingRequests(requests) {
+  const sorted = [...requests].sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
+  const actual = [];
+  const material = [];
+  for (const atom of sorted) {
+    const owner = actual[actual.length - 1] || null;
+    if (owner && isMaterialShapingDirective(atom.text)) {
+      material.push({
+        ...atom,
+        type: 'MATERIAL_REQUIREMENT',
+        material_requirement_owner_atom_id: owner.id
+      });
+      continue;
+    }
+    actual.push(atom);
+  }
+  return { actual, material };
+}
+
 function buildSemanticAtoms(sourceGraph) {
   const source = sourceGraph?.source || '';
   const candidateNodes = (sourceGraph?.nodes || []).filter((node) => ['clause', 'sentence', 'heading', 'list_item'].includes(node.kind));
@@ -298,16 +334,29 @@ function buildSemanticAtoms(sourceGraph) {
     }
   }
 
-  const requests = coalesceDependentRequestAtoms(
+  const coalesced = coalesceDependentRequestAtoms(
     atoms.filter((atom) => atom.type === 'REQUEST'),
     source
   );
+  const { actual: requests, material } = partitionMaterialShapingRequests(coalesced);
+  const materialOwnerByAtomId = new Map();
+  for (const item of material) {
+    for (const atomId of item.merged_source_atom_ids || [item.id]) {
+      materialOwnerByAtomId.set(atomId, item.material_requirement_owner_atom_id);
+    }
+  }
+  const semanticAtoms = atoms.map((atom) => {
+    const ownerAtomId = atom.type === 'REQUEST' ? materialOwnerByAtomId.get(atom.id) : null;
+    return ownerAtomId
+      ? { ...atom, type: 'MATERIAL_REQUIREMENT', operation: null, material_requirement_owner_atom_id: ownerAtomId }
+      : atom;
+  });
   return {
     schema: 'astera.semantic-atom-graph.v1',
     language: sourceGraph.language,
-    atoms,
+    atoms: semanticAtoms,
     request_atoms: requests.map((atom, index) => ({ ...atom, request_id: `R${String(index + 1).padStart(2, '0')}` })),
-    counts: atoms.reduce((acc, atom) => { acc[atom.type] = (acc[atom.type] || 0) + 1; return acc; }, {})
+    counts: semanticAtoms.reduce((acc, atom) => { acc[atom.type] = (acc[atom.type] || 0) + 1; return acc; }, {})
   };
 }
 
@@ -323,5 +372,6 @@ module.exports = {
   buildUniversalSourceUnderstanding,
   detectLanguage,
   isRequestText,
+  isMaterialShapingDirective,
   operationFor
 };
