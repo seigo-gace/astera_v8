@@ -257,12 +257,13 @@ function hasIndependentMaterialSubject(text) {
   const value = normalized(text);
   if (/\b(?:for|in|about|regarding)\s+(?!the\s+(?:decision|answer|output|material|evidence|case)\b)[a-z0-9][^,.;!?]{2,}/iu.test(value)) return true;
   if (/(?:について|に関する|における)[^。！？!?]{0,40}(?:リスク|危険|比較軸|評価軸|根拠)/u.test(value)) return true;
+  if (/[^。！？!?]{2,40}の(?:リスク|危険|比較軸|評価軸|根拠)/u.test(value)) return true;
   return false;
 }
 
 function isMaterialShapingDirective(text) {
   const value = normalized(text);
-  if (!value || !MATERIAL_DIRECTIVE.test(value)) return false;
+  if (!value) return false;
   if (!(MATERIAL_SHAPING_JA.test(value) || MATERIAL_SHAPING_EN.test(value))) return false;
   return !hasIndependentMaterialSubject(value);
 }
