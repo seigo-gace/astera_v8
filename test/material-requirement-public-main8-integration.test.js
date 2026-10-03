@@ -8,7 +8,11 @@ const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mc
 const silentLogger = { write() {} };
 const caller = { id: 'material-main8-test', is_global: true, plan: 'admin' };
 
-test('Requirement Graph reaches public Main8 only through five-lane Inquiry processing', async () => {
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+test('Requirement Graph reaches public Main8 only through five-lane processing and five-lane specialist material is preserved', async () => {
   const engine = new AsteraEngine({
     poolSize: 2,
     logger: silentLogger,
@@ -31,10 +35,33 @@ test('Requirement Graph reaches public Main8 only through five-lane Inquiry proc
     assert.equal(out.material?.sections?.length, 8);
     assert.equal(out.material?.material_requirement_projection, undefined);
 
-    const inquiryMissing = (out.result?.five_stage?.tasks || [])
-      .flatMap((task) => task?.inquiry?.missing_fields || []);
+    const stages = out.result?.five_stage?.tasks || [];
+    const inquiryMissing = stages.flatMap((task) => task?.inquiry?.missing_fields || []);
     assert.ok(inquiryMissing.includes('判断基準・合格条件が未確定'));
     assert.ok(inquiryMissing.includes('判断を無効にする条件・反例・失敗条件が未確定'));
+
+    const factRequirement = stages.flatMap((task) => task?.fact?.fact_requirements || [])[0]?.item;
+    const inquiryRequirement = stages.flatMap((task) => task?.inquiry?.inquiry_lens || [])[0];
+    const evidenceRequirement = stages.flatMap((task) => task?.inquiry?.evidence_need || [])[0];
+    const comparisonDimension = stages.flatMap((task) => task?.compare?.dimensions || [])[0];
+    const domainPerspective = stages.flatMap((task) => task?.multi?.perspectives || [])
+      .find((item) => item?.source === 'LENS_PLAN')?.focus;
+
+    assert.ok(factRequirement);
+    assert.ok(inquiryRequirement);
+    assert.ok(evidenceRequirement);
+    assert.ok(comparisonDimension);
+    assert.ok(domainPerspective);
+
+    for (const value of [factRequirement, inquiryRequirement, evidenceRequirement, comparisonDimension, domainPerspective]) {
+      assert.match(out.material.text, new RegExp(escapeRegExp(value), 'u'));
+    }
+
+    assert.match(out.material.text, /専門分野上、確認が必要な事実項目（確認済み事実ではない）/u);
+    assert.match(out.material.text, /次に確認する専門項目/u);
+    assert.match(out.material.text, /成立確認に必要な根拠項目（存在・取得・採用済みとは限らない）/u);
+    assert.match(out.material.text, /判断・比較で揃える専門軸/u);
+    assert.match(out.material.text, /専門分野から追加で見る視点/u);
 
     assert.match(out.material.text, /判断材料不足: 判断基準・合格条件が未確定/u);
     assert.match(out.material.text, /判断材料不足: 判断を無効にする条件・反例・失敗条件が未確定/u);
