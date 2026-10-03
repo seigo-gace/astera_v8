@@ -61,6 +61,27 @@ test('language detection distinguishes Japanese and English without document-typ
   assert.equal(detectLanguage('Review the contract clause and preserve the evidence boundary.'), 'en');
 });
 
+test('English periods split ordinary sentences but preserve dotted identifiers, versions, decimals, and domains', () => {
+  const input = 'Review Node.js v1.2.3 at 99.9% coverage on example.com. Verify rollback behavior next.';
+  const graph = buildSourceGraph(input, 'en');
+  const sentences = graph.nodes.filter((node) => node.kind === 'sentence').map((node) => node.text);
+  assert.deepEqual(sentences, [
+    'Review Node.js v1.2.3 at 99.9% coverage on example.com.',
+    'Verify rollback behavior next.'
+  ]);
+  assert.equal(sentences.join(' '), input);
+});
+
+test('English abbreviations do not create phantom sentence boundaries', () => {
+  const input = 'Review the evidence, e.g. the incident log. Verify the conclusion.';
+  const graph = buildSourceGraph(input, 'en');
+  const sentences = graph.nodes.filter((node) => node.kind === 'sentence').map((node) => node.text);
+  assert.deepEqual(sentences, [
+    'Review the evidence, e.g. the incident log.',
+    'Verify the conclusion.'
+  ]);
+});
+
 test('noisy JA/EN examples expose many source-backed requests rather than one post = one request', () => {
   for (const id of ['known-noisy-multi-ja-1k', 'known-noisy-multi-en-1k']) {
     const row = byId(id);
