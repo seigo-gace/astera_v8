@@ -2,6 +2,7 @@
 
 const { PURPOSE } = require('./standalone-material-normalizer');
 const { attachMaterialRequirementGraph } = require('./material-requirement-graph');
+const { refinePreparedMaterialRequirements } = require('./specialist-requirement-refiner');
 
 const PURPOSE_MODES = Object.freeze([
   'review',
@@ -86,9 +87,13 @@ function preserveDetectedSingleCasePurpose(prepared) {
   };
 }
 
+function attachAndRefine(prepared) {
+  return refinePreparedMaterialRequirements(attachMaterialRequirementGraph(prepared));
+}
+
 function applyExplicitPurposeControl(prepared, value) {
   const intent = explicitPurposeIntent(value);
-  if (!intent) return attachMaterialRequirementGraph(preserveDetectedSingleCasePurpose(prepared));
+  if (!intent) return attachAndRefine(preserveDetectedSingleCasePurpose(prepared));
   if (!prepared || typeof prepared !== 'object') return prepared;
 
   const packet = prepared.analysis_task_packet && typeof prepared.analysis_task_packet === 'object'
@@ -114,7 +119,7 @@ function applyExplicitPurposeControl(prepared, value) {
     },
     standalone_api_intent: intent
   };
-  return attachMaterialRequirementGraph(controlled);
+  return attachAndRefine(controlled);
 }
 
 module.exports = {
