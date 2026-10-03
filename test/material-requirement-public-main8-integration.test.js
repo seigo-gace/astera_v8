@@ -12,7 +12,7 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-test('Requirement Graph reaches public Main8 only through five-lane processing and five-lane specialist material is preserved', async () => {
+test('Requirement Graph reaches public Main8 only through five-lane processing and operation-relevant specialist material is preserved', async () => {
   const engine = new AsteraEngine({
     poolSize: 2,
     logger: silentLogger,
@@ -53,15 +53,16 @@ test('Requirement Graph reaches public Main8 only through five-lane processing a
     assert.ok(comparisonDimension);
     assert.ok(domainPerspective);
 
-    for (const value of [factRequirement, inquiryRequirement, evidenceRequirement, comparisonDimension, domainPerspective]) {
+    for (const value of [factRequirement, inquiryRequirement, evidenceRequirement, domainPerspective]) {
       assert.match(out.material.text, new RegExp(escapeRegExp(value), 'u'));
     }
 
     assert.match(out.material.text, /専門分野上、確認が必要な事実項目（確認済み事実ではない）/u);
     assert.match(out.material.text, /次に確認する専門項目/u);
     assert.match(out.material.text, /成立確認に必要な根拠項目（存在・取得・採用済みとは限らない）/u);
-    assert.match(out.material.text, /判断・比較で揃える専門軸/u);
     assert.match(out.material.text, /専門分野から追加で見る視点/u);
+    assert.doesNotMatch(out.material.text, /判断・比較で揃える専門軸/u);
+    assert.doesNotMatch(out.material.text, new RegExp(escapeRegExp(comparisonDimension), 'u'));
 
     assert.match(out.material.text, /判断材料不足: 判断基準・合格条件が未確定/u);
     assert.match(out.material.text, /判断材料不足: 判断を無効にする条件・反例・失敗条件が未確定/u);
