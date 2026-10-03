@@ -103,6 +103,18 @@ test('短いASCII分類語はLatin単語内部では引き続き誤発火しな�
   assert.equal((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('api'), false);
 });
 
+test('長いASCII分類語もLatin単語内部では誤発火しない', () => {
+  const result = routeDomainTemplates({ question: 'Verify that Node.js 22 is supported in production using official evidence.' });
+  assert.equal(result.primary?.id, 'G29');
+  assert.equal(result.secondary.some((item) => item.id === 'G33'), false);
+});
+
+test('長いASCII分類語は独立語としては引き続き分類へ使う', () => {
+  const result = routeDomainTemplates({ question: 'consumer product recall and warranty review' });
+  assert.equal(result.primary?.id, 'G33');
+  assert.ok((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('product'));
+});
+
 test('会話ContextはGenre採点へ混ぜず現在Taskを優先する', () => {
   const result = routeDomainTemplates({
     question: 'APIサーバーのシステム開発を改善する',
