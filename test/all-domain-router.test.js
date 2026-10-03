@@ -86,11 +86,11 @@ test('弱い一般語だけでは38 Genreへ強制分類せずABSTAINする', ()
   assert.match(result.lens_text, /primary=ABSTAIN/);
 });
 
-test('Catalog内で一意な短い日本語専門語は文字数だけを理由に弱信号へ落とさない', () => {
+test('Genre identityに含まれる短い日本語専門語は文字数だけを理由に弱信号へ落とさない', () => {
   const cases = [
     ['百科情報の改訂判断について判断材料が欲しい。', 'G01'],
     ['公共AI方針の倫理判断について判断材料が欲しい。', 'G02'],
-    ['行動介入の採用判断について判断材料が欲しい。', 'G03'],
+    ['心理介入の採用判断について判断材料が欲しい。', 'G03'],
     ['法律上の責任判断について判断材料が欲しい。', 'G08'],
     ['医療現場の運用判断について判断材料が欲しい。', 'G23']
   ];
@@ -100,6 +100,12 @@ test('Catalog内で一意な短い日本語専門語は文字数だけを理由�
     assert.equal(result.taxonomy_review_required, false, `${question}: confidence=${result.confidence}`);
     assert.ok(result.confidence >= 0.72, `${question}: confidence=${result.confidence}`);
   }
+});
+
+test('短い専門語でもGenre identityではない横断語1件だけなら強制分類しない', () => {
+  const result = routeDomainTemplates({ question: '契約条件を確認する。' });
+  assert.equal(result.primary, null);
+  assert.equal(result.classification_basis, 'ABSTAIN_LOW_SIGNAL');
 });
 
 test('短いASCII分類語を単語途中で誤発火させない', () => {
