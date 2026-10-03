@@ -88,6 +88,31 @@ function asciiBoundaryMatch(text, term) {
   return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}(?=$|[^a-z0-9])`, 'i').test(text);
 }
 
+let genreTermFrequencyCache = null;
+
+function genreTermFrequency(term) {
+  if (!genreTermFrequencyCache) {
+    const counts = new Map();
+    for (const genre of GENRE_LENSES) {
+      const seen = new Set((genre.terms || []).map(normalize).filter(Boolean));
+      for (const item of seen) counts.set(item, (counts.get(item) || 0) + 1);
+    }
+    genreTermFrequencyCache = counts;
+  }
+  return genreTermFrequencyCache.get(term) || 0;
+}
+
+function exactTermWeight(term) {
+  const compactLength = term.replace(/\s/g, '').length;
+  if (isAsciiControlledTerm(term)) {
+    return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+  }
+  if (compactLength >= 2 && genreTermFrequency(term) === 1) {
+    return compactLength >= 4 ? 16 : 10;
+  }
+  return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+}
+
 function ngrams(value, n = 3) {
   const text = normalize(value).replace(/\s+/g, '');
   if (!text) return new Set();
@@ -145,8 +170,7 @@ function scoreGenre(genre, text) {
     const asciiControlled = isAsciiControlledTerm(term);
     const exactMatch = asciiControlled ? asciiBoundaryMatch(normalizedText, term) : normalizedText.includes(term);
     if (exactMatch) {
-      const compactLength = term.replace(/\s/g, '').length;
-      score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+      score += exactTermWeight(term);
       exactHits += 1;
       matched.push(rawTerm);
       continue;
@@ -285,7 +309,7 @@ function defenseFallback(scored = [], routeText = '') {
 
 function philosophyEthicsFallback(scored = [], routeText = '') {
   if (!rx('功利主義|義務論|応用倫理|存在論|形而上学').test(routeText)) return null;
-  const candidate = scored.find((item) => item.genre?.id === 'G02');
+  const candidate = scored.find((item) => item.genre.id === 'G02');
   if (!candidate || candidate.exact_hits < 1) return null;
   return publicGenre({
     ...candidate,
