@@ -50,9 +50,13 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   const next = { ...judgment };
 
   const factRequirements = itemsFromLane(taskResults, 'fact', 'fact_requirements', (entry) => entry?.item);
-  const riskRequirements = unique(array(taskResults)
-    .filter(taskRequestsRiskMaterial)
-    .flatMap((result) => array(result?.lanes?.risk?.risks)
+
+  // LensPlan entries are already domain-selected judgment material. Do not make
+  // their public visibility depend on a second parser-derived material-request
+  // signal: that signal may legitimately be partial while the selected domain
+  // lens remains authoritative for what must be checked before a decision.
+  const riskRequirements = unique(array(taskResults).flatMap((result) =>
+    array(result?.lanes?.risk?.risks)
       .filter((entry) => entry?.source === 'LENS_PLAN')
       .map((entry) => entry?.impact)));
   const domainPerspectives = unique(array(taskResults).flatMap((result) =>
@@ -62,9 +66,7 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   ));
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
   const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
-  const comparisonDimensions = unique(array(taskResults)
-    .filter((result) => taskNeedsComparison(result) || taskRequestsComparisonMaterial(result))
-    .flatMap((result) => array(result?.lanes?.compare?.dimensions)));
+  const comparisonDimensions = itemsFromLane(taskResults, 'compare', 'dimensions');
 
   if (next['03_facts']) {
     next['03_facts'] = { ...next['03_facts'], fact_requirements: factRequirements };
