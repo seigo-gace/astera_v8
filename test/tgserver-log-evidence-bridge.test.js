@@ -69,18 +69,22 @@ test('TGserver metadata drops invalid bounded values instead of breaking log del
   assert.equal(requests[0].run_id, '123');
 });
 
-test('GitHub read bridge exposes the legacy TGserver searchable metadata contract', () => {
+test('TGserver ZERO integration uses canonical Development Probe and central reader boundary', () => {
   const root = path.join(__dirname, '..');
-  const query = JSON.parse(fs.readFileSync(path.join(root, '.github', 'astera-legacy-tgserver-query.json'), 'utf8'));
-  const expected = ['query','project_id','severity','from','to','source','repo','branch','workflow','run_id','module'];
-  assert.deepEqual(Object.keys(query), expected);
-  assert.equal(query.project_id, 'P002');
+  const oldQuery = path.join(root, '.github', 'astera-legacy-tgserver-query.json');
+  const oldReader = path.join(root, '.github', 'workflows', 'astera-legacy-tgserver-log-read.yml');
+  assert.equal(fs.existsSync(oldQuery), false, 'project-local TGserver search query must be removed');
+  assert.equal(fs.existsSync(oldReader), false, 'project-local TGserver search workflow must be removed');
 
-  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'astera-legacy-tgserver-log-read.yml'), 'utf8');
-  for (const field of ['source','repo','branch','workflow','run_id','module']) assert.match(workflow, new RegExp(`['\"]?${field}['\"]?`));
-  assert.match(workflow, /POST_\/search/);
-  assert.match(workflow, /retention-days:\s*3/);
-  assert.match(workflow, /REDACTED/);
-  assert.match(workflow, /TOPIC_ID_FIXED=FALSE/);
-  assert.match(workflow, /VNEXT_USED=FALSE/);
+  const probe = fs.readFileSync(path.join(root, '.github', 'workflows', 'dev-probe.yml'), 'utf8');
+  const verify = fs.readFileSync(path.join(root, '.github', 'workflows', 'verify.yml'), 'utf8');
+
+  assert.match(probe, /github\.event\.issue\.user\.login\s*==\s*github\.repository_owner/);
+  assert.match(probe, /startsWith\(github\.event\.issue\.title, '\[DEV-PROBE\]'\)/);
+  assert.match(probe, /uses:\s*\.\/\.github\/workflows\/verify\.yml/);
+  assert.match(probe, /retention-days:\s*3/);
+  assert.doesNotMatch(probe, /github\.event\.issue\.body/);
+  assert.doesNotMatch(probe, /LEGACY_TGSERVER_URL|CF_ACCESS_CLIENT|CF-Access-Client|\/search|\/ingest/);
+  assert.doesNotMatch(probe, /secrets\./);
+  assert.match(verify, /workflow_call:/);
 });
