@@ -3,7 +3,6 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { FiveStageExecutor } = require('./five-stage-executor');
-const { attachLaneTelemetry } = require('./full-runtime-trace');
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -268,7 +267,6 @@ class CanonicalTaskExecutor {
       task: payload.task,
       canonical: evaluated.canonical
     }, options);
-    attachLaneTelemetry(stage.lanes, stage.lane_execution);
     return {
       canonical: evaluated.canonical,
       lanes: stage.lanes,
