@@ -23,7 +23,14 @@ const ENGLISH_GENRE_IDENTITY_ALIASES = Object.freeze({
 });
 
 function aliasesForGenre(genreId) {
-  return ENGLISH_GENRE_IDENTITY_ALIASES[String(genreId || '')] || [];
+  const id = String(genreId || '').trim().toUpperCase();
+  if (!/^G(?:0[1-9]|[12]\d|3[0-8])$/.test(id)) return [];
+  // A canonical genre ID is itself a controlled identity alias. This lets an
+  // upstream caller or user explicitly select G01-G38 without requiring the
+  // surrounding natural-language wording to independently re-prove the same
+  // classification. The existing router still applies overlays and all lens
+  // generation after the explicit identity match.
+  return [id, ...(ENGLISH_GENRE_IDENTITY_ALIASES[id] || [])];
 }
 
 module.exports = {
