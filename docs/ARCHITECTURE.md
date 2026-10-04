@@ -1,6 +1,6 @@
 # Astera v8 — Canonical System Architecture
 
-Updated: 2026-10-03  
+Updated: 2026-10-04  
 Repository: `seigo-gace/astera_v8`
 
 > This document is the canonical repository architecture reference for Astera v8.
@@ -36,7 +36,7 @@ The current change unit has an approved redesign target:
 
 [`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
 
-Status of that document is **APPROVED TARGET DESIGN / IMPLEMENTATION PENDING**.
+Status of that document is **APPROVED TARGET DESIGN / IMPLEMENTATION IN PROGRESS**.
 
 It extends the Judgment Material Generation target toward:
 
@@ -51,7 +51,7 @@ It extends the Judgment Material Generation target toward:
 - work-conserving dependency execution and Full Runtime tracing;
 - GitHub-self-executable semantic/performance verification.
 
-The target document does **not** prove that the current source implements these contracts. Until implementation, tests, CI and exact-runtime evidence are reconciled, current code behavior remains governed by the current contracts described in this canonical architecture.
+The target document is a design authority, not automatic proof that every milestone is complete. Implementation status must be reconciled from current Source, Tests, CI artifacts and exact-runtime evidence. Current repository evidence now proves the Universal semantic CI gate and Full Runtime trace contract on the current branch; work-conserving critical-path optimization and private exact-SHA runtime proof remain separate gates.
 
 The product-level completion criterion for the redesign is output quality: eight headings, a selected Lens, generated Tasks, HTTP 200 or green CI alone are not sufficient. The Main8 output must contain the material actually required for the receiving Human/Main AI to judge the specific question without fabricated evidence or hidden semantic loss.
 
@@ -150,7 +150,7 @@ The approved redesign further requires that arbitrary input be preserved into so
 - Human Reader presentation signals without fact mutation
 - Main8 framing
 
-Target-design additions, not yet implementation proof:
+Target-design additions are reconciled milestone by milestone rather than treated as one blanket completion claim. Current verified implementation evidence includes the GitHub Universal corpus gate and Full Runtime stage tracing. The following broader target areas still require their own current evidence when changed or claimed complete:
 
 - lossless Source Graph preservation
 - universal semantic atom projection
@@ -159,8 +159,8 @@ Target-design additions, not yet implementation proof:
 - operation + G01-G38 material sufficiency
 - Claim/Evidence sub-question topology
 - work-conserving DAG scheduling
-- Full Runtime stage tracing
-- GitHub-self-executable semantic/performance corpus gates
+- Full Runtime stage tracing — implemented as `astera.runtime-trace.v2` with 20 required spans and CI artifact verification
+- GitHub-self-executable semantic/performance corpus gates — current Universal semantic/metamorphic gates are executable and passing on the current branch
 
 ### 4.3 Prohibited responsibilities
 
@@ -631,6 +631,8 @@ The approved redesign adds proof requirements for:
 - GitHub-self-executable semantic/performance artifacts;
 - ready-queue scheduling correctness after implementation.
 
+Current branch verification proves the Full Runtime trace schema/gate at Source/CI level: Universal Judgment reports 82/82 semantic PASS, Full Runtime Trace 82/82 AVAILABLE, Metamorphic 24/24 PASS, with `runtime-trace.json` containing complete 20-span `astera.runtime-trace.v2` records. This does not substitute for the later M5 critical-path optimization or M6 private exact-SHA runtime verification.
+
 `NOT RUN` is not `PASS`.
 
 ---
@@ -695,6 +697,6 @@ When repository documents conflict, use this order:
 5. README / STRUCTURE / user-facing references
 6. Historical documents / archive
 
-`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved target-design authority for the current redesign but remains explicitly **implementation pending**. It does not override current implementation facts until reconciled and verified.
+`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved target-design authority for the current redesign and is now **implementation in progress**. A milestone may be called implemented only when current code/tests/CI or exact-runtime evidence proves that milestone; remaining M5/M6 work must not be inferred complete from the Universal semantic/trace CI alone.
 
 Product-facing documentation describes the completed Product Contract. Development audit findings and unfinished implementation deltas are tracked separately from this document.

@@ -1,5 +1,52 @@
 # Astera v8 — Changelog
 
+## 2026-10-04 — Universal semantic gate + Full Runtime Trace v2
+
+The Universal redesign implementation moved from design-only status to **implementation in progress with current Source/CI proof for the semantic gate and Full Runtime trace milestone**.
+
+### Runtime trace contract
+
+- Added internal `astera.runtime-trace.v2` Full Runtime tracing.
+- Required stage set is fixed at 20 spans: ingest, source graph, language detection, parser wait, semantic atoms, case graph, lens route, claim extraction, evidence plan/wait/bind, canonical CPU, five analytical lanes, Main8 render, public normalize and total.
+- Trace records stage timing/queue/CPU availability, external-wait state, cache counters, semantic counts, error/fallback state and invocation count.
+- `NOT_APPLICABLE` stages remain explicit with zero fabricated duration/work and zero invocation count.
+- Trace observability does not acquire final-decision authority and does not alter the public `POST /process` Main8 text response.
+
+### CI / artifact proof
+
+Current verified Source SHA before this documentation-only reconciliation: `3f319879a0faa92dc56f3f55a1d5098c58231082`.
+
+At that SHA:
+
+```text
+Astera Verify                PASS
+Universal Structure Verify   PASS
+Universal Judgment Verify    PASS
+Universal semantic           82/82 PASS
+G01-G38 coverage             38/38
+Universal metamorphic        24/24 PASS
+Full Runtime Trace           82/82 COMPLETE
+Trace schema                 astera.runtime-trace.v2
+Required spans per case      20
+Bad trace cases              0
+```
+
+Universal Judgment CI emits `runtime-trace.json` inside the uploaded machine-readable artifact and validates schema/status/required-span completeness before PASS.
+
+### Remaining redesign boundaries
+
+This proof completes the Full Runtime trace milestone but does **not** by itself complete:
+
+- M5 ready-queue/work-conserving critical-path redesign;
+- resource-class concurrency/Parser-Evidence overlap optimization;
+- full external-path performance acceptance;
+- M6 private exact-SHA runtime proof;
+- merge/deploy/production authorization.
+
+No merge, deploy, production mutation or persistent service change is authorized by this documentation entry.
+
+---
+
 ## 2026-09-26 — Three-module product documentation reconciliation
 
 This documentation pass reconciles Astera v8 around its completed Product Contract and three canonical modules.

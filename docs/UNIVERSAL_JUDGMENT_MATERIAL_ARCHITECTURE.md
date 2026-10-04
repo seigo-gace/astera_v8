@@ -1,12 +1,12 @@
 # Universal Judgment Material Architecture
 
-Updated: 2026-10-03  
-Status: **APPROVED TARGET DESIGN / IMPLEMENTATION PENDING**  
+Updated: 2026-10-04  
+Status: **APPROVED TARGET DESIGN / IMPLEMENTATION IN PROGRESS**  
 Scope: Judgment Material Generation + Evidence handoff + runtime verification architecture
 
 This document defines the redesign target required for Astera v8 to accept **arbitrary judgment-seeking input** and return Main8 material that a Human or Main AI can actually use to decide.
 
-It does **not** claim that the current source already satisfies this target. Implementation, regression, CI and exact-runtime proof remain separate gates.
+It does **not** treat design text as implementation proof. Each milestone requires current Source, Test, CI artifact and, where applicable, exact-runtime evidence. Current repository evidence now proves the Universal semantic CI gate and the Full Runtime trace milestone; M5 critical-path redesign and M6 private exact-SHA runtime proof remain separate gates.
 
 ---
 
@@ -620,7 +620,7 @@ Do not cache current external Evidence across freshness boundaries without expli
 
 Initial Fast Path latency is not Full Runtime latency.
 
-Target trace schema: `astera.runtime-trace.v2`
+Implemented trace schema: `astera.runtime-trace.v2`
 
 Required spans:
 
@@ -657,16 +657,20 @@ For each span record:
 - Task/Request/Claim counts;
 - error/fallback state.
 
-Node `perf_hooks`, Worker performance/ELU and `diagnostics_channel` are preferred observability primitives where they do not materially perturb the hot path.
+Current implementation authority is `src/runtime/runtime-trace.js`, attached to the Engine result as `result.runtime_trace`. `NOT_APPLICABLE` stages remain explicit and retain zero invocation count rather than fabricated work. Public HTTP `POST /process` continues to return Main8 text and does not expose this internal trace as part of the public text response.
 
-Performance acceptance must be reported separately for:
+The Universal Judgment CI gate verifies every selected case has `schema_version=astera.runtime-trace.v2`, `status=COMPLETE`, no missing required spans and all 20 spans present. It emits a dedicated `runtime-trace.json` artifact. Current exact-SHA CI evidence records 82/82 complete trace cases with no bad cases.
+
+Node `perf_hooks` and measured Worker/runtime telemetry are used where they do not materially perturb the hot path. `diagnostics_channel` remains an allowed future primitive, not a prerequisite for declaring the current trace schema complete.
+
+Performance acceptance must still be reported separately for:
 
 - deterministic no-network path;
 - Parser path;
 - Evidence path;
 - full external path.
 
-No single `p95 < 100ms` Fast Path result may be presented as proof of Full Runtime performance.
+No single `p95 < 100ms` Fast Path result may be presented as proof of Full Runtime performance. The completed trace makes critical-path measurement possible; it does not by itself prove that M5 optimization or M6 private-runtime acceptance is complete.
 
 ---
 
@@ -736,17 +740,17 @@ The exact text may differ; the Case Graph and required material coverage must re
 
 ### 12.4 CI outputs
 
-GitHub Actions should emit machine-readable artifacts:
+Current Universal Judgment CI emits machine-readable artifacts including:
 
 ```text
 summary.json
 failures.json
+case-results.json
+cases/*.json
 runtime-trace.json
-sample-main8/
-coverage-by-language.json
-coverage-by-genre.json
-coverage-by-length.json
 ```
+
+`runtime-trace.json` is a dedicated trace-only artifact payload inside the uploaded Universal Judgment artifact and is schema/span validated before PASS. Additional specialized coverage/sample artifacts may be added when they provide non-duplicative evidence.
 
 This allows GPT to inspect real outputs directly instead of requiring Master Terminal for normal regression.
 
@@ -781,7 +785,7 @@ VPS Terminal remains only for boundaries that truly require the live private run
 
 ## 14. Implementation migration sequence
 
-The redesign should be implemented in bounded stages.
+The redesign is implemented and verified in bounded stages. A later stage is not implied complete merely because an earlier CI gate is green.
 
 ### M1 — Verification authority first
 
@@ -791,6 +795,8 @@ The redesign should be implemented in bounded stages.
 - reproduce the known 1k noisy and 5k clean failures;
 - add Japanese/English paired fixtures;
 - add Full Runtime trace.
+
+Current verified milestone: GitHub Universal semantic gate is 82/82 PASS, Metamorphic gate is 24/24 PASS, and Full Runtime Trace is 82/82 COMPLETE with dedicated `runtime-trace.json`. This establishes current CI/trace authority; it does not collapse later migration stages into M1.
 
 ### M2 — Source Graph + atom extraction
 
@@ -821,6 +827,8 @@ The redesign should be implemented in bounded stages.
 - CPU-only Worker policy;
 - cache/transfer optimization based on trace evidence.
 
+M5 remains a separate current work target. Full Runtime Trace provides the evidence needed to locate waits/critical paths but does not itself implement the work-conserving scheduler or prove overlap optimization.
+
 ### M6 — Exact runtime proof
 
 Only after Source/CI semantic and performance gates pass:
@@ -828,6 +836,8 @@ Only after Source/CI semantic and performance gates pass:
 - exact-SHA private runtime verification;
 - no persistent service mutation unless separately authorized;
 - no merge/deploy/production change without explicit approval.
+
+M6 remains unproven until the same final Source SHA is verified against the authorized private runtime boundary.
 
 ---
 

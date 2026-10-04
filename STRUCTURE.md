@@ -47,26 +47,27 @@ src/domain-template-router.js
 src/hyperion-human-reader.js
 ```
 
-Deterministic Task execution support:
+Deterministic Task execution / observability support:
 
 ```text
 src/runtime/canonical-task-admission.js
 src/runtime/canonical-task-executor.js
 src/runtime/canonical-wave-executor.js
 src/runtime/concurrency-policy.js
+src/runtime/runtime-trace.js
 ```
 
-These implement dependency validation, Wave ordering, bounded concurrency, overload rejection, dependency skip propagation and cancellation handling.
+These implement dependency validation, Wave ordering, bounded concurrency, overload rejection, dependency skip propagation, cancellation handling and Full Runtime stage trace collection. `runtime-trace.js` owns the internal `astera.runtime-trace.v2` 20-span trace contract; it is observability, not a fourth module or final-decision authority.
 
 Detailed reference: [`docs/modules/JUDGMENT_MATERIAL_GENERATION.md`](docs/modules/JUDGMENT_MATERIAL_GENERATION.md)
 
-Approved redesign target (implementation pending): [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
+Approved redesign target (implementation in progress): [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)
 
 Research/theory/OSS evidence register: [`docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md`](docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md)
 
 Deterministic target algorithms: [`docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md`](docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md)
 
-The target redesign covers arbitrary-input Source Graph preservation, universal semantic atoms, Case Graph v2, Japanese/English parity, G01-G38 judgment-material sufficiency, evidence topology, GitHub-self-executable semantic verification, Full Runtime tracing and work-conserving DAG scheduling. It is a design authority, not proof that current source already implements those contracts.
+The target redesign covers arbitrary-input Source Graph preservation, universal semantic atoms, Case Graph v2, Japanese/English parity, G01-G38 judgment-material sufficiency, evidence topology, GitHub-self-executable semantic verification, Full Runtime tracing and work-conserving DAG scheduling. Current Source/CI evidence proves the Universal semantic gate and Full Runtime trace milestone; remaining target areas still require their own proof, including M5 critical-path scheduling/overlap work and M6 private exact-SHA runtime verification.
 
 ---
 
@@ -195,7 +196,9 @@ docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md
 docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md
 ```
 
-The architecture document owns the target boundaries, the research register owns external rationale/component evaluation, and the algorithm document owns deterministic target procedures/invariants. All remain implementation pending until source/tests/CI/runtime evidence reconcile them.
+The architecture document owns the target boundaries, the research register owns external rationale/component evaluation, and the algorithm document owns deterministic target procedures/invariants. Implementation status is reconciled milestone-by-milestone from Source/Test/CI/runtime evidence. Current verified milestones include the Universal semantic gate and Full Runtime trace; unverified remaining stages stay pending.
+
+Universal Judgment CI currently emits a machine-readable `runtime-trace.json` inside its uploaded artifact and rejects incomplete schema/status/required-span coverage.
 
 Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs/MODULE_MAP.md), not duplicated here.
 
@@ -212,7 +215,7 @@ Full responsibility mapping is intentionally kept in [`docs/MODULE_MAP.md`](docs
 6. archive / historical artifacts
 ```
 
-`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved redesign target for the current change unit. Until its implementation is reconciled into current contracts/code/tests and the canonical architecture, it must be read as **target design / implementation pending**, never as evidence that the live product already satisfies it.
+`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md` is the approved redesign target for the current change unit and is **implementation in progress**. A completed milestone must have current Source/Test/CI or exact-runtime proof. Full Runtime trace currently has that Source/CI proof; M5 critical-path optimization and M6 private exact-SHA runtime proof must not be inferred complete from it.
 
 `docs/UNIVERSAL_JUDGMENT_RESEARCH_EVIDENCE.md` and `docs/UNIVERSAL_JUDGMENT_ALGORITHMS.md` support that target; they do not supersede current implementation facts.
 

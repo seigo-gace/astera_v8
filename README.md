@@ -87,6 +87,37 @@ engineering Fast Path target: ~0.1 second class
 
 Fast Pathでは、Task / Claim / Lens / Constraint / Risk / Comparison Material / 現時点のEvidence Statusを構造化します。外部Network、Evidence Search完了待ち、Browser、OCR、重量Parser等は同期必須処理としてFast Pathへ直列挿入しません。必要な重処理は初期判断材料返却後にProgressiveに補強し、速度のために判断材料の品質を落としません。
 
+### Full Runtime observability
+
+Fast Path latencyとFull Runtime latencyは別Measurementです。Judgment Material GenerationのEngine resultは`astera.runtime-trace.v2`のFull Runtime traceを保持し、次の20 stageを同一schemaで観測します。
+
+```text
+ingest
+source_graph
+language_detection
+parser_wait
+semantic_atoms
+case_graph
+lens_route
+claim_extract
+evidence_plan
+evidence_wait
+evidence_bind
+canonical_cpu
+fact_lane
+risk_lane
+multi_lane
+inquiry_lane
+compare_lane
+main8_render
+public_normalize
+total
+```
+
+各spanはwall time、queue wait、CPU time（取得可能な場合）、external wait、cache状態、count、error/fallback状態を保持します。GitHub Universal Judgment gateは`runtime-trace.json`をArtifactとして出力し、全Corpus caseでschema/status/required spansの完全性を検証します。
+
+このTraceはEngine/Verificationの観測Contractです。Public HTTP `POST /process`の製品Responseは引き続きMain8の`text/plain`であり、内部Traceを外部Responseへ混在させません。
+
 ### Input processing
 
 - Input / Context normalization
@@ -500,6 +531,7 @@ Final human/business decision
 - Root runtime npm dependencies: **0**
 - Judgment Material Generation + Evidence Search + Evaluation / Verification
 - 判断材料生成Module: **基本1秒以下 / 約0.1秒級Fast Path**
+- Full Runtime observability: **`astera.runtime-trace.v2` / 20 required spans / `runtime-trace.json` CI artifact**
 - Evidence Search: **Specialist / Authoritative + General / Currentの2 Routeを根拠検索ごとに両方実行**
 - Dependency-aware Task Graph / bounded Wave execution
 - Queue admission / overload rejection / cancellation propagation
@@ -523,6 +555,7 @@ Release verificationでは少なくとも次を分離します。
 Source validity
 Unit / Integration / Regression
 Task dependency / wave / cancellation behavior
+Full Runtime stage trace / critical-path evidence
 Runtime health
 Real external boundary
 Evidence retrieval
@@ -559,6 +592,7 @@ READMEは完成品の入口です。詳細仕様は各専用Documentへ分離し
 | [`docs/modules/EVIDENCE_SEARCH.md`](docs/modules/EVIDENCE_SEARCH.md) | 根拠検索Module |
 | [`docs/modules/EVALUATION_VERIFICATION.md`](docs/modules/EVALUATION_VERIFICATION.md) | 判定・検証Module |
 | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) | HTTP / Auth / Contract |
+| [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md) | Universal Judgment redesign / Full Runtime trace contract |
 | [`docs/QUICK_START.md`](docs/QUICK_START.md) | Development / Verification start |
 | [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md) | Production deployment |
 | [`docs/SECURITY_NOTES.md`](docs/SECURITY_NOTES.md) | Security boundary |
