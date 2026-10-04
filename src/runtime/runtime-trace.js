@@ -88,7 +88,7 @@ class RuntimeTrace {
     current.error_state = unique([...current.error_state, ...(measurement.error_state ? [measurement.error_state] : [])]);
     current.fallback_state = unique([...current.fallback_state, ...(measurement.fallback_state ? [measurement.fallback_state] : [])]);
     current.measurement_state = unique([...current.measurement_state, measurement.measurement_state || 'MEASURED']);
-    current.invocations += Number(measurement.invocations || 1);
+    current.invocations += measurement.invocations === undefined ? 1 : Number(measurement.invocations);
     this.spans.set(name, current);
   }
 
