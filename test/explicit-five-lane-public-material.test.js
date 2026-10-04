@@ -47,7 +47,8 @@ test('G34 emergency response plan routes to public safety and preserves emergenc
   const question = domainPrompt('G34', '緊急対応計画の判断');
   const routed = routeDomainTemplates({ question });
   assert.equal(routed.primary?.id, 'G34');
-  assert.equal(routed.classification_basis, 'PUBLIC_SAFETY_EMERGENCY_CANONICAL_HINT');
+  assert.equal(routed.classification_basis, 'CONTROLLED_TERM_MATCH');
+  assert.ok(routed.primary?.matched_signals.includes('G34'));
 
   const out = await run(question);
   assert.match(out.material.text, /Hazard・危険/u);
