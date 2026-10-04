@@ -1,1 +1,122 @@
-x
+name: Development Probe
+
+on:
+  issues:
+    types: [opened, reopened]
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/dev-probe.yml
+      - .github/workflows/verify.yml
+      - test/tgserver-log-evidence-bridge.test.js
+      - docs/TGSERVER_ZERO_INTEGRATION.md
+      - README.md
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dev-probe-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issues' &&
+       github.event.issue.user.login == github.repository_owner &&
+       startsWith(github.event.issue.title, '[DEV-PROBE]'))
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+
+  evidence:
+    if: always() && needs.verify.result != 'skipped'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write fixed Development Probe evidence
+        shell: bash
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const payload = {
+            schema: 'astera.dev-probe.evidence.v1',
+            repository: process.env.GITHUB_REPOSITORY,
+            source_sha: process.env.SOURCE_SHA,
+            event_name: process.env.EVENT_NAME,
+            canonical_workflow: '.github/workflows/verify.yml',
+            canonical_verify_result: process.env.VERIFY_RESULT,
+            issue_body_command_execution: false,
+            arbitrary_server_command: false,
+            tgserver_runtime_reader: 'seigo-gace/TGserver',
+            tgserver_vnext_used: false,
+            cloudflare_access_secret_copied: false
+          };
+          fs.writeFileSync('dev-probe-evidence.json', JSON.stringify(payload, null, 2));
+          NODE
+
+      - name: Upload Development Probe evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-probe-${{ github.run_id }}
+          path: dev-probe-evidence.json
+          if-no-files-found: error
+          retention-days: 3
+
+  comment-success:
+    if: github.event_name == 'issues' && needs.verify.result == 'success' && needs.evidence.result == 'success'
+    needs: [verify, evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Comment success and close request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Development Probe passed.\n\nWorkflow run: ${runUrl}\nArtifact: dev-probe-${context.runId}`,
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed',
+            });
+
+  comment-failure:
+    if: github.event_name == 'issues' && always() && needs.verify.result != 'skipped' && (needs.verify.result != 'success' || needs.evidence.result != 'success')
+    needs: [verify, evidence]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Comment failure without closing request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Development Probe failed. The request remains open.\n\nWorkflow run: ${runUrl}`,
+            });
