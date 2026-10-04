@@ -1,6 +1,6 @@
 # Astera v8 — 共通Domain Lens Genre Index
 
-Updated: 2026-10-03  
+Updated: 2026-10-04  
 Document ID: `astera-lens-genre-index`  
 Taxonomy Version: `1.0.0`
 
@@ -11,6 +11,8 @@ Canonical implementation:
 ```text
 src/all-domain-lens-catalog.js
 src/domain-template-router.js
+src/domain-identity-aliases.js
+src/lens-plan.js
 ```
 
 Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)  
@@ -86,11 +88,13 @@ Current router id:
 all_domain_lens_router_v2
 ```
 
-Behavior from `src/domain-template-router.js`:
+Behavior from `src/domain-template-router.js` and `src/domain-identity-aliases.js`:
 
 - Input is normalized deterministically.
 - Empty/invalid input returns `ASTERA_LENS_INPUT_REQUIRED` without inventing a domain.
 - Primary classification uses controlled-term/text scoring and may abstain when signal is too weak.
+- A valid explicit canonical ID `G01`–`G38` is itself a controlled identity signal. Forms such as `G10`, `【G10】` and `[G10]` enter the same controlled-term routing path; they do not create a bypass router.
+- Invalid lookalikes such as `G00`, `G39` and `G99` are not promoted to canonical Lens IDs.
 - Weak/fallback classification sets `taxonomy_review_required=true`.
 - Secondary Lens candidates are limited to at most 3.
 - Overlay candidates are limited to at most 5.
@@ -109,6 +113,8 @@ PUBLIC_SAFETY_CANONICAL_HINT
 DEFENSE_CANONICAL_HINT
 PHILOSOPHY_ETHICS_HINT
 ```
+
+An explicit valid `Gxx` identity normally resolves through `CONTROLLED_TERM_MATCH`.
 
 Do not create an `other`/`unknown` Lens merely to avoid abstention.
 
@@ -191,6 +197,20 @@ Lens = G11 finance
 may require generic comparison slots plus finance-specific period/accounting-basis/denominator/risk-assumption material.
 
 This is not an instruction to hard-code prose templates per Genre. The material contract is structured and source/evidence backed.
+
+### Additive specialist breadth
+
+`src/lens-plan.js` may supplement a selected Primary Lens with `PRIMARY_BREADTH` material when the representative canonical profile does not by itself cover the specialist pre-decision dimensions needed for the wider Genre.
+
+This supplement is additive only. It may contribute Fact, Risk, Multi, Inquiry, Compare, Evidence or Safety material, but it:
+
+- does not replace the canonical Primary Lens;
+- does not change the `G01`–`G38` IDs or taxonomy version;
+- does not create a 39th Genre;
+- does not select or rank candidates;
+- does not create a final decision or automatic recommendation.
+
+The current Universal Judgment gate separately verifies that the resulting public Main8 contains enough domain material; Lens classification alone is insufficient proof.
 
 ---
 
@@ -295,11 +315,12 @@ When reading old documents/tests, label this explicitly as **Legacy v1 evaluator
 
 ---
 
-## 11. Safety and decision boundary
+## 11. Safety, public-output and decision boundary
 
 Lens material may strengthen:
 
 ```text
+Fact requirements
 Risk
 Inquiry
 Comparison dimensions
@@ -307,11 +328,14 @@ Evidence requirements
 Safety gates
 ```
 
+Public Main8 projection is request-sensitive. Specialist Risk or Compare material may exist in the internal LensPlan without automatically appearing in every generic task. It is projected to public Main8 when the Task/request actually calls for those materials, such as explicit risk/failure-condition requirements, comparison-axis requirements or a real comparison task.
+
 It must not create:
 
 ```text
 automatic recommendation
 candidate winner
+candidate ranking
 final decision
 fabricated evidence
 ```
@@ -328,17 +352,20 @@ The redesign requires separate verification for:
 
 A test that only checks `primary.id === Gxx` cannot prove judgment-material quality.
 
-GitHub-self-executable regression must include Japanese and English, multiple lengths/styles and G01-G38 coverage with semantic/material-slot gold annotations rather than exact answer-template matching.
+Current regression includes explicit canonical-ID routing for `G01`–`G38` in Japanese and English, additive breadth coverage for weak representative Genre profiles, and Universal Judgment semantic/material verification across the full 38-Genre pair set.
+
+GitHub-self-executable regression must continue to include Japanese and English, multiple lengths/styles and G01-G38 coverage with semantic/material-slot gold annotations rather than exact answer-template matching.
 
 ---
 
 ## 13. Update rules
 
 1. Keep `G01`–`G38` IDs stable unless an explicit taxonomy migration is approved.
-2. Update `src/all-domain-lens-catalog.js`, `src/domain-template-router.js`, related tests and this document together when current routing changes.
+2. Update `src/all-domain-lens-catalog.js`, `src/domain-template-router.js`, `src/domain-identity-aliases.js`, `src/lens-plan.js`, related tests and this document together as applicable when current routing/material coverage changes.
 3. Keep Overlay definitions synchronized with router code.
 4. Do not create an `other`/`unknown` Lens to hide weak classification; the router may abstain.
 5. Do not claim Generic v2 Lens enforcement from Legacy v1 tests.
 6. Do not duplicate the full per-Lens implementation arrays in README.
 7. Do not treat G01-G38 as a supported-document whitelist or Request parser.
 8. Do not treat correct Genre classification as proof of Main8 completion.
+9. Do not treat internal specialist Risk/Compare material as permission to expose it in public Main8 when the Task did not request it.
