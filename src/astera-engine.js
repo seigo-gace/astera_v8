@@ -1,5 +1,13 @@
 'use strict';
 
+const {
+  RuntimeTrace,
+  activeTrace,
+  runWithTrace,
+  installRuntimeTraceInstrumentation
+} = require('./runtime/runtime-trace');
+installRuntimeTraceInstrumentation();
+
 const CanonicalAsteraEngine = require('./canonical-astera-engine');
 const { resolveTaskEvidence } = require('./canonical-evidence-resolver');
 const { createEvidenceSearchClient } = require('./evidence-search/api/runtime-client');
@@ -105,141 +113,149 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   frame(args = {}) {
-    const judgment = super.frame(args);
-    const request = args.request || {};
-    const packet = request.analysis_task_packet || {};
-    const observable = packet.observable_material || request.observable_material || null;
-    const intent = packet.analysis_intent || request.standalone_api_intent || null;
-    const next = projectFiveLaneMaterialToMain8({ ...judgment }, args.taskResults || []);
-    const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
+    const trace = activeTrace();
+    const render = () => {
+      const judgment = super.frame(args);
+      const request = args.request || {};
+      const packet = request.analysis_task_packet || {};
+      const observable = packet.observable_material || request.observable_material || null;
+      const intent = packet.analysis_intent || request.standalone_api_intent || null;
+      const next = projectFiveLaneMaterialToMain8({ ...judgment }, args.taskResults || []);
+      const outputLang = String(judgment.output_language || request.output_language || request.language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
 
-    const fiveLaneStructuralGaps = uniqueStrings(
-      (args.taskResults || []).flatMap((result) => result?.lanes?.inquiry?.missing_fields || [])
-    ).filter((value) => isPublicStructuralGapLabel(value, outputLang));
-    const fiveLanePremise = next['02_premise'];
-    if (fiveLanePremise && fiveLaneStructuralGaps.length) {
-      const projected = fiveLaneStructuralGaps.map((value) =>
-        `${outputLang === 'ja' ? '判断材料不足' : 'Missing judgment material'}: ${value}`
-      );
-      const items = uniqueStrings([...(fiveLanePremise.items || []), ...projected]);
-      next['02_premise'] = { ...fiveLanePremise, items, summary: items.join(' / ') };
-    }
-
-    if (packet.parser_projection_recovery?.applied === true) {
-      const premise = next['02_premise'];
-      const unresolvedItems = publicRecoveryUnresolvedItems(packet, outputLang);
-      if (premise && unresolvedItems.length) {
-        const items = uniqueStrings([...(premise.items || []), ...unresolvedItems]);
-        next['02_premise'] = { ...premise, items, summary: items.join(' / ') };
+      const fiveLaneStructuralGaps = uniqueStrings(
+        (args.taskResults || []).flatMap((result) => result?.lanes?.inquiry?.missing_fields || [])
+      ).filter((value) => isPublicStructuralGapLabel(value, outputLang));
+      const fiveLanePremise = next['02_premise'];
+      if (fiveLanePremise && fiveLaneStructuralGaps.length) {
+        const projected = fiveLaneStructuralGaps.map((value) =>
+          `${outputLang === 'ja' ? '判断材料不足' : 'Missing judgment material'}: ${value}`
+        );
+        const items = uniqueStrings([...(fiveLanePremise.items || []), ...projected]);
+        next['02_premise'] = { ...fiveLanePremise, items, summary: items.join(' / ') };
       }
-      const facts = next['03_facts'];
-      const observableFactItems = uniqueStrings(observable?.claim_texts || []).map((value) =>
-        `${outputLang === 'ja' ? '入力記載（未検証）' : 'Input statement (unverified)'}: ${value}`
-      );
-      if (facts && observableFactItems.length) {
-        const items = uniqueStrings([...(facts.items || []), ...observableFactItems]);
-        next['03_facts'] = { ...facts, items, summary: items.join(' / ') };
+
+      if (packet.parser_projection_recovery?.applied === true) {
+        const premise = next['02_premise'];
+        const unresolvedItems = publicRecoveryUnresolvedItems(packet, outputLang);
+        if (premise && unresolvedItems.length) {
+          const items = uniqueStrings([...(premise.items || []), ...unresolvedItems]);
+          next['02_premise'] = { ...premise, items, summary: items.join(' / ') };
+        }
+        const facts = next['03_facts'];
+        const observableFactItems = uniqueStrings(observable?.claim_texts || []).map((value) =>
+          `${outputLang === 'ja' ? '入力記載（未検証）' : 'Input statement (unverified)'}: ${value}`
+        );
+        if (facts && observableFactItems.length) {
+          const items = uniqueStrings([...(facts.items || []), ...observableFactItems]);
+          next['03_facts'] = { ...facts, items, summary: items.join(' / ') };
+        }
       }
-    }
 
-    if (!observable || !intent) return next;
-    const taskSpecificPurpose = uniqueStrings((packet.tasks || []).map((task) => task?.purpose || task?.objective))[0] || '';
-    const specificPurpose = intent.source === 'EXPLICIT_PURPOSE_OVERRIDE'
-      ? intent.purpose
-      : (packet.user_goal || taskSpecificPurpose || next['01_purpose']?.user_goal || intent.purpose);
-    const resolvedIntent = { ...intent, purpose: specificPurpose || intent.purpose };
-    next.analysis_intent = resolvedIntent;
-    next.observable_material = observable;
+      if (!observable || !intent) return next;
+      const taskSpecificPurpose = uniqueStrings((packet.tasks || []).map((task) => task?.purpose || task?.objective))[0] || '';
+      const specificPurpose = intent.source === 'EXPLICIT_PURPOSE_OVERRIDE'
+        ? intent.purpose
+        : (packet.user_goal || taskSpecificPurpose || next['01_purpose']?.user_goal || intent.purpose);
+      const resolvedIntent = { ...intent, purpose: specificPurpose || intent.purpose };
+      next.analysis_intent = resolvedIntent;
+      next.observable_material = observable;
 
-    const purpose = next['01_purpose'];
-    if (purpose) {
-      const priorItems = Array.isArray(purpose.items) ? purpose.items : [];
-      next['01_purpose'] = {
-        ...purpose,
-        user_goal: resolvedIntent.purpose,
-        summary: resolvedIntent.purpose,
-        items: uniqueStrings([resolvedIntent.purpose, ...priorItems.filter((item) => String(item) !== resolvedIntent.purpose)]),
-        analysis_intent: resolvedIntent
-      };
-    }
-
-    const comparison = next['06_comparison'];
-    if (comparison && observable.candidates?.length >= 2) {
-      const existingCandidates = Array.isArray(comparison.comparison_candidates)
-        ? comparison.comparison_candidates
-        : [];
-      const candidates = uniqueStrings([...observable.candidates, ...existingCandidates]).filter((label) => {
-        const composite = /^(.+案)と(.+案)$/u.exec(label);
-        return !composite || !(observable.candidates.includes(composite[1]) && observable.candidates.includes(composite[2]));
-      });
-      const existingMaterials = new Map(
-        (Array.isArray(comparison.candidate_materials) ? comparison.candidate_materials : [])
-          .map((item) => [String(item?.label || ''), item])
-      );
-      const candidateMaterials = candidates.map((label, index) => {
-        if (existingMaterials.has(label)) return existingMaterials.get(label);
-        return {
-          candidate_id: `observable:${index + 1}`,
-          label,
-          material_state: 'OBSERVABLE_UNVERIFIED_MATERIAL',
-          observations: (observable.claim_texts || []).filter((claim) => String(claim).includes(label)),
-          confirmed_claim_ids: [],
-          undetermined_claim_ids: [],
-          supported_scopes: [],
-          evidence_refs: []
+      const purpose = next['01_purpose'];
+      if (purpose) {
+        const priorItems = Array.isArray(purpose.items) ? purpose.items : [];
+        next['01_purpose'] = {
+          ...purpose,
+          user_goal: resolvedIntent.purpose,
+          summary: resolvedIntent.purpose,
+          items: uniqueStrings([resolvedIntent.purpose, ...priorItems.filter((item) => String(item) !== resolvedIntent.purpose)]),
+          analysis_intent: resolvedIntent
         };
-      });
-      const dimensions = uniqueStrings([...(observable.dimensions || []), ...(comparison.dimensions || [])]);
-      next['06_comparison'] = {
-        ...comparison,
-        summary: `observable_candidates=${candidates.length}; dimensions=${dimensions.join(' / ') || '-'}`,
-        items: candidates.map((label) => `candidate=${label}`),
-        comparison_candidates: candidates,
-        dimensions,
-        candidate_materials: candidateMaterials,
-        selected_candidate: null,
-        candidate_ranking: [],
-        rejected_candidates: []
-      };
-    }
+      }
 
-    const crisis = next['04_crisis'];
-    if (crisis && observable.risks?.length) {
-      const specificRisks = observable.risks.map((risk, index) => ({
-        rule_id: `OBSERVABLE-${risk.code}`,
-        key: risk.code,
-        impact: risk.impact,
-        failure_condition: `${risk.code} を解消するEvidence・成立条件が未確認のまま判断材料を使用する。`,
-        weight: Math.max(35, 60 - index),
-        source: 'OBSERVABLE_MATERIAL',
-        claim_ids: []
-      }));
-      const existing = Array.isArray(crisis.risks) ? crisis.risks : [];
-      const genericDominance = new Set([
-        'Data Loss', 'Downtime', '互換性破壊', 'Security Regression', 'Rollback不能',
-        '幻覚・誤判定', 'Bias', 'Privacy Leak', 'Prompt Injection', '過信・監査Gap',
-        '製品安全', '誤表示', 'Recall', '保証不履行', '互換性問題',
-        '根拠なしの主張', '弱いSource', '矛盾', 'Source Laundering'
-      ]);
-      const retained = existing.filter((risk) => {
-        if (String(risk.rule_id || '').startsWith('OBSERVABLE-')) return true;
-        return !genericDominance.has(String(risk.impact || ''));
-      });
-      const risks = [...specificRisks, ...retained];
-      next['04_crisis'] = {
-        ...crisis,
-        summary: `case_specific_risks=${specificRisks.length}; total_risks=${risks.length}`,
-        risks,
-        items: risks.map((risk) => `${risk.key}[${risk.weight}] ${risk.impact}`)
-      };
-    }
+      const comparison = next['06_comparison'];
+      if (comparison && observable.candidates?.length >= 2) {
+        const existingCandidates = Array.isArray(comparison.comparison_candidates)
+          ? comparison.comparison_candidates
+          : [];
+        const candidates = uniqueStrings([...observable.candidates, ...existingCandidates]).filter((label) => {
+          const composite = /^(.+案)と(.+案)$/u.exec(label);
+          return !composite || !(observable.candidates.includes(composite[1]) && observable.candidates.includes(composite[2]));
+        });
+        const existingMaterials = new Map(
+          (Array.isArray(comparison.candidate_materials) ? comparison.candidate_materials : [])
+            .map((item) => [String(item?.label || ''), item])
+        );
+        const candidateMaterials = candidates.map((label, index) => {
+          if (existingMaterials.has(label)) return existingMaterials.get(label);
+          return {
+            candidate_id: `observable:${index + 1}`,
+            label,
+            material_state: 'OBSERVABLE_UNVERIFIED_MATERIAL',
+            observations: (observable.claim_texts || []).filter((claim) => String(claim).includes(label)),
+            confirmed_claim_ids: [],
+            undetermined_claim_ids: [],
+            supported_scopes: [],
+            evidence_refs: []
+          };
+        });
+        const dimensions = uniqueStrings([...(observable.dimensions || []), ...(comparison.dimensions || [])]);
+        next['06_comparison'] = {
+          ...comparison,
+          summary: `observable_candidates=${candidates.length}; dimensions=${dimensions.join(' / ') || '-'}`,
+          items: candidates.map((label) => `candidate=${label}`),
+          comparison_candidates: candidates,
+          dimensions,
+          candidate_materials: candidateMaterials,
+          selected_candidate: null,
+          candidate_ranking: [],
+          rejected_candidates: []
+        };
+      }
 
-    return next;
+      const crisis = next['04_crisis'];
+      if (crisis && observable.risks?.length) {
+        const specificRisks = observable.risks.map((risk, index) => ({
+          rule_id: `OBSERVABLE-${risk.code}`,
+          key: risk.code,
+          impact: risk.impact,
+          failure_condition: `${risk.code} を解消するEvidence・成立条件が未確認のまま判断材料を使用する。`,
+          weight: Math.max(35, 60 - index),
+          source: 'OBSERVABLE_MATERIAL',
+          claim_ids: []
+        }));
+        const existing = Array.isArray(crisis.risks) ? crisis.risks : [];
+        const genericDominance = new Set([
+          'Data Loss', 'Downtime', '互換性破壊', 'Security Regression', 'Rollback不能',
+          '幻覚・誤判定', 'Bias', 'Privacy Leak', 'Prompt Injection', '過信・監査Gap',
+          '製品安全', '誤表示', 'Recall', '保証不履行', '互換性問題',
+          '根拠なしの主張', '弱いSource', '矛盾', 'Source Laundering'
+        ]);
+        const retained = existing.filter((risk) => {
+          if (String(risk.rule_id || '').startsWith('OBSERVABLE-')) return true;
+          return !genericDominance.has(String(risk.impact || ''));
+        });
+        const risks = [...specificRisks, ...retained];
+        next['04_crisis'] = {
+          ...crisis,
+          summary: `case_specific_risks=${specificRisks.length}; total_risks=${risks.length}`,
+          risks,
+          items: risks.map((risk) => `${risk.key}[${risk.weight}] ${risk.impact}`)
+        };
+      }
+
+      return next;
+    };
+    return trace ? trace.measureSync('main8_render', render, { cache_unknown: 0 }) : render();
   }
 
   material(judgment) {
-    const rendered = normalizeUnifiedMain8Material(renderFiveLaneMain8(judgment));
-    return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
+    const trace = activeTrace();
+    const normalize = () => {
+      const rendered = normalizeUnifiedMain8Material(renderFiveLaneMain8(judgment));
+      return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
+    };
+    return trace ? trace.measureSync('public_normalize', normalize, { cache_unknown: 0 }) : normalize();
   }
 
   externalBrief(judgment) {
@@ -247,8 +263,60 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   async process(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
-    const out = await super.process(input, caller, executionContext);
-    return attachEvidenceCitations(out);
+    const trace = new RuntimeTrace({
+      caller_id: caller?.id || 'unknown',
+      input_chars: String(input?.question || '').length,
+      context_chars: String(input?.context || '').length
+    });
+    return runWithTrace(trace, async () => {
+      trace.measureSync('ingest', () => ({
+        question_chars: String(input?.question || '').length,
+        context_chars: String(input?.context || '').length
+      }), {
+        counts: {
+          question_chars: String(input?.question || '').length,
+          context_chars: String(input?.context || '').length
+        },
+        cache_unknown: 0
+      });
+
+      const out = await super.process(input, caller, executionContext);
+      const cited = trace.measureSync('public_normalize', () => attachEvidenceCitations(out), {
+        cache_unknown: 0,
+        measurement_state: 'PUBLIC_EVIDENCE_CITATION_NORMALIZE'
+      });
+
+      if (!trace.has('parser_wait')) trace.markNotApplicable('parser_wait', 'NO_JAPANESE_PARSER_WAIT');
+      if (!trace.has('evidence_wait')) trace.markNotApplicable('evidence_wait', 'NO_EXTERNAL_EVIDENCE_WAIT');
+
+      const taskCount = Number(cited?.runtime?.task_count || cited?.result?.analysis_task_packet?.tasks?.length || 0);
+      const claimCount = Number(cited?.result?.canonical_claims?.claim_count || 0);
+      const runtimeTrace = trace.finalize({
+        counts: { task_count: taskCount, claim_count: claimCount },
+        request: {
+          language: cited?.runtime?.input_language || cited?.result?.request_model?.language || null,
+          output_language: cited?.runtime?.requested_output_language || null
+        }
+      });
+
+      const runtime = cited?.runtime && typeof cited.runtime === 'object'
+        ? {
+          ...cited.runtime,
+          runtime_trace_status: runtimeTrace.status,
+          runtime_trace_schema: runtimeTrace.schema_version,
+          runtime_trace_missing_spans: runtimeTrace.missing_spans
+        }
+        : cited?.runtime;
+      const result = cited?.result && typeof cited.result === 'object'
+        ? {
+          ...cited.result,
+          ...(runtimeTrace.status === 'COMPLETE' ? { runtime_trace: runtimeTrace } : {}),
+          runtime_trace_status: runtimeTrace.status,
+          runtime_trace_missing_spans: runtimeTrace.missing_spans
+        }
+        : cited?.result;
+      return { ...cited, result, runtime };
+    });
   }
 
   async processProgressive(input = {}, caller = { id: 'unknown' }, executionContext = {}) {
@@ -286,13 +354,22 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   async resolveEvidenceForTask({ task, input, caller, signal = null }) {
-    return resolveTaskEvidence({
+    const trace = activeTrace();
+    const resolve = () => resolveTaskEvidence({
       client: this.evidenceSearchClient,
       task,
       input,
       caller,
       signal
     });
+    return trace
+      ? trace.measureAsync('evidence_wait', resolve, {
+        external_wait: true,
+        cache_unknown: 1,
+        counts: { task_calls: 1 },
+        measurement_state: 'EXTERNAL_WAIT'
+      })
+      : resolve();
   }
 }
 
