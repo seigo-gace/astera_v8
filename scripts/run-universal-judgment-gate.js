@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const AsteraEngine = require('../src/astera-engine');
+const { TRACE_SCHEMA, REQUIRED_SPANS } = require('../src/runtime/runtime-trace');
 const { bootstrapRuntimeEnv } = require('../src/evidence-search/api/runtime-client');
 const {
   JapaneseParserMCPClient,
@@ -107,6 +108,26 @@ function novelPatternMatches(patterns, material, input) {
   return found;
 }
 
+function validateRuntimeTrace(trace) {
+  const spanNames = new Set((trace?.spans || []).map((span) => String(span?.name || '')).filter(Boolean));
+  const missingSpans = REQUIRED_SPANS.filter((name) => !spanNames.has(name));
+  const complete = Boolean(
+    trace
+    && trace.schema_version === TRACE_SCHEMA
+    && trace.status === 'COMPLETE'
+    && Array.isArray(trace.missing_spans)
+    && trace.missing_spans.length === 0
+    && missingSpans.length === 0
+  );
+  return {
+    complete,
+    schema_version: trace?.schema_version || null,
+    status: trace?.status || null,
+    span_count: spanNames.size,
+    missing_spans: missingSpans
+  };
+}
+
 function evaluateCase(testCase, out, durationMs) {
   const result = out?.result || {};
   const material = String(out?.material?.text || '');
@@ -149,6 +170,15 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const trace = result?.runtime_trace || result?.performance_trace || result?.trace?.runtime || null;
+  const traceValidation = validateRuntimeTrace(trace);
+  if (!traceValidation.complete) {
+    failures.push({
+      code: 'FULL_RUNTIME_TRACE_INCOMPLETE',
+      expected_schema: TRACE_SCHEMA,
+      expected_span_count: REQUIRED_SPANS.length,
+      ...traceValidation
+    });
+  }
 
   return {
     case_id: testCase.id,
@@ -163,7 +193,8 @@ function evaluateCase(testCase, out, durationMs) {
     public_request_ids: requests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
-    runtime_trace_available: Boolean(trace),
+    runtime_trace_available: traceValidation.complete,
+    runtime_trace_validation: traceValidation,
     runtime_trace: trace,
     pass: failures.length === 0,
     failures,
@@ -244,6 +275,9 @@ async function main() {
           genre: testCase.expected?.genre || null,
           input_chars: testCase.input.length,
           duration_ms: Number((performance.now() - started).toFixed(3)),
+          runtime_trace_available: false,
+          runtime_trace_validation: { complete: false, schema_version: null, status: null, span_count: 0, missing_spans: [...REQUIRED_SPANS] },
+          runtime_trace: null,
           pass: false,
           failures: [{ code: 'PROCESS_ERROR', message: error.message, error_code: error.code || null }],
           material: ''
@@ -285,12 +319,15 @@ async function main() {
     pair_summary: pairSummary,
     latency_ms: { p50: percentile(0.50), p95: percentile(0.95), max: durations[durations.length - 1] || 0 },
     full_runtime_stage_trace: {
+      schema_version: TRACE_SCHEMA,
+      required_span_count: REQUIRED_SPANS.length,
       cases_with_trace: traceAvailableCount,
       total_cases: results.length,
       status: traceAvailableCount === results.length ? 'AVAILABLE' : 'NOT_YET_COMPLETE'
     },
     acceptance: {
       semantic_failures_must_be_zero: true,
+      full_runtime_trace_required: true,
       ja_en_required: true,
       g01_g38_required: true,
       known_1k_5k_failures_required: true,
@@ -300,7 +337,25 @@ async function main() {
     }
   };
 
+  const runtimeTraceArtifact = {
+    schema: 'astera.universal-runtime-trace-artifact.v1',
+    trace_schema: TRACE_SCHEMA,
+    required_spans: [...REQUIRED_SPANS],
+    total_cases: results.length,
+    cases_with_complete_trace: traceAvailableCount,
+    status: traceAvailableCount === results.length ? 'COMPLETE' : 'PARTIAL',
+    cases: results.map((r) => ({
+      case_id: r.case_id,
+      kind: r.kind,
+      language: r.language,
+      genre: r.genre || null,
+      validation: r.runtime_trace_validation || null,
+      trace: r.runtime_trace || null
+    }))
+  };
+
   writeJson('summary.json', summary);
+  writeJson('runtime-trace.json', runtimeTraceArtifact);
   writeJson('failures.json', failures.map(({ material, ...rest }) => rest));
   writeJson('case-results.json', results);
   for (const r of results) writeJson(`cases/${r.case_id}.json`, r);
@@ -314,6 +369,7 @@ async function main() {
   console.log(`UNIVERSAL_LATENCY_P50_MS=${summary.latency_ms.p50}`);
   console.log(`UNIVERSAL_LATENCY_P95_MS=${summary.latency_ms.p95}`);
   console.log(`UNIVERSAL_FULL_RUNTIME_TRACE=${summary.full_runtime_stage_trace.status}`);
+  console.log(`UNIVERSAL_RUNTIME_TRACE_CASES=${traceAvailableCount}/${results.length}`);
   console.log(`UNIVERSAL_ARTIFACT_ROOT=${ARTIFACT_ROOT}`);
 
   if (failures.length) {
