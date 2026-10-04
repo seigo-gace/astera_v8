@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const AsteraEngine = require('../src/astera-engine');
+const Logger = require('../src/logger');
 const {
   TRACE_SCHEMA,
   REQUIRED_SPANS
@@ -13,8 +14,15 @@ function spanMap(trace) {
   return new Map((trace?.spans || []).map((span) => [span.name, span]));
 }
 
+function createTraceTestEngine() {
+  return new AsteraEngine({
+    evidenceSearchClient: null,
+    logger: new Logger({ tgsEnabled: false })
+  });
+}
+
 test('public Astera runtime emits complete asterav8 runtime-trace v2 without changing decision authority', async (t) => {
-  const engine = new AsteraEngine({ evidenceSearchClient: null });
+  const engine = createTraceTestEngine();
   t.after(async () => engine.destroy());
 
   const out = await engine.process({
@@ -66,7 +74,7 @@ test('public Astera runtime emits complete asterav8 runtime-trace v2 without cha
 });
 
 test('runtime trace keeps optional external waits explicit instead of fabricating durations', async (t) => {
-  const engine = new AsteraEngine({ evidenceSearchClient: null });
+  const engine = createTraceTestEngine();
   t.after(async () => engine.destroy());
 
   const out = await engine.process({
