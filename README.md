@@ -124,7 +124,7 @@ total
 - Source role isolation
 - Japanese semantic parsing boundary
 - Deterministic Task Decomposition
-- Requirement / Constraint / Prohibition / Preserve / Deadline / Condition / Exception保持
+- Requirement / Constraint / Prohibition / Preserve / Condition / Exception保持
 - Claim extraction / normalization
 - Evidence Requirement生成
 
