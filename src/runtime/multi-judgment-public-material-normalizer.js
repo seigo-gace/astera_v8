@@ -363,12 +363,12 @@ function normalizeSection07(section, model, lang) {
       ? /成立した外部根拠候補がある/u.test(current)
       : /Accepted external evidence exists/iu.test(current);
     const intent = lang === 'ja'
-      ? '利用者は外部Evidenceを明示要求していない。'
-      : 'The user did not explicitly request external evidence.';
+      ? '利用者入力の条件・観測を保持するために外部検索を必要としない。'
+      : 'User-supplied conditions and observations can be preserved without requiring external search.';
     if (accepted) return `  - ${match[1]}: ${intent} ${current}`;
     return lang === 'ja'
-      ? `  - ${match[1]}: ${intent} 内部TaskのEvidence検索状態を要求レベルの外部Evidence要求へ昇格せず、実装事実・原因は未確認として分離する。`
-      : `  - ${match[1]}: ${intent} Do not promote internal Task evidence-search state into a request-level external-evidence requirement; implementation facts and causes remain separately unverified.`;
+      ? `  - ${match[1]}: ${intent} 外部根拠が必要な実装事実・原因は、成立した根拠が得られるまで未確認として分離する。`
+      : `  - ${match[1]}: ${intent} Implementation facts or causes that require external evidence remain separately unverified until acceptable evidence is established.`;
   });
   const sourceSummary = sourceBackedEvidenceSummary(model, lang);
   if (sourceSummary && !lines.some((line) => line.includes(lang === 'ja' ? '利用者入力として与えられた材料' : 'Material supplied by the user'))) {
