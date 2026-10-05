@@ -65,20 +65,23 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
       .filter((entry) => entry?.source === 'LENS_PLAN')
       .map((entry) => Array.isArray(entry?.focus) ? entry.focus.join(' / ') : entry?.focus)
   ));
+  const missingMaterial = itemsFromLane(taskResults, 'inquiry', 'missing_fields');
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
   const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
   const comparisonDimensions = unique(array(taskResults)
     .filter((result) => taskNeedsComparison(result) || taskRequestsComparisonMaterial(result))
     .flatMap((result) => array(lanesOf(result)?.compare?.dimensions)));
 
+  if (next['02_premise']) next['02_premise'] = { ...next['02_premise'], five_lane_missing_material: missingMaterial };
   if (next['03_facts']) next['03_facts'] = { ...next['03_facts'], fact_requirements: factRequirements };
   if (next['04_crisis']) next['04_crisis'] = { ...next['04_crisis'], risk_requirements: riskRequirements };
   if (next['05_opposition']) next['05_opposition'] = { ...next['05_opposition'], domain_perspectives: domainPerspectives };
-  if (next['06_comparison']) next['06_comparison'] = { ...next['06_comparison'], five_lane_dimensions: comparisonDimensions };
+  if (next['06_comparison']) next['06_comparison'] = { ...next['06_comparison'], dimensions: comparisonDimensions, five_lane_dimensions: comparisonDimensions };
   if (next['07_evidence_status']) next['07_evidence_status'] = { ...next['07_evidence_status'], evidence_requirements: evidenceRequirements };
   if (next['08_reinstruction']) next['08_reinstruction'] = { ...next['08_reinstruction'], inquiry_requirements: inquiryRequirements };
 
   next.five_lane_public_material = {
+    missing_material: missingMaterial,
     fact_requirements: factRequirements,
     risk_requirements: riskRequirements,
     domain_perspectives: domainPerspectives,
