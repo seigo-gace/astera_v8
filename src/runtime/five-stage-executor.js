@@ -216,21 +216,22 @@ class FiveStageExecutor {
         throw error;
       }));
       const projected = await Promise.all(jobs);
-      const rawLanes = { lens_plan: task?.domain?.lens_plan || null };
+      const lanes = { lens_plan: task?.domain?.lens_plan || null };
       const telemetry = [];
       for (const item of projected) {
-        rawLanes[item.lane] = item.value;
+        lanes[item.lane] = item.value;
         telemetry.push({ lane: item.lane, ...item.telemetry });
       }
-      const lanes = scopeFiveStageDecisionMaterial(rawLanes, task, canonical);
+      const publicLanes = scopeFiveStageDecisionMaterial(lanes, task, canonical);
       return {
         lanes,
+        public_lanes: publicLanes,
         lane_execution: {
           mode: 'FIVE_STAGE_PARALLEL_WORKER_THREADS',
           lane_count: FIVE_STAGE.length,
           worker_pool_size: FIVE_STAGE.length,
           lane_order: [...FIVE_STAGE],
-          public_material_boundary: 'FIVE_STAGE_SCOPED_BEFORE_MAIN8',
+          public_material_boundary: 'FIVE_STAGE_SCOPED_COPY_BEFORE_MAIN8',
           telemetry
         }
       };

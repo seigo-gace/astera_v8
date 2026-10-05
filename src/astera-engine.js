@@ -23,6 +23,7 @@ const { recoverPartialParserMaterial } = require('./runtime/parser-partial-mater
 const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
 const { renderFiveLaneMain8 } = require('./runtime/five-lane-main8-material-renderer');
 const { projectFiveLaneMaterialToMain8 } = require('./runtime/five-lane-main8-projection');
+const { buildPublicFiveStageAggregate, publicTaskResults } = require('./runtime/five-stage-public-aggregate');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const {
@@ -101,8 +102,17 @@ class AsteraEngine extends CanonicalAsteraEngine {
   frame(args = {}) {
     const trace = activeTrace();
     const project = () => {
-      const judgment = super.frame(args);
-      return projectFiveLaneMaterialToMain8({ ...judgment }, args.taskResults || []);
+      const taskResults = args.taskResults || [];
+      const projectedTaskResults = publicTaskResults(taskResults);
+      const projectedAggregate = buildPublicFiveStageAggregate(args.aggregate || {}, taskResults);
+      const judgment = super.frame({ ...args, taskResults: projectedTaskResults, aggregate: projectedAggregate });
+      const packet = args.request?.analysis_task_packet || {};
+      const next = projectFiveLaneMaterialToMain8({ ...judgment }, taskResults);
+      const analysisIntent = packet.analysis_intent || args.request?.standalone_api_intent || null;
+      const observableMaterial = packet.observable_material || args.request?.observable_material || null;
+      if (analysisIntent) next.analysis_intent = analysisIntent;
+      if (observableMaterial) next.observable_material = observableMaterial;
+      return next;
     };
     return trace ? trace.measureSync('main8_render', project, { cache_unknown: 0 }) : project();
   }

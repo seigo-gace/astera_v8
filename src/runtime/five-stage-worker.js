@@ -20,6 +20,18 @@ const OPERATIONS = Object.freeze({
   PROJECT_COMPARE_LANE: 'compare'
 });
 
+function array(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function clean(value) {
+  return String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+}
+
+function unique(values = []) {
+  return [...new Set(array(values).map(clean).filter(Boolean))];
+}
+
 function serializeError(error) {
   return {
     name: String(error?.name || 'Error'),
@@ -64,6 +76,85 @@ function factRequirements(domain) {
   })));
 }
 
+function enrichRiskLane(base = {}, task = {}) {
+  const observable = task.observable_material || {};
+  const additions = array(observable.risks).map((risk, index) => ({
+    rule_id: `OBSERVABLE-${clean(risk?.code || `RISK-${index + 1}`)}`,
+    key: clean(risk?.code || `observable-risk-${index + 1}`),
+    impact: clean(risk?.impact),
+    failure_condition: `${clean(risk?.code || 'OBSERVABLE_RISK')} を解消するEvidence・成立条件が未確認のまま判断材料を使用する。`,
+    weight: Math.max(35, 60 - index),
+    source: 'OBSERVABLE_MATERIAL',
+    claim_ids: []
+  })).filter((item) => item.impact);
+  if (!additions.length) return base;
+  const seen = new Set(additions.map((item) => `${item.key}|${item.impact}`));
+  const risks = [...additions, ...array(base.risks).filter((item) => !seen.has(`${item?.key}|${item?.impact}`))];
+  const highest = [...risks].sort((a, b) => Number(b?.weight || 0) - Number(a?.weight || 0))[0] || null;
+  return Object.freeze({
+    ...base,
+    rule_ids: unique(risks.map((item) => item?.rule_id)),
+    risk_count: risks.length,
+    risks,
+    highest,
+    failure_conditions: unique(risks.map((item) => item?.failure_condition)),
+    level: Number(highest?.weight || 0) >= 30 ? 'high' : highest ? 'medium' : 'low'
+  });
+}
+
+function observableCandidateMaterial(label, index, task = {}) {
+  const claims = array(task.observable_material?.claim_texts).filter((claim) => String(claim).includes(label));
+  return {
+    candidate_id: `observable:${index + 1}`,
+    label,
+    material_state: claims.length ? 'OBSERVABLE_UNVERIFIED_MATERIAL' : 'INSUFFICIENT_CANDIDATE_MATERIAL',
+    observations: claims,
+    confirmed_claim_ids: [],
+    undetermined_claim_ids: [],
+    supported_scopes: [],
+    evidence_refs: []
+  };
+}
+
+function enrichCompareLane(base = {}, task = {}) {
+  const observable = task.observable_material || {};
+  const candidates = unique([...array(observable.candidates), ...array(base.comparison_candidates).map((item) => typeof item === 'string' ? item : item?.label)]);
+  const dimensions = unique([...array(observable.dimensions), ...array(base.dimensions)]);
+  if (!candidates.length && !dimensions.length) return base;
+
+  const existingMaterials = new Map(array(base.candidate_materials).map((item) => [clean(item?.label), item]));
+  const candidateMaterials = candidates.map((label, index) => existingMaterials.get(clean(label)) || observableCandidateMaterial(label, index, task));
+  const existingDifferences = new Map(array(base.trade_off_differences).map((item) => [clean(item?.dimension), item]));
+  const tradeOffDifferences = dimensions.map((dimension) => existingDifferences.get(clean(dimension)) || ({
+    dimension,
+    comparison_state: 'INSUFFICIENT_COMPARISON_MATERIAL',
+    per_candidate: candidateMaterials.map((item) => ({
+      candidate_id: item.candidate_id,
+      label: item.label,
+      material_state: item.material_state,
+      observations: item.observations || [],
+      confirmed_claim_ids: item.confirmed_claim_ids || [],
+      undetermined_claim_ids: item.undetermined_claim_ids || [],
+      supported_scopes: item.supported_scopes || [],
+      evidence_refs: item.evidence_refs || []
+    })),
+    conditions: unique([...(task.conditions || []), ...(task.constraints || [])]),
+    status: 'MATERIAL_ONLY',
+    source: 'OBSERVABLE_MATERIAL'
+  }));
+
+  return Object.freeze({
+    ...base,
+    comparison_candidates: candidates,
+    candidate_materials: candidateMaterials,
+    dimensions,
+    trade_off_differences: tradeOffDifferences,
+    selected_candidate: null,
+    candidate_ranking: [],
+    rejected_candidates: []
+  });
+}
+
 async function runLane(lane, payload) {
   const normalized = normalizePayload(payload);
   const startedAt = Date.now();
@@ -76,7 +167,7 @@ async function runLane(lane, payload) {
       break;
     }
     case 'risk':
-      value = riskLane(normalized.claims, normalized.results, normalized.task, normalized.domain);
+      value = enrichRiskLane(riskLane(normalized.claims, normalized.results, normalized.task, normalized.domain), normalized.task);
       break;
     case 'multi':
       value = multiLane(normalized.claims, normalized.results, normalized.domain, normalized.task, normalized.searchPlan);
@@ -85,7 +176,7 @@ async function runLane(lane, payload) {
       value = inquiryLane(normalized.claims, normalized.results, normalized.domain, normalized.task);
       break;
     case 'compare':
-      value = compareLane(normalized.claims, normalized.results, normalized.policyByClaimId, normalized.domain, normalized.task);
+      value = enrichCompareLane(compareLane(normalized.claims, normalized.results, normalized.policyByClaimId, normalized.domain, normalized.task), normalized.task);
       break;
     default: {
       const error = new Error(`Unsupported five-stage lane: ${lane || '-'}`);
