@@ -30,7 +30,13 @@ function fixture() {
     '01 本当の目的\n- 今回の入力には2件の判断要求がある。',
     '02 前提不足\n- 共通条件なし。',
     '03 事実確認\n  - R01: 確認済み事実として追加できる材料はまだない。\n  - R02: 確認済み事実として追加できる材料はまだない。',
-    '04 危機察知\n- 未確認事項を断定しない。',
+    [
+      '04 危機察知',
+      '- 危険材料も判断要求ごとに分ける:',
+      '  - R01: Data Loss / Downtime / 互換性破壊 / Security Regression / Rollback不能',
+      '  - R02: Recall / 保証不履行 / 根拠なしの主張 / 弱いSource / 矛盾',
+      '- 共通Risk: 複数要求を1件に潰さない。'
+    ].join('\n'),
     [
       '05 反対視点',
       '- 各判断要求について反証・失敗側の材料を別々に保持する:',
@@ -65,19 +71,34 @@ function fixture() {
   };
 }
 
-test('verify projection removes unrelated domain lens while explicit compare material remains', () => {
+test('public Main8 removes unsupported domain lens across crisis/opposition/comparison while explicit compare remains', () => {
   const { material, judgment } = fixture();
   const out = normalizeMultiJudgmentPublicMaterial(material, judgment);
   const sections = out.text.split('\n---\n');
+  const crisis = sections[3];
   const opposition = sections[4];
   const comparison = sections[5];
   const verifyBlock = comparison.split('  - R01 [')[1].split('  - R02 [')[0];
   const compareBlock = comparison.split('  - R02 [')[1];
 
+  assert.match(crisis, /R01[\s\S]*バージョン[\s\S]*時点[\s\S]*対象範囲/);
+  assert.match(crisis, /R02[\s\S]*根拠なしの主張[\s\S]*弱いSource[\s\S]*矛盾/);
   assert.match(opposition, /R01[\s\S]*バージョン[\s\S]*時点[\s\S]*対象範囲/);
-  assert.doesNotMatch(opposition, /Data Loss|Downtime|Security Regression|Rollback不能/);
   assert.doesNotMatch(verifyBlock, /現行維持|段階移行|全面置換|Build vs Buy|保守性|Migration対象|Rollback/);
   assert.match(verifyBlock, /検証対象[\s\S]*Source[\s\S]*反証・例外/);
   assert.match(compareBlock, /候補: A案 \/ B案/);
   assert.match(compareBlock, /比較観点: 作業時間 \/ 法務リスク/);
+  assert.doesNotMatch(out.text, /Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換/);
+});
+
+test('crisis projection preserves a generic-looking risk when the same request explicitly supplies it', () => {
+  const { material, judgment } = fixture();
+  judgment.case_model.judgment_requests[0].request_text = 'Downtimeの発生条件を公式根拠で検証してください。';
+  judgment.observable_material.case_model = judgment.case_model;
+  const out = normalizeMultiJudgmentPublicMaterial(material, judgment);
+  const crisis = out.text.split('\n---\n')[3];
+  const r01 = crisis.split('  - R01:')[1].split('  - R02:')[0];
+
+  assert.match(r01, /Downtime/);
+  assert.doesNotMatch(r01, /Data Loss|Security Regression|Rollback不能|互換性破壊/);
 });

@@ -153,6 +153,37 @@ function usefulCounterPart(value, requestText = '') {
   if (nearRequestRestatement(text, requestText)) return false;
   return true;
 }
+const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
+function spansOverlap(left = {}, right = {}) {
+  const start = Math.max(Number(left.start || 0), Number(right.start || 0));
+  const end = Math.min(Number(left.end || 0), Number(right.end || 0));
+  return end > start;
+}
+function requestSourceText(model, request = {}) {
+  const values = [clean(request.request_text || '')];
+  for (const observation of model.observations || []) {
+    const belongs = (observation?.request_ids || []).includes(request.id)
+      || spansOverlap(observation?.source_span, request?.source_span);
+    if (belongs) values.push(clean(observation?.text || ''));
+  }
+  return values.filter(Boolean).join(' ');
+}
+function domainTemplateSourceBacked(value, model, request) {
+  const text = clean(value);
+  const matches = text.match(new RegExp(INTERNAL_DOMAIN_TEMPLATE_TOKEN.source, 'giu')) || [];
+  if (!matches.length) return true;
+  const source = requestSourceText(model, request).toLocaleLowerCase();
+  return matches.every((token) => source.includes(String(token).toLocaleLowerCase()));
+}
+function usefulRiskPart(value, model, request) {
+  const text = clean(value);
+  if (!text) return false;
+  if (internalMarker(text)) return false;
+  if (/Alternative evidence angle/iu.test(text)) return false;
+  if (nearRequestRestatement(text, request?.request_text || '')) return false;
+  if (!domainTemplateSourceBacked(text, model, request)) return false;
+  return true;
+}
 function normalizeDigits(value) {
   return String(value || '').replace(/[０-９]/g, (char) => String(char.charCodeAt(0) - 0xFF10)).replace('．', '.');
 }
@@ -221,6 +252,21 @@ function normalizeSection03(section, model, lang) {
     else lines.push(quantity);
   }
   return lines.join('\n');
+}
+function normalizeSection04(section, model, lang) {
+  return section.split('\n').map((line) => {
+    const match = /^  - (R\d{2}):\s*(.*)$/u.exec(line);
+    if (!match) return line;
+    const request = (model.judgment_requests || []).find((item) => item.id === match[1]);
+    if (!request) return line;
+    const semantic = semanticCounterSummary(request, lang);
+    const extras = clean(match[2])
+      .split(/\s*\/\s*/u)
+      .map(clean)
+      .filter((part) => usefulRiskPart(part, model, request))
+      .filter((part) => comparable(part) !== comparable(semantic));
+    return `  - ${match[1]}: ${[semantic, ...new Set(extras)].join(' / ')}`;
+  }).join('\n');
 }
 function normalizeSection05(section, model, lang) {
   let text = section;
@@ -381,6 +427,7 @@ function normalizeMultiJudgmentPublicMaterial(material, judgment = {}) {
     sections[6] = sections[6].replace(/Keep evidence status separate by judgment request/u, 'Keep evidence status separate for every judgment request');
   }
   sections[2] = normalizeSection03(sections[2], model, lang);
+  sections[3] = normalizeSection04(sections[3], model, lang);
   sections[4] = normalizeSection05(sections[4], model, lang);
   sections[5] = normalizeSection06(sections[5], model, lang);
   sections[6] = normalizeSection07(sections[6], model, lang);
