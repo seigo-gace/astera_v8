@@ -37,7 +37,8 @@ function task(id, text, { target = text, evidenceRequired = false } = {}) {
 }
 
 test('M5 canonical plan reuse preserves the final plan while reusing the exact extraction', () => {
-  const baseTask = task('T1', 'Node.js 22 is supported.', { target: 'Node.js 22' });
+  const text = 'According to NodeJS, "Node.js 22 is supported."';
+  const baseTask = task('T1', text, { target: 'Node.js 22' });
   const extraction = extractCanonicalTaskClaims(baseTask, { executionAt: EXECUTION_AT });
   assert.ok(extraction.claims.length > 0);
 
