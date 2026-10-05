@@ -130,16 +130,102 @@ function normalizeCandidateMaterial(block, quantities) {
   }).join('\n');
 }
 
+function isEnglishMain8(text) {
+  return /(?:^|\n)01 True Objective(?:\n|$)/u.test(String(text || ''));
+}
+
+function normalizeOppositionPublic(block, lang) {
+  const lines = String(block || '').split('\n');
+  const kept = [];
+  let removedInternal = false;
+  for (const line of lines) {
+    if (/^\s*-\s*(?:id|focus|conditions|failure_conditions|status|dimensions|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs|policy_notes)\s*:/iu.test(line)) {
+      removedInternal = true;
+      continue;
+    }
+    if (/^\s*$/u.test(line)) continue;
+    kept.push(line);
+  }
+  if (removedInternal && kept.length) {
+    kept.splice(1, 0, lang === 'ja'
+      ? '- 支持根拠だけでなく、反証・例外・失敗条件、対象バージョンや時点の不一致も確認する。'
+      : '- Check counter-evidence, exceptions, failure conditions, mismatched version, and time scope before treating the claim as established.');
+  }
+  return kept.join('\n');
+}
+
+function normalizeEvidencePublic(block, lang) {
+  const lines = String(block || '').split('\n');
+  const out = [];
+  let emittedState = false;
+  for (const line of lines) {
+    if (/SearchExecution=|EvidenceQuality=|ClaimConfirmation=/iu.test(line)) {
+      if (!emittedState) {
+        const notExecuted = /NOT_EXECUTED/iu.test(line);
+        out.push(notExecuted
+          ? (lang === 'ja'
+            ? '- 外部検索は実行されておらず、外部事実としては未確認のまま。'
+            : '- External search was not executed, so external factual status remains unresolved.')
+          : (lang === 'ja'
+            ? '- 外部根拠の成立状態は内部状態名ではなく、成立・未成立の区別として扱う。'
+            : '- External evidence status is presented as established or unresolved rather than as an internal runtime state.'));
+        emittedState = true;
+      }
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+function normalizeReinstructionPublic(block, lang) {
+  const lines = String(block || '').split('\n');
+  const out = [];
+  let emittedUnresolved = false;
+  for (const line of lines) {
+    if (/Task Wave|Lens=|SearchExecution=|EvidenceQuality=|MATERIAL_ONLY|INSUFFICIENT_/iu.test(line)) continue;
+    const purpose = /^\s*-\s*T\d+\s*:\s*purpose=(.+)$/iu.exec(line);
+    if (purpose) {
+      out.push(`- ${lang === 'ja' ? '目的' : 'Purpose'}: ${clean(purpose[1])}`);
+      continue;
+    }
+    if (/UNDETERMINED\s+Claim.*CONFIRMED|未確定.*確定/u.test(line)) {
+      if (!emittedUnresolved) {
+        out.push(lang === 'ja'
+          ? '- 未確定の主張は、根拠が成立するまで未確定のまま保持し、確認済みへ推測昇格しない。'
+          : '- Unresolved claims must remain unresolved rather than being promoted to confirmed without accepted evidence.');
+        emittedUnresolved = true;
+      }
+      continue;
+    }
+    if (/^\s*-\s*Blocking条件/u.test(line) && /RETRIEVAL_FAILED|T\d+:/iu.test(line)) continue;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+function stripPublicInternalLines(block) {
+  return String(block || '').split('\n').filter((line) => {
+    if (/:lens-risk-\d+\[/iu.test(line)) return false;
+    if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return false;
+    if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
+    return true;
+  }).join('\n');
+}
+
 function normalizeUnifiedMain8Text(value) {
   const text = String(value || '');
   const blocks = text.split('\n---\n');
   if (blocks.length !== 8) return text;
   const quantities = quantityByCandidate(text);
+  const lang = isEnglishMain8(text) ? 'en' : 'ja';
   blocks[1] = normalizePremiseSection(blocks[1]);
   blocks[2] = normalizeFactsSection(blocks[2]);
-  blocks[4] = normalizeCandidateMaterial(normalizeVerificationTarget(blocks[4]), quantities);
+  blocks[4] = normalizeOppositionPublic(normalizeCandidateMaterial(normalizeVerificationTarget(blocks[4]), quantities), lang);
   blocks[5] = normalizeCandidateMaterial(blocks[5], quantities);
-  blocks[6] = normalizeVerificationTarget(blocks[6]);
+  blocks[6] = normalizeEvidencePublic(normalizeVerificationTarget(blocks[6]), lang);
+  blocks[7] = normalizeReinstructionPublic(blocks[7], lang);
+  for (let index = 0; index < blocks.length; index += 1) blocks[index] = stripPublicInternalLines(blocks[index]);
   return blocks.join('\n---\n');
 }
 
