@@ -25,6 +25,14 @@ function appendBlock(text, title, items) {
   return base ? `${base}\n${block}` : block;
 }
 
+function appendInlineLines(text, title, items) {
+  const values = unique(items);
+  if (!values.length) return String(text || '');
+  const block = values.map((item) => `- ${title}: ${item}`).join('\n');
+  const base = String(text || '').trim();
+  return base ? `${base}\n${block}` : block;
+}
+
 function baseSections(judgment = {}, baseRendered = {}) {
   const renderedParts = String(baseRendered.text || '').split('\n---\n');
   const order = array(judgment.order).length === 8 ? judgment.order : ORDER;
@@ -50,12 +58,23 @@ function renderFiveLaneMain8(judgment = {}, baseRendered = null) {
   const initial = baseSections(judgment, baseRendered);
   const sections = sectionByKey(initial);
 
+  const missingMaterial = unique(judgment['02_premise']?.five_lane_missing_material || []);
   const factRequirements = unique(judgment['03_facts']?.fact_requirements || []);
   const riskRequirements = unique(judgment['04_crisis']?.risk_requirements || []);
   const domainPerspectives = unique(judgment['05_opposition']?.domain_perspectives || []);
   const dimensions = unique(judgment['06_comparison']?.five_lane_dimensions || []);
   const evidenceRequirements = unique(judgment['07_evidence_status']?.evidence_requirements || []);
   const inquiryRequirements = unique(judgment['08_reinstruction']?.inquiry_requirements || []);
+
+  if (sections.has('02_premise') && missingMaterial.length) {
+    const section = sections.get('02_premise');
+    section.text = appendInlineLines(
+      section.text,
+      lang === 'ja' ? '判断材料不足' : 'Judgment material missing',
+      missingMaterial
+    );
+    sections.set('02_premise', section);
+  }
 
   if (sections.has('03_facts') && factRequirements.length) {
     const section = sections.get('03_facts');
