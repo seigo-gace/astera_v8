@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   enforceDualRoutePayload,
+  configuredRouteSummary,
   routeExecutionSummary,
   attachDualRouteTrace
 } = require('../src/evidence-search/module');
@@ -109,6 +110,54 @@ test('one official-live provider cannot satisfy both routes by itself', () => {
         reinforcement: []
       }
     }),
+    (error) => error?.code === 'EVIDENCE_DUAL_ROUTE_EXECUTION_INCOMPLETE'
+  );
+});
+
+test('dual-ready runtime rejects instead of fabricating a route when one route has no provider applicable to the query', () => {
+  const configured = configuredRouteSummary([
+    { provider_id: 'specialist-configured', source_class: 'FREE_PROJECTION', certified: true },
+    { provider_id: 'general-configured', source_class: 'FREE_GENERAL_WEB', certified: true }
+  ]);
+  assert.equal(configured.dual_route_ready, true);
+
+  const traced = attachDualRouteTrace({
+    status: 'FINAL_VALID',
+    evidence: [{ candidate_id: 'must-not-be-published' }],
+    provider_execution: {
+      initial: [
+        { provider_id: 'general-configured', source_class: 'FREE_GENERAL_WEB', status: 'FULFILLED' }
+      ],
+      reinforcement: []
+    },
+    result_hash: 'old'
+  }, configured);
+
+  assert.equal(traced.status, 'REJECTED');
+  assert.deepEqual(traced.evidence, []);
+  assert.equal(traced.route_execution.dual_route_complete, false);
+  assert.equal(traced.route_execution.configured_dual_route_ready, true);
+  assert.equal(traced.route_execution.fail_closed, true);
+  assert.equal(traced.route_execution.failure_mode, 'ROUTE_UNAVAILABLE_FOR_QUERY');
+  assert.equal(traced.route_execution.specialist_authoritative.attempted, false);
+  assert.equal(traced.route_execution.general_current.attempted, true);
+  assert.notEqual(traced.result_hash, 'old');
+});
+
+test('runtime configuration that lacks a required route still raises execution-incomplete', () => {
+  const configured = configuredRouteSummary([
+    { provider_id: 'specialist-only', source_class: 'FREE_PROJECTION', certified: true }
+  ]);
+  assert.equal(configured.dual_route_ready, false);
+  assert.throws(
+    () => attachDualRouteTrace({
+      status: 'FINAL_VALID',
+      evidence: [],
+      provider_execution: {
+        initial: [{ provider_id: 'specialist-only', source_class: 'FREE_PROJECTION', status: 'FULFILLED' }],
+        reinforcement: []
+      }
+    }, configured),
     (error) => error?.code === 'EVIDENCE_DUAL_ROUTE_EXECUTION_INCOMPLETE'
   );
 });

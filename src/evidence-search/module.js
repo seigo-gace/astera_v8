@@ -34,6 +34,30 @@ function enforceDualRoutePayload(payload) {
   });
 }
 
+function configuredRouteSummary(providers) {
+  const configured = (Array.isArray(providers) ? providers : []).filter((provider) => (
+    provider?.certified === true && provider?.source_class !== 'PAID_PROVIDER'
+  ));
+  const specialist = configured.filter((provider) => (
+    provider.source_class === 'FREE_PROJECTION' || provider.source_class === 'FREE_OFFICIAL_LIVE'
+  ));
+  const generalCurrent = configured.filter((provider) => (
+    provider.source_class === 'FREE_OFFICIAL_LIVE' || provider.source_class === 'FREE_GENERAL_WEB'
+  ));
+  const summarize = (records) => Object.freeze({
+    available: records.length > 0,
+    provider_count: records.length,
+    provider_ids: Object.freeze(records.map((provider) => provider.provider_id))
+  });
+  const distinctProviderIds = new Set(configured.map((provider) => String(provider?.provider_id || '').trim()).filter(Boolean));
+  return Object.freeze({
+    specialist_authoritative: summarize(specialist),
+    general_current: summarize(generalCurrent),
+    distinct_provider_count: distinctProviderIds.size,
+    dual_route_ready: specialist.length > 0 && generalCurrent.length > 0 && distinctProviderIds.size >= 2
+  });
+}
+
 function routeExecutionSummary(result) {
   const initial = Array.isArray(result?.provider_execution?.initial) ? result.provider_execution.initial : [];
   // FREE_OFFICIAL_LIVE is intentionally a bridge class: an official live source can
@@ -60,18 +84,40 @@ function routeExecutionSummary(result) {
   });
 }
 
-function attachDualRouteTrace(result) {
+function dualRouteExecutionComplete(routeExecution) {
+  return Boolean(
+    routeExecution.specialist_authoritative.attempted
+    && routeExecution.general_current.attempted
+    && routeExecution.distinct_provider_count >= 2
+  );
+}
+
+function attachDualRouteTrace(result, configuredRoutes = null) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
   const routeExecution = routeExecutionSummary(result);
-  if (
-    !routeExecution.specialist_authoritative.attempted
-    || !routeExecution.general_current.attempted
-    || routeExecution.distinct_provider_count < 2
-  ) {
-    fail(
-      'Evidence Search did not attempt both required search routes',
-      'EVIDENCE_DUAL_ROUTE_EXECUTION_INCOMPLETE'
-    );
+  if (!dualRouteExecutionComplete(routeExecution)) {
+    if (!configuredRoutes?.dual_route_ready) {
+      fail(
+        'Evidence Search did not attempt both required search routes',
+        'EVIDENCE_DUAL_ROUTE_EXECUTION_INCOMPLETE'
+      );
+    }
+    const { result_hash: ignoredResultHash, ...withoutHash } = result;
+    void ignoredResultHash;
+    const failClosedTrace = Object.freeze({
+      ...routeExecution,
+      dual_route_complete: false,
+      configured_dual_route_ready: true,
+      fail_closed: true,
+      failure_mode: 'ROUTE_UNAVAILABLE_FOR_QUERY'
+    });
+    const rejected = Object.freeze({
+      ...withoutHash,
+      status: 'REJECTED',
+      evidence: Object.freeze([]),
+      route_execution: failClosedTrace
+    });
+    return Object.freeze({ ...rejected, result_hash: sha256(rejected) });
   }
   const { result_hash: ignoredResultHash, ...withoutHash } = result;
   void ignoredResultHash;
@@ -93,6 +139,7 @@ class EvidenceSearchModule {
     this.moduleId = 'astera-evidence-search';
     this.version = String(options.version || '2.4.0');
     this.orchestrator = new SearchOrchestrator(options);
+    this.configuredRoutes = configuredRouteSummary(options.providerRegistry?.providers || options.providers || []);
   }
 
   async execute(request) {
@@ -104,7 +151,7 @@ class EvidenceSearchModule {
     if (operation === OPERATIONS.SEARCH_EVIDENCE) {
       const payload = enforceDualRoutePayload(request.payload);
       const searched = await this.orchestrator.execute(payload, request.context || {});
-      result = enforceAdoptedEvidenceBoundary(attachDualRouteTrace(searched));
+      result = enforceAdoptedEvidenceBoundary(attachDualRouteTrace(searched, this.configuredRoutes));
     } else if (operation === OPERATIONS.CALCULATE_PAID_USAGE) result = calculateUsageReport(request.payload);
     else result = this.orchestrator.health();
     return Object.freeze({ schema_version: RESPONSE_SCHEMA_VERSION, module_id: this.moduleId, module_version: this.version, operation, status: 'OK', result });
@@ -118,5 +165,6 @@ function createEvidenceSearchModule(options = {}) {
 
 module.exports = createEvidenceSearchModule;
 module.exports.enforceDualRoutePayload = enforceDualRoutePayload;
+module.exports.configuredRouteSummary = configuredRouteSummary;
 module.exports.routeExecutionSummary = routeExecutionSummary;
 module.exports.attachDualRouteTrace = attachDualRouteTrace;
