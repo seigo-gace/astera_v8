@@ -180,7 +180,7 @@ function usefulRiskPart(value, model, request) {
   if (!text) return false;
   if (internalMarker(text)) return false;
   if (/Alternative evidence angle/iu.test(text)) return false;
-  if (nearRequestRestatement(text, request?.request_text || '')) return false;
+  if (comparable(text) === comparable(request?.request_text || '')) return false;
   if (!domainTemplateSourceBacked(text, model, request)) return false;
   return true;
 }
