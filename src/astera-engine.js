@@ -17,6 +17,7 @@ const {
   observeDocumentMaterial,
   ensureStandaloneDecisionMaterialRequest
 } = require('./runtime/standalone-material-normalizer');
+const { buildUniversalSourceUnderstanding } = require('./runtime/universal-source-graph');
 const { applyUniversalCaseGraph } = require('./runtime/universal-case-graph');
 const { recoverPartialParserMaterial } = require('./runtime/parser-partial-material-recovery');
 const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-normalizer');
@@ -74,9 +75,16 @@ class AsteraEngine extends CanonicalAsteraEngine {
   }
 
   async prepareRequest(input = {}) {
-    const prepared = await super.prepareRequest(input);
+    // Start parser-backed semantic preparation first. While external parser I/O is pending,
+    // build only the deterministic source understanding that does not depend on parser truth.
+    const preparedPromise = super.prepareRequest(input);
+    const source = String(input.question ?? input.original_question ?? input.normalized_question ?? '');
+    const precomputedUnderstanding = source
+      ? buildUniversalSourceUnderstanding(source, input.language || '')
+      : null;
+    const prepared = await preparedPromise;
     const normalized = ensureStandaloneDecisionMaterialRequest(prepared, input);
-    const universal = applyUniversalCaseGraph(normalized, input);
+    const universal = applyUniversalCaseGraph(normalized, input, precomputedUnderstanding);
     const recovered = universal?.analysis_task_packet?.universal_case_graph?.applied === true
       ? universal
       : recoverPartialParserMaterial(universal, input);

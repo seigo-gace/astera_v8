@@ -384,11 +384,17 @@ function shouldApplyUniversalCaseGraph(prepared, understanding, input = {}) {
 function recoveredCaseHardBlockers(values = []) {
   return unique(values).filter((value) => !/NO_EXECUTABLE_ACTION|PARSER_ACTION_GUARD_BLOCKED/iu.test(String(value)));
 }
-function applyUniversalCaseGraph(prepared, input = {}) {
+function reusablePrecomputedUnderstanding(understanding, source) {
+  if (understanding?.source_graph?.schema !== 'astera.source-graph.v1') return null;
+  if (understanding?.semantic_atoms?.schema !== 'astera.semantic-atom-graph.v1') return null;
+  return understanding.source_graph.source === source ? understanding : null;
+}
+function applyUniversalCaseGraph(prepared, input = {}, precomputedUnderstanding = null) {
   if (!prepared?.analysis_task_packet) return prepared;
   const source = String(input.question ?? prepared.original_question ?? prepared.normalized_question ?? '');
   if (!source) return prepared;
-  const understanding = buildUniversalSourceUnderstanding(source, input.language || prepared.language || '');
+  const understanding = reusablePrecomputedUnderstanding(precomputedUnderstanding, source)
+    || buildUniversalSourceUnderstanding(source, input.language || prepared.language || '');
   const requests = requestRecords(understanding);
   if (!requests.length || !shouldApplyUniversalCaseGraph(prepared, understanding, input)) {
     return {
