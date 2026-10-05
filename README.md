@@ -593,6 +593,7 @@ READMEは完成品の入口です。詳細仕様は各専用Documentへ分離し
 | [`docs/modules/EVALUATION_VERIFICATION.md`](docs/modules/EVALUATION_VERIFICATION.md) | 判定・検証Module |
 | [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) | HTTP / Auth / Contract |
 | [`docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](docs/UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md) | Universal Judgment redesign / Full Runtime trace contract |
+| [`docs/TGSERVER_ZERO_INTEGRATION.md`](docs/TGSERVER_ZERO_INTEGRATION.md) | CHAT-driven development evidence: canonical Development Probe for Source/Test/Build/Verify and central TGserver ZERO reader for Runtime logs |
 | [`docs/QUICK_START.md`](docs/QUICK_START.md) | Development / Verification start |
 | [`docs/DEPLOYMENT_VPS.md`](docs/DEPLOYMENT_VPS.md) | Production deployment |
 | [`docs/SECURITY_NOTES.md`](docs/SECURITY_NOTES.md) | Security boundary |
