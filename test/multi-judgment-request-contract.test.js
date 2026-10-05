@@ -105,9 +105,10 @@ test('one post with multiple requested judgment materials is not collapsed into 
     assert.match(sections[5], /R01[^\n]*現状[^\n]*対象範囲[^\n]*利用者影響/u);
     assert.match(sections[5], /R02[^\n]*実装箇所[^\n]*イベント\/操作経路[^\n]*ON\/OFF/u);
     assert.match(sections[5], /R03[^\n]*再現条件[^\n]*発生源[^\n]*component\/CSS\/style\/layout/u);
-    assert.match(sections[6], /R01[^\n]*外部Evidenceを明示要求していない/u);
-    assert.match(sections[6], /R02[^\n]*外部Evidenceを明示要求していない/u);
-    assert.match(sections[6], /R03[^\n]*外部Evidenceを明示要求していない/u);
+    assert.match(sections[6], /R01[^\n]*外部検索を必要としない[^\n]*外部根拠が必要な実装事実・原因[^\n]*根拠が得られるまで未確認/u);
+    assert.match(sections[6], /R02[^\n]*外部検索を必要としない[^\n]*外部根拠が必要な実装事実・原因[^\n]*根拠が得られるまで未確認/u);
+    assert.match(sections[6], /R03[^\n]*外部検索を必要としない[^\n]*外部根拠が必要な実装事実・原因[^\n]*根拠が得られるまで未確認/u);
+    assert.doesNotMatch(sections[6], /外部Evidence|内部Task/u);
     assert.doesNotMatch(sections[6], /R0[123][^\n]*外部根拠は成立していない/u);
     assert.match(sections[7], /R01[^\n]*境界[^\n]*整理|R01[^\n]*全体を点検/u);
     assert.match(sections[7], /R02[^\n]*OFF[^\n]*表示確認/u);
