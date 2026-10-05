@@ -209,6 +209,8 @@ function stripPublicInternalLines(block) {
     if (/:lens-risk-\d+\[/iu.test(line)) return false;
     if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return false;
     if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
+    if (/\bparser_overall_status\s*:/iu.test(line)) return false;
+    if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return false;
     return true;
   }).join('\n');
 }
