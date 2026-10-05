@@ -134,8 +134,9 @@ test('evidence citation boundary preserves normalized multi-judgment public mate
   assert.match(out.material.main8_text, /R01[\s\S]*見せる情報と見せない内部情報/);
   assert.match(out.material.main8_text, /R02[\s\S]*実装箇所・接続点[\s\S]*ON\/OFF/);
   assert.match(out.material.main8_text, /R03[\s\S]*発生源・生成元[\s\S]*CSS\/style\/layout/);
-  assert.match(evidenceSection, /R02:[^\n]*利用者は外部Evidenceを明示要求していない/u);
-  assert.match(evidenceSection, /R03:[^\n]*利用者は外部Evidenceを明示要求していない/u);
+  assert.match(evidenceSection, /R02:[^\n]*外部検索を必要としない[^\n]*外部根拠が必要な実装事実・原因[^\n]*根拠が得られるまで未確認/u);
+  assert.match(evidenceSection, /R03:[^\n]*外部検索を必要としない[^\n]*外部根拠が必要な実装事実・原因[^\n]*根拠が得られるまで未確認/u);
+  assert.doesNotMatch(evidenceSection, /外部Evidence|内部Task/u);
   assert.doesNotMatch(evidenceSection, /R0[23]:[^\n]*外部根拠は成立していない/u);
   assert.doesNotMatch(out.material.main8_text, /Alternative evidence angle|の完了・合格条件を明示する/);
   assert.equal(out.material.evidence_contract, 'astera.evidence-citation.v1');
