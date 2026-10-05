@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
+const { scopeFiveStageDecisionMaterial } = require('./five-stage-public-boundary');
 
 const FIVE_STAGE = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare']);
 const OPERATION = Object.freeze({
@@ -215,12 +216,13 @@ class FiveStageExecutor {
         throw error;
       }));
       const projected = await Promise.all(jobs);
-      const lanes = { lens_plan: task?.domain?.lens_plan || null };
+      const rawLanes = { lens_plan: task?.domain?.lens_plan || null };
       const telemetry = [];
       for (const item of projected) {
-        lanes[item.lane] = item.value;
+        rawLanes[item.lane] = item.value;
         telemetry.push({ lane: item.lane, ...item.telemetry });
       }
+      const lanes = scopeFiveStageDecisionMaterial(rawLanes, task, canonical);
       return {
         lanes,
         lane_execution: {
@@ -228,6 +230,7 @@ class FiveStageExecutor {
           lane_count: FIVE_STAGE.length,
           worker_pool_size: FIVE_STAGE.length,
           lane_order: [...FIVE_STAGE],
+          public_material_boundary: 'FIVE_STAGE_SCOPED_BEFORE_MAIN8',
           telemetry
         }
       };
