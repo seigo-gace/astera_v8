@@ -92,7 +92,7 @@ test('Japanese Parser wait overlaps one source-understanding build without chang
   assert.equal(out?.result?.type, 'cognitive_map');
   assert.equal(out.result.decision_authority, 'EXTERNAL_ONLY');
   assert.equal(out.result.no_normative_decision_generated, true);
-  assert.equal(out.result.request_model?.instruction_understanding?.parser, 'deterministic-japanese-parser');
+  assert.equal(out.result.request_model?.instruction_understanding?.parser, 'Deterministic-Japanese-Parser-MCP');
 
   const trace = out.result.runtime_trace;
   assert.ok(trace);
