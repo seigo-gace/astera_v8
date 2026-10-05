@@ -2,9 +2,9 @@
 
 const { unique } = require('./judgment-materials-analyzer');
 const { lensPlanEntries, lensPlanValues } = require('./lens-plan');
-const { deepFreeze } = require('./v4-canonical/core');
+const { deepFreeze, ClaimOrigin } = require('./v4-canonical/core');
 const { fragmentInput } = require('./v4-canonical/fragmenter');
-const { extractClaimsForTask } = require('./v4-canonical/claim-extractor');
+const { extractClaimsForTask, buildVerificationTargetClaim } = require('./v4-canonical/claim-extractor');
 const { QUERY_ROLES, policyForClaim } = require('./v4-canonical/policy-registry');
 const { planQueriesForClaim, planTaskQueries } = require('./v4-canonical/query-planner');
 const { bindClaimEvidence } = require('./v4-canonical/evidence-binding');
@@ -39,12 +39,37 @@ function queriesForClaim(claim, policy, domainId = null) {
   return planQueriesForClaim(claim, policy, { primary: domainId ? { id: domainId } : null });
 }
 
-function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
-  const extraction = extractClaimsForTask(task, {
+function extractionOptions(options = {}) {
+  return {
     executionAt: options.executionAt || new Date().toISOString(),
     documentReferenceDate: options.documentReferenceDate || null,
     knownNames: options.knownNames || []
+  };
+}
+
+function extractCanonicalTaskClaims(task, options = {}) {
+  return extractClaimsForTask(task, extractionOptions(options));
+}
+
+function finalizeCanonicalTaskExtraction(task, extraction, options = {}) {
+  if (!extraction || !Array.isArray(extraction.claims)) return extractCanonicalTaskClaims(task, options);
+  if (!task.evidence_need?.required || extraction.claims.some((claim) => claim.claim_origin === ClaimOrigin.DIRECT_ASSERTION)) {
+    return extraction;
+  }
+  const verificationTarget = buildVerificationTargetClaim({
+    task,
+    inputDocumentId: `task:${task.id}`,
+    executionAt: options.executionAt || new Date().toISOString()
   });
+  const claims = [...new Map([...extraction.claims, verificationTarget].map((claim) => [claim.claim_id, claim])).values()]
+    .sort((a, b) => a.claim_id.localeCompare(b.claim_id));
+  return deepFreeze({ ...extraction, claims });
+}
+
+function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
+  const extraction = options.extraction
+    ? finalizeCanonicalTaskExtraction(task, options.extraction, options)
+    : extractCanonicalTaskClaims(task, options);
   const policyByClaim = {};
   for (const claim of extraction.claims) policyByClaim[claim.claim_id] = policyForClaim(claim);
   const searchPlan = planTaskQueries(extraction.claims, policyByClaim, domain);
@@ -137,7 +162,6 @@ function projectFiveLanes({ task, canonical, domain = {} }) {
 function uniqueStrings(values = []) {
   return unique(values.map((value) => String(value ?? '').trim()).filter(Boolean));
 }
-
 function isPolicyTradeOffNote(value) {
   return POLICY_TRADE_OFF_NOTES.includes(String(value ?? '').trim());
 }
@@ -420,6 +444,7 @@ module.exports = {
   POLICY_TRADE_OFF_NOTES,
   fragmentText,
   claimsForTask,
+  extractCanonicalTaskClaims,
   policyFor,
   queriesForClaim,
   buildCanonicalTaskPlan,
