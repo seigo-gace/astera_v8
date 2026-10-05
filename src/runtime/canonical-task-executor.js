@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { FiveStageExecutor } = require('./five-stage-executor');
+const { getGlobalCanonicalTaskAdmission } = require('./canonical-task-admission');
 
 function positiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -276,10 +277,16 @@ class CanonicalTaskExecutor {
   }
 
   exec(operation, payload, options = {}) {
-    if (operation === 'PROJECT_CANONICAL_TASK' && this.enableFiveStageParallel) {
-      return this._projectCanonicalTask(payload, options);
-    }
-    return this._execSingle(operation, payload, options);
+    const execute = () => {
+      if (operation === 'PROJECT_CANONICAL_TASK' && this.enableFiveStageParallel) {
+        return this._projectCanonicalTask(payload, options);
+      }
+      return this._execSingle(operation, payload, options);
+    };
+    const admission = options.admission === null ? null : getGlobalCanonicalTaskAdmission();
+    return admission
+      ? admission.run(execute, { signal: options.signal || null })
+      : Promise.resolve().then(execute);
   }
 
   stats() {

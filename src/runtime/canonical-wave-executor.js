@@ -1,7 +1,6 @@
 'use strict';
 
 const { canonicalConcurrency, positiveInteger } = require('./concurrency-policy');
-const { getGlobalCanonicalTaskAdmission } = require('./canonical-task-admission');
 
 function graphError(code, message, details = {}) {
   const error = new Error(message);
@@ -83,9 +82,9 @@ async function mapBounded(items, maximumConcurrency, mapper) {
   return output;
 }
 
-async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null, maxConcurrency = 8, admission }) {
+async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null, maxConcurrency = 8, admission = null }) {
   if (typeof runTask !== 'function') throw new TypeError('runTask must be a function');
-  const effectiveAdmission = admission === undefined ? getGlobalCanonicalTaskAdmission() : admission;
+  const effectiveAdmission = admission || null;
   if (effectiveAdmission && typeof effectiveAdmission.run !== 'function') throw new TypeError('admission.run must be a function');
   const waves = normalizeWaves(tasks, executionWaves);
   const byId = new Map(tasks.map((task) => [String(task.id), task]));
