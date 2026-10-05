@@ -46,7 +46,7 @@ function counterOntology(action, lang = 'ja') {
     implement: '追加先を誤っていないか、OFF・失敗・未設定時に無反応や誤案内にならないか、既存操作を壊さないかを確認する。',
     improve: '見直しで必要情報まで隠さないか、変更対象外まで変えないか、改善後に別の利用者影響を生まないかを確認する。',
     remove: '症状だけを隠す修正になっていないか、原因や必要な境界を残したままにしていないか、再発しないかを確認する。',
-    verify: '支持材料だけでなく反証・例外・対象範囲違い・時点違いを同じ強さで確認する。',
+    verify: '支持材料だけでなく反証・例外と、版・バージョン（該当する場合）・時点・対象範囲の違いを同じ強さで確認する。',
     compare: '単一指標だけで優劣を決めず、各候補を同一条件・同一軸で比較できているか確認する。',
     integrate: '片側だけ正常でも契約不一致・失敗時処理・既存経路破壊がないか確認する。',
     migrate: '移行成功だけでなくRollback不能、データ・契約互換性、途中状態の失敗を確認する。',
@@ -59,7 +59,7 @@ function counterOntology(action, lang = 'ja') {
     implement: 'Check wrong insertion points, OFF/failure/unconfigured behavior, and regressions in existing actions.',
     improve: 'Check whether useful information is hidden, out-of-scope behavior changes, or new user impact is introduced.',
     remove: 'Check whether the change only hides the symptom, leaves the cause or required boundaries intact, or can recur.',
-    verify: 'Check contrary evidence, exceptions, scope mismatches, and time mismatches as strongly as supporting material.',
+    verify: 'Check contrary evidence, exceptions, version/revision differences where applicable, time-point differences, and scope differences as strongly as supporting material.',
     compare: 'Do not choose by one metric; compare candidates under the same conditions and dimensions.',
     integrate: 'Check contract mismatch, failure behavior, and regressions even when one side works.',
     migrate: 'Check rollback failure, data/contract compatibility, and intermediate-state failures.',
@@ -238,7 +238,9 @@ function normalizeSection05(section, model, lang) {
       if (line.startsWith(marker)) return [`${line} / ${semantic}`];
       if (!line.includes(`${label}:`)) return [line];
       const raw = line.slice(line.indexOf(':') + 1);
-      const extras = raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
+      const extras = String(request.action || '') === 'verify'
+        ? []
+        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
       const out = [`    - ${label}: ${semantic}`];
       if (extras.length) out.push(`    - ${extraLabel}: ${[...new Set(extras)].join(' / ')}`);
       return out;
@@ -260,7 +262,16 @@ function normalizeSection06(section, model, lang) {
     const missingLabel = lang === 'ja'
       ? /(?:まだ不足している材料|追加で必要な材料)/u
       : /(?:Material still missing|Additional material required)/iu;
+    const comparisonOnlyLabel = lang === 'ja'
+      ? /^\s+-\s+(?:候補|比較観点):/u
+      : /^\s+-\s+(?:Candidates|Dimensions):/iu;
     const lines = block.split('\n').flatMap((line) => {
+      if (String(request.action || '') !== 'compare' && comparisonOnlyLabel.test(line)) return [];
+      if (String(request.action || '') === 'verify' && missingLabel.test(line)) {
+        const colon = line.indexOf(':');
+        if (colon < 0) return [];
+        return [`${line.slice(0, colon + 1)} ${ontology}`];
+      }
       if (!missingLabel.test(line)) return [line];
       const colon = line.indexOf(':');
       if (colon < 0) return [line];
