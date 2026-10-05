@@ -165,3 +165,37 @@ This contract does not:
 - declare the Universal Judgment redesign complete;
 - turn example document names into supported-input restrictions;
 - make Astera the final Decision authority.
+
+## 9. Five-stage semantic authority before Main8
+
+The final semantic-material path is fixed as:
+
+```text
+Input / Source / Case Model
+→ Task / Requirement / Claim
+→ Fact / Risk / Multi / Inquiry / Compare
+→ Main8
+→ public presentation / citation
+```
+
+`Fact / Risk / Multi / Inquiry / Compare` is the sole semantic material-generation boundary immediately before Main8. A Main8 renderer MUST NOT bypass these five stages to invent or restore judgment meaning directly from raw input, Case Graph, observable material, Genre Lens, or a post-hoc template.
+
+The five-stage runtime keeps its complete internal lane result unchanged. Public exposure uses a separately scoped five-stage copy at the five-stage-to-Main8 boundary. Public filtering MUST NOT destructively rewrite the internal lane result.
+
+Main8 may perform only projection/presentation work over already-produced material, including:
+
+- place five-stage material into the fixed eight sections;
+- preserve ordering and section identity;
+- deduplicate equivalent presentation lines;
+- translate internal state into reader-facing wording without changing its meaning;
+- attach evidence citations and source identity;
+- suppress internal IDs, enum names, transport state and diagnostic field labels from public prose while retaining them in structured/internal diagnostics.
+
+Main8 MUST NOT:
+
+- create a new risk, comparison axis, candidate, perspective, fact, evidence conclusion, or missing requirement that was not produced before the Main8 boundary;
+- restore generic Lens boilerplate that the five-stage public boundary rejected;
+- promote `MISSING`, `UNRESOLVED`, or `CONFLICTING` material into a satisfied/confirmed statement;
+- use presentation cleanup as a substitute for repairing Task / Requirement / Claim or the owning five-stage lane.
+
+When Main8 lacks required material, the repair point is the upstream Task / Requirement / Claim model or the owning five-stage lane. The renderer is not a fallback semantic generator.
