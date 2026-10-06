@@ -1,0 +1,53 @@
+name: Cleanup Astera runtime transfer
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'agent/runtime-replacement-hf' && github.repository == 'seigo-gace/astera_v8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for verified tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if gh api repos/seigo-gace/astera_v8/git/ref/tags/astera-v4.2.2-evidence-v8.2-verified >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Verified tag was not found; refusing cleanup.' >&2
+          exit 1
+      - name: Close temporary pull requests
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method PATCH repos/seigo-gace/astera_v8/pulls/4 -f state=closed >/dev/null 2>&1 || true
+          gh api --method PATCH repos/seigo-gace/astera_v8/pulls/5 -f state=closed >/dev/null 2>&1 || true
+      - name: Delete temporary branches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for branch in \
+            agent/replace-astera-v8-runtime \
+            agent/runtime-release-transfer \
+            agent/runtime-replacement-hf; do
+            encoded=${branch//\//%2F}
+            gh api --method DELETE "repos/seigo-gace/astera_v8/git/refs/heads/$encoded" >/dev/null 2>&1 || true
+          done
