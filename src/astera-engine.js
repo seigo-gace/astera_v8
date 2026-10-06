@@ -107,7 +107,7 @@ class AsteraEngine extends CanonicalAsteraEngine {
       const projectedAggregate = buildPublicFiveStageAggregate(args.aggregate || {}, taskResults);
       const judgment = super.frame({ ...args, taskResults: projectedTaskResults, aggregate: projectedAggregate });
       const packet = args.request?.analysis_task_packet || {};
-      const next = projectFiveLaneMaterialToMain8({ ...judgment }, taskResults);
+      const next = projectFiveLaneMaterialToMain8({ ...judgment }, projectedTaskResults);
       const analysisIntent = packet.analysis_intent || args.request?.standalone_api_intent || null;
       const observableMaterial = packet.observable_material || args.request?.observable_material || null;
       if (analysisIntent) next.analysis_intent = analysisIntent;
