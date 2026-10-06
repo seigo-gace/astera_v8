@@ -47,6 +47,19 @@ function buildPublicFiveStageAggregate(rawAggregate = {}, taskResults = []) {
 
   return {
     ...rawAggregate,
+    // Perspective Expansion is retained in the internal task/result model, but
+    // it is not a public semantic authority. Public Main8 must receive
+    // semantic material only from the scoped Fact/Risk/Multi/Inquiry/Compare
+    // lanes. Leaving raw Perspective Expansion here would bypass that boundary.
+    perspectiveExpansion: {
+      ...(rawAggregate.perspectiveExpansion || {}),
+      per_task: {},
+      perspectives: [],
+      candidates: [],
+      selected: null,
+      rejected: [],
+      public_projection_state: 'SUPPRESSED_NON_FIVE_STAGE_SEMANTIC_PATH'
+    },
     risks: {
       ...(rawAggregate.risks || {}),
       risk_count: riskItems.length,
