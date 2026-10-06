@@ -194,7 +194,7 @@ function scopeCompareLane(compare = {}, task = {}, canonical = {}, lensPlan = {}
   const allowPrimary = explicitComparisonMaterial(task);
   const dimensions = unique(compare.dimensions).filter((value) => {
     const entry = lensEntry(lensPlan, 'compare', value);
-    if (!entry) return true;
+    if (!entry) return sourceBacked(value, source);
     return allowLensValue(value, entry, source, allowPrimary);
   });
   const allowed = new Set(dimensions.map(clean));
