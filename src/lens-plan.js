@@ -50,6 +50,51 @@ const GENRE_BREADTH_AUGMENTATIONS = Object.freeze({
     risk_lens: Object.freeze(['Execution Risk・実行リスク']),
     compare_lens: Object.freeze(['Market・市場', 'Unit Economics・収益構造', 'Execution Risk・実行リスク'])
   }),
+  G11: Object.freeze({
+    id: 'G11-BREADTH-FINANCIAL-DECISION', name: 'G11 Financial Decision Breadth',
+    fact_lens: Object.freeze([
+      'Investment Objective・投資目的',
+      'Expected Cash Flow・期待Cash Flow',
+      'Capital Requirement・必要資本',
+      'Time Horizon・期間',
+      'Return Metric・収益指標'
+    ]),
+    risk_lens: Object.freeze([
+      'Downside・損失余地',
+      'Liquidity・流動性',
+      'Valuation / Assumption Risk・評価前提Risk',
+      'Concentration・集中',
+      'Regulatory / Tax・規制・税務'
+    ]),
+    multi_lens: Object.freeze([
+      'Investor・投資者',
+      'Finance・財務',
+      'Operations・事業運営',
+      'Risk / Compliance・Risk・Compliance'
+    ]),
+    inquiry_lens: Object.freeze([
+      '投資目的と評価期間は何か',
+      '期待Returnと資本Costは何か',
+      'Downsideと撤退条件は何か',
+      'Base / Upside / Downside Scenarioで何が変わるか'
+    ]),
+    compare_lens: Object.freeze([
+      'Expected Return・期待収益',
+      'Capital Cost・資本Cost',
+      'Downside・損失余地',
+      'Cash Flow Timing・Cash Flow時期',
+      'Liquidity・流動性',
+      'Scenario Sensitivity・Scenario感応度',
+      'Exit Condition・撤退条件'
+    ]),
+    evidence_to_collect: Object.freeze([
+      'Historical / Forecast Financials・実績・予測財務',
+      'Cash Flow Assumptions・Cash Flow前提',
+      'Cost of Capital Basis・資本Cost根拠',
+      'Scenario Data・Scenario Data',
+      'Contract / Regulatory Conditions・契約・規制条件'
+    ])
+  }),
   G12: Object.freeze({
     id: 'G12-BREADTH-WORKFORCE-DYNAMICS', name: 'G12 Workforce Dynamics Breadth',
     fact_lens: Object.freeze(['Skills・技能', 'Labor Market・労働市場']),
