@@ -110,7 +110,7 @@ function scopeFactLane(fact = {}, task = {}, canonical = {}, lensPlan = {}) {
 
 function scopeRiskLane(risk = {}, task = {}, canonical = {}, lensPlan = {}) {
   const source = sourceText(task, canonical);
-  const retainPrimaryLens = explicitRiskMaterial(task);
+  const retainPrimaryLens = true;
   const risks = array(risk.risks).filter((entry) => {
     if (entry?.source !== 'LENS_PLAN') return true;
     return allowLensValue(entry?.impact, entry, source, retainPrimaryLens);
