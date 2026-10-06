@@ -129,7 +129,7 @@ function scopeRiskLane(risk = {}, task = {}, canonical = {}, lensPlan = {}) {
 
 function scopeMultiLane(multi = {}, task = {}, canonical = {}, lensPlan = {}) {
   const source = sourceText(task, canonical);
-  const retainPrimaryLens = explicitPerspectiveMaterial(task) || explicitRiskMaterial(task);
+  const retainPrimaryLens = true;
   const fixed = new Set(array(task.hard_blockers).concat(array(task.prohibitions)).map(clean));
 
   const perspectives = array(multi.perspectives).flatMap((entry) => {
