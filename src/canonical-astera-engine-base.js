@@ -356,8 +356,8 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
         if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
         evidenceRawByTask.set(String(task.id),evidenceRaw);
         const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw},{signal});
-        const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
-        return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
+        const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,publicLanes=projected.public_lanes||lanes,perspectiveExpansion=projected.perspective_expansion;
+        return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,public_lanes:publicLanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
       }
     });
     if(signal?.aborted){const error=new Error('Request cancelled');error.code='REQUEST_CANCELLED';error.status=499;throw error;}
@@ -365,8 +365,8 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       if(entry.result)return entry.result;
       const error=entry.error||Object.assign(new Error('Task skipped because a dependency failed'),{code:'SKIPPED_DEPENDENCY',details:entry.skipped||null});
       const evidenceRaw=evidenceRawByTask.get(String(entry.task.id))||(entry.task.canonical_plan?.search_plan?.queries?.length?notProvidedEvidence(entry.task.id):notRequiredEvidence(entry.task.id));
-      const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),projected=projectCanonicalFailure({task:entry.task,error}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
-      return{task:entry.task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,execution_failure:{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message,skipped:entry.skipped||null}};
+      const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),projected=projectCanonicalFailure({task:entry.task,error}),canonical=projected.canonical,lanes=projected.lanes,publicLanes=projected.public_lanes||lanes,perspectiveExpansion=projected.perspective_expansion;
+      return{task:entry.task,evidence,evidence_raw:evidenceRaw,canonical,lanes,public_lanes:publicLanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,execution_failure:{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message,skipped:entry.skipped||null}};
     });
     const executionSummary={mode:'WORKER_THREADS_WAVE_BOUNDED',pool_size:executor.size,waves:execution.waves,timings:execution.timings,failures:Object.fromEntries([...execution.failures].map(([taskId,error])=>[taskId,{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message}])),skipped:Object.fromEntries(execution.skipped)};
     const materialExecutionSummary={...executionSummary,timings:(executionSummary.timings||[]).map(({duration_ms,...timing})=>timing)};
