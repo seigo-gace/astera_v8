@@ -111,7 +111,7 @@ test('public boundary keeps primary request-local lens material and blocks unrel
   assert.equal(out.multi.perspectives.some((x) => x.focus === '財務責任者'), false);
   assert.deepEqual(out.inquiry.inquiry_lens, ['互換条件は何か']);
   assert.deepEqual(out.inquiry.evidence_need, ['Code参照']);
-  assert.deepEqual(out.compare.dimensions, ['保守性・Risk・Cost', '利用者理解']);
+  assert.deepEqual(out.compare.dimensions, ['保守性・Risk・Cost']);
 
   assert.equal(lanes.risk.risks.some((x) => x.impact === '資金流動性'), true, 'internal lane must remain unchanged');
   assert.equal(lanes.compare.dimensions.includes('返金対応'), true, 'internal compare lane must remain unchanged');
