@@ -24,6 +24,7 @@ const { normalizeMultiJudgmentCase } = require('./runtime/multi-judgment-case-no
 const { renderFiveLaneMain8 } = require('./runtime/five-lane-main8-material-renderer');
 const { projectFiveLaneMaterialToMain8 } = require('./runtime/five-lane-main8-projection');
 const { buildPublicFiveStageAggregate, publicTaskResults } = require('./runtime/five-stage-public-aggregate');
+const { scopeFiveStageDecisionMaterial } = require('./runtime/five-stage-public-boundary');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
 const {
@@ -149,6 +150,22 @@ class AsteraEngine extends CanonicalAsteraEngine {
       });
 
       const out = await super.process(input, caller, executionContext);
+      if (out?.result?.type === 'cognitive_map' && Array.isArray(out.result.task_results)) {
+        out.result.task_results = out.result.task_results.map((item) => {
+          const rawLanes = {
+            lens_plan: item?.task?.domain?.lens_plan || null,
+            fact: item?.facts || {},
+            risk: item?.risks || {},
+            multi: item?.multi || {},
+            inquiry: item?.inquiry || {},
+            compare: item?.comparison || {}
+          };
+          return {
+            ...item,
+            public_lanes: scopeFiveStageDecisionMaterial(rawLanes, item?.task || {}, item?.canonical || {})
+          };
+        });
+      }
       const cited = trace.measureSync('public_normalize', () => attachEvidenceCitations(out), {
         cache_unknown: 0,
         measurement_state: 'PUBLIC_EVIDENCE_CITATION_NORMALIZE'
