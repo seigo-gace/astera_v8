@@ -35,7 +35,9 @@ function explicitPerspectiveMaterial(task = {}) {
 
 function explicitComparisonMaterial(task = {}) {
   const action = clean(task.action || task.operation).toLowerCase();
+  const direct = unique([task.source_span?.text, task.raw_text, task.target, task.objective, task.purpose]).join(' ');
   if (/^(?:compare|comparison|比較)$/u.test(action)) return true;
+  if (/(?:比較に必要な軸|比較軸|評価軸|比較(?:条件|基準)|compare|comparison|versus)/iu.test(direct)) return true;
   if (array(task.candidates).length >= 2 || array(task.observable_material?.candidates).length >= 2) return true;
   return taskMaterialRequirements(task).some((value) =>
     /(?:比較に必要な軸|比較軸|評価軸|比較(?:条件|基準)|\bcomparison\s+(?:dimensions?|criteria)\b|\bevaluation\s+criteria\b|\bdimensions?\s+(?:for|to)\s+(?:compare|comparison|evaluate|evaluation)\b)/iu.test(value)
