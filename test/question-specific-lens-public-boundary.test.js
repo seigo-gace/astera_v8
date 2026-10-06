@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { scopeFiveStageDecisionMaterial } = require('../src/runtime/five-stage-public-boundary');
+const { buildPublicFiveStageAggregate } = require('../src/runtime/five-stage-public-aggregate');
 
 function entry(value, tier, lensId) {
   return { value, sources: [{ tier, lens_id: lensId, lens_name: lensId }] };
@@ -203,4 +204,42 @@ test('source-relevant narrow primary material survives even when breadth exists'
   assert.ok(scoped.fact.fact_requirements.some((item) => item.item.includes('返金・失効')));
   assert.ok(scoped.inquiry.inquiry_lens.some((item) => item.includes('返金・失効')));
   assert.ok(scoped.inquiry.evidence_need.some((item) => item.includes('決済記録')));
+});
+
+
+test('raw Perspective Expansion cannot bypass scoped five-stage material into public Main8 aggregate', () => {
+  const rawAggregate = {
+    perspectiveExpansion: {
+      engine: 'Astera Deterministic Perspective Expansion',
+      perspectives: [{
+        id: 'opposition',
+        focus: ['Data Loss', '返金負債', '単一障害点']
+      }],
+      per_task: { T01: { perspectives: [{ focus: ['Data Loss'] }] } }
+    }
+  };
+  const taskResults = [{
+    task: { id: 'T01' },
+    lanes: {
+      fact: { confirmed: [], unconfirmed: [] },
+      risk: { risks: [] },
+      multi: { perspectives: [{ id: 'critical', focus: ['source-backed unresolved'], source: 'CANONICAL_CLAIM_CONFIRMATION' }], trade_off_map: [] },
+      inquiry: { missing_fields: [] },
+      compare: { dimensions: [], comparison_candidates: [], candidate_materials: [], trade_off_differences: [], scope_booleans: [], supported_scope: [], unsupported_scope: [], contradiction_map: [], condition_differences: {} }
+    },
+    public_lanes: {
+      fact: { confirmed: [], unconfirmed: [] },
+      risk: { risks: [] },
+      multi: { perspectives: [{ id: 'critical', focus: ['source-backed unresolved'], source: 'CANONICAL_CLAIM_CONFIRMATION' }], trade_off_map: [] },
+      inquiry: { missing_fields: [] },
+      compare: { dimensions: [], comparison_candidates: [], candidate_materials: [], trade_off_differences: [], scope_booleans: [], supported_scope: [], unsupported_scope: [], contradiction_map: [], condition_differences: {} }
+    }
+  }];
+
+  const publicAggregate = buildPublicFiveStageAggregate(rawAggregate, taskResults);
+  assert.deepEqual(publicAggregate.perspectiveExpansion.perspectives, []);
+  assert.deepEqual(publicAggregate.perspectiveExpansion.per_task, {});
+  assert.equal(publicAggregate.perspectiveExpansion.public_projection_state, 'SUPPRESSED_NON_FIVE_STAGE_SEMANTIC_PATH');
+  assert.deepEqual(publicAggregate.multi.perspectives.map((item) => item.focus), [['source-backed unresolved']]);
+  assert.doesNotMatch(JSON.stringify(publicAggregate), /Data Loss|返金負債|単一障害点/);
 });
