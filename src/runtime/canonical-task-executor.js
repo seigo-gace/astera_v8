@@ -270,7 +270,7 @@ class CanonicalTaskExecutor {
     }, options);
     return {
       canonical: evaluated.canonical,
-      lanes: stage.lanes,
+      lanes: stage.public_lanes || stage.lanes,
       perspective_expansion: evaluated.perspective_expansion,
       lane_execution: stage.lane_execution
     };
