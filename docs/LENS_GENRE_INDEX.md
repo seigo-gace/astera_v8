@@ -1,43 +1,128 @@
-# Astera 共通レンズ・ジャンル一覧
+# Astera v8 — 共通Domain Lens Genre Index
 
-Status: 共有運用基準  
+Updated: 2026-10-04  
 Document ID: `astera-lens-genre-index`  
-Schema Version: `2.1`  
 Taxonomy Version: `1.0.0`
 
-## 1. 目的
+This document defines the current `G01`–`G38` Domain Lens IDs used by **Judgment Material Generation**.
 
-この文書は、Astera v8通常版、品質・完成度判定Module、ASTERA-KBが共通参照する38専門ジャンルの固定IDと接続境界を管理します。READMEへ一覧本文を展開せず、両RepositoryのREADMEから本ファイルを参照します。
+Canonical implementation:
 
-## 2. 責務
+```text
+src/all-domain-lens-catalog.js
+src/domain-template-router.js
+src/domain-identity-aliases.js
+src/lens-plan.js
+```
 
-| 対象 | 責務 |
-|---|---|
-| Astera v8通常版 | 入力を38専門ジャンルへ決定論的に分類し、Fact / Risk / Multi / Inquiry / CompareのLensを適用する |
-| 品質・完成度判定Module | 同じLensを読み込み、分野固有のRisk・Evidence・Safety条件を固定Rule採点へ追加する |
-| ASTERA-KB | Knowledgeの4階層TaxonomyとEvidenceを保存・検索し、Asteraへ分類情報を返す |
-| 共通ID | `G01`〜`G38`をRuntime、判定Module、KB Crosswalk、Log、Testの共通Keyとして使用する |
+Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)  
+Universal target design: [`UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md`](UNIVERSAL_JUDGMENT_MATERIAL_ARCHITECTURE.md)  
+Lens guide: [`DOMAIN_TEMPLATE_CATALOG.md`](DOMAIN_TEMPLATE_CATALOG.md)
 
-KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点確認するか」、Artifact Profileは「どの種類の成果物を採点するか」であり、責務を混同しません。
+---
 
-## 3. 共通実装
+## 1. Responsibility boundary
 
-- Lens正本: `astera_v8/src/all-domain-lens-catalog.js`
-- 通常版分類: `astera_v8/src/domain-template-router.js`
-- 判定Module接続: `astera_v8/src/quality-completion-evaluator/domain-lens-resolver.js`
-- Primary Lens: 38専門ジャンルから1件
-- Secondary Lens: Score上位3件
-- Overlay Lens: Primaryを上書きせず追加
-- 分類優先: `CONTROLLED_TERM_MATCH → TEXT_SCORE_MATCH → HYPOTHESIS_LAST_RESORT`
-- 空入力: 誤分類せずInput Error
-- 弱い分類: 低Confidenceと`taxonomy_review_required=true`
-- 各Genreは、元Taxonomyとの整合確認用に4階層の`lens_anchor_path`を持つ
-- 4階層全Pathの検索結果は、将来ASTERA-KB接続時も同じ`G01`〜`G38`を入口として扱う
-- 判定Moduleで`enforce=true`を指定した場合、Lens固有確認は`VALID` Evidenceへ接続されている場合だけ通過する
+### Judgment Material Generation
+
+Uses the Lens router to determine what domain-specific material should be examined for Task/Claim processing.
+
+### Evidence Search
+
+May consume Lens/domain/overlay metadata as search and Information Quality context. Evidence Search remains the owner of Provider execution and evidence adoption.
+
+### Generic Evaluation v2
+
+Generic v2 is Profile / Measurements / Evidence based and does **not** automatically execute the Legacy evaluator Domain Lens resolver as a generic-v2 invariant.
+
+### Legacy Evaluation v1
+
+Legacy v1 still contains `domain-lens-resolver.js` and corresponding tests. Those remain compatibility behavior and must not be used as proof of Generic v2 Lens enforcement.
+
+---
+
+## 2. Critical product boundary: G01-G38 is not the product scope
+
+The 38 Lens taxonomy is a **domain-material routing aid**. It must not become a whitelist of supported questions, document types, professions or judgment scenarios.
+
+Astera must accept arbitrary judgment-seeking input regardless of whether it is:
+
+- a clean report or noisy free-form message;
+- a design document, business document, legal text, scientific paper, plan, memo, audit record, personal question or another form;
+- Japanese or English;
+- short or long;
+- single-purpose or multi-purpose;
+- Human-authored or AI-authored.
+
+Correct semantic order:
+
+```text
+Source Graph / Semantic Atoms / Case Graph
+  ↓
+Request / Claim
+  ↓
+G01-G38 Lens routing
+  ↓
+Domain-specific required judgment material
+  ↓
+Evidence requirement / Risk / Inquiry / Comparison dimensions
+  ↓
+Main8 material sufficiency
+```
+
+A correct Lens classification is **not** proof that the final Main8 is useful or complete.
+
+The final quality question is:
+
+> Does the output contain the material actually required to judge this specific question?
+
+This is tested separately from Lens classification accuracy.
+
+---
+
+## 3. Current router behavior
+
+Current router id:
+
+```text
+all_domain_lens_router_v2
+```
+
+Behavior from `src/domain-template-router.js` and `src/domain-identity-aliases.js`:
+
+- Input is normalized deterministically.
+- Empty/invalid input returns `ASTERA_LENS_INPUT_REQUIRED` without inventing a domain.
+- Primary classification uses controlled-term/text scoring and may abstain when signal is too weak.
+- A valid explicit canonical ID `G01`–`G38` is itself a controlled identity signal. Forms such as `G10`, `【G10】` and `[G10]` enter the same controlled-term routing path; they do not create a bypass router.
+- Invalid lookalikes such as `G00`, `G39` and `G99` are not promoted to canonical Lens IDs.
+- Weak/fallback classification sets `taxonomy_review_required=true`.
+- Secondary Lens candidates are limited to at most 3.
+- Overlay candidates are limited to at most 5.
+- Overlay does not replace the Primary Lens.
+- Safety-oriented deterministic fallback exists for specific medical/public-safety/defense/philosophy signals.
+
+Current classification basis values include:
+
+```text
+CONTROLLED_TERM_MATCH
+TEXT_SCORE_MATCH
+HYPOTHESIS_LAST_RESORT
+ABSTAIN_LOW_SIGNAL
+SAFETY_OVERLAY_CANONICAL_HINT
+PUBLIC_SAFETY_CANONICAL_HINT
+DEFENSE_CANONICAL_HINT
+PHILOSOPHY_ETHICS_HINT
+```
+
+An explicit valid `Gxx` identity normally resolves through `CONTROLLED_TERM_MATCH`.
+
+Do not create an `other`/`unknown` Lens merely to avoid abstention.
+
+---
 
 ## 4. Primary Lens一覧
 
-| ID | 専門ジャンル | 検証Anchor Path |
+| ID | 専門ジャンル | Lens Anchor Path |
 |---|---|---|
 | G01 | 一般知識・百科・情報資源 | `G01/G01-L03/G01-L03-M01/G01-L03-M01-S03` |
 | G02 | 哲学・倫理・宗教・思想 | `G02/G02-L03/G02-L03-M02/G02-L03-M02-S06` |
@@ -80,62 +165,207 @@ KB Taxonomyは「情報が何に属するか」、Astera Lensは「何を重点�
 
 Primary Lens総数: **38**
 
-## 5. Overlay Lens
+The detailed terms and per-Lens Fact/Risk/Multi/Inquiry/Compare/Evidence/Safety arrays are owned by `src/all-domain-lens-catalog.js`; this document does not duplicate those arrays.
 
-| ID | 用途 |
+---
+
+## 5. Domain-material sufficiency responsibility
+
+The target redesign requires each selected Lens to contribute **material requirements**, not just a label.
+
+Representative categories include:
+
+- domain-specific fact dimensions;
+- relevant counter/falsification conditions;
+- risk dimensions;
+- comparison dimensions;
+- authority/source classes;
+- freshness / effective-date requirements;
+- jurisdiction / population / environment / version scope;
+- specialist evidence expectations;
+- safety-critical uncertainty.
+
+These are composable with the universal operation-material ontology.
+
+Example:
+
+```text
+Request operation = compare
+Lens = G11 finance
+```
+
+may require generic comparison slots plus finance-specific period/accounting-basis/denominator/risk-assumption material.
+
+This is not an instruction to hard-code prose templates per Genre. The material contract is structured and source/evidence backed.
+
+### Additive specialist breadth
+
+`src/lens-plan.js` may supplement a selected Primary Lens with `PRIMARY_BREADTH` material when the representative canonical profile does not by itself cover the specialist pre-decision dimensions needed for the wider Genre.
+
+This supplement is additive only. It may contribute Fact, Risk, Multi, Inquiry, Compare, Evidence or Safety material, but it:
+
+- does not replace the canonical Primary Lens;
+- does not change the `G01`–`G38` IDs or taxonomy version;
+- does not create a 39th Genre;
+- does not select or rank candidates;
+- does not create a final decision or automatic recommendation.
+
+The current Universal Judgment gate separately verifies that the resulting public Main8 contains enough domain material; Lens classification alone is insufficient proof.
+
+---
+
+## 6. Cross-domain input
+
+One input may legitimately contain Requests/Claims from several Genres.
+
+Target behavior:
+
+- attach Lens context to the relevant Request/Claim;
+- preserve one Primary Lens where the router contract requires it, plus secondary/overlay context;
+- do not collapse cross-domain content into a generic primary-purpose string;
+- do not invent a 39th `other` Lens simply because the case spans multiple domains.
+
+Material sufficiency is evaluated by the union of relevant Request/Claim Lens requirements, not by a single global label alone.
+
+---
+
+## 7. Overlay Lens
+
+Current router defines:
+
+| ID | Purpose |
 |---|---|
-| `high_stakes_legal` | 訴訟、解雇、逮捕、損害賠償など重大な法的条件 |
-| `medical_safety` | 胸痛、呼吸異常、意識障害、自傷など緊急性の高い医療条件 |
-| `current_information` | 現在価格、法改正、最新仕様など時間で変化する情報 |
-| `evidence_strict` | 根拠、証拠、正確性、検証、引用を強く要求する処理 |
-| `safety_abuse` | 攻撃、Malware、詐欺、侵入、回避など悪用可能性がある処理 |
+| `high_stakes_legal` | 高Riskの法的条件を追加確認 |
+| `medical_safety` | 緊急性・受診遅延・危険な自己治療等を追加確認 |
+| `current_information` | 現在価格・法改正・最新仕様等の鮮度条件を追加 |
+| `evidence_strict` | 一次Source・Source品質・矛盾等を強化確認 |
+| `safety_abuse` | Harm/Evasion/Exploitation/Fraud等のSafety観点を追加 |
 
-## 6. 通常版出力契約
+Exact signals/risk/evidence/safety arrays are defined in `src/domain-template-router.js`.
+
+---
+
+## 8. Current output shape
+
+Representative Judgment Material router result:
 
 ```json
 {
-  "router": "all_domain_lens_router_v1",
+  "router": "all_domain_lens_router_v2",
   "taxonomy_version": "1.0.0",
+  "classification_basis": "CONTROLLED_TERM_MATCH",
+  "confidence": 0.9,
+  "taxonomy_review_required": false,
   "primary": {
     "id": "G29",
-    "name": "IT・Computer・System・Application開発",
-    "classification": {
-      "specialized_genre": {"id": "G29", "name": "IT・Computer・System・Application開発"},
-      "lens_anchor_path": {
-        "path_key": "G29/G29-L03/G29-L03-M03/G29-L03-M03-S04"
-      },
-      "path_resolution": "GENRE_LENS_ANCHOR"
-    }
+    "name": "IT・Computer・System・Application開発"
   },
-  "classification_basis": "CONTROLLED_TERM_MATCH",
-  "confidence": 0.95,
-  "taxonomy_review_required": false
+  "secondary": [],
+  "overlays": []
 }
 ```
 
-## 7. 判定Module入力契約
+Exact output fields remain defined by current router code.
 
-```json
-{
-  "domain_lens": {
-    "id": "G29",
-    "taxonomy_version": "1.0.0",
-    "path_key": "G29/G29-L03/G29-L03-M03/G29-L03-M03-S04",
-    "enforce": true
-  }
-}
+---
+
+## 9. Evidence Search connection
+
+Judgment Material Generation may include the selected Domain Lens in an Evidence Search request.
+
+Evidence Search then decides Provider/query execution and Information Quality under its own responsibility.
+
+```text
+Lens routing
+→ domain-specific material requirement
+→ Evidence Requirement
+→ Evidence Search
+→ Evidence quality/adoption
 ```
 
-- Lens未指定時は通常版と同じRouterで補完する
-- `enforce=false`時は評価結果へLensを付与する
-- `enforce=true`時はLens固有Risk・Evidence・Safety確認を `domain_lens.assessment` に記録する（QCE Blocking には使わない）
-- `passed`はEvaluatorが`VALID`と確認したEvidenceへ接続されている場合だけ assessment 上で有効
-- 未確認・失敗時も QCE は Domain Lens 事後Blockingしない
+The Lens does not authorize an Evidence Candidate by itself.
 
-## 8. 更新規則
+---
 
-1. 両RepositoryのDocument ID、Schema Version、38 IDを一致させる。
-2. Runtime変更時は`src/all-domain-lens-catalog.js`、`src/domain-template-router.js`、判定Module接続、Test、本文書を同時更新する。
-3. KBの4階層Pathを38 Lensへ潰さず、`Gxx`と完全Pathを併記する。
-4. `other`、`unknown`、`unclassified`、`未分類`、`その他`を新設しない。
-5. READMEには本文を複製せず、本ファイルへの参照だけを置く。
+## 10. Evaluator-generation boundary
+
+### Generic v2
+
+Current generic contract:
+
+```text
+astera.evaluation.request.v2
+```
+
+Generic v2 currently loads its v2 evaluation Profile and evaluates Measurements/Evidence. It does not automatically run `domain-lens-resolver.js` as a generic-v2 stage.
+
+### Legacy v1
+
+Historical/compatibility code still accepts Domain Lens-related input and has Lens tests.
+
+Files:
+
+```text
+src/quality-completion-evaluator/domain-lens-resolver.js
+src/quality-completion-evaluator/tests/integration/domain-lens.test.js
+src/quality-completion-evaluator/tests/integration/domain-lens-real-examples.test.js
+```
+
+When reading old documents/tests, label this explicitly as **Legacy v1 evaluator behavior**.
+
+---
+
+## 11. Safety, public-output and decision boundary
+
+Lens material may strengthen:
+
+```text
+Fact requirements
+Risk
+Inquiry
+Comparison dimensions
+Evidence requirements
+Safety gates
+```
+
+Public Main8 projection is request-sensitive. Specialist Risk or Compare material may exist in the internal LensPlan without automatically appearing in every generic task. It is projected to public Main8 when the Task/request actually calls for those materials, such as explicit risk/failure-condition requirements, comparison-axis requirements or a real comparison task.
+
+It must not create:
+
+```text
+automatic recommendation
+candidate winner
+candidate ranking
+final decision
+fabricated evidence
+```
+
+---
+
+## 12. Verification requirement
+
+The redesign requires separate verification for:
+
+1. Lens routing quality;
+2. domain-material requirement coverage;
+3. final Main8 material sufficiency.
+
+A test that only checks `primary.id === Gxx` cannot prove judgment-material quality.
+
+Current regression includes explicit canonical-ID routing for `G01`–`G38` in Japanese and English, additive breadth coverage for weak representative Genre profiles, and Universal Judgment semantic/material verification across the full 38-Genre pair set.
+
+GitHub-self-executable regression must continue to include Japanese and English, multiple lengths/styles and G01-G38 coverage with semantic/material-slot gold annotations rather than exact answer-template matching.
+
+---
+
+## 13. Update rules
+
+1. Keep `G01`–`G38` IDs stable unless an explicit taxonomy migration is approved.
+2. Update `src/all-domain-lens-catalog.js`, `src/domain-template-router.js`, `src/domain-identity-aliases.js`, `src/lens-plan.js`, related tests and this document together as applicable when current routing/material coverage changes.
+3. Keep Overlay definitions synchronized with router code.
+4. Do not create an `other`/`unknown` Lens to hide weak classification; the router may abstain.
+5. Do not claim Generic v2 Lens enforcement from Legacy v1 tests.
+6. Do not duplicate the full per-Lens implementation arrays in README.
+7. Do not treat G01-G38 as a supported-document whitelist or Request parser.
+8. Do not treat correct Genre classification as proof of Main8 completion.
+9. Do not treat internal specialist Risk/Compare material as permission to expose it in public Main8 when the Task did not request it.

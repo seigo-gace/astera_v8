@@ -1,6 +1,7 @@
 'use strict';
 
 const { TAXONOMY_VERSION, GENRE_LENSES } = require('./all-domain-lens-catalog');
+const { aliasesForGenre } = require('./domain-identity-aliases');
 
 function rx(pattern) {
   return new RegExp(pattern, 'i');
@@ -75,6 +76,64 @@ function normalize(value) {
     .trim();
 }
 
+function routingSignalText(value) {
+  return String(value || '')
+    .replace(/判断材料(?:化)?/gu, ' ')
+    .replace(/次に確認する(?:材料|事項|項目)/gu, ' ')
+    .replace(/\b(?:judgment|decision)[ -]materials?\b/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isAsciiControlledTerm(value) {
+  return /^[a-z0-9.+#&-]+(?: [a-z0-9.+#&-]+)*$/i.test(String(value || ''));
+}
+
+function asciiBoundaryMatch(text, term) {
+  if (!isAsciiControlledTerm(term)) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegex(term)}(?=$|[^a-z0-9])`, 'i').test(text);
+}
+
+let genreTermFrequencyCache = null;
+
+function genreTermFrequency(term) {
+  if (!genreTermFrequencyCache) {
+    const counts = new Map();
+    for (const genre of GENRE_LENSES) {
+      const seen = new Set((genre.terms || []).map(normalize).filter(Boolean));
+      for (const item of seen) counts.set(item, (counts.get(item) || 0) + 1);
+    }
+    genreTermFrequencyCache = counts;
+  }
+  return genreTermFrequencyCache.get(term) || 0;
+}
+
+function isGenreIdentityTerm(genre, term) {
+  if (genreTermFrequency(term) !== 1) return false;
+  const identity = normalize(`${genre?.name || ''} ${genre?.anchor_title || ''}`);
+  return identity.includes(term);
+}
+
+function exactTermWeight(term, genre) {
+  const compactLength = term.replace(/\s/g, '').length;
+  if (isAsciiControlledTerm(term)) {
+    return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+  }
+  if (compactLength >= 2 && isGenreIdentityTerm(genre, term)) {
+    return compactLength >= 4 ? 16 : 10;
+  }
+  return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+}
+
+function aliasWeight(alias) {
+  const compactLength = alias.replace(/\s/g, '').length;
+  return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : 8;
+}
+
 function ngrams(value, n = 3) {
   const text = normalize(value).replace(/\s+/g, '');
   if (!text) return new Set();
@@ -122,6 +181,7 @@ function scoreGenre(genre, text) {
   const queryTokens = new Set(normalizedText.split(' ').filter(Boolean));
   const queryNgrams = ngrams(normalizedText);
   const anchor = normalize(genre.anchor_title);
+  const identityAliases = aliasesForGenre(genre.id);
   let score = normalizedText.includes(anchor) ? 1000 : 0;
   let exactHits = normalizedText.includes(anchor) ? 1 : 0;
   const matched = [];
@@ -129,14 +189,10 @@ function scoreGenre(genre, text) {
   for (const rawTerm of genre.terms || []) {
     const term = normalize(rawTerm);
     if (!term) continue;
-    const shortAsciiToken = /^[a-z0-9.+#-]{1,3}$/.test(term);
-    const shortAsciiBoundaryMatch = shortAsciiToken
-      ? new RegExp(`(^|[^a-z0-9.+#-])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^a-z0-9.+#-])`, 'i').test(normalizedText)
-      : false;
-    const exactMatch = shortAsciiToken ? shortAsciiBoundaryMatch : normalizedText.includes(term);
+    const asciiControlled = isAsciiControlledTerm(term);
+    const exactMatch = asciiControlled ? asciiBoundaryMatch(normalizedText, term) : normalizedText.includes(term);
     if (exactMatch) {
-      const compactLength = term.replace(/\s/g, '').length;
-      score += compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
+      score += exactTermWeight(term, genre);
       exactHits += 1;
       matched.push(rawTerm);
       continue;
@@ -147,7 +203,16 @@ function scoreGenre(genre, text) {
     }
   }
 
-  const termNgrams = ngrams([genre.name, genre.anchor_title, ...(genre.terms || [])].join(' '));
+  const catalogTerms = new Set((genre.terms || []).map((term) => normalize(term)).filter(Boolean));
+  for (const rawAlias of identityAliases) {
+    const alias = normalize(rawAlias);
+    if (!alias || catalogTerms.has(alias) || !asciiBoundaryMatch(normalizedText, alias)) continue;
+    score += aliasWeight(alias);
+    exactHits += 1;
+    matched.push(rawAlias);
+  }
+
+  const termNgrams = ngrams([genre.name, genre.anchor_title, ...(genre.terms || []), ...identityAliases].join(' '));
   const overlap = [...queryNgrams].filter((item) => termNgrams.has(item)).length;
   const denominator = Math.max(1, new Set([...queryNgrams, ...termNgrams]).size);
   const similarity = overlap / denominator;
@@ -250,13 +315,15 @@ function medicalSafetyFallback(scored = [], overlays = []) {
 }
 
 function publicSafetyFallback(scored = [], routeText = '') {
-  if (!rx('鑑識|forensic|犯罪|捜査|警察|Evidence chain|chain of custody|現金.*なくな|レジログ').test(routeText)) return null;
+  const emergencyPlan = rx('緊急対応計画|危機対応計画|緊急時対応計画|emergency response plan|public safety response plan').test(routeText);
+  const forensicSignal = rx('鑑識|forensic|犯罪|捜査|警察|Evidence chain|chain of custody|現金.*なくな|レジログ').test(routeText);
+  if (!emergencyPlan && !forensicSignal) return null;
   const candidate = scored.find((item) => item.genre?.id === 'G34');
-  if (!candidate || candidate.score < 2) return null;
+  if (!candidate || (!emergencyPlan && candidate.score < 2)) return null;
   return publicGenre({
     ...candidate,
-    classification_basis: 'PUBLIC_SAFETY_CANONICAL_HINT',
-    confidence: 0.52,
+    classification_basis: emergencyPlan ? 'PUBLIC_SAFETY_EMERGENCY_CANONICAL_HINT' : 'PUBLIC_SAFETY_CANONICAL_HINT',
+    confidence: emergencyPlan ? 0.62 : 0.52,
     taxonomy_review_required: true
   });
 }
@@ -275,7 +342,7 @@ function defenseFallback(scored = [], routeText = '') {
 
 function philosophyEthicsFallback(scored = [], routeText = '') {
   if (!rx('功利主義|義務論|応用倫理|存在論|形而上学').test(routeText)) return null;
-  const candidate = scored.find((item) => item.genre?.id === 'G02');
+  const candidate = scored.find((item) => item.genre.id === 'G02');
   if (!candidate || candidate.exact_hits < 1) return null;
   return publicGenre({
     ...candidate,
@@ -320,7 +387,8 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
     for (const overlay of overlays) {
       lines.push(`overlay.${overlay.id}.risk_lens=${overlay.risk_lens.join(' / ')}`);
       lines.push(`overlay.${overlay.id}.evidence_to_collect=${overlay.evidence_to_collect.join(' / ')}`);
-      lines.push(`overlay.${overlay.id}.safety_gate=${overlay.safety_gate.join(' / ')}`);
+      lines.push(`overlay.${overlay.id}.safety_gate=${overlay.safety_gate.join(' / ')}`
+      );
     }
   }
   return lines.join('\n');
@@ -328,7 +396,7 @@ function buildLensText(primary, overlays, classificationBasis = null, confidence
 
 function routeDomainTemplates({ question = '', context = '' } = {}) {
   const normalized = normalizeInput({ question, context });
-  const routeText = normalized.core_request.trim();
+  const routeText = routingSignalText(normalized.core_request);
   if (!normalize(routeText)) {
     return {
       router: 'all_domain_lens_router_v2',

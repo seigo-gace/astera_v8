@@ -80,7 +80,7 @@ test('user can search local specialist projections and receive final verified ev
         question: 'ASTERA evidence search uses Node.js 22',
         domain_lens: { id: 'G29', taxonomy_version: '1.0.0' },
         conditions: [{ condition_id: 'runtime', class: 'CORE', field: 'fields.claim', operator: 'EQ', expected_value: 'ASTERA uses Node.js 22', required: true }],
-        search: { free_projection: true, free_current: true },
+        search: { free_projection: true, free_current: true, free_general_web: true },
         paid_search: { enabled: false },
         deadline_ms: 8000
       }
@@ -94,17 +94,23 @@ test('user can search local specialist projections and receive final verified ev
     assert.equal(response.result.payment_executed, false);
     assert.equal(response.result.provider_execution.initial.length, 2);
     assert.equal(response.result.provider_execution.reinforcement.length, 1);
+    assert.equal(response.result.route_execution.specialist_authoritative.attempted, true);
+    assert.equal(response.result.route_execution.general_current.attempted, true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
 
-test('user receives a deterministic rejection instead of an empty success', async () => {
+test('user receives a deterministic rejection instead of an empty success while both required routes execute', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-evidence-user-fail-'));
   try {
-    const emptyFile = await writeProjection(root, 'empty', []);
+    const emptyProjectionFile = await writeProjection(root, 'empty-projection', []);
+    const emptyCurrentFile = await writeProjection(root, 'empty-current', []);
     const module = createEvidenceSearchModule({
-      providers: [createJsonProjectionProvider({ provider_id: 'empty-file', filePath: emptyFile, source_class: 'FREE_PROJECTION', capabilities: ['NO_REINFORCEMENT'], domains: ['G29'] })]
+      providers: [
+        createJsonProjectionProvider({ provider_id: 'empty-projection-file', filePath: emptyProjectionFile, source_class: 'FREE_PROJECTION', capabilities: ['NO_REINFORCEMENT'], domains: ['G29'] }),
+        createJsonProjectionProvider({ provider_id: 'empty-current-file', filePath: emptyCurrentFile, source_class: 'FREE_OFFICIAL_LIVE', capabilities: ['NO_REINFORCEMENT'], domains: ['G29'] })
+      ]
     });
 
     const response = await module.execute({
@@ -115,7 +121,7 @@ test('user receives a deterministic rejection instead of an empty success', asyn
         question: 'information that does not exist',
         domain_lens: { id: 'G29' },
         conditions: [{ condition_id: 'missing', class: 'CORE', field: 'text', operator: 'CONTAINS', expected_value: 'information that does not exist' }],
-        search: { free_projection: true, free_current: false },
+        search: { free_projection: true, free_current: true, free_general_web: true },
         paid_search: { enabled: false }
       }
     });
@@ -123,6 +129,8 @@ test('user receives a deterministic rejection instead of an empty success', asyn
     assert.notEqual(response.result.status, 'FINAL_VALID');
     assert.ok(response.result.quality.initial.blocking_reasons.includes('NO_EVIDENCE_CANDIDATE'));
     assert.equal(response.result.evidence.length, 0);
+    assert.equal(response.result.route_execution.specialist_authoritative.attempted, true);
+    assert.equal(response.result.route_execution.general_current.attempted, true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

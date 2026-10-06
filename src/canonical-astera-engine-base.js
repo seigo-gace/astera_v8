@@ -4,7 +4,7 @@ const CanonicalEngineSupport = require('./canonical-engine-support');
 const { routeDomainTemplates } = require('./domain-template-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
-const { buildCanonicalTaskPlan } = require('./canonical-claim-runtime');
+const { extractCanonicalTaskClaims, buildCanonicalTaskPlan } = require('./canonical-claim-runtime');
 const { projectCanonicalFailure } = require('./canonical-task-projection');
 const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 const { UndeterminedReason } = require('./v4-canonical/confirmation');
@@ -326,8 +326,8 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     }
 
     const tasks=packet.tasks.map((baseTask)=>{
-      const preliminary=buildCanonicalTaskPlan(baseTask,{});
-      const routeText=taskText(baseTask,preliminary.claims);
+      const extraction=extractCanonicalTaskClaims(baseTask);
+      const routeText=taskText(baseTask,extraction.claims);
       const spanText=String(baseTask.source_span?.text||'').trim();
       const targetText=String(baseTask.target||'').trim();
       const routeParts=[];
@@ -339,7 +339,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       const domain=routeDomainTemplates({question:routeQuestion,context});
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,evidence_need:evidenceNeed,domain};
-      const canonicalPlan=buildCanonicalTaskPlan(task,domain);
+      const canonicalPlan=buildCanonicalTaskPlan(task,domain,{extraction});
       return{...task,canonical_plan:canonicalPlan};
     });
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};

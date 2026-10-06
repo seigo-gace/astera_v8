@@ -24,13 +24,53 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Hermetic verify (source + unit tests)
+      - name: Run source tests
         run: npm run verify:source
 
-      - name: REAL MCP gate
-        env:
-          ASTERA_JAPANESE_PARSER_COMMAND: ${{ secrets.ASTERA_JAPANESE_PARSER_COMMAND }}
-        run: node scripts/run-real-mcp-gate.js
+      - name: Run Initial Fast Path performance hard gate
+        run: npm run verify:performance
 
-      - name: HTTP Main8 E2E smoke
-        run: bash scripts/smoke.sh
+      - name: Build real Japanese Parser HTTP runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/seigo-gace/Deterministic-Japanese-Parser-MCP.git /tmp/djpmcp-http-src
+          cd /tmp/djpmcp-http-src
+          git fetch --depth 1 origin 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          git checkout --detach 42e3b0ac128932d3ddc23e39d708dfd8f0773d03
+          docker build -f Dockerfile.http -t djpmcp-http-release .
+          docker run -d --rm \
+            --name djpmcp-http-release \
+            -p 127.0.0.1:8765:8765 \
+            -e DJPMCP_HTTP_API_KEY=release-gate-key \
+            -e DJPMCP_HTTP_ALLOWED_HOSTS=127.0.0.1:8765,localhost:8765 \
+            djpmcp-http-release
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8765/readyz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs djpmcp-http-release
+          exit 1
+
+      - name: Run real Japanese Parser release gate
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: release-gate-key
+        run: npm run verify:real-mcp
+
+      - name: Run real HTTP smoke verification
+        env:
+          ASTERA_JAPANESE_PARSER_MODE: http
+          ASTERA_JAPANESE_PARSER_URL: http://127.0.0.1:8765/v1/analyze
+          ASTERA_JAPANESE_PARSER_API_KEY: release-gate-key
+        run: npm run verify:http-e2e
+
+      - name: Run unseen effect release gate
+        run: npm run verify:effect-unseen
+
+      - name: Stop Japanese Parser HTTP runtime
+        if: always()
+        run: docker rm -f djpmcp-http-release >/dev/null 2>&1 || true

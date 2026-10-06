@@ -1,13 +1,20 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { MAX_CANONICAL_CONCURRENCY, canonicalConcurrency } = require('../src/runtime/concurrency-policy');
-const { CanonicalTaskAdmission, destroyGlobalCanonicalTaskAdmission } = require('../src/runtime/canonical-task-admission');
+const {
+  CanonicalTaskAdmission,
+  getGlobalCanonicalTaskAdmission,
+  destroyGlobalCanonicalTaskAdmission
+} = require('../src/runtime/canonical-task-admission');
+const { CanonicalTaskExecutor } = require('../src/runtime/canonical-task-executor');
 const { executeTaskWaves } = require('../src/runtime/canonical-wave-executor');
 const CanonicalEngineSupport = require('../src/canonical-engine-support');
 
 const task = (id, depends_on = []) => ({ id, depends_on });
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const workerFile = path.join(__dirname, 'fixtures-worker.js');
 
 test('canonical task hard ceiling is 8 while the CPU worker pool default remains 4', async () => {
   assert.equal(MAX_CANONICAL_CONCURRENCY, 8);
@@ -52,8 +59,9 @@ test('one request never starts more than 8 task bodies', async () => {
   await destroyGlobalCanonicalTaskAdmission();
 });
 
-test('multiple simultaneous requests share one server-wide limit of 8', async () => {
+test('explicit admission can bound generic task bodies server-wide', async () => {
   await destroyGlobalCanonicalTaskAdmission();
+  const admission = getGlobalCanonicalTaskAdmission({ limit: 8, maxQueue: 64 });
   let active = 0;
   let maximum = 0;
   const makeRequest = (prefix) => {
@@ -62,6 +70,7 @@ test('multiple simultaneous requests share one server-wide limit of 8', async ()
       tasks,
       executionWaves: [tasks.map((item) => item.id)],
       maxConcurrency: 99,
+      admission,
       runTask: async (current) => {
         active += 1;
         maximum = Math.max(maximum, active);
@@ -75,6 +84,56 @@ test('multiple simultaneous requests share one server-wide limit of 8', async ()
   assert.equal(a.results.size + b.results.size + c.results.size, 36);
   assert.equal(maximum, 8);
   await destroyGlobalCanonicalTaskAdmission();
+});
+
+test('wave task bodies do not consume canonical CPU admission unless explicitly requested', async () => {
+  await destroyGlobalCanonicalTaskAdmission();
+  const admission = getGlobalCanonicalTaskAdmission({ limit: 1, maxQueue: 8 });
+  let releaseCpu;
+  const cpuBarrier = new Promise((resolve) => { releaseCpu = resolve; });
+  const heldCpu = admission.run(async () => cpuBarrier);
+  await sleep(5);
+  assert.equal(admission.stats().active, 1);
+
+  const tasks = [task('evidence-a'), task('evidence-b')];
+  let started = 0;
+  const wave = executeTaskWaves({
+    tasks,
+    executionWaves: [tasks.map((item) => item.id)],
+    maxConcurrency: 2,
+    runTask: async (current) => {
+      started += 1;
+      await sleep(5);
+      return current.id;
+    }
+  });
+  await sleep(2);
+  assert.equal(started, 2);
+  assert.equal(admission.stats().active, 1);
+  releaseCpu();
+  await heldCpu;
+  const out = await wave;
+  assert.equal(out.results.size, 2);
+  await destroyGlobalCanonicalTaskAdmission();
+});
+
+test('canonical CPU executors share one server-wide admission independently of wave I/O', async () => {
+  await destroyGlobalCanonicalTaskAdmission();
+  const admission = getGlobalCanonicalTaskAdmission({ limit: 1, maxQueue: 8 });
+  const firstExecutor = new CanonicalTaskExecutor({ workerFile, size: 2, enableFiveStageParallel: false });
+  const secondExecutor = new CanonicalTaskExecutor({ workerFile, size: 2, enableFiveStageParallel: false });
+  try {
+    const first = firstExecutor.exec('fixture', { id: 'first', delay: 35 });
+    const second = secondExecutor.exec('fixture', { id: 'second', delay: 5 });
+    await sleep(10);
+    assert.equal(admission.stats().active, 1);
+    assert.equal(admission.stats().queued, 1);
+    assert.equal((await first).id, 'first');
+    assert.equal((await second).id, 'second');
+  } finally {
+    await Promise.allSettled([firstExecutor.destroy(), secondExecutor.destroy()]);
+    await destroyGlobalCanonicalTaskAdmission();
+  }
 });
 
 test('9th task waits in queue until one of 8 slots opens', async () => {

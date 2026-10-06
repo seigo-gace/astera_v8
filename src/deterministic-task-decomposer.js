@@ -1,6 +1,6 @@
 'use strict';
 
-const { unique, tokenOverlap } = require('./judgment-materials-analyzer');
+const { unique, tokenOverlap, segmentSource, classifyClauseRole } = require('./judgment-materials-analyzer');
 
 const norm = (value) => String(value || '').normalize('NFKC').replace(/\r\n?/g, '\n').trim();
 const genericTarget = (value) => !value || /^(?:入力対象|input target|対象|target|これ|それ|あれ|これら|それら)$/iu.test(norm(value));
@@ -58,27 +58,6 @@ function isolatedRole(span, sourceRegions) {
   return hit?.role || 'DIRECT_INPUT';
 }
 
-function splitWithSpans(text) {
-  const input = String(text || '');
-  const items = [];
-  let start = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    if (!/[。！？!?;；\n]/u.test(input[index])) continue;
-    const raw = input.slice(start, index + 1);
-    const left = raw.length - raw.trimStart().length;
-    const right = raw.length - raw.trimEnd().length;
-    if (index + 1 - right > start + left) items.push({ start: start + left, end: index + 1 - right, text: input.slice(start + left, index + 1 - right) });
-    start = index + 1;
-  }
-  if (start < input.length) {
-    const raw = input.slice(start);
-    const left = raw.length - raw.trimStart().length;
-    const right = raw.length - raw.trimEnd().length;
-    if (input.length - right > start + left) items.push({ start: start + left, end: input.length - right, text: input.slice(start + left, input.length - right) });
-  }
-  return items;
-}
-
 function tokenSet(text) {
   const value = norm(text).toLowerCase();
   const ascii = value.match(/[a-z][a-z0-9_.:/-]{1,}/g) || [];
@@ -97,7 +76,7 @@ function overlapScore(left, right) {
 
 function contextBindings(context) {
   const bindings = [];
-  for (const span of splitWithSpans(context)) {
+  for (const span of segmentSource(context)) {
     const text = norm(span.text);
     if (!text) continue;
     const source = { source: 'context', source_span: { start: span.start, end: span.end, text: span.text } };
@@ -116,7 +95,13 @@ function contextBindings(context) {
     if (/(?:最優先|優先|先に|まず|priority|first|before)/i.test(text)) push('priority');
     if (/(?:期限|納期|締切|締め切|deadline|due date|hard_deadline|来週|来月|今週|今月|金曜|月曜|火曜|水曜|木曜|土曜|日曜|までに)/i.test(text)) push('deadline');
   }
-  return bindings;
+  const seen = new Set();
+  return bindings.filter((binding) => {
+    const key = `${binding.kind}|${binding.source_span.start}|${binding.source_span.end}|${binding.value}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function deliverables(text) {
@@ -152,7 +137,7 @@ function negatedDecisionRanges(text) {
     const pattern = new RegExp(re.source, flags);
     for (const match of value.matchAll(pattern)) ranges.push({ start: match.index, end: match.index + match[0].length });
   }
-  for (const span of splitWithSpans(value)) {
+  for (const span of segmentSource(value)) {
     if (!PROHIBITION_CUE.test(span.text)) continue;
     for (const match of span.text.matchAll(/判断|選定|選ぶ|決め|採用|decid|select|choose|recommend/gi)) {
       ranges.push({ start: span.start + match.index, end: span.start + match.index + match[0].length });
@@ -167,6 +152,7 @@ function isNegatedDecideMatch(text, item) {
 }
 
 function actionOccurrences(text) {
+  if (!/[ぁ-んァ-ヶ一-龠々]/u.test(String(text || '')) && classifyClauseRole({ text }) !== 'INSTRUCTION') return [];
   const found = [];
   const protectedDecisionRanges = decisionMaterialRanges(text);
   for (const [id, pattern] of ACTION_PATTERNS) {
@@ -241,12 +227,22 @@ function explicitPurpose(text, fallback = '') {
   const value = norm(text);
   const ja = /^(.{2,120}?)(?:ために|ため、|ため、?)(?=.{1,120}(?:検証|確認|改善|修正|実装|作成|移行|統合|削除))/u.exec(value);
   if (ja) return norm(ja[1]);
-  const en = /(?:in order to|so that)\s+([^.;!?]{2,160})/i.exec(value);
+  const soSentence = segmentSource(value).find((span) => /\bso\s+that\b/i.test(span.text));
+  if (soSentence) {
+    const hierarchy = /^(.{2,240}?)\s+so\s+that\s+([^.;!?]{2,200})/i.exec(norm(soSentence.text));
+    if (hierarchy) return norm(hierarchy[1]);
+  }
+  const en = /(?:in order to)\s+([^.;!?]{2,160})/i.exec(value);
   return en ? norm(en[1]) : fallback;
 }
 
 function extractDesiredEffect(text) {
   const value = norm(text);
+  const soSentence = segmentSource(value).find((span) => /\bso\s+that\b/i.test(span.text));
+  if (soSentence) {
+    const hierarchy = /\bso\s+that\s+([^.;!?]{2,200})/i.exec(norm(soSentence.text));
+    if (hierarchy) return { status: '指定あり', text: norm(hierarchy[1]) };
+  }
   if (!/(?:%|％|\d+\s*(?:秒|ms|ミリ秒|倍|件\/|req\/))/u.test(value)) return { status: '未指定', text: '未指定' };
   const match = value.match(/(?:期待効果|効果|KPI|指標)(?:は|:|=)\s*([^。！？\n]{2,160})/u);
   if (match) return { status: '指定あり', text: norm(match[1]) };
@@ -271,9 +267,15 @@ function extractInstructionUnderstandingFields(question) {
   const goalSpan = explicitPurposeSpan(q);
   const desired = extractDesiredEffect(q);
   const outputPolicy = extractOutputPolicy(q);
+  const primaryInstruction = segmentSource(q).find((span) => classifyClauseRole(span) === 'INSTRUCTION');
+  const primaryGoal = goalSpan?.phrase || (primaryInstruction
+    ? explicitPurpose(primaryInstruction.text, norm(primaryInstruction.text).replace(/[。！？!?.]+$/u, '').trim())
+    : '');
   return {
-    user_goal: goalSpan?.phrase || '',
-    user_goal_span: goalSpan?.span || null,
+    user_goal: primaryGoal,
+    user_goal_span: goalSpan?.span || (primaryInstruction
+      ? { start: primaryInstruction.start, end: primaryInstruction.end, text: primaryInstruction.text }
+      : null),
     desired_effect: desired.text,
     effect_status: desired.status,
     output_policy: outputPolicy
@@ -330,7 +332,8 @@ function consolidateMaterialOnlyConsultTasks(question, tasks) {
   if (primary.action === 'improve') {
     primary.unresolved = unique((primary.unresolved || []).filter((item) => item !== 'deliverable'));
   }
-  return [primary];
+  const carrierIds = new Set(carriers.map((task) => task.id));
+  return tasks.filter((task) => task.id === primary.id || !carrierIds.has(task.id)).map((task) => task.id === primary.id ? primary : task);
 }
 
 function extractPublicConstraintLines(question) {
@@ -437,7 +440,13 @@ function inferTarget(text, actionMatch, fallback = '') {
       if (candidate) return candidate;
     }
     if (/^[A-Za-z]/.test(value.slice(match.index))) {
-      const after = value.slice(match.end).replace(/^(?:\s+the|\s+an?|\s+)/i, '').split(/\b(?:and|then|while|without|if|when)\b|[.,;!?]/i)[0].trim();
+      const remainder = value.slice(match.end).replace(/^(?:\s+the|\s+an?|\s+)/i, '');
+      const firstSpan = segmentSource(remainder)[0]?.text || remainder;
+      let after = norm(firstSpan)
+        .split(/\b(?:then|while|without|if|when)\b|[;,!?]/i)[0]
+        .replace(/[.]+$/u, '')
+        .trim();
+      if (match.id === 'verify') after = after.replace(/^that\s+/i, '').trim();
       if (after && after.length <= 120) return after;
     }
     if (before && before.length <= 120 && !REFERENCE_CUE.test(before)) return before.replace(/(?:は|が|を|で|の)$/u, '').trim();
@@ -848,7 +857,7 @@ function buildBranchRelations(tasks) {
 }
 
 function correctionRelations(question, tasks) {
-  const corrections = splitWithSpans(question).filter((span) => /(?:訂正|撤回|前言|ではなく|じゃなく|違う|correct|withdraw|retract|instead)/i.test(span.text));
+  const corrections = segmentSource(question).filter((span) => /(?:訂正|撤回|前言|ではなく|じゃなく|違う|correct|withdraw|retract|instead)/i.test(span.text));
   const relations = [];
   const unresolved = [];
   for (const correction of corrections) {
@@ -1243,12 +1252,18 @@ function enrichRequest(request, input = {}) {
     }
   }
   const instructionFields = extractInstructionUnderstandingFields(question);
+  const packetSemanticStates = {
+    fact: unique(tasks.flatMap((task) => task.semantic_states?.fact || [])),
+    attributed_claim: unique(tasks.flatMap((task) => task.semantic_states?.attributed_claim || [])),
+    missing_evidence: unique(tasks.flatMap((task) => task.semantic_states?.missing_evidence || []))
+  };
   const enrichedPacket = {
     ...packet,
     user_goal: instructionFields.user_goal,
     desired_effect: instructionFields.desired_effect,
     effect_status: instructionFields.effect_status,
     output_policy: instructionFields.output_policy,
+    semantic_states: packetSemanticStates,
     conflicts: [...(packet.conflicts || []), ...sourceConflicts],
     schema_version: 'astera.analysis-task-packet.v2',
     task_decomposition_version: '3.0-canonical',
@@ -1300,6 +1315,7 @@ function enrichRequest(request, input = {}) {
     desired_effect: instructionFields.desired_effect,
     effect_status: instructionFields.effect_status,
     output_policy: instructionFields.output_policy,
+    semantic_states: packetSemanticStates,
     instruction_understanding: {
       ...(request.instruction_understanding || {}),
       task_decomposition: 'DETERMINISTIC_CANONICAL_V3',

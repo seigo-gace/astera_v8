@@ -3,7 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const CanonicalAsteraEngine = require('../src/canonical-astera-engine');
-const { destroyGlobalCanonicalTaskAdmission } = require('../src/runtime/canonical-task-admission');
+const {
+  getGlobalCanonicalTaskAdmission,
+  destroyGlobalCanonicalTaskAdmission
+} = require('../src/runtime/canonical-task-admission');
 
 const { createMockJapaneseParserClient } = require('./helpers/japanese-parser-mcp-mock');
 
@@ -130,7 +133,7 @@ class DecisionMaterialsLoadEngine extends CanonicalAsteraEngine {
 }
 
 for (const count of [8, 9, 20, 50, 100]) {
-  test(`decision-materials completes ${count} Task load with hard Task concurrency <= 8 and default CPU worker pool 4`, async () => {
+  test(`decision-materials completes ${count} Task load with per-request I/O concurrency <= 8 and default CPU worker pool 4`, async () => {
     await destroyGlobalCanonicalTaskAdmission();
     const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger, japaneseParserClient: createMockJapaneseParserClient() });
     try {
@@ -143,6 +146,11 @@ for (const count of [8, 9, 20, 50, 100]) {
       assert.equal(out.result.parallel_execution.pool_size, 4);
       assert.equal(engine.evidenceStarts, count);
       assert.equal(engine.maximumEvidenceActive, Math.min(8, count));
+      const cpuAdmission = getGlobalCanonicalTaskAdmission().stats();
+      assert.equal(cpuAdmission.limit, 8);
+      assert.ok(cpuAdmission.maximum_active <= 8);
+      assert.equal(cpuAdmission.admitted, count);
+      assert.equal(cpuAdmission.completed, count);
       assert.ok(out.result.task_results.every((entry) => entry.canonical.undetermined_count >= 1));
       assert.equal(out.result.comparison.selected_candidate, null);
       assert.deepEqual(out.result.comparison.candidate_ranking, []);
@@ -153,7 +161,7 @@ for (const count of [8, 9, 20, 50, 100]) {
   });
 }
 
-test('simultaneous decision-material requests share the same server-wide maximum of 8 Task bodies', async () => {
+test('simultaneous decision-material requests overlap evidence I/O while sharing one server-wide CPU admission of 8', async () => {
   await destroyGlobalCanonicalTaskAdmission();
   const engine = new DecisionMaterialsLoadEngine({ logger: silentLogger, evidenceDelayMs: 8, japaneseParserClient: createMockJapaneseParserClient() });
   try {
@@ -170,7 +178,15 @@ test('simultaneous decision-material requests share the same server-wide maximum
 
     assert.equal(outputs.reduce((sum, out) => sum + out.result.task_results.length, 0), 60);
     assert.equal(engine.evidenceStarts, 60);
-    assert.equal(engine.maximumEvidenceActive, 8);
+    assert.ok(engine.maximumEvidenceActive > 8, `expected separated evidence I/O to overlap beyond CPU limit; actual=${engine.maximumEvidenceActive}`);
+    assert.ok(engine.maximumEvidenceActive <= 24, `per-request I/O cap must remain <= 8 across three requests; actual=${engine.maximumEvidenceActive}`);
+
+    const cpuAdmission = getGlobalCanonicalTaskAdmission().stats();
+    assert.equal(cpuAdmission.limit, 8);
+    assert.ok(cpuAdmission.maximum_active <= 8, `canonical CPU admission exceeded 8; actual=${cpuAdmission.maximum_active}`);
+    assert.equal(cpuAdmission.admitted, 60);
+    assert.equal(cpuAdmission.completed, 60);
+
     assert.ok(outputs.every((out) => out.result.parallel_execution.pool_size === 4));
     assert.ok(outputs.every((out) => out.result.decision_authority === 'EXTERNAL_ONLY'));
   } finally {

@@ -86,6 +86,28 @@ test('弱い一般語だけでは38 Genreへ強制分類せずABSTAINする', ()
   assert.match(result.lens_text, /primary=ABSTAIN/);
 });
 
+test('Genre identityに含まれる短い日本語専門語は文字数だけを理由に弱信号へ落とさない', () => {
+  const cases = [
+    ['百科情報の改訂判断について判断材料が欲しい。', 'G01'],
+    ['公共AI方針の倫理判断について判断材料が欲しい。', 'G02'],
+    ['心理介入の採用判断について判断材料が欲しい。', 'G03'],
+    ['法律上の責任判断について判断材料が欲しい。', 'G08'],
+    ['医療現場の運用判断について判断材料が欲しい。', 'G23']
+  ];
+  for (const [question, expectedId] of cases) {
+    const result = routeDomainTemplates({ question });
+    assert.equal(result.primary?.id, expectedId, `${question}: ${result.primary?.id}`);
+    assert.equal(result.taxonomy_review_required, false, `${question}: confidence=${result.confidence}`);
+    assert.ok(result.confidence >= 0.72, `${question}: confidence=${result.confidence}`);
+  }
+});
+
+test('短い専門語でもGenre identityではない横断語1件だけなら強制分類しない', () => {
+  const result = routeDomainTemplates({ question: '契約条件を確認する。' });
+  assert.equal(result.primary, null);
+  assert.equal(result.classification_basis, 'ABSTAIN_LOW_SIGNAL');
+});
+
 test('短いASCII分類語を単語途中で誤発火させない', () => {
   const result = routeDomainTemplates({ question: 'Maintenance procedure and reliability review for industrial equipment' });
   assert.notEqual(result.primary?.id, 'G30');
@@ -101,6 +123,18 @@ test('短いASCII分類語は日本語Script境界でも正しく一致する', 
 test('短いASCII分類語はLatin単語内部では引き続き誤発火しない', () => {
   const result = routeDomainTemplates({ question: 'rapidサーバーの現行仕様を検証する。' });
   assert.equal((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('api'), false);
+});
+
+test('長いASCII分類語もLatin単語内部では誤発火しない', () => {
+  const result = routeDomainTemplates({ question: 'Verify that Node.js 22 is supported in production using official evidence.' });
+  assert.equal(result.primary?.id, 'G29');
+  assert.equal(result.secondary.some((item) => item.id === 'G33'), false);
+});
+
+test('長いASCII分類語は独立語としては引き続き分類へ使う', () => {
+  const result = routeDomainTemplates({ question: 'consumer product recall and warranty review' });
+  assert.equal(result.primary?.id, 'G33');
+  assert.ok((result.primary?.matched_signals || []).map((x) => String(x).toLowerCase()).includes('product'));
 });
 
 test('会話ContextはGenre採点へ混ぜず現在Taskを優先する', () => {

@@ -1,7 +1,6 @@
 'use strict';
 
 const { canonicalConcurrency, positiveInteger } = require('./concurrency-policy');
-const { getGlobalCanonicalTaskAdmission } = require('./canonical-task-admission');
 
 function graphError(code, message, details = {}) {
   const error = new Error(message);
@@ -83,62 +82,179 @@ async function mapBounded(items, maximumConcurrency, mapper) {
   return output;
 }
 
-async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null, maxConcurrency = 8, admission }) {
+async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null, maxConcurrency = 8, admission = null }) {
   if (typeof runTask !== 'function') throw new TypeError('runTask must be a function');
-  const effectiveAdmission = admission === undefined ? getGlobalCanonicalTaskAdmission() : admission;
+  const effectiveAdmission = admission || null;
   if (effectiveAdmission && typeof effectiveAdmission.run !== 'function') throw new TypeError('admission.run must be a function');
   const waves = normalizeWaves(tasks, executionWaves);
   const byId = new Map(tasks.map((task) => [String(task.id), task]));
+  const originalIndex = new Map(tasks.map((task, index) => [String(task.id), index]));
+  const waveIndex = new Map();
+  for (let index = 0; index < waves.length; index += 1) {
+    for (const taskId of waves[index]) waveIndex.set(taskId, index);
+  }
+
+  const dependents = new Map(tasks.map((task) => [String(task.id), []]));
+  const remainingDependencies = new Map();
+  for (const task of tasks) {
+    const taskId = String(task.id);
+    const dependencies = (task.depends_on || []).map(String);
+    remainingDependencies.set(taskId, dependencies.length);
+    for (const dependency of dependencies) dependents.get(dependency).push(taskId);
+  }
+
   const results = new Map();
   const failures = new Map();
   const skipped = new Map();
-  const timings = [];
+  const settled = new Set();
   const effectiveConcurrency = canonicalConcurrency(maxConcurrency);
+  const ready = [];
+  const waveTiming = waves.map(() => ({ started_at: null, ended_at: null }));
+  let active = 0;
+  let completed = 0;
 
-  for (let waveNo = 0; waveNo < waves.length; waveNo += 1) {
-    if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled before next execution wave', { status: 499 });
-    const wave = waves[waveNo];
-    const startedAt = Date.now();
-    const settled = await mapBounded(wave, effectiveConcurrency, async (taskId) => {
-      if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled during execution wave', { status: 499 });
-      const task = byId.get(taskId);
-      const failedDependencies = (task.depends_on || []).filter((dependency) => failures.has(String(dependency)) || skipped.has(String(dependency)));
-      if (failedDependencies.length) {
-        const skippedResult = {
-          task_id: taskId,
-          status: 'SKIPPED_DEPENDENCY',
-          failed_dependencies: failedDependencies.map(String)
-        };
-        skipped.set(taskId, skippedResult);
-        return { taskId, status: 'skipped', value: skippedResult };
-      }
-      try {
-        const execute = () => runTask(task, { wave_index: waveNo, signal });
-        const value = effectiveAdmission
-          ? await effectiveAdmission.run(execute, { signal })
-          : await execute();
-        results.set(taskId, value);
-        return { taskId, status: 'fulfilled', value };
-      } catch (error) {
-        if (error?.code === 'TASK_CANCELLED' && signal?.aborted) {
-          throw graphError('REQUEST_CANCELLED', 'Request cancelled during execution wave', { status: 499 });
-        }
-        failures.set(taskId, error);
-        return { taskId, status: 'rejected', error };
-      }
-    });
-    timings.push({
-      wave_index: waveNo,
-      task_ids: [...wave],
-      duration_ms: Date.now() - startedAt,
-      maximum_concurrency: Math.min(wave.length, effectiveConcurrency),
-      fulfilled: settled.filter((item) => item.status === 'fulfilled').length,
-      rejected: settled.filter((item) => item.status === 'rejected').length,
-      skipped: settled.filter((item) => item.status === 'skipped').length
-    });
+  const enqueueReady = (taskId) => {
+    ready.push(taskId);
+    ready.sort((left, right) => originalIndex.get(left) - originalIndex.get(right));
+  };
+  for (const task of tasks) {
+    if ((remainingDependencies.get(String(task.id)) || 0) === 0) enqueueReady(String(task.id));
   }
 
+  const touchWaveStart = (taskId, now = Date.now()) => {
+    const index = waveIndex.get(taskId) || 0;
+    const timing = waveTiming[index];
+    if (timing.started_at === null) timing.started_at = now;
+  };
+  const touchWaveEnd = (taskId, now = Date.now()) => {
+    const index = waveIndex.get(taskId) || 0;
+    const timing = waveTiming[index];
+    if (timing.started_at === null) timing.started_at = now;
+    timing.ended_at = Math.max(timing.ended_at || now, now);
+  };
+
+  if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled before task execution', { status: 499 });
+
+  await new Promise((resolve, reject) => {
+    let finished = false;
+
+    const cleanupAbort = () => {
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+    };
+    const finishResolve = () => {
+      if (finished) return;
+      finished = true;
+      cleanupAbort();
+      resolve();
+    };
+    const finishReject = (error) => {
+      if (finished) return;
+      finished = true;
+      cleanupAbort();
+      reject(error);
+    };
+    const onAbort = () => finishReject(graphError('REQUEST_CANCELLED', 'Request cancelled during task execution', { status: 499 }));
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+    const releaseDependents = (taskId) => {
+      for (const dependentId of dependents.get(taskId) || []) {
+        const remaining = Math.max(0, Number(remainingDependencies.get(dependentId) || 0) - 1);
+        remainingDependencies.set(dependentId, remaining);
+        if (remaining !== 0 || settled.has(dependentId)) continue;
+        const dependent = byId.get(dependentId);
+        const failedDependencies = (dependent.depends_on || []).map(String)
+          .filter((dependency) => failures.has(dependency) || skipped.has(dependency));
+        if (failedDependencies.length) {
+          const now = Date.now();
+          touchWaveStart(dependentId, now);
+          const skippedResult = {
+            task_id: dependentId,
+            status: 'SKIPPED_DEPENDENCY',
+            failed_dependencies: failedDependencies
+          };
+          skipped.set(dependentId, skippedResult);
+          settled.add(dependentId);
+          completed += 1;
+          touchWaveEnd(dependentId, now);
+          releaseDependents(dependentId);
+        } else {
+          enqueueReady(dependentId);
+        }
+      }
+    };
+
+    const settleTask = (taskId) => {
+      if (settled.has(taskId)) return;
+      settled.add(taskId);
+      completed += 1;
+      touchWaveEnd(taskId);
+      releaseDependents(taskId);
+    };
+
+    const dispatch = () => {
+      if (finished) return;
+      if (signal?.aborted) {
+        finishReject(graphError('REQUEST_CANCELLED', 'Request cancelled during task execution', { status: 499 }));
+        return;
+      }
+      while (!finished && active < effectiveConcurrency && ready.length) {
+        const taskId = ready.shift();
+        if (settled.has(taskId)) continue;
+        const task = byId.get(taskId);
+        const declaredWave = waveIndex.get(taskId) || 0;
+        touchWaveStart(taskId);
+        active += 1;
+        const execute = () => runTask(task, { wave_index: declaredWave, signal });
+        const running = effectiveAdmission
+          ? effectiveAdmission.run(execute, { signal })
+          : Promise.resolve().then(execute);
+        Promise.resolve(running).then(
+          (value) => {
+            results.set(taskId, value);
+          },
+          (error) => {
+            if (error?.code === 'TASK_CANCELLED' && signal?.aborted) {
+              finishReject(graphError('REQUEST_CANCELLED', 'Request cancelled during task execution', { status: 499 }));
+              return;
+            }
+            failures.set(taskId, error);
+          }
+        ).finally(() => {
+          active = Math.max(0, active - 1);
+          if (finished) return;
+          settleTask(taskId);
+          if (completed === tasks.length) {
+            finishResolve();
+            return;
+          }
+          dispatch();
+        });
+      }
+      if (!finished && completed === tasks.length) finishResolve();
+      if (!finished && active === 0 && ready.length === 0 && completed < tasks.length) {
+        finishReject(graphError('TASK_GRAPH_STALLED', 'Task graph made no progress while unresolved tasks remain'));
+      }
+    };
+
+    dispatch();
+  });
+
   if (signal?.aborted) throw graphError('REQUEST_CANCELLED', 'Request cancelled during task execution', { status: 499 });
+
+  const timings = waves.map((wave, waveNo) => {
+    const timing = waveTiming[waveNo];
+    const startedAt = timing.started_at;
+    const endedAt = timing.ended_at;
+    return {
+      wave_index: waveNo,
+      task_ids: [...wave],
+      duration_ms: startedAt === null || endedAt === null ? 0 : Math.max(0, endedAt - startedAt),
+      maximum_concurrency: Math.min(wave.length, effectiveConcurrency),
+      fulfilled: wave.filter((taskId) => results.has(taskId)).length,
+      rejected: wave.filter((taskId) => failures.has(taskId)).length,
+      skipped: wave.filter((taskId) => skipped.has(taskId)).length
+    };
+  });
 
   return {
     waves,

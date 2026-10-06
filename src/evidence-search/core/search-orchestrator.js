@@ -19,8 +19,11 @@ async function notifyLifecycle(context,state,value,patch={}){if(typeof context.l
 function buildCoverage(selectedProviders,executions){if(!selectedProviders.length)return Object.freeze({registry_coverage_state:'UNKNOWN',discovery_scope_state:'UNKNOWN',selected_provider_count:0,completed_provider_count:0});const completed=executions.filter((item)=>item.status==='FULFILLED'),allCompleted=completed.length===selectedProviders.length,completeDiscovery=allCompleted&&completed.every((item)=>item.normalized.coverage_state==='COMPLETE_FOR_QUERY_SCOPE');return Object.freeze({registry_coverage_state:allCompleted?'COMPLETE_FOR_ACTIVE_REGISTRY':completed.length?'PARTIAL_ACTIVE_REGISTRY':'UNKNOWN',discovery_scope_state:completeDiscovery?'COMPLETE_FOR_QUERY_SCOPE':completed.length?'PARTIAL_FOR_QUERY_SCOPE':'UNKNOWN',selected_provider_count:selectedProviders.length,completed_provider_count:completed.length});}
 function resolveInformationProfile(plan,overlays){const profiles=loadInformationQualityProfiles();const domainId=plan.domain_lens?.id?String(plan.domain_lens.id).toUpperCase():null;let groupId,profile,extra={};if(domainId){groupId=profiles.domain_profile_map[domainId];if(!groupId||!profiles.profile_groups[groupId])throw Object.assign(new Error(`unsupported domain profile: ${domainId}`),{code:'INFORMATION_PROFILE_INVALID'});profile={...(profiles.profile_groups[groupId]||{})};}else{groupId='STANDARD';profile={...(profiles.profile_groups.STANDARD||{})};extra={domain_resolution:'UNRESOLVED'};}for(const overlayId of overlays||[]){const overlay=profiles.overlay_profiles?.[overlayId];if(!overlay)continue;if(overlay.profile_group&&profiles.profile_groups[overlay.profile_group]){groupId=overlay.profile_group;profile={...profile,...profiles.profile_groups[groupId]};}profile={...profile,...overlay,freshness_policy:{...(profile.freshness_policy||{}),...(overlay.freshness_policy||{})},required_source_roles:[...new Set([...(profile.required_source_roles||[]),...(overlay.required_source_roles||[])])]};}return Object.freeze({group_id:groupId,...profile,...extra});}
 function buildMeasurements({candidates,plan,executions,selectedProviders,informationProfile}){const lineageBase=analyzeLineage(candidates),officialRecords=new Set(candidates.filter((candidate)=>['OFFICIAL','PRIMARY'].includes(candidate.source_role)).map((candidate)=>candidate.canonical_record_id).filter(Boolean));return Object.freeze({conditions:Object.freeze(measureConditions(candidates,plan.conditions)),lineage:Object.freeze({...lineageBase,distinct_official_record_count:officialRecords.size}),conflict:detectConflicts(candidates,plan.conditions),freshness:measureFreshness(candidates,plan,informationProfile.freshness_policy||{}),coverage:buildCoverage(selectedProviders,executions)});}
-function buildProviderTasks(providers,phase,plan,context,querySet){return providers.map((provider)=>({provider,timeout_ms:Math.max(100,Math.min(2500,provider.latency_p95_ms*2,context.remaining_ms())),run:()=>provider.search(Object.freeze({schema_version:'astera.evidence-search.provider-plan.v1',phase,request_id:context.request_id,query_plan_hash:plan.plan_hash,effective_as_of:plan.effective_as_of,domain_lens:plan.domain_lens,conditions:plan.conditions,query_set:querySet,maximum_results:plan.maximum_results}),Object.freeze({signal:context.signal,deadline_at:context.deadline_at,caller_id:context.caller_id,request_id:context.request_id}))}));}
-async function executePhase({providers,phase,plan,context,scheduler,querySet}){if(!providers.length)return[];const rawExecutions=await scheduler.run(buildProviderTasks(providers,phase,plan,context,querySet),context);return rawExecutions.map((execution)=>{if(execution.status!=='FULFILLED')return Object.freeze({status:'REJECTED',provider:execution.provider,duration_ms:execution.duration_ms,error:{code:execution.error?.code||'PROVIDER_FAILED',message:execution.error?.message||'provider failed'}});try{return Object.freeze({...execution,normalized:normalizeProviderResult(execution.value,execution.provider)});}catch(error){return Object.freeze({status:'REJECTED',provider:execution.provider,duration_ms:execution.duration_ms,error:{code:error.code||'PROVIDER_RESPONSE_INVALID',message:error.message}});}});}
+function providerTaskTimeoutMs(provider,context){return Math.max(100,Math.min(12000,provider.latency_p95_ms*2,context.remaining_ms()));}
+function buildProviderTasks(providers,phase,plan,context,querySet){return providers.map((provider)=>({provider,timeout_ms:providerTaskTimeoutMs(provider,context),run:()=>provider.search(Object.freeze({schema_version:'astera.evidence-search.provider-plan.v1',phase,request_id:context.request_id,query_plan_hash:plan.plan_hash,effective_as_of:plan.effective_as_of,domain_lens:plan.domain_lens,conditions:plan.conditions,query_set:querySet,maximum_results:plan.maximum_results}),Object.freeze({signal:context.signal,deadline_at:context.deadline_at,caller_id:context.caller_id,request_id:context.request_id}))}));}
+function providerQueryBindingError(message){const error=new Error(message);error.code='PROVIDER_QUERY_BINDING_INVALID';return error;}
+function validateProviderQueryBindings(normalized,querySet){const requestedIds=new Set((querySet||[]).map((query)=>String(query?.query_id||'').trim()).filter(Boolean)),relevantRows=(normalized?.query_results||[]).filter((row)=>requestedIds.has(String(row?.query_id||''))),candidates=normalized?.candidates||[],candidatesByRecordId=new Map(),candidateByCandidateId=new Map(),referencedCandidateIds=new Set();for(const candidate of candidates){const recordId=String(candidate.canonical_record_id||'').trim(),candidateId=String(candidate.candidate_id||'').trim();if(recordId){if(!candidatesByRecordId.has(recordId))candidatesByRecordId.set(recordId,[]);candidatesByRecordId.get(recordId).push(candidate);}if(candidateId){const existing=candidateByCandidateId.get(candidateId);if(existing&&existing.canonical_record_id!==candidate.canonical_record_id)throw providerQueryBindingError(`candidate_id is ambiguous: ${candidateId}`);candidateByCandidateId.set(candidateId,candidate);}}for(const row of relevantRows){const ids=(row.candidate_record_ids||[]).map((value)=>String(value||'').trim()).filter(Boolean);if(row.retrieval_status!=='FOUND'){if(ids.length)throw providerQueryBindingError(`query ${row.query_id} has candidate ids with status ${row.retrieval_status}`);continue;}for(const id of ids){const direct=candidateByCandidateId.get(id),recordMatches=candidatesByRecordId.get(id)||[],matches=direct?[direct]:recordMatches;if(!matches.length)throw providerQueryBindingError(`query ${row.query_id} references unknown candidate: ${id}`);for(const candidate of matches)referencedCandidateIds.add(candidate.candidate_id);}}for(const candidate of candidates){if(!referencedCandidateIds.has(candidate.candidate_id))throw providerQueryBindingError(`candidate is not bound to a requested FOUND query: ${candidate.canonical_record_id||candidate.candidate_id}`);}return normalized;}
+async function executePhase({providers,phase,plan,context,scheduler,querySet}){if(!providers.length)return[];const rawExecutions=await scheduler.run(buildProviderTasks(providers,phase,plan,context,querySet),context);return rawExecutions.map((execution)=>{if(execution.status!=='FULFILLED')return Object.freeze({status:'REJECTED',provider:execution.provider,duration_ms:execution.duration_ms,error:{code:execution.error?.code||'PROVIDER_FAILED',message:execution.error?.message||'provider failed'}});try{const normalized=validateProviderQueryBindings(normalizeProviderResult(execution.value,execution.provider),querySet);return Object.freeze({...execution,normalized});}catch(error){return Object.freeze({status:'REJECTED',provider:execution.provider,duration_ms:execution.duration_ms,error:{code:error.code||'PROVIDER_RESPONSE_INVALID',message:error.message}});}});}
 function collectCandidates(executions){return executions.filter((execution)=>execution.status==='FULFILLED').flatMap((execution)=>execution.normalized.candidates);}
 function noveltyKey(candidate){return[candidate.canonical_record_id||'',candidate.content_hash||'',candidate.source_family_id||'',candidate.capability_id||''].join('|');}
 function selectNewCorroboration(initialCandidates,reinforcementCandidates){const initialKeys=new Set(initialCandidates.map(noveltyKey)),initialFamilies=new Set(initialCandidates.map((item)=>item.source_family_id)),initialCapabilities=new Set(initialCandidates.map((item)=>item.capability_id));return reinforcementCandidates.filter((candidate)=>!initialKeys.has(noveltyKey(candidate))&&(!initialFamilies.has(candidate.source_family_id)||!initialCapabilities.has(candidate.capability_id)));}
@@ -29,25 +32,127 @@ function queryExecution(executions,querySet){return Object.freeze((querySet||[])
 function executionReports(executions){return Object.freeze(executions.map((execution)=>Object.freeze({provider_id:execution.provider.provider_id,source_class:execution.provider.source_class,status:execution.status,duration_ms:execution.duration_ms,candidate_count:execution.status==='FULFILLED'?execution.normalized.candidates.length:0,query_results:execution.status==='FULFILLED'?execution.normalized.query_results:Object.freeze([]),error_code:execution.error?.code||null})));}
 function normalizeEvaluator(evaluator){if(typeof evaluator==='function')return evaluator;if(evaluator&&typeof evaluator.evaluate==='function')return evaluator.evaluate.bind(evaluator);throw new TypeError('informationQualityEvaluator must be a function or expose evaluate()');}
 async function invokeEvaluator(evaluator,request,context){const result=await evaluator(request,context);if(!result||typeof result!=='object'||Array.isArray(result)){const error=new Error('information quality evaluator returned an invalid result');error.code='INFORMATION_QUALITY_RESPONSE_INVALID';throw error;}if(!result.status||!Number.isInteger(result.score_bp)){const error=new Error('information quality evaluator result is incomplete');error.code='INFORMATION_QUALITY_RESPONSE_INVALID';throw error;}return result;}
+function throwIfCallerCancelled(signal){if(!signal?.aborted)return;const error=new Error('evidence search cancelled by caller');error.code='SEARCH_CANCELLED';error.status=499;throw error;}
+function recoveryArtifactError(stage){const error=new Error(`required recovery checkpoint is invalid: ${stage}`);error.code='RECOVERY_ARTIFACT_INVALID';return error;}
+function recoveryStage(recovery,stage){const value=recovery?.stages?.[stage];if(!value||typeof value!=='object'||Array.isArray(value))throw recoveryArtifactError(stage);return value;}
+function recoveryArray(value,field,stage){if(!Array.isArray(value?.[field]))throw recoveryArtifactError(stage);return value[field];}
+function recoveredQuality(value,stage){if(!value?.status||!Number.isInteger(value.score_bp))throw recoveryArtifactError(stage);return value;}
+function combineCoverage(...records){const phases=records.filter((record)=>record&&Number(record.selected_provider_count)>0),selectedProviderCount=phases.reduce((sum,record)=>sum+Number(record.selected_provider_count||0),0),completedProviderCount=phases.reduce((sum,record)=>sum+Number(record.completed_provider_count||0),0),allCompleted=selectedProviderCount>0&&selectedProviderCount===completedProviderCount,completeDiscovery=allCompleted&&phases.every((record)=>record.discovery_scope_state==='COMPLETE_FOR_QUERY_SCOPE');return Object.freeze({registry_coverage_state:allCompleted?'COMPLETE_FOR_ACTIVE_REGISTRY':completedProviderCount?'PARTIAL_ACTIVE_REGISTRY':'UNKNOWN',discovery_scope_state:completeDiscovery?'COMPLETE_FOR_QUERY_SCOPE':completedProviderCount?'PARTIAL_FOR_QUERY_SCOPE':'UNKNOWN',selected_provider_count:selectedProviderCount,completed_provider_count:completedProviderCount});}
+function recoveryPlanMismatch(){const error=new Error('recomputed recovery plan does not match the persisted plan');error.code='EVIDENCE_RECOVERY_PLAN_MISMATCH';return error;}
 
 class SearchOrchestrator{
   constructor(options={}){this.registry=options.providerRegistry instanceof ProviderRegistry?options.providerRegistry:new ProviderRegistry(options.providers||[]);this.scheduler=options.scheduler||new BoundedScheduler({globalConcurrency:options.globalConcurrency||process.env.ASTERA_SEARCH_GLOBAL_CONCURRENCY||8,perProviderConcurrency:options.perProviderConcurrency||process.env.ASTERA_SEARCH_PER_ADAPTER_CONCURRENCY||2});this.evaluator=normalizeEvaluator(options.informationQualityEvaluator||evaluateInformationQuality);this.evaluatorMode=String(options.informationQualityEvaluatorMode||(options.informationQualityEvaluator?'INJECTED':'IN_PROCESS'));}
   health(){const providers=this.registry.health(),activeProviderCount=providers.filter((provider)=>provider.active_search_eligible===true).length;return Object.freeze({status:activeProviderCount>0?'OK':'UNAVAILABLE_NO_ACTIVE_PROVIDER',module:'astera-evidence-search',provider_count:this.registry.providers.length,active_provider_count:activeProviderCount,providers,evaluator_mode:this.evaluatorMode,ai_used:false,payment_execution:false});}
   async execute(payload,outerContext={}){
-    const startedAt=Date.now(),requestId=String(payload?.request_id||outerContext.request_id||`evs_${crypto.randomUUID()}`),callerId=String(outerContext.caller_id||payload?.caller_id||'anonymous'),executionTime=String(outerContext.execution_time||new Date().toISOString()),plan=compileQueryPlan(payload,{execution_time:executionTime,effective_as_of:outerContext.effective_as_of}),deadlineAt=startedAt+plan.deadline_ms,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),plan.deadline_ms),context=Object.freeze({request_id:requestId,caller_id:callerId,execution_time:executionTime,deadline_at:deadlineAt,signal:controller.signal,lifecycle:outerContext.lifecycle,remaining_ms:()=>Math.max(1,deadlineAt-Date.now())});
+    const outerSignal=outerContext.signal;
+    throwIfCallerCancelled(outerSignal);
+    const startedAt=Date.now();
+    const requestId=String(payload?.request_id||outerContext.request_id||`evs_${crypto.randomUUID()}`);
+    const callerId=String(outerContext.caller_id||payload?.caller_id||'anonymous');
+    const executionTime=String(outerContext.execution_time||new Date().toISOString());
+    const recovery=outerContext.recovery||null;
+    const plannedRecovery=recovery?.stages?.PLANNED||null;
+    const recoveryEffectiveAsOf=recovery?.job?.effective_as_of;
+    if(recovery&&plannedRecovery&&(!recoveryEffectiveAsOf||!recovery.job?.query_plan_hash))throw recoveryArtifactError('PLANNED');
+    const plan=compileQueryPlan(payload,{execution_time:executionTime,effective_as_of:recovery?recoveryEffectiveAsOf:outerContext.effective_as_of});
+    if(plannedRecovery&&(
+      plan.plan_hash!==recovery.job.query_plan_hash
+      || plannedRecovery.query_plan_hash!==recovery.job.query_plan_hash
+      || plannedRecovery.effective_as_of!==recovery.job.effective_as_of
+    ))throw recoveryPlanMismatch();
+    const deadlineAt=startedAt+plan.deadline_ms;
+    const controller=new AbortController();
+    const abortFromOuter=()=>controller.abort(outerSignal.reason);
+    const timer=setTimeout(()=>controller.abort(),plan.deadline_ms);
+    const context=Object.freeze({request_id:requestId,caller_id:callerId,execution_time:executionTime,deadline_at:deadlineAt,signal:controller.signal,lifecycle:outerContext.lifecycle,remaining_ms:()=>Math.max(1,deadlineAt-Date.now())});
+    if(outerSignal?.aborted)abortFromOuter();else outerSignal?.addEventListener?.('abort',abortFromOuter,{once:true});
     try{
-      await notifyLifecycle(context,'PLANNED',{schema_version:plan.schema_version,query_plan_hash:plan.plan_hash,effective_as_of:plan.effective_as_of,domain_lens:plan.domain_lens,source_policy:plan.source_policy,primary_query_count:plan.primary_query_set.length,reinforcement_query_count:plan.reinforcement_query_set.length},{effective_as_of:plan.effective_as_of,query_plan_hash:plan.plan_hash});
-      const informationProfile=resolveInformationProfile(plan,payload.overlays||[]),initialProviders=this.registry.select(plan,'INITIAL'),initialExecutions=await executePhase({providers:initialProviders,phase:'INITIAL',plan,context,scheduler:this.scheduler,querySet:plan.primary_query_set}),initialQueryExecution=queryExecution(initialExecutions,plan.primary_query_set),initialCandidates=deduplicateCandidates(collectCandidates(initialExecutions)).slice(0,plan.maximum_results),initialMeasurements=buildMeasurements({candidates:initialCandidates,plan,executions:initialExecutions,selectedProviders:initialProviders,informationProfile});
-      await notifyLifecycle(context,'INITIAL_SEARCH_COMPLETED',{candidates:initialCandidates,measurements:initialMeasurements,provider_execution:executionReports(initialExecutions),query_execution:initialQueryExecution});
-      const initialQuality=await invokeEvaluator(this.evaluator,buildEvaluationRequest({phase:'INITIAL',plan,payload,candidates:initialCandidates,measurements:initialMeasurements,reinforcementAttemptCount:0,newCorroborationCount:0}),context);
-      await notifyLifecycle(context,'INITIAL_JUDGED',initialQuality,{initial_score_bp:initialQuality.score_bp});
-      const allExecutions=[...initialExecutions];let finalCandidates=initialCandidates,finalMeasurements=initialMeasurements,finalQuality=initialQuality,newCorroboration=[],reinforcementExecutions=[],reinforcementQueryExecution=[];
+      throwIfCallerCancelled(outerSignal);
+      if(!plannedRecovery)await notifyLifecycle(context,'PLANNED',{schema_version:plan.schema_version,query_plan_hash:plan.plan_hash,effective_as_of:plan.effective_as_of,domain_lens:plan.domain_lens,source_policy:plan.source_policy,primary_query_count:plan.primary_query_set.length,reinforcement_query_count:plan.reinforcement_query_set.length},{effective_as_of:plan.effective_as_of,query_plan_hash:plan.plan_hash});
+      throwIfCallerCancelled(outerSignal);
+      const informationProfile=resolveInformationProfile(plan,payload.overlays||[]);
+      const resumedInitialSearch=Boolean(recovery?.stages?.INITIAL_SEARCH_COMPLETED);
+      let initialProviders=[];
+      let initialExecutions=[];
+      let initialCandidates;
+      let initialMeasurements;
+      let initialProviderExecution;
+      let initialQueryExecution;
+      if(resumedInitialSearch){
+        const checkpoint=recoveryStage(recovery,'INITIAL_SEARCH_COMPLETED');
+        initialCandidates=recoveryArray(checkpoint,'candidates','INITIAL_SEARCH_COMPLETED');
+        initialProviderExecution=recoveryArray(checkpoint,'provider_execution','INITIAL_SEARCH_COMPLETED');
+        initialQueryExecution=recoveryArray(checkpoint,'query_execution','INITIAL_SEARCH_COMPLETED');
+        if(!checkpoint.measurements||typeof checkpoint.measurements!=='object'||Array.isArray(checkpoint.measurements))throw recoveryArtifactError('INITIAL_SEARCH_COMPLETED');
+        initialMeasurements=checkpoint.measurements;
+      }else{
+        initialProviders=this.registry.select(plan,'INITIAL');
+        initialExecutions=await executePhase({providers:initialProviders,phase:'INITIAL',plan,context,scheduler:this.scheduler,querySet:plan.primary_query_set});
+        throwIfCallerCancelled(outerSignal);
+        initialQueryExecution=queryExecution(initialExecutions,plan.primary_query_set);
+        initialCandidates=deduplicateCandidates(collectCandidates(initialExecutions)).slice(0,plan.maximum_results);
+        initialMeasurements=buildMeasurements({candidates:initialCandidates,plan,executions:initialExecutions,selectedProviders:initialProviders,informationProfile});
+        initialProviderExecution=executionReports(initialExecutions);
+        await notifyLifecycle(context,'INITIAL_SEARCH_COMPLETED',{candidates:initialCandidates,measurements:initialMeasurements,provider_execution:initialProviderExecution,query_execution:initialQueryExecution});
+      }
+      throwIfCallerCancelled(outerSignal);
+      let initialQuality;
+      if(recovery?.stages?.INITIAL_JUDGED){
+        initialQuality=recoveredQuality(recoveryStage(recovery,'INITIAL_JUDGED'),'INITIAL_JUDGED');
+      }else{
+        initialQuality=await invokeEvaluator(this.evaluator,buildEvaluationRequest({phase:'INITIAL',plan,payload,candidates:initialCandidates,measurements:initialMeasurements,reinforcementAttemptCount:0,newCorroborationCount:0}),context);
+        throwIfCallerCancelled(outerSignal);
+        await notifyLifecycle(context,'INITIAL_JUDGED',initialQuality,{initial_score_bp:initialQuality.score_bp});
+      }
+      throwIfCallerCancelled(outerSignal);
+      let finalCandidates=initialCandidates;
+      let finalMeasurements=initialMeasurements;
+      let finalQuality=initialQuality;
+      let newCorroborationCount=0;
+      let reinforcementProviderExecution=[];
+      let reinforcementQueryExecution=[];
       if(initialQuality.status==='REINFORCEMENT_REQUIRED'){
-        const reinforcementProviders=this.registry.select(plan,'REINFORCEMENT');reinforcementExecutions=await executePhase({providers:reinforcementProviders,phase:'REINFORCEMENT',plan,context,scheduler:this.scheduler,querySet:plan.reinforcement_query_set});reinforcementQueryExecution=queryExecution(reinforcementExecutions,plan.reinforcement_query_set);allExecutions.push(...reinforcementExecutions);const reinforcementCandidates=deduplicateCandidates(collectCandidates(reinforcementExecutions));newCorroboration=selectNewCorroboration(initialCandidates,reinforcementCandidates);finalCandidates=deduplicateCandidates([...initialCandidates,...newCorroboration]).slice(0,plan.maximum_results);finalMeasurements=buildMeasurements({candidates:finalCandidates,plan,executions:allExecutions,selectedProviders:[...initialProviders,...reinforcementProviders],informationProfile});await notifyLifecycle(context,'REINFORCEMENT_COMPLETED',{candidates:finalCandidates,measurements:finalMeasurements,provider_execution:executionReports(reinforcementExecutions),query_execution:reinforcementQueryExecution,new_corroboration_count:newCorroboration.length},{reinforcement_attempt_count:1});finalQuality=await invokeEvaluator(this.evaluator,buildEvaluationRequest({phase:'FINAL',plan,payload,candidates:finalCandidates,measurements:finalMeasurements,reinforcementAttemptCount:1,newCorroborationCount:newCorroboration.length}),context);await notifyLifecycle(context,'FINAL_JUDGED',finalQuality,{final_score_bp:finalQuality.score_bp,reinforcement_attempt_count:1});
-      }else await notifyLifecycle(context,'FINAL_JUDGED',finalQuality,{final_score_bp:finalQuality.score_bp,reinforcement_attempt_count:0});
-      const result={schema_version:'astera.evidence-search.result.v1',request_id:requestId,caller_id:callerId,status:finalQuality.status,execution_time:executionTime,effective_as_of:plan.effective_as_of,query_plan_hash:plan.plan_hash,duration_ms:Date.now()-startedAt,evidence:Object.freeze(finalCandidates),coverage:finalMeasurements.coverage,quality:Object.freeze({initial:initialQuality,final:finalQuality,reinforcement_attempt_count:initialQuality.status==='REINFORCEMENT_REQUIRED'?1:0,new_corroboration_count:newCorroboration.length}),query_execution:Object.freeze({initial:initialQueryExecution,reinforcement:Object.freeze(reinforcementQueryExecution)}),provider_execution:Object.freeze({initial:executionReports(initialExecutions),reinforcement:executionReports(reinforcementExecutions)}),paid_usage_reports:Object.freeze([]),ai_used:false,payment_executed:false};return deepFreeze({...result,result_hash:sha256(result)});
-    }finally{clearTimeout(timer);}
+        if(recovery?.stages?.REINFORCEMENT_COMPLETED){
+          const checkpoint=recoveryStage(recovery,'REINFORCEMENT_COMPLETED');
+          finalCandidates=recoveryArray(checkpoint,'candidates','REINFORCEMENT_COMPLETED');
+          reinforcementProviderExecution=recoveryArray(checkpoint,'provider_execution','REINFORCEMENT_COMPLETED');
+          reinforcementQueryExecution=recoveryArray(checkpoint,'query_execution','REINFORCEMENT_COMPLETED');
+          if(!checkpoint.measurements||typeof checkpoint.measurements!=='object'||Array.isArray(checkpoint.measurements)||!Number.isSafeInteger(checkpoint.new_corroboration_count))throw recoveryArtifactError('REINFORCEMENT_COMPLETED');
+          finalMeasurements=checkpoint.measurements;
+          newCorroborationCount=checkpoint.new_corroboration_count;
+        }else{
+          const reinforcementProviders=this.registry.select(plan,'REINFORCEMENT');
+          const reinforcementExecutions=await executePhase({providers:reinforcementProviders,phase:'REINFORCEMENT',plan,context,scheduler:this.scheduler,querySet:plan.reinforcement_query_set});
+          throwIfCallerCancelled(outerSignal);
+          reinforcementQueryExecution=queryExecution(reinforcementExecutions,plan.reinforcement_query_set);
+          const reinforcementCandidates=deduplicateCandidates(collectCandidates(reinforcementExecutions));
+          const newCorroboration=selectNewCorroboration(initialCandidates,reinforcementCandidates);
+          newCorroborationCount=newCorroboration.length;
+          finalCandidates=deduplicateCandidates([...initialCandidates,...newCorroboration]).slice(0,plan.maximum_results);
+          const phaseMeasurements=buildMeasurements({candidates:finalCandidates,plan,executions:reinforcementExecutions,selectedProviders:reinforcementProviders,informationProfile});
+          finalMeasurements=resumedInitialSearch
+            ? Object.freeze({...phaseMeasurements,coverage:combineCoverage(initialMeasurements.coverage,phaseMeasurements.coverage)})
+            : buildMeasurements({candidates:finalCandidates,plan,executions:[...initialExecutions,...reinforcementExecutions],selectedProviders:[...initialProviders,...reinforcementProviders],informationProfile});
+          reinforcementProviderExecution=executionReports(reinforcementExecutions);
+          await notifyLifecycle(context,'REINFORCEMENT_COMPLETED',{candidates:finalCandidates,measurements:finalMeasurements,provider_execution:reinforcementProviderExecution,query_execution:reinforcementQueryExecution,new_corroboration_count:newCorroborationCount},{reinforcement_attempt_count:1});
+        }
+        throwIfCallerCancelled(outerSignal);
+        if(recovery?.stages?.FINAL_JUDGED){
+          finalQuality=recoveredQuality(recoveryStage(recovery,'FINAL_JUDGED'),'FINAL_JUDGED');
+        }else{
+          finalQuality=await invokeEvaluator(this.evaluator,buildEvaluationRequest({phase:'FINAL',plan,payload,candidates:finalCandidates,measurements:finalMeasurements,reinforcementAttemptCount:1,newCorroborationCount}),context);
+          throwIfCallerCancelled(outerSignal);
+          await notifyLifecycle(context,'FINAL_JUDGED',finalQuality,{final_score_bp:finalQuality.score_bp,reinforcement_attempt_count:1});
+        }
+      }else if(recovery?.stages?.FINAL_JUDGED){
+        finalQuality=recoveredQuality(recoveryStage(recovery,'FINAL_JUDGED'),'FINAL_JUDGED');
+      }else{
+        await notifyLifecycle(context,'FINAL_JUDGED',finalQuality,{final_score_bp:finalQuality.score_bp,reinforcement_attempt_count:0});
+      }
+      throwIfCallerCancelled(outerSignal);
+      const result={schema_version:'astera.evidence-search.result.v1',request_id:requestId,caller_id:callerId,status:finalQuality.status,execution_time:executionTime,effective_as_of:plan.effective_as_of,query_plan_hash:plan.plan_hash,duration_ms:Date.now()-startedAt,evidence:Object.freeze(finalCandidates),coverage:finalMeasurements.coverage,quality:Object.freeze({initial:initialQuality,final:finalQuality,reinforcement_attempt_count:initialQuality.status==='REINFORCEMENT_REQUIRED'?1:0,new_corroboration_count:newCorroborationCount}),query_execution:Object.freeze({initial:initialQueryExecution,reinforcement:Object.freeze(reinforcementQueryExecution)}),provider_execution:Object.freeze({initial:initialProviderExecution,reinforcement:reinforcementProviderExecution}),paid_usage_reports:Object.freeze([]),ai_used:false,payment_executed:false};return deepFreeze({...result,result_hash:sha256(result)});
+    }finally{clearTimeout(timer);outerSignal?.removeEventListener?.('abort',abortFromOuter);}
   }
 }
 
-module.exports={SearchOrchestrator,queryExecution};
+module.exports={SearchOrchestrator,providerTaskTimeoutMs,queryExecution,validateProviderQueryBindings};
