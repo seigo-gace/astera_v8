@@ -47,7 +47,6 @@ function sourceText(task = {}, canonical = {}) {
     ...array(task.replace),
     ...array(task.conditions),
     ...array(task.exceptions),
-    ...array(taskMaterialRequirements(task)),
     ...array(canonical.records).map((record) => record?.claim?.raw_text || record?.claim?.text)
   ]).join('\n').toLocaleLowerCase();
 }
