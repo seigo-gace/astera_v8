@@ -166,7 +166,7 @@ function allowedLensSet(lensPlan = {}, channel, source, allowPrimary) {
 
 function scopeInquiryLane(inquiry = {}, task = {}, canonical = {}, lensPlan = {}) {
   const source = sourceText(task, canonical);
-  const allowPrimary = explicitInquiryMaterial(task) || explicitRiskMaterial(task) || explicitComparisonMaterial(task);
+  const allowPrimary = true;
   const allowedInquiry = allowedLensSet(lensPlan, 'inquiry', source, allowPrimary);
   const allowedEvidence = allowedLensSet(lensPlan, 'evidence', source, allowPrimary);
   const allInquiry = new Set(array(lensPlan?.channels?.inquiry).map((entry) => clean(entry?.value)).filter(Boolean));
