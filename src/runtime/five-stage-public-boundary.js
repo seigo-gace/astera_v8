@@ -200,7 +200,12 @@ function scopeMultiLane(multi = {}, task = {}, canonical = {}, lensPlan = {}, so
     const focus = unique(focusValues).filter((value) => {
       const normalized = clean(value);
       if (fixed.has(normalized) || sourceRelevant(value, source)) return true;
-      return !hiddenRiskValues.has(normalized);
+      // If the public LensPlan explicitly identifies a value as allowed, retain it.
+      const mappedRisk = entryForValue(lensPlan, 'risk', value);
+      if (mappedRisk) return lensEntryAllowed(mappedRisk, 'risk', source, lensPlan);
+      // Provenance-less defensive Lens material is fail-closed. This preserves
+      // the M6 contract for legacy/compact lane payloads.
+      return false;
     });
     return [{ ...entry, focus }];
   });
@@ -240,10 +245,15 @@ function scopeInquiryLane(inquiry = {}, source, lensPlan = {}) {
 }
 
 function scopeCompareLane(compare = {}, task = {}, canonical = {}, lensPlan = {}, source = sourceText(task, canonical)) {
+  const dimensionSourceValues = new Set(array(compare.dimension_sources).map((entry) => clean(entry?.value)));
   const dimensions = unique(compare.dimensions).filter((value) => {
     const mapped = entryForValue(lensPlan, 'compare', value);
-    if (!mapped) return true; // source-extracted dimensions are authoritative.
-    return lensEntryAllowed(mapped, 'compare', source, lensPlan);
+    if (mapped) return lensEntryAllowed(mapped, 'compare', source, lensPlan);
+    // A dimension absent from Lens provenance may be source-extracted only
+    // when the request itself supports it. Otherwise fail closed to avoid
+    // resurrecting legacy generic Lens dimensions.
+    if (dimensionSourceValues.has(clean(value))) return sourceRelevant(value, source);
+    return sourceRelevant(value, source);
   });
   const allowed = new Set(dimensions.map(clean));
   return {
