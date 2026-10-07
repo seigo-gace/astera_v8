@@ -11,7 +11,7 @@ const CASES=[
   {name:'医療緊急',id:'G23',question:'70歳の父が30分前から胸の強い痛みと冷や汗を訴えています。自宅で様子を見るべきか、救急車を呼ぶべきか判断したい。',required:['Emergency Red Flag','受診遅延','症状経過','患者','救急要請'],overlay:'medical_safety'},
   {name:'Software移行',id:'G29',question:'現在動いているNode.jsのAPIサーバーを停止時間なしで、既存Clientとの互換性を維持したまま段階移行できるか比較したい。',required:['互換性破壊','Rollback不能','API契約','将来の保守者','段階移行']},
   {name:'CVE対策',id:'G31',question:'使用中のLibraryに重大なCVE脆弱性が見つかった。停止せず今日行う対策と恒久対策を分けて判断したい。',required:['Exploit可能性','CVE一次情報','Incident Responder','Patch・Upgrade']},
-  {name:'前払Credit',id:'G11',question:'月額課金に加えて前払いクレジットを販売する。売上計上、未使用残高、返金、失効の扱いを比較して決めたい。',required:['会計誤分類','返金負債','Ledger','経理','失効Policy']},
+  {name:'前払Credit',id:'G11',question:'月額課金に加えて前払いクレジットを販売する。売上計上、未使用残高、返金、失効の扱いを比較して決めたい。',required:['Liquidity・資金流動性','税務・規制・会計Risk','Cash Flow予測・実績','財務・経理','Cash Flow']},
   {name:'家庭園芸',id:'G38',question:'初心者がベランダで食べられる野菜を育てたい。手間、費用、失敗しにくさを比較して最初の一種類を決めたい。',required:['季節・環境不適合','環境条件','初心者','失敗しにくさ']}
 ];
 
