@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { scopeFiveStageDecisionMaterial } = require('../src/runtime/five-stage-public-boundary');
 const { buildPublicFiveStageAggregate } = require('../src/runtime/five-stage-public-aggregate');
+const { normalizeMultiJudgmentPublicMaterial } = require('../src/runtime/multi-judgment-public-material-normalizer');
 
 function entry(value, tier, lensId) {
   return { value, sources: [{ tier, lens_id: lensId, lens_name: lensId }] };
@@ -242,4 +243,66 @@ test('raw Perspective Expansion cannot bypass scoped five-stage material into pu
   assert.equal(publicAggregate.perspectiveExpansion.public_projection_state, 'SUPPRESSED_NON_FIVE_STAGE_SEMANTIC_PATH');
   assert.deepEqual(publicAggregate.multi.perspectives.map((item) => item.focus), [['source-backed unresolved']]);
   assert.doesNotMatch(JSON.stringify(publicAggregate), /Data Loss|返金負債|単一障害点/);
+});
+
+
+test('strongly evidenced secondary domain keeps its specialist material without literal lens-word matching', () => {
+  const lensPlan = {
+    channels: {
+      fact: [],
+      risk: [],
+      multi: [{
+        value: 'Designer',
+        sources: [{
+          tier: 'SECONDARY',
+          lens_id: 'G25',
+          lens_name: 'engineering',
+          score: 18,
+          matched_signals: ['機械', '品質工学']
+        }]
+      }],
+      inquiry: [],
+      compare: [],
+      evidence: [],
+      safety: []
+    }
+  };
+  const raw = baseLanes(lensPlan);
+  const task = {
+    source_span: { text: '機械製造の材料強度と品質工学を検証する。' },
+    target: '機械製造の材料強度と品質工学',
+    objective: '検証する'
+  };
+  const scoped = scopeFiveStageDecisionMaterial(raw, task, { records: [] });
+  assert.deepEqual(scoped.multi.perspectives.map((item) => item.focus), ['Designer']);
+});
+
+test('multi-judgment public normalizer cannot reintroduce catalog Lens material rejected upstream', () => {
+  const r01 = 'ユーザー向けエラーを整理し、内部API名やstack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけ対処可能な文章にする。';
+  const judgment = {
+    output_language: 'ja',
+    case_model: {
+      request_count: 2,
+      global_context: { prohibitions: [], constraints: [], preserve: [] },
+      observations: [],
+      judgment_requests: [
+        { id: 'R01', request_text: r01, action: 'analyze', source_span: { start: 0, end: r01.length, text: r01 }, local_context: {} },
+        { id: 'R02', request_text: '別件の表示確認をする。', action: 'verify', source_span: { start: r01.length + 1, end: r01.length + 12, text: '別件の表示確認をする。' }, local_context: {} }
+      ]
+    }
+  };
+  const sections = [
+    '01 本当の目的\n- 今回の入力には2件の判断要求がある。',
+    '02 前提不足\n- 条件を保持する。',
+    '03 事実確認\n- 入力材料を保持する。',
+    '04 危機察知\n- 危険材料も判断要求ごとに分ける:\n  - R01: 未確定Claimを確定事実として扱う危険 / 資金流動性 / 会計誤分類 / Data Loss / 単一障害点\n  - R02: 未確定Claimを確定事実として扱う危険',
+    '05 反対視点\n- 各判断要求について反証・失敗側の材料を別々に保持する:\n  - R01: request\n    - 反証・失敗条件: 未確定Claimを確定事実として扱う危険 / 返金負債 / Downtime / 通信断\n  - R02: request',
+    '06 比較案\n- 判断要求ごとに分ける:\n  - R01 [検討・整理]: current\n    - 追加で必要な材料: 返金・失効条件は何か / 互換条件は何か / TopologyとProtocolは何か\n  - R02 [検証]: current',
+    '07 根拠成立状態\n- 根拠成立状態も判断要求ごとに分離する\n  - R01: 未確認\n  - R02: 未確認',
+    '08 主役AI／利用者への再指示\n  - R01: 次を確認\n  - R02: 次を確認'
+  ];
+  const out = normalizeMultiJudgmentPublicMaterial({ text: sections.join('\n---\n'), sections: sections.map((text) => ({ text })) }, judgment);
+  const r01Risk = out.text.match(/  - R01:.*$/mu)?.[0] || '';
+  assert.doesNotMatch(r01Risk, /資金流動性|会計誤分類|Data Loss|単一障害点/u);
+  assert.doesNotMatch(out.text, /返金負債|Downtime|通信断|返金・失効条件は何か|互換条件は何か|TopologyとProtocolは何か/u);
 });
