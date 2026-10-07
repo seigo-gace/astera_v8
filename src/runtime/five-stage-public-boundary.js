@@ -57,9 +57,73 @@ function sourceBacked(value, source) {
   return source.includes(token);
 }
 
+function broadJudgmentMaterialRequest(task = {}, canonical = {}) {
+  const source = sourceText(task, canonical);
+  const asksMaterial = /判断材料|decision\s+material|judgment\s+material/iu.test(source);
+  if (!asksMaterial) return false;
+  const breadthSignals = [
+    /事実|fact/iu,
+    /危険|リスク|risk|failure/iu,
+    /反対|反証|oppos|counter/iu,
+    /比較|compare|comparison/iu,
+    /根拠|evidence|source/iu,
+    /未確認|未確定|unresolved|verify next|確認する材料/iu
+  ].filter((re) => re.test(source)).length;
+  return breadthSignals >= 2;
+}
+
+function sourceChannelRequested(task = {}, canonical = {}, channel) {
+  if (broadJudgmentMaterialRequest(task, canonical)) return true;
+  const source = sourceText(task, canonical);
+  const patterns = {
+    fact: /(?:事実|確認済み|known\s+facts?|facts?\s+known|what\s+is\s+known)/iu,
+    risk: /(?:危険|リスク|失敗条件|反証条件|risks?|failure\s+(?:conditions?|modes?)|disconfirming)/iu,
+    multi: /(?:反対視点|反証|別視点|opposing|counter(?:point|argument|evidence)|alternative\s+view)/iu,
+    inquiry: /(?:未確認|未確定|不足(?:事項|材料|情報)|次に確認|what\s+(?:is|remains)\s+unknown|unresolved|verify\s+next|missing\s+(?:material|information))/iu,
+    compare: /(?:比較|比較軸|評価軸|compare|comparison|trade[- ]?off)/iu,
+    evidence: /(?:根拠|証拠|出典|公式(?:資料|根拠)|evidence|authoritative\s+source|official\s+source)/iu
+  };
+  return Boolean(patterns[channel]?.test(source));
+}
+
+function lensValueAllowed(value, task = {}, canonical = {}, channel) {
+  const source = sourceText(task, canonical);
+  return sourceBacked(value, source) || sourceChannelRequested(task, canonical, channel);
+}
+
+function scopeFactLane(fact = {}, task = {}, canonical = {}) {
+  const factRequirements = array(fact.fact_requirements).filter((entry) =>
+    entry?.source !== 'LENS_PLAN' || lensValueAllowed(entry?.item, task, canonical, 'fact')
+  );
+  const evidenceGaps = array(fact.evidence_gaps).filter((entry) =>
+    entry?.source !== 'LENS_PLAN' || lensValueAllowed(entry?.item, task, canonical, 'evidence')
+  );
+  return { ...fact, fact_requirements: factRequirements, evidence_gaps: evidenceGaps };
+}
+
+function scopeInquiryLane(inquiry = {}, task = {}, canonical = {}) {
+  const inquiryLens = unique(inquiry.inquiry_lens).filter((value) =>
+    lensValueAllowed(value, task, canonical, 'inquiry')
+  );
+  const evidenceNeed = unique(inquiry.evidence_need).filter((value) =>
+    lensValueAllowed(value, task, canonical, 'evidence')
+  );
+  const removed = new Set([
+    ...unique(inquiry.inquiry_lens).filter((value) => !inquiryLens.includes(value)),
+    ...unique(inquiry.evidence_need).filter((value) => !evidenceNeed.includes(value))
+  ].map(clean));
+  const missingQuestions = unique(inquiry.missing_questions).filter((value) => !removed.has(clean(value)));
+  return {
+    ...inquiry,
+    inquiry_lens: inquiryLens,
+    evidence_need: evidenceNeed,
+    missing_questions: missingQuestions
+  };
+}
+
 function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
   const source = sourceText(task, canonical);
-  const retainLens = explicitRiskMaterial(task);
+  const retainLens = sourceChannelRequested(task, canonical, 'risk');
   const risks = array(risk.risks).filter((entry) =>
     entry?.source !== 'LENS_PLAN' || retainLens || sourceBacked(entry?.impact, source)
   );
@@ -77,7 +141,7 @@ function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
 
 function scopeMultiLane(multi = {}, task = {}, canonical = {}) {
   const source = sourceText(task, canonical);
-  const retainLens = explicitRiskMaterial(task);
+  const retainLens = sourceChannelRequested(task, canonical, 'multi');
   const fixed = new Set(array(task.hard_blockers).concat(array(task.prohibitions)).map(clean));
   const perspectives = array(multi.perspectives).flatMap((entry) => {
     if (entry?.source === 'LENS_PLAN' && !retainLens && !sourceBacked(entry?.focus, source)) return [];
@@ -110,8 +174,10 @@ function scopeCompareLane(compare = {}, task = {}, canonical = {}) {
 function scopeFiveStageDecisionMaterial(lanes = {}, task = {}, canonical = {}) {
   return {
     ...lanes,
+    fact: scopeFactLane(lanes.fact || {}, task, canonical),
     risk: scopeRiskLane(lanes.risk || {}, task, canonical),
     multi: scopeMultiLane(lanes.multi || {}, task, canonical),
+    inquiry: scopeInquiryLane(lanes.inquiry || {}, task, canonical),
     compare: scopeCompareLane(lanes.compare || {}, task, canonical)
   };
 }
@@ -120,5 +186,7 @@ module.exports = {
   sourceBacked,
   explicitRiskMaterial,
   explicitComparisonMaterial,
+  broadJudgmentMaterialRequest,
+  sourceChannelRequested,
   scopeFiveStageDecisionMaterial
 };
