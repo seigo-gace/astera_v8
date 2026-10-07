@@ -282,6 +282,7 @@ test('multi-judgment public normalizer cannot reintroduce catalog Lens material 
   const judgment = {
     output_language: 'ja',
     case_model: {
+      multi_judgment: true,
       request_count: 2,
       global_context: { prohibitions: [], constraints: [], preserve: [] },
       observations: [],
