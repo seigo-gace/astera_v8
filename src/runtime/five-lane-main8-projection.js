@@ -29,14 +29,27 @@ function taskMaterialRequirements(result = {}) {
   ]);
 }
 
+function taskRequestText(result = {}) {
+  const task = result?.task || {};
+  return unique([
+    task?.source_span?.text,
+    task?.raw_text,
+    task?.target,
+    task?.objective,
+    task?.purpose
+  ]).join(' ');
+}
+
 function taskRequestsRiskMaterial(result = {}) {
-  return taskMaterialRequirements(result).some((value) =>
+  const values = [...taskMaterialRequirements(result), taskRequestText(result)];
+  return values.some((value) =>
     /(?:主要(?:な)?(?:危険|リスク)|危険(?:・|や|と)?(?:失敗|リスク)?|リスク|失敗条件|反証条件|\bmaterial\s+risks?\b|\brisks?\b|failure\s+(?:conditions?|modes?)|disconfirming\s+conditions?)/iu.test(value)
   );
 }
 
 function taskRequestsComparisonMaterial(result = {}) {
-  return taskMaterialRequirements(result).some((value) =>
+  const values = [...taskMaterialRequirements(result), taskRequestText(result)];
+  return values.some((value) =>
     /(?:比較に必要な軸|比較軸|評価軸|比較(?:条件|基準)|\bcomparison\s+(?:dimensions?|criteria)\b|\bevaluation\s+criteria\b|\bdimensions?\s+(?:for|to)\s+(?:compare|comparison|evaluate|evaluation)\b)/iu.test(value)
   );
 }
