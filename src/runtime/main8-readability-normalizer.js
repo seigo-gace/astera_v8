@@ -205,12 +205,19 @@ function normalizeReinstructionPublic(block, lang) {
 }
 
 function stripPublicInternalLines(block) {
-  return String(block || '').split('\n').filter((line) => {
+  return String(block || '').split('\n').map((line) => {
+    let next = String(line || '');
+    next = next.replace(/^(\s*-\s*)T\d+:[^\s]+\s+/u, '$1');
+    next = next.replace(/:(?:UNDETERMINED|CONFIRMED):/gu, ':');
+    return next;
+  }).filter((line) => {
     if (/:lens-risk-\d+\[/iu.test(line)) return false;
     if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return false;
     if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
     if (/\bparser_overall_status\s*:/iu.test(line)) return false;
     if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return false;
+    if (/^\s*-\s*(?:candidates|dimensions|label|observations|supported_scopes|evidence_refs|dimension|conditions|constraints|unsupported_scope)\s*:/u.test(line)) return false;
+    if (/\bclaim_id\s*=/iu.test(line)) return false;
     return true;
   }).join('\n');
 }
