@@ -279,6 +279,17 @@ function qualifiedScore(item, secondary = false) {
   return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
+const SOFTWARE_INTERACTION_CONTEXT = rx('system|システム|api|stack trace|内部エラー|通信失敗|権限不足|permission|画面|フォーム|ボタン|ui|upload|ファイル|component|css|service');
+const FINANCE_CORE_IDENTITY = rx('投資|財務|会計|金融|税務|資産|負債|収益|費用|金利|利率|cash flow|accounting|finance|financial|investment|valuation|npv|irr|cost of capital|tax|asset|liability|revenue');
+
+function disambiguateIncidentalFinance(scored = [], routeText = '') {
+  const best = scored[0];
+  if (best?.genre?.id !== 'G11') return scored;
+  if (!SOFTWARE_INTERACTION_CONTEXT.test(routeText) || FINANCE_CORE_IDENTITY.test(routeText)) return scored;
+  const withoutFinance = scored.filter((item) => item?.genre?.id !== 'G11');
+  return withoutFinance.length ? withoutFinance : scored;
+}
+
 function applyOverlayScores(text) {
   return OVERLAYS
     .map((overlay) => {
@@ -419,6 +430,7 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   let scored = GENRE_LENSES
     .map((genre) => scoreGenre(genre, routeText))
     .sort((a, b) => b.score - a.score || b.exact_hits - a.exact_hits || a.genre.id.localeCompare(b.genre.id));
+  scored = disambiguateIncidentalFinance(scored, routeText);
   if (/功利主義|義務論|応用倫理/u.test(routeText)) {
     const ethics = scored.find((item) => item.genre.id === 'G02');
     const ai = scored.find((item) => item.genre.id === 'G30');
@@ -506,5 +518,6 @@ module.exports = {
   OVERLAYS,
   normalizeInput,
   scoreGenre,
+  disambiguateIncidentalFinance,
   medicalSafetyFallback
 };
