@@ -85,3 +85,14 @@ test('deadline and request target helpers are deterministic', () => {
     '2026年10月1日時点のNode.js 22の公式サポート状況'
   );
 });
+
+test('structured unsupported parser diagnostics never leak into public Main8', () => {
+  const input = main8().replace(
+    '08 主役AI／利用者への再指示\n- 未確定のまま保持する。',
+    '08 主役AI／利用者への再指示\n- 未確定を保持: unsupported:0:{"text":"利用者入力","status":"UNSUPPORTED"}\n- 未確定のまま保持する。'
+  );
+  const out = normalizeUnifiedMain8Text(input);
+  assert.doesNotMatch(out, /unsupported:\d+:/iu);
+  assert.doesNotMatch(out, /"status":"UNSUPPORTED"/u);
+  assert.match(out, /未確定のまま保持する/);
+});

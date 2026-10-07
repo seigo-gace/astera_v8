@@ -211,6 +211,7 @@ function stripPublicInternalLines(block) {
     if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
     if (/\bparser_overall_status\s*:/iu.test(line)) return false;
     if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return false;
+    if (/\bunsupported:\d+:\s*\{[^}]*"(?:text|status)"\s*:/iu.test(line)) return false;
     return true;
   }).join('\n');
 }

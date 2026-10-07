@@ -279,6 +279,59 @@ function qualifiedScore(item, secondary = false) {
   return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
+const SOFTWARE_INTERACTION_CONTEXT = rx('system|システム|api|stack trace|内部エラー|通信失敗|権限不足|permission|画面|フォーム|ボタン|ui|upload|ファイル|component|css|service');
+const FINANCE_CORE_IDENTITY = rx('投資|財務|会計|金融|税務|資産|負債|収益|費用|金利|利率|cash flow|accounting|finance|financial|investment|valuation|npv|irr|cost of capital|tax|asset|liability|revenue');
+const INVESTMENT_FINANCE_CONTEXT = rx('(?:投資|investment|valuation).*(?:cash flow|収益|downside|流動性|資本cost|割引率|npv|irr|exit)|(?:cash flow|npv|irr|資本cost|割引率|risk-adjusted return)');
+const ACCOUNTING_FINANCE_CONTEXT = rx('前払|前払い|クレジット|売上計上|未使用残高|返金|失効|前受|会計処理|deferred revenue|prepaid|refund|breakage');
+
+const ACCOUNTING_FINANCE_PROFILE = Object.freeze({
+  fact_lens: ['取引構造','金額・期間','Cash Flow','会計処理時点','返金・失効条件'],
+  risk_lens: ['資金流動性','会計誤分類','税務・規制','返金負債','未使用残高管理'],
+  multi_lens: ['利用者','経理','財務責任者','決済事業者','監査・専門家'],
+  inquiry_lens: ['法域と会計基準は何か','いつ権利義務が発生するか','返金・失効条件は何か','実績と予測を分けたか'],
+  compare_lens: ['前受管理','利用時認識','返金対応','失効Policy','専門家確認'],
+  evidence_to_collect: ['取引規約','Ledger','会計方針','決済記録','法域別公式資料']
+});
+
+const ACUTE_MEDICAL_PROFILE = Object.freeze({
+  fact_lens: ['患者・Population','症状・Duration','既往・薬','介入','Outcome・Evidence確度'],
+  risk_lens: ['Emergency Red Flag','診断断定','危険な自己治療','薬物相互作用','受診遅延'],
+  multi_lens: ['患者','医療者','家族','救急対応者','Benefit-Risk Reviewer'],
+  inquiry_lens: ['胸痛・呼吸・意識などのRed Flagはあるか','症状はいつからか','現在の薬と既往は何か','求めるOutcomeは何か'],
+  compare_lens: ['救急要請','早期受診','医療者相談','安全条件付き経過観察','治療選択の相談'],
+  evidence_to_collect: ['症状経過','Vital・検査','薬剤一覧','診療Guideline','医療者評価']
+});
+
+function disambiguateIncidentalFinance(scored = [], routeText = '') {
+  if (!SOFTWARE_INTERACTION_CONTEXT.test(routeText) || FINANCE_CORE_IDENTITY.test(routeText)) return scored;
+  const withoutFinance = scored.filter((item) => item?.genre?.id !== 'G11');
+  return withoutFinance.length ? withoutFinance : scored;
+}
+
+function promoteExplicitInvestmentFinance(scored = [], routeText = '') {
+  if (!INVESTMENT_FINANCE_CONTEXT.test(routeText)) return scored;
+  const finance = scored.find((item) => item?.genre?.id === 'G11');
+  if (!finance) return scored;
+  const promoted = {
+    ...finance,
+    score: Math.max(Number(finance.score || 0), 16),
+    exact_hits: Math.max(Number(finance.exact_hits || 0), 1),
+    matched_signals: [...new Set([...(finance.matched_signals || []), 'QUESTION_SPECIFIC_INVESTMENT_FINANCE'])]
+  };
+  return [promoted, ...scored.filter((item) => item?.genre?.id !== 'G11')];
+}
+
+function specializeQuestionSpecificLens(primary, routeText = '', overlays = []) {
+  if (!primary) return primary;
+  if (primary.id === 'G11' && ACCOUNTING_FINANCE_CONTEXT.test(routeText) && !INVESTMENT_FINANCE_CONTEXT.test(routeText)) {
+    return { ...primary, ...ACCOUNTING_FINANCE_PROFILE };
+  }
+  if (primary.id === 'G23' && overlays.some((overlay) => overlay.id === 'medical_safety')) {
+    return { ...primary, ...ACUTE_MEDICAL_PROFILE };
+  }
+  return primary;
+}
+
 function applyOverlayScores(text) {
   return OVERLAYS
     .map((overlay) => {
@@ -306,12 +359,15 @@ function medicalSafetyFallback(scored = [], overlays = []) {
   if (!overlays.some((item) => item.id === 'medical_safety')) return null;
   const candidate = scored.find((item) => item.genre?.id === 'G23');
   if (!candidate) return null;
-  return publicGenre({
-    ...candidate,
-    classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
-    confidence: 0.5,
-    taxonomy_review_required: true
-  });
+  return {
+    ...publicGenre({
+      ...candidate,
+      classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
+      confidence: 0.5,
+      taxonomy_review_required: true
+    }),
+    ...ACUTE_MEDICAL_PROFILE
+  };
 }
 
 function publicSafetyFallback(scored = [], routeText = '') {
@@ -419,6 +475,8 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   let scored = GENRE_LENSES
     .map((genre) => scoreGenre(genre, routeText))
     .sort((a, b) => b.score - a.score || b.exact_hits - a.exact_hits || a.genre.id.localeCompare(b.genre.id));
+  scored = disambiguateIncidentalFinance(scored, routeText);
+  scored = promoteExplicitInvestmentFinance(scored, routeText);
   if (/功利主義|義務論|応用倫理/u.test(routeText)) {
     const ethics = scored.find((item) => item.genre.id === 'G02');
     const ai = scored.find((item) => item.genre.id === 'G30');
@@ -472,13 +530,13 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   }
 
   const classification = classifyScores(scored);
-  const primary = publicGenre({ ...best, ...classification });
+  const primary = specializeQuestionSpecificLens(publicGenre({ ...best, ...classification }), routeText, overlays);
   const secondary = scored.slice(1)
     .filter((item) => qualifiedScore(item, true))
     .slice(0, 3)
     .map((item) => {
       const meta = classifyScores([item]);
-      return publicGenre({ ...item, ...meta });
+      return specializeQuestionSpecificLens(publicGenre({ ...item, ...meta }), routeText, overlays);
     });
 
   return {
@@ -506,5 +564,8 @@ module.exports = {
   OVERLAYS,
   normalizeInput,
   scoreGenre,
+  disambiguateIncidentalFinance,
+  promoteExplicitInvestmentFinance,
+  specializeQuestionSpecificLens,
   medicalSafetyFallback
 };

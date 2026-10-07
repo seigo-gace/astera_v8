@@ -51,11 +51,15 @@ function publicLens(genre, declared, source, routedPrimary = null) {
 
 function resolveDomainLens(request) {
   const declared = request?.domain_lens || null;
-  if (declared?.id) return publicLens(GENRE_BY_ID.get(declared.id), declared, "request");
   const routed = routeDomainTemplates({
     question: request?.target?.title || request?.target?.candidate_id || "",
     context: request?.target?.content || ""
   });
+  if (declared?.id) {
+    const genre = GENRE_BY_ID.get(declared.id);
+    const questionSpecificPrimary = routed.primary?.id === declared.id ? routed.primary : null;
+    return publicLens(genre, declared, "request", questionSpecificPrimary);
+  }
   if (!routed.primary) return null;
   return publicLens(GENRE_BY_ID.get(routed.primary.id), null, "deterministic_router", routed.primary);
 }
