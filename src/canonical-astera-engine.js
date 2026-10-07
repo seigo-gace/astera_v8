@@ -184,8 +184,16 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     const instruction = extractInstructionUnderstandingFields(questionText);
     const materialOnly = isMaterialOnlyQuestion(questionText)
       || (args.taskResults || []).some((result) => result.task?.material_only === true);
-    const userGoal = packet.user_goal || instruction.user_goal
-      || (args.taskResults || []).map((result) => result.task.user_goal || result.task.purpose).find((item) => item && !/判断材料へ構造化|UNRESOLVED/i.test(String(item)))
+    const genericGoal = (value) => /^(?:入力内の候補を比較可能な判断材料として整理する|入力内容から検証可能な主張・候補・比較材料を抽出し、判断材料として整理する|入力内容を判断材料として整理する|organize the input into judgment material|extract verifiable claims, candidates, and comparison material from the input)$/iu.test(String(value || '').trim());
+    const sourceRequests = Array.isArray(packet?.case_model?.judgment_requests) ? packet.case_model.judgment_requests : [];
+    const singleSourceGoal = sourceRequests.length === 1
+      ? String(sourceRequests[0]?.request_text || sourceRequests[0]?.objective || '').trim().split(/(?<=[。！？!?])\s*|(?<=\.)\s+/u).find(Boolean)
+      : '';
+    const packetGoal = packet.user_goal || instruction.user_goal || '';
+    const userGoal = (packetGoal && !genericGoal(packetGoal) ? packetGoal : '')
+      || singleSourceGoal
+      || (args.taskResults || []).map((result) => result.task.user_goal || result.task.purpose).find((item) => item && !genericGoal(item) && !/判断材料へ構造化|UNRESOLVED/i.test(String(item)))
+      || packetGoal
       || '-';
     const desiredEffect = packet.desired_effect || instruction.desired_effect || '未指定';
     const effectStatus = packet.effect_status || instruction.effect_status || '未指定';
