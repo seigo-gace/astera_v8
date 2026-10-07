@@ -184,7 +184,13 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
     const instruction = extractInstructionUnderstandingFields(questionText);
     const materialOnly = isMaterialOnlyQuestion(questionText)
       || (args.taskResults || []).some((result) => result.task?.material_only === true);
-    const genericGoal = (value) => /^(?:入力内の候補を比較可能な判断材料として整理する|入力内容から検証可能な主張・候補・比較材料を抽出し、判断材料として整理する|入力内容を判断材料として整理する|organize the input into judgment material|extract verifiable claims, candidates, and comparison material from the input)$/iu.test(String(value || '').trim());
+    const genericGoal = (value) => {
+      const goal = String(value || '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+      if (!goal) return false;
+      if (/^(?:入力内の候補を比較可能な判断材料として整理する|入力内容を判断材料として整理する)$/u.test(goal)) return true;
+      if (/^入力内容(?:の|から).*(?:検証可能な主張|主張・候補・比較材料).*(?:根拠成立状態|判断材料).*$/u.test(goal)) return true;
+      return /^(?:organize the input into judgment material|extract .*?(?:verifiable claims|candidates|comparison material).*?(?:evidence status|judgment material).*)$/iu.test(goal);
+    };
     const sourceRequests = Array.isArray(packet?.case_model?.judgment_requests) ? packet.case_model.judgment_requests : [];
     const singleSourceGoal = sourceRequests.length === 1
       ? String(sourceRequests[0]?.request_text || sourceRequests[0]?.objective || '').trim().split(/(?<=[。！？!?])\s*|(?<=\.)\s+/u).find(Boolean)
