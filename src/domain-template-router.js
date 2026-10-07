@@ -281,7 +281,7 @@ function qualifiedScore(item, secondary = false) {
 
 const SOFTWARE_INTERACTION_CONTEXT = rx('system|システム|api|stack trace|内部エラー|通信失敗|権限不足|permission|画面|フォーム|ボタン|ui|upload|ファイル|component|css|service');
 const FINANCE_CORE_IDENTITY = rx('投資|財務|会計|金融|税務|資産|負債|収益|費用|金利|利率|cash flow|accounting|finance|financial|investment|valuation|npv|irr|cost of capital|tax|asset|liability|revenue');
-const INVESTMENT_FINANCE_CONTEXT = rx('(?:投資|investment|valuation).*(?:cash flow|収益|downside|流動性|資本cost|割引率|npv|irr|exit)|(?:cash flow|npv|irr|valuation|資本cost|割引率|risk-adjusted return)');
+const INVESTMENT_FINANCE_CONTEXT = rx('(?:投資|investment|valuation).*(?:cash flow|収益|downside|流動性|資本cost|割引率|npv|irr|exit)|(?:cash flow|npv|irr|資本cost|割引率|risk-adjusted return)');
 const ACCOUNTING_FINANCE_CONTEXT = rx('前払|前払い|クレジット|売上計上|未使用残高|返金|失効|前受|会計処理|deferred revenue|prepaid|refund|breakage');
 
 const ACCOUNTING_FINANCE_PROFILE = Object.freeze({
@@ -303,8 +303,6 @@ const ACUTE_MEDICAL_PROFILE = Object.freeze({
 });
 
 function disambiguateIncidentalFinance(scored = [], routeText = '') {
-  const best = scored[0];
-  if (best?.genre?.id !== 'G11') return scored;
   if (!SOFTWARE_INTERACTION_CONTEXT.test(routeText) || FINANCE_CORE_IDENTITY.test(routeText)) return scored;
   const withoutFinance = scored.filter((item) => item?.genre?.id !== 'G11');
   return withoutFinance.length ? withoutFinance : scored;
@@ -361,12 +359,15 @@ function medicalSafetyFallback(scored = [], overlays = []) {
   if (!overlays.some((item) => item.id === 'medical_safety')) return null;
   const candidate = scored.find((item) => item.genre?.id === 'G23');
   if (!candidate) return null;
-  return publicGenre({
-    ...candidate,
-    classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
-    confidence: 0.5,
-    taxonomy_review_required: true
-  });
+  return {
+    ...publicGenre({
+      ...candidate,
+      classification_basis: 'SAFETY_OVERLAY_CANONICAL_HINT',
+      confidence: 0.5,
+      taxonomy_review_required: true
+    }),
+    ...ACUTE_MEDICAL_PROFILE
+  };
 }
 
 function publicSafetyFallback(scored = [], routeText = '') {
