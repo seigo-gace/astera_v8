@@ -83,7 +83,7 @@ const DOMAINS = [
   ['G08','legal','契約条項の適用判断','contract clause applicability',['jurisdiction','effective date','exception','管轄','施行日','例外']],
   ['G09','economics','貿易施策の影響判断','trade policy impact',['baseline','counterfactual','distribution','基準','反実仮想','分配']],
   ['G10','business','新規事業計画の判断','new business plan',['market','unit economics','execution risk','市場','収益構造','実行リスク']],
-  ['G11','finance','投資案件の比較判断','investment comparison',['cash flow','downside','liquidity','Cash Flow','Downside','流動性','資本Cost','NPV','IRR']],
+  ['G11','finance','投資案件の比較判断','investment comparison',['cash flow','downside','liquidity','Cash Flow','Downside','流動性']],
   ['G12','workforce','採用計画の判断','workforce hiring plan',['skills','labor market','retention','技能','労働市場','定着']],
   ['G13','education','教育プログラム導入判断','education program adoption',['learner population','outcome','assessment','学習者','成果','評価']],
   ['G14','language','翻訳方針の判断','translation policy',['source meaning','terminology','locale','原意','用語','ロケール']],
@@ -120,7 +120,7 @@ function makeDomainCases() {
     const expected = {
       min_requests: 1,
       material_terms: materialTerms,
-      min_material_terms: Math.max(3, Math.ceil(materialTerms.length * 0.5)),
+      min_material_concepts: 3,
       forbidden_material_terms: genre === 'G11' ? ['前受管理','利用時認識','返金対応','失効Policy','未使用残高管理','refund liability','breakage policy'] : [],
       evidence_requested: true,
       genre

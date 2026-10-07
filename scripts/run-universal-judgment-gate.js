@@ -27,6 +27,7 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /support_evidence_refs/iu,
   /parser_overall_status/iu,
   /meaning_unresolved/iu,
+  /unsupported:\d+:\s*\{/iu,
   /candidate_id/iu,
   /binding_id/iu,
   /RETRIEVAL_FAILED/iu,
@@ -84,6 +85,54 @@ function uniqueRequestIds(text) {
 function countTerms(text, terms) {
   const n = normalize(text);
   return [...new Set((terms || []).filter((term) => n.includes(normalize(term))))];
+}
+
+const MATERIAL_CONCEPT_EQUIVALENTS = Object.freeze([
+  ['primary source','一次資料','一次史料'],
+  ['provenance','出所','出典'],
+  ['chronology','年代','年代情報','時系列'],
+  ['affected group','対象者','当事者','影響を受ける'],
+  ['equity','公平','公平性'],
+  ['access','アクセス'],
+  ['source meaning','原意','意味損失','原文'],
+  ['terminology','用語','用語集'],
+  ['locale','ロケール','地域','locale要件'],
+  ['version','版','版情報'],
+  ['rights','権利','著作権'],
+  ['preservation','保存','保管','archive'],
+  ['measurement','測定','測定量'],
+  ['model','モデル','理論model'],
+  ['uncertainty','不確実性','誤差'],
+  ['hazard','ハザード','自然現象','災害'],
+  ['exposure','曝露'],
+  ['time horizon','期間','時点'],
+  ['population','対象集団','患者','対象population'],
+  ['benefit','便益','outcome'],
+  ['harm','害','harm','adverse event'],
+  ['capacity','容量','需要量'],
+  ['time','時間','schedule','時間制約'],
+  ['resilience','レジリエンス','代替route'],
+  ['interface','インターフェース','api契約'],
+  ['dependency','依存','依存関係'],
+  ['regression','回帰','security regression']
+]);
+
+function conceptVariants(term) {
+  const key = normalize(term);
+  const found = MATERIAL_CONCEPT_EQUIVALENTS.find((group) => group.some((item) => normalize(item) === key));
+  return found || [term];
+}
+
+function materialConceptCoverage(text, terms) {
+  const values = Array.isArray(terms) ? terms.filter(Boolean) : [];
+  if (!values.length) return { groups: [], matched: [] };
+  const half = values.length % 2 === 0 ? values.length / 2 : 0;
+  const groups = half >= 2
+    ? values.slice(0, half).map((term, index) => [...new Set([...conceptVariants(term), ...conceptVariants(values[index + half])])])
+    : values.map((term) => [...new Set(conceptVariants(term))]);
+  const normalizedText = normalize(text);
+  const matched = groups.filter((group) => group.some((term) => normalizedText.includes(normalize(term))));
+  return { groups, matched };
 }
 
 function anchorCoverage(text, anchors) {
@@ -153,14 +202,17 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  const requiredMaterialTerms = Number(expected.min_material_terms || Math.max(2, Math.ceil((expected.material_terms || []).length * 0.5)));
-  if ((expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+  const conceptCoverage = materialConceptCoverage(material, expected.material_terms || []);
+  const requiredMaterialConcepts = Number(expected.min_material_concepts || conceptCoverage.groups.length);
+  if (conceptCoverage.groups.length && conceptCoverage.matched.length < requiredMaterialConcepts) {
     failures.push({
       code: 'DOMAIN_MATERIAL_INSUFFICIENT',
       genre: expected.genre || null,
       matched_terms: materialTerms,
       expected_terms: expected.material_terms,
-      required_match_count: requiredMaterialTerms
+      matched_concept_count: conceptCoverage.matched.length,
+      required_concept_count: requiredMaterialConcepts,
+      missing_concepts: conceptCoverage.groups.filter((group) => !conceptCoverage.matched.includes(group))
     });
   }
 
@@ -210,6 +262,7 @@ function evaluateCase(testCase, out, durationMs) {
     public_request_ids: requests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
+    domain_material_concepts_matched: conceptCoverage.matched,
     irrelevant_domain_material_terms_matched: forbiddenMaterialTerms,
     runtime_trace_available: traceValidation.complete,
     runtime_trace_validation: traceValidation,
