@@ -37,10 +37,8 @@ function explicitComparisonMaterial(task = {}) {
 function sourceText(task = {}, canonical = {}) {
   return unique([
     task.source_span?.text,
+    task.request_text,
     task.raw_text,
-    task.target,
-    task.objective,
-    task.purpose,
     ...array(task.constraints),
     ...array(task.prohibitions),
     ...array(task.preserve),
@@ -88,7 +86,10 @@ function sourceChannelRequested(task = {}, canonical = {}, channel) {
 
 function lensValueAllowed(value, task = {}, canonical = {}, channel) {
   const source = sourceText(task, canonical);
-  return sourceBacked(value, source) || sourceChannelRequested(task, canonical, channel);
+  if (sourceBacked(value, source)) return true;
+  if (broadJudgmentMaterialRequest(task, canonical)) return true;
+  if (channel === 'evidence') return false;
+  return sourceChannelRequested(task, canonical, channel);
 }
 
 function scopeFactLane(fact = {}, task = {}, canonical = {}) {
