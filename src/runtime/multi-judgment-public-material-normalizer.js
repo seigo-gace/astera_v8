@@ -1,10 +1,28 @@
 'use strict';
 
+const { GENRE_LENSES } = require('../all-domain-lens-catalog');
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 function comparable(value) {
   return clean(value).replace(/^(?:また|さらに|なお)\s*/u, '').replace(/[。．.]+$/u, '').trim();
+}
+
+const DOMAIN_LENS_VALUES = new Set(GENRE_LENSES.flatMap((genre) => [
+  ...(genre.fact_lens || []),
+  ...(genre.risk_lens || []),
+  ...(genre.multi_lens || []),
+  ...(genre.inquiry_lens || []),
+  ...(genre.compare_lens || []),
+  ...(genre.evidence_to_collect || []),
+  ...(genre.safety_gate || [])
+]).map(clean).filter(Boolean));
+
+function isDomainLensMaterial(value) {
+  const text = clean(value);
+  if (!text) return false;
+  return DOMAIN_LENS_VALUES.has(text);
 }
 function modelOf(judgment = {}) {
   return judgment.observable_material?.case_model || judgment.case_model || null;
@@ -142,8 +160,9 @@ function usefulMissingLine(value, requestText = '') {
   if (nearRequestRestatement(text, requestText)) return false;
   return true;
 }
-function usefulCounterPart(value, requestText = '') {
+function usefulCounterPart(value, model, request) {
   const text = clean(value);
+  const requestText = request?.request_text || '';
   if (!text) return false;
   if (internalMarker(text)) return false;
   if (/Alternative evidence angle/iu.test(text)) return false;
@@ -151,6 +170,7 @@ function usefulCounterPart(value, requestText = '') {
   if (/(?:肯定形|否定形)\s*$/u.test(text)) return false;
   if (/^検討しろ[。.]?$/u.test(text)) return false;
   if (nearRequestRestatement(text, requestText)) return false;
+  if (!requestSupportsDomainLensMaterial(text, model, request)) return false;
   return true;
 }
 const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
@@ -168,6 +188,19 @@ function requestSourceText(model, request = {}) {
   }
   return values.filter(Boolean).join(' ');
 }
+
+function requestSupportsDomainLensMaterial(value, model, request) {
+  const text = clean(value);
+  if (!isDomainLensMaterial(text)) return true;
+  const source = requestSourceText(model, request).toLocaleLowerCase();
+  if (source.includes(text.toLocaleLowerCase())) return true;
+  const segments = text
+    .toLocaleLowerCase()
+    .split(/[・\/／,:;|()（）\[\]{}<>「」『』\s]+/u)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 3);
+  return segments.some((part) => source.includes(part));
+}
 function domainTemplateSourceBacked(value, model, request) {
   const text = clean(value);
   const matches = text.match(new RegExp(INTERNAL_DOMAIN_TEMPLATE_TOKEN.source, 'giu')) || [];
@@ -182,6 +215,7 @@ function usefulRiskPart(value, model, request) {
   if (/Alternative evidence angle/iu.test(text)) return false;
   if (comparable(text) === comparable(request?.request_text || '')) return false;
   if (!domainTemplateSourceBacked(text, model, request)) return false;
+  if (!requestSupportsDomainLensMaterial(text, model, request)) return false;
   return true;
 }
 function normalizeDigits(value) {
@@ -286,7 +320,7 @@ function normalizeSection05(section, model, lang) {
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = String(request.action || '') === 'verify'
         ? []
-        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
+        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, model, request));
       const out = [`    - ${label}: ${semantic}`];
       if (extras.length) out.push(`    - ${extraLabel}: ${[...new Set(extras)].join(' / ')}`);
       return out;
@@ -325,7 +359,8 @@ function normalizeSection06(section, model, lang) {
       const parts = line.slice(colon + 1)
         .split(/\s*\/\s*/u)
         .map(clean)
-        .filter((part) => usefulMissingLine(part, request.request_text));
+        .filter((part) => usefulMissingLine(part, request.request_text))
+        .filter((part) => requestSupportsDomainLensMaterial(part, model, request));
       if (!parts.length) return [];
       return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
     }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);

@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { scopeFiveStageDecisionMaterial } = require('./five-stage-public-boundary');
+const { compileLensPlan } = require('../lens-plan');
 
 const FIVE_STAGE = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare']);
 const OPERATION = Object.freeze({
@@ -216,7 +217,8 @@ class FiveStageExecutor {
         throw error;
       }));
       const projected = await Promise.all(jobs);
-      const lanes = { lens_plan: task?.domain?.lens_plan || null };
+      const lensPlan = task?.domain?.lens_plan || compileLensPlan(task?.domain || {});
+      const lanes = { lens_plan: lensPlan };
       const telemetry = [];
       for (const item of projected) {
         lanes[item.lane] = item.value;

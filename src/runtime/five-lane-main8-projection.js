@@ -29,14 +29,39 @@ function taskMaterialRequirements(result = {}) {
   ]);
 }
 
-function taskRequestsRiskMaterial(result = {}) {
-  return taskMaterialRequirements(result).some((value) =>
+function taskRequestText(result = {}, request = {}) {
+  const task = result?.task || {};
+  const model = request?.analysis_task_packet?.case_model || {};
+  const requests = array(model?.judgment_requests);
+  const owned = requests.find((item) => clean(item?.id) === clean(task?.request_id));
+  const singleRequestWholeInput = requests.length <= 1
+    ? clean(request?.original_question || request?.normalized_question || '')
+    : '';
+  return unique([
+    task?.source_span?.text,
+    task?.raw_text,
+    task?.target,
+    task?.objective,
+    task?.purpose,
+    owned?.request_text,
+    singleRequestWholeInput,
+    ...array(task?.unresolved),
+    ...array(task?.constraints),
+    ...array(task?.conditions),
+    ...array(task?.exceptions)
+  ]).join(' ');
+}
+
+function taskRequestsRiskMaterial(result = {}, request = {}) {
+  const values = [...taskMaterialRequirements(result), taskRequestText(result, request)];
+  return values.some((value) =>
     /(?:主要(?:な)?(?:危険|リスク)|危険(?:・|や|と)?(?:失敗|リスク)?|リスク|失敗条件|反証条件|\bmaterial\s+risks?\b|\brisks?\b|failure\s+(?:conditions?|modes?)|disconfirming\s+conditions?)/iu.test(value)
   );
 }
 
-function taskRequestsComparisonMaterial(result = {}) {
-  return taskMaterialRequirements(result).some((value) =>
+function taskRequestsComparisonMaterial(result = {}, request = {}) {
+  const values = [...taskMaterialRequirements(result), taskRequestText(result, request)];
+  return values.some((value) =>
     /(?:比較に必要な軸|比較軸|評価軸|比較(?:条件|基準)|\bcomparison\s+(?:dimensions?|criteria)\b|\bevaluation\s+criteria\b|\bdimensions?\s+(?:for|to)\s+(?:compare|comparison|evaluate|evaluation)\b)/iu.test(value)
   );
 }
@@ -51,12 +76,12 @@ function taskNeedsComparison(result = {}) {
   return false;
 }
 
-function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
+function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = [], request = {}) {
   const next = { ...judgment };
 
   const factRequirements = itemsFromLane(taskResults, 'fact', 'fact_requirements', (entry) => entry?.item);
   const riskRequirements = unique(array(taskResults)
-    .filter(taskRequestsRiskMaterial)
+    .filter((result) => taskRequestsRiskMaterial(result, request))
     .flatMap((result) => array(lanesOf(result)?.risk?.risks)
       .filter((entry) => entry?.source === 'LENS_PLAN')
       .map((entry) => entry?.impact)));
@@ -69,7 +94,7 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
   const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
   const comparisonDimensions = unique(array(taskResults)
-    .filter((result) => taskNeedsComparison(result) || taskRequestsComparisonMaterial(result))
+    .filter((result) => taskNeedsComparison(result) || taskRequestsComparisonMaterial(result, request))
     .flatMap((result) => array(lanesOf(result)?.compare?.dimensions)));
 
   if (next['02_premise']) next['02_premise'] = { ...next['02_premise'], five_lane_missing_material: missingMaterial };
