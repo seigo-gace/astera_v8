@@ -36,7 +36,11 @@ function taskRequestText(result = {}) {
     task?.raw_text,
     task?.target,
     task?.objective,
-    task?.purpose
+    task?.purpose,
+    ...array(task?.unresolved),
+    ...array(task?.constraints),
+    ...array(task?.conditions),
+    ...array(task?.exceptions)
   ]).join(' ');
 }
 
