@@ -153,8 +153,25 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  if ((expected.material_terms || []).length && materialTerms.length < 2) {
-    failures.push({ code: 'DOMAIN_MATERIAL_INSUFFICIENT', genre: expected.genre || null, matched_terms: materialTerms, expected_terms: expected.material_terms });
+  const requiredMaterialTerms = Number(expected.min_material_terms || Math.max(2, Math.ceil((expected.material_terms || []).length * 0.5)));
+  if ((expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+    failures.push({
+      code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+      genre: expected.genre || null,
+      matched_terms: materialTerms,
+      expected_terms: expected.material_terms,
+      required_match_count: requiredMaterialTerms
+    });
+  }
+
+  const forbiddenMaterialTerms = countTerms(material, expected.forbidden_material_terms || []);
+  if (forbiddenMaterialTerms.length) {
+    failures.push({
+      code: 'IRRELEVANT_DOMAIN_MATERIAL_LEAK',
+      genre: expected.genre || null,
+      matched_forbidden_terms: forbiddenMaterialTerms,
+      forbidden_terms: expected.forbidden_material_terms
+    });
   }
 
   const leaked = novelPatternMatches(INTERNAL_PUBLIC_PATTERNS, material, testCase.input);
@@ -193,6 +210,7 @@ function evaluateCase(testCase, out, durationMs) {
     public_request_ids: requests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
+    irrelevant_domain_material_terms_matched: forbiddenMaterialTerms,
     runtime_trace_available: traceValidation.complete,
     runtime_trace_validation: traceValidation,
     runtime_trace: trace,
