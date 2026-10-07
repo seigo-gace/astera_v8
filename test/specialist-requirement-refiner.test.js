@@ -43,3 +43,29 @@ test('low-signal input does not turn a speculative Genre Lens into required spec
   const requiredSpecialist = request.nodes.filter((node) => node.tags?.includes('SPECIALIST_REFINEMENT') && node.required !== false);
   if (request.specialist_refinement.state === 'ABSTAINED') assert.equal(requiredSpecialist.length, 0);
 });
+
+
+test('software UI error request does not receive required finance specialist material from incidental payment words', () => {
+  const refined = refinePreparedMaterialRequirements(preparedFor(
+    'system側の通信失敗や内部API名やstack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけ利用者向けに分かる文章へ整理する。',
+    'improve'
+  ));
+  const request = refined.analysis_task_packet.material_requirement_graph.requests[0];
+  assert.notEqual(request.specialist_refinement.genre_lens_primary?.id, 'G11');
+  const values = request.nodes.flatMap((node) => node.value_refs || []);
+  assert.equal(values.some((value) => /前受管理|返金負債|未使用残高管理|失効Policy/u.test(value)), false);
+});
+
+test('finance specialist refinement for investment uses broad investment material instead of prepaid-credit accounting template', () => {
+  const refined = refinePreparedMaterialRequirements(preparedFor(
+    '投資案件AとBをCash Flow、収益性、Downside、流動性、資本Costで比較する。',
+    'compare'
+  ));
+  const request = refined.analysis_task_packet.material_requirement_graph.requests[0];
+  assert.equal(request.specialist_refinement.genre_lens_primary?.id, 'G11');
+  const values = request.nodes.flatMap((node) => node.value_refs || []);
+  assert.ok(values.some((value) => /Cash Flow/u.test(value)));
+  assert.ok(values.some((value) => /NPV|IRR|Risk-adjusted Return/u.test(value)));
+  assert.ok(values.some((value) => /Downside|流動性/u.test(value)));
+  assert.equal(values.some((value) => /前受管理|返金負債|未使用残高管理|失効Policy/u.test(value)), false);
+});
