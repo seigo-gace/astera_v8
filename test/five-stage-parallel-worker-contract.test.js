@@ -79,3 +79,44 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
     await executor.destroy();
   }
 });
+
+
+test('task executor preserves raw five-stage lanes while carrying a separately scoped public copy', async () => {
+  const sourceText = 'Verify whether Node.js 22 is supported in production using official evidence.';
+  const domain = routeDomainTemplates({ question: sourceText, context: '' });
+  const baseTask = {
+    id: 'T01',
+    action: 'verify',
+    target: 'Node.js 22 production support',
+    objective: 'Verify support status from official evidence',
+    purpose: 'Verify support status by separating facts, risks, and evidence gaps',
+    source_span: { start: 0, end: sourceText.length, text: sourceText },
+    raw_text: sourceText,
+    premises: [],
+    constraints: [],
+    prohibitions: [],
+    preserve: [],
+    replace: [],
+    conditions: [],
+    exceptions: [],
+    depends_on: [],
+    domain
+  };
+  const task = { ...baseTask, canonical_plan: buildCanonicalTaskPlan(baseTask, domain) };
+  const executor = new CanonicalTaskExecutor({ size: 1, timeoutMs: 5000, logger: silentLogger });
+
+  try {
+    const projected = await executor.exec('PROJECT_CANONICAL_TASK', {
+      task,
+      evidenceRaw: rejectedEvidence(task.id)
+    });
+    assert.ok(projected.lanes?.risk?.risks?.some((item) => item.source === 'LENS_PLAN'), 'raw internal Lens risk must remain available');
+    assert.ok(projected.public_lanes, 'scoped public lanes must survive the task executor boundary');
+    assert.equal(projected.public_lanes.risk.risks.some((item) => item.source === 'LENS_PLAN'), false);
+    assert.equal(projected.public_lanes.fact.fact_requirements.some((item) => item.source === 'LENS_PLAN'), false);
+    assert.equal(projected.public_lanes.multi.perspectives.some((item) => item.source === 'LENS_PLAN'), false);
+    assert.equal(projected.public_lanes.inquiry.evidence_need.includes('Code参照'), false);
+  } finally {
+    await executor.destroy();
+  }
+});

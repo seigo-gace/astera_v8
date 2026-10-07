@@ -29,6 +29,26 @@ function taskMaterialRequirements(result = {}) {
   ]);
 }
 
+function taskSourceText(result = {}) {
+  return clean(
+    result?.task?.request_text
+    || result?.task?.raw_text
+    || result?.task?.target
+    || result?.task?.objective
+    || result?.task?.purpose
+  );
+}
+
+function isTaskRestatement(value, result = {}) {
+  const item = clean(value);
+  const source = taskSourceText(result);
+  if (!item || !source) return false;
+  if (item === source) return true;
+  if (item.length >= 16 && source.includes(item)) return true;
+  if (source.length >= 16 && item.includes(source)) return true;
+  return false;
+}
+
 function taskRequestsRiskMaterial(result = {}) {
   return taskMaterialRequirements(result).some((value) =>
     /(?:主要(?:な)?(?:危険|リスク)|危険(?:・|や|と)?(?:失敗|リスク)?|リスク|失敗条件|反証条件|\bmaterial\s+risks?\b|\brisks?\b|failure\s+(?:conditions?|modes?)|disconfirming\s+conditions?)/iu.test(value)
@@ -65,7 +85,12 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
       .filter((entry) => entry?.source === 'LENS_PLAN')
       .map((entry) => Array.isArray(entry?.focus) ? entry.focus.join(' / ') : entry?.focus)
   ));
-  const missingMaterial = itemsFromLane(taskResults, 'inquiry', 'missing_fields');
+  const missingMaterial = unique(array(taskResults).flatMap((result) =>
+    array(lanesOf(result)?.inquiry?.missing_fields)
+      .map(clean)
+      .filter(Boolean)
+      .filter((value) => !isTaskRestatement(value, result))
+  ));
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
   const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
   const comparisonDimensions = unique(array(taskResults)
@@ -97,5 +122,6 @@ module.exports = {
   taskNeedsComparison,
   taskRequestsRiskMaterial,
   taskRequestsComparisonMaterial,
+  isTaskRestatement,
   projectFiveLaneMaterialToMain8
 };

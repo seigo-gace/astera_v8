@@ -1,5 +1,9 @@
 'use strict';
 
+const { GENRE_LENSES } = require('../all-domain-lens-catalog');
+const { GENRE_BREADTH_AUGMENTATIONS } = require('../lens-plan');
+const { OVERLAYS } = require('../domain-template-router');
+
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -154,6 +158,21 @@ function usefulCounterPart(value, requestText = '') {
   return true;
 }
 const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
+const DOMAIN_TEMPLATE_VALUE_SET = new Set([
+  ...GENRE_LENSES.flatMap((lens) => [
+    ...(lens.fact_lens || []), ...(lens.risk_lens || []), ...(lens.multi_lens || []),
+    ...(lens.inquiry_lens || []), ...(lens.compare_lens || []), ...(lens.evidence_to_collect || []),
+    ...(lens.safety_gate || [])
+  ]),
+  ...Object.values(GENRE_BREADTH_AUGMENTATIONS || {}).flatMap((lens) => [
+    ...(lens.fact_lens || []), ...(lens.risk_lens || []), ...(lens.multi_lens || []),
+    ...(lens.inquiry_lens || []), ...(lens.compare_lens || []), ...(lens.evidence_to_collect || []),
+    ...(lens.safety_gate || [])
+  ]),
+  ...(OVERLAYS || []).flatMap((lens) => [
+    ...(lens.risk_lens || []), ...(lens.evidence_to_collect || []), ...(lens.safety_gate || [])
+  ])
+].map((value) => comparable(value)).filter(Boolean));
 function spansOverlap(left = {}, right = {}) {
   const start = Math.max(Number(left.start || 0), Number(right.start || 0));
   const end = Math.min(Number(left.end || 0), Number(right.end || 0));
@@ -170,9 +189,12 @@ function requestSourceText(model, request = {}) {
 }
 function domainTemplateSourceBacked(value, model, request) {
   const text = clean(value);
+  const normalized = comparable(text);
   const matches = text.match(new RegExp(INTERNAL_DOMAIN_TEMPLATE_TOKEN.source, 'giu')) || [];
-  if (!matches.length) return true;
+  const isCatalogTemplateValue = DOMAIN_TEMPLATE_VALUE_SET.has(normalized);
+  if (!matches.length && !isCatalogTemplateValue) return true;
   const source = requestSourceText(model, request).toLocaleLowerCase();
+  if (isCatalogTemplateValue && !source.includes(normalized.toLocaleLowerCase())) return false;
   return matches.every((token) => source.includes(String(token).toLocaleLowerCase()));
 }
 function usefulRiskPart(value, model, request) {
@@ -286,7 +308,7 @@ function normalizeSection05(section, model, lang) {
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = String(request.action || '') === 'verify'
         ? []
-        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
+        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text)).filter((part) => domainTemplateSourceBacked(part, model, request));
       const out = [`    - ${label}: ${semantic}`];
       if (extras.length) out.push(`    - ${extraLabel}: ${[...new Set(extras)].join(' / ')}`);
       return out;
@@ -325,7 +347,8 @@ function normalizeSection06(section, model, lang) {
       const parts = line.slice(colon + 1)
         .split(/\s*\/\s*/u)
         .map(clean)
-        .filter((part) => usefulMissingLine(part, request.request_text));
+        .filter((part) => usefulMissingLine(part, request.request_text))
+        .filter((part) => domainTemplateSourceBacked(part, model, request));
       if (!parts.length) return [];
       return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
     }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);

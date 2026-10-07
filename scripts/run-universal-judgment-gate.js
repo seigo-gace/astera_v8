@@ -35,7 +35,11 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /\b(?:PARSE|PARSER|TASK_GRAPH|SCOPE)_[A-Z0-9_]+\b/u,
   /stack trace/iu,
   /\bat\s+\S+\s+\([^\n)]+:\d+:\d+\)/u,
-  /\/home\/[^\s]+/u
+  /\/home\/[^\s]+/u,
+  /\bT\d{2,}:[a-z_]+(?::)?(?:\[[^\]]+\])?/iu,
+  /:(?:UNDETERMINED|CONFIRMED):/u,
+  /^\s*-\s*(?:candidates|dimensions|label|observations|supported_scopes|evidence_refs|dimension|conditions|constraints|unsupported_scope)\s*:/imu,
+  /\bclaim_id\s*=/iu
 ];
 
 const FINAL_DECISION_PATTERNS = [

@@ -166,7 +166,9 @@ function sourceLenses(domain = {}) {
   return [
     ...(domain.primary ? [{ lens: domain.primary, tier: 'PRIMARY' }] : []),
     ...(breadth ? [{ lens: breadth, tier: 'PRIMARY_BREADTH' }] : []),
-    ...(Array.isArray(domain.secondary) ? domain.secondary.map((lens) => ({ lens, tier: 'SECONDARY' })) : []),
+    // Secondary genres are routing diagnostics, not automatic semantic-material authority.
+    // A weak lexical overlap (for example, "credit" inside a software error message)
+    // must not inject an entire unrelated domain template into Fact/Risk/Compare/Main8.
     ...(Array.isArray(domain.overlays) ? domain.overlays.map((lens) => ({ lens, tier: 'OVERLAY' })) : [])
   ];
 }

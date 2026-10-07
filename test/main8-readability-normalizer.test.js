@@ -85,3 +85,45 @@ test('deadline and request target helpers are deterministic', () => {
     '2026年10月1日時点のNode.js 22の公式サポート状況'
   );
 });
+
+test('public readability strips internal task/status/comparison field markers without deleting semantic text', () => {
+  const source = [
+    '01 本当の目的\n- 目的: 判断材料を整理する',
+    '02 前提不足\n- 未確認事項を保持する',
+    '03 事実確認\n- 事実は未確認',
+    [
+      '04 危機察知',
+      '- T06:undetermined:[22] 未確定Claimを確定事実として扱う危険',
+      '- T07:medical_safety[28] 健康・安全への高影響判断'
+    ].join('\n'),
+    '05 反対視点\n- 反証を確認する',
+    [
+      '06 比較案',
+      '- candidates: A / B',
+      '- dimensions: Cost / Risk',
+      '- label: A',
+      '- observations: :UNDETERMINED:利用者入力',
+      '- supported_scopes: -',
+      '- evidence_refs: -',
+      '- dimension: Cost',
+      '- conditions: same scope',
+      '- constraints: same assumptions',
+      '- unsupported_scope: claim_id=C01; reasons=MISSING',
+      '- 判断・比較で揃える専門軸:',
+      '  - Cost',
+      '  - Risk'
+    ].join('\n'),
+    '07 根拠成立状態\n- 外部根拠は未成立',
+    '08 主役AI／利用者への再指示\n- 未確定を保持する'
+  ].join('\n---\n');
+
+  const out = normalizeUnifiedMain8Text(source);
+  assert.match(out, /未確定Claimを確定事実として扱う危険/);
+  assert.match(out, /健康・安全への高影響判断/);
+  assert.match(out, /判断・比較で揃える専門軸/);
+  assert.match(out, /Cost/);
+  assert.match(out, /Risk/);
+  assert.doesNotMatch(out, /T06:undetermined|T07:medical_safety|:UNDETERMINED:/);
+  assert.doesNotMatch(out, /^\s*-\s*(?:candidates|dimensions|label|observations|supported_scopes|evidence_refs|dimension|conditions|constraints|unsupported_scope)\s*:/mu);
+  assert.doesNotMatch(out, /claim_id\s*=/u);
+});
