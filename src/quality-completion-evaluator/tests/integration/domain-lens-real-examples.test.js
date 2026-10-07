@@ -31,7 +31,7 @@ const CASES = [
     name: "前払Credit会計",
     expectedId: "G11",
     question: "月額課金に加えて前払いクレジットを販売する。売上計上、未使用残高、返金、失効の扱いを比較して決めたい。",
-    expectedLensItem: "返金負債"
+    expectedLensItem: "Liquidity・資金流動性"
   },
   {
     name: "家庭園芸",
