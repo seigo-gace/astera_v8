@@ -141,3 +141,41 @@ test('evidence citation boundary preserves normalized multi-judgment public mate
   assert.doesNotMatch(out.material.main8_text, /Alternative evidence angle|の完了・合格条件を明示する/);
   assert.equal(out.material.evidence_contract, 'astera.evidence-citation.v1');
 });
+
+test('post-lane Main8 normalization cannot re-inject unrelated domain template material', () => {
+  const model = {
+    request_count: 2,
+    multi_judgment: true,
+    judgment_requests: [
+      {
+        id: 'R01', action: 'analyze',
+        request_text: 'system側の通信失敗や内部API名、stack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけ利用者向けに整理する。'
+      },
+      {
+        id: 'R02', action: 'migrate',
+        request_text: 'API移行でRollback手順と互換性を確認する。'
+      }
+    ],
+    observations: [],
+    global_context: {},
+    request_relations: []
+  };
+  const sections = [
+    '01 本当の目的\n  - R01: error boundary\n  - R02: migration',
+    '02 前提不足\n- -',
+    '03 事実確認\n  - R01: -\n  - R02: -',
+    '04 危機察知\n  - R01: Data Loss / Downtime / 秘密情報漏洩・不正利用・権限逸脱\n  - R02: Rollback不能 / 互換性破壊',
+    '05 反対視点\n  - R01: error boundary\n    - 反証・失敗条件: Data Loss / Downtime / Developer / Operator\n  - R02: migration\n    - 反証・失敗条件: Rollback不能 / 互換性破壊',
+    '06 比較案\n  - R01 [検討・整理]\n    - 要求: error boundary\n    - 追加で必要な材料: 互換条件は何か / Rollback手順はあるか / Code参照 / API契約\n  - R02 [移行]\n    - 要求: migration\n    - 追加で必要な材料: Rollback手順はあるか / API契約',
+    '07 根拠成立状態\n  - R01: -\n  - R02: -',
+    '08 主役AI／利用者への再指示\n  - R01: check\n  - R02: check'
+  ];
+  const material = { text: sections.join('\n---\n'), compact_text: '', sections: sections.map((text) => ({ text })) };
+  const out = normalizeMultiJudgmentPublicMaterial(material, {
+    output_language: 'ja',
+    observable_material: { case_model: model }
+  });
+  const r01 = out.text.slice(out.text.indexOf('R01'), out.text.lastIndexOf('R02'));
+  assert.doesNotMatch(r01, /Data Loss|Downtime|Developer|Operator|Rollback手順|Code参照|API契約/u);
+  assert.match(out.text, /R02[\s\S]*Rollback/u, 'source-backed migration material should remain available');
+});
