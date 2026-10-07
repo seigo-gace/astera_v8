@@ -56,34 +56,50 @@ function fixture() {
   return { claims, results, policyByClaimId, task };
 }
 
-test('LensPlan retains Primary, Secondary, and Overlay sources without flattening away provenance', () => {
+test('LensPlan retains Secondary routing metadata but only Primary and Overlay contribute semantic channels', () => {
   const domain = domainWithSecondary();
   assert.equal(domain.lens_plan.primary_id, 'G09');
   assert.deepEqual(domain.lens_plan.secondary_ids, ['G10']);
   assert.deepEqual(domain.lens_plan.overlay_ids, ['current_information']);
   assert.ok(domain.lens_plan.channels.risk.some((entry) => entry.value === '因果誤認' && entry.sources.some((source) => source.tier === 'PRIMARY')));
-  assert.ok(domain.lens_plan.channels.risk.some((entry) => entry.value === 'Cash不足' && entry.sources.some((source) => source.tier === 'SECONDARY')));
+  assert.equal(domain.lens_plan.channels.risk.some((entry) => entry.value === 'Cash不足'), false);
   assert.ok(domain.lens_plan.channels.risk.some((entry) => entry.value === '古い情報' && entry.sources.some((source) => source.tier === 'OVERLAY')));
 });
 
-test('all five Canonical lanes consume the same LensPlan including effective Secondary material', () => {
+test('all five Canonical lanes consume Primary/Overlay semantic material without Secondary template injection', () => {
   const domain = domainWithSecondary();
   const lanes = buildFiveLanes({ ...fixture(), domain });
 
   assert.deepEqual(lanes.lens_plan.secondary_ids, ['G10']);
   assert.ok(lanes.fact.evidence_gaps.some((item) => item.item === '公的統計'));
-  assert.ok(lanes.fact.evidence_gaps.some((item) => item.item === '競合情報'));
+  assert.equal(lanes.fact.evidence_gaps.some((item) => item.item === '競合情報'), false);
   assert.ok(lanes.risk.risks.some((item) => item.impact === '因果誤認'));
-  assert.ok(lanes.risk.risks.some((item) => item.impact === 'Cash不足'));
+  assert.equal(lanes.risk.risks.some((item) => item.impact === 'Cash不足'), false);
   assert.ok(lanes.risk.risks.some((item) => item.impact === '古い情報'));
   assert.ok(lanes.risk.safety_gates.includes('現在情報を確認してから断定する'));
   assert.ok(lanes.multi.perspectives.some((item) => item.focus === '消費者'));
-  assert.ok(lanes.multi.perspectives.some((item) => item.focus === '経営者'));
+  assert.equal(lanes.multi.perspectives.some((item) => item.focus === '経営者'), false);
   assert.ok(lanes.inquiry.missing_questions.includes('期間はいつか'));
-  assert.ok(lanes.inquiry.missing_questions.includes('成功指標は何か'));
+  assert.equal(lanes.inquiry.missing_questions.includes('成功指標は何か'), false);
   assert.ok(lanes.compare.dimensions.includes('成長'));
-  assert.ok(lanes.compare.dimensions.includes('実行能力'));
+  assert.equal(lanes.compare.dimensions.includes('実行能力'), false);
   assert.equal(lanes.compare.selected_candidate, null);
   assert.deepEqual(lanes.compare.candidate_ranking, []);
   assert.equal(lanes.compare.verdict.decision, 'MATERIAL_ONLY');
+});
+
+
+test('software error handling does not inherit finance semantic material from a secondary credit signal', () => {
+  const { routeDomainTemplates } = require('../src/domain-template-router');
+  const routed = routeDomainTemplates({
+    question: 'system側の通信失敗や内部API名、stack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけ利用者向けに整理する。'
+  });
+  assert.equal(routed.primary?.id, 'G29');
+  assert.ok(routed.secondary.some((item) => item.id === 'G11'));
+  const plan = compileLensPlan(routed);
+  assert.deepEqual(plan.secondary_ids.includes('G11'), true);
+  const publicValues = Object.values(plan.channels).flat().map((entry) => entry.value);
+  for (const forbidden of ['資金流動性', '会計誤分類', '返金負債', '未使用残高管理']) {
+    assert.equal(publicValues.includes(forbidden), false, `secondary finance leakage: ${forbidden}`);
+  }
 });
