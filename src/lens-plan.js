@@ -193,6 +193,8 @@ const GENRE_BREADTH_AUGMENTATIONS = Object.freeze({
   })
 });
 
+function array(value) { return Array.isArray(value) ? value : []; }
+
 function clean(value) {
   return String(value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
 }
@@ -201,7 +203,11 @@ function sourceDescriptor(lens, tier) {
   return Object.freeze({
     tier,
     lens_id: String(lens?.id || ''),
-    lens_name: String(lens?.name || '')
+    lens_name: String(lens?.name || ''),
+    score: Number.isFinite(Number(lens?.score)) ? Number(lens.score) : null,
+    confidence: Number.isFinite(Number(lens?.confidence)) ? Number(lens.confidence) : null,
+    classification_basis: String(lens?.classification_basis || ''),
+    matched_signals: Object.freeze(array(lens?.matched_signals).map(clean).filter(Boolean))
   });
 }
 
