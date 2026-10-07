@@ -158,7 +158,6 @@ function usefulMissingLine(value, requestText = '') {
   if (/^Alternative evidence angle$/iu.test(text)) return false;
   if (/^反例\s*条件不成立\s*例外$/u.test(text)) return false;
   if (nearRequestRestatement(text, requestText)) return false;
-  if (!requestSupportsDomainLensMaterial(text, model, request)) return false;
   return true;
 }
 function usefulCounterPart(value, model, request) {
@@ -171,6 +170,7 @@ function usefulCounterPart(value, model, request) {
   if (/(?:肯定形|否定形)\s*$/u.test(text)) return false;
   if (/^検討しろ[。.]?$/u.test(text)) return false;
   if (nearRequestRestatement(text, requestText)) return false;
+  if (!requestSupportsDomainLensMaterial(text, model, request)) return false;
   return true;
 }
 const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
