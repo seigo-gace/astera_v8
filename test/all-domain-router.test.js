@@ -162,3 +162,20 @@ test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => 
   assert.match(result.lens_text, /primary=G31/);
   assert.match(result.lens_text, /overlay\.evidence_strict/);
 });
+
+
+test('software UI error wording does not route incidental credits or purchase failures into finance', () => {
+  const result = routeDomainTemplates({
+    question: 'system側の通信失敗や内部API名やstack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけ利用者向けに分かる文章へ整理する。'
+  });
+  assert.notEqual(result.primary?.id, 'G11');
+});
+
+test('explicit investment judgment remains finance after incidental-finance disambiguation', () => {
+  const result = routeDomainTemplates({
+    question: '投資案件AとBをCash Flow、収益性、Downside、流動性、資本Costで比較する。'
+  });
+  assert.equal(result.primary?.id, 'G11');
+  assert.ok(result.primary.compare_lens.some((value) => /NPV|IRR|Risk-adjusted Return/u.test(value)));
+  assert.equal(result.primary.compare_lens.some((value) => /返金|失効Policy/u.test(value)), false);
+});
