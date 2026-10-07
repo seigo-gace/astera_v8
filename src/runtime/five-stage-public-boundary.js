@@ -100,6 +100,13 @@ function channelHasBreadth(lensPlan = {}, channel) {
   return lensEntries(lensPlan, channel).some((entry) => entryTiers(entry).has('PRIMARY_BREADTH'));
 }
 
+function strongSecondaryDomainEvidence(entry = {}) {
+  return array(entry?.sources).some((source) =>
+    clean(source?.tier) === 'SECONDARY'
+    && array(source?.matched_signals).length >= 2
+  );
+}
+
 function lensEntryAllowed(entry = {}, channel, source, lensPlan = {}) {
   if (!entry) return true;
   const tiers = entryTiers(entry);
@@ -121,7 +128,9 @@ function lensEntryAllowed(entry = {}, channel, source, lensPlan = {}) {
   // Secondary genres are internal routing context unless their actual material
   // is source-relevant. A secondary genre match alone must not create public
   // judgment material.
-  if (tiers.has('SECONDARY')) return sourceRelevant(entry?.value, source);
+  if (tiers.has('SECONDARY')) {
+    return strongSecondaryDomainEvidence(entry) || sourceRelevant(entry?.value, source);
+  }
 
   return sourceRelevant(entry?.value, source);
 }
