@@ -209,6 +209,7 @@ function stripPublicInternalLines(block) {
     let next = String(line || '');
     next = next.replace(/^(\s*-\s*)T\d+:[^\s]+\s+/u, '$1');
     next = next.replace(/:(?:UNDETERMINED|CONFIRMED):/gu, ':');
+    next = next.replace(/^(\s*-\s*):+\s*/u, '$1');
     return next;
   }).filter((line) => {
     if (/:lens-risk-\d+\[/iu.test(line)) return false;
