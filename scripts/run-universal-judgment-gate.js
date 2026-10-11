@@ -92,6 +92,19 @@ function anchorCoverage(text, anchors) {
   return { matched, ratio: matched.length / anchors.length };
 }
 
+function conceptCoverage(text, concepts) {
+  const rows = Array.isArray(concepts) ? concepts : [];
+  const normalized = normalize(text);
+  const matched = [];
+  for (const concept of rows) {
+    const aliases = Array.isArray(concept) ? concept : [concept];
+    const hit = aliases.find((alias) => normalized.includes(normalize(alias)));
+    if (hit) matched.push({ concept: aliases[0] || '', matched_alias: hit });
+  }
+  return { matched, ratio: rows.length ? matched.length / rows.length : 1 };
+}
+
+
 function patternMatches(pattern, text) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
   const re = new RegExp(pattern.source, flags);
@@ -153,15 +166,25 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, (expected.material_terms || []).length));
-  if ((expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+  const materialConcepts = conceptCoverage(material, expected.material_concepts || []);
+  if ((expected.material_concepts || []).length && materialConcepts.matched.length < expected.material_concepts.length) {
     failures.push({
       code: 'DOMAIN_MATERIAL_INSUFFICIENT',
       genre: expected.genre || null,
-      required_count: requiredMaterialTerms,
-      matched_terms: materialTerms,
-      expected_terms: expected.material_terms
+      required_concepts: expected.material_concepts,
+      matched_concepts: materialConcepts.matched
     });
+  } else {
+    const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, (expected.material_terms || []).length));
+    if (!(expected.material_concepts || []).length && (expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+      failures.push({
+        code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+        genre: expected.genre || null,
+        required_count: requiredMaterialTerms,
+        matched_terms: materialTerms,
+        expected_terms: expected.material_terms
+      });
+    }
   }
 
   const forbiddenMaterialTerms = countTerms(material, expected.forbidden_material_terms || []);
@@ -210,6 +233,7 @@ function evaluateCase(testCase, out, durationMs) {
     public_request_ids: requests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
+    domain_material_concepts_matched: materialConcepts.matched,
     forbidden_material_terms_matched: forbiddenMaterialTerms,
     runtime_trace_available: traceValidation.complete,
     runtime_trace_validation: traceValidation,
