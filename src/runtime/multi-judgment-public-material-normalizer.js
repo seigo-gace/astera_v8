@@ -189,6 +189,7 @@ function usefulRiskPart(value, model, request) {
   if (/Alternative evidence angle/iu.test(text)) return false;
   if (comparable(text) === comparable(request?.request_text || '')) return false;
   if (!domainTemplateSourceBacked(text, model, request)) return false;
+  if (!requestSourceBacked(text, model, request)) return false;
   return true;
 }
 function normalizeDigits(value) {
