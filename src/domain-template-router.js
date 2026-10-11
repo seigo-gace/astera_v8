@@ -59,6 +59,38 @@ const DOMAIN_SAFETY_GATES = Object.freeze({
   G35: ['法・民間保護・Escalation Riskを必ず確認する']
 });
 
+const FINANCE_CONTEXT_PROFILES = Object.freeze({
+  payment: Object.freeze({
+    fact_lens: Object.freeze(['取引構造','金額・期間','Cash Flow','会計処理時点','返金・失効条件']),
+    risk_lens: Object.freeze(['資金流動性','会計誤分類','税務・規制','返金負債','未使用残高管理']),
+    multi_lens: Object.freeze(['利用者','経理','財務責任者','決済事業者','監査・専門家']),
+    inquiry_lens: Object.freeze(['法域と会計基準は何か','いつ権利義務が発生するか','返金・失効条件は何か','実績と予測を分けたか']),
+    compare_lens: Object.freeze(['前受管理','利用時認識','返金対応','失効Policy','専門家確認']),
+    evidence_to_collect: Object.freeze(['取引規約','Ledger','会計方針','決済記録','法域別公式資料'])
+  }),
+  investment: Object.freeze({
+    fact_lens: Object.freeze(['対象資産・投資案','投資額・期間','Cash Flow・収益性','資本Cost・評価前提','税務・規制条件']),
+    risk_lens: Object.freeze(['損失・Downside','資金流動性','評価前提の誤り','集中・Counterparty Risk','税務・規制不適合']),
+    multi_lens: Object.freeze(['投資者','財務責任者','事業責任者','取引相手','監査・専門家']),
+    inquiry_lens: Object.freeze(['投資目的と期間は何か','期待ReturnとDownsideは何か','資金拘束とExit条件は何か','評価前提と税務・規制条件は何か']),
+    compare_lens: Object.freeze(['収益性・Return','Risk・Downside','流動性','期間・回収','資本Cost・税務影響']),
+    evidence_to_collect: Object.freeze(['財務諸表・Cash Flow','投資条件・契約','市場・評価Data','Scenario・感応度Data','規制・税務公式資料'])
+  })
+});
+
+function specializeGenreForRequest(genre, routeText = '') {
+  if (!genre || genre.id !== 'G11') return genre;
+  const text = String(routeText || '');
+  const payment = /前払|前払い|クレジット|返金|失効|売上計上|決済|stored[ -]?value|prepaid|refund|revenue recognition/iu.test(text);
+  const investment = /投資|investment|portfolio|収益性|return|downside|流動性|liquidity|valuation|評価|資本cost|capital cost/iu.test(text);
+  const profile = payment && !investment
+    ? FINANCE_CONTEXT_PROFILES.payment
+    : investment
+      ? FINANCE_CONTEXT_PROFILES.investment
+      : null;
+  return profile ? { ...genre, ...profile } : genre;
+}
+
 const MIN_CONTROLLED_PRIMARY_SCORE = 6;
 const MIN_TEXT_PRIMARY_SCORE = 8;
 const MIN_SECONDARY_SCORE = 6;
@@ -231,8 +263,8 @@ function scoreGenre(genre, text) {
   };
 }
 
-function publicGenre(item) {
-  const genre = item.genre;
+function publicGenre(item, routeText = '') {
+  const genre = specializeGenreForRequest(item.genre, routeText);
   const gate = DOMAIN_SAFETY_GATES[genre.id] || [];
   return {
     id: genre.id,
@@ -484,13 +516,13 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   }
 
   const classification = classifyScores(scored);
-  const primary = publicGenre({ ...best, ...classification });
+  const primary = publicGenre({ ...best, ...classification }, routeText);
   const secondary = scored.slice(1)
     .filter((item) => qualifiedScore(item, true))
     .slice(0, 3)
     .map((item) => {
       const meta = classifyScores([item]);
-      return publicGenre({ ...item, ...meta });
+      return publicGenre({ ...item, ...meta }, routeText);
     });
 
   return {
