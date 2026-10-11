@@ -162,3 +162,22 @@ test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => 
   assert.match(result.lens_text, /primary=G31/);
   assert.match(result.lens_text, /overlay\.evidence_strict/);
 });
+
+
+test('single incidental finance term does not inject G11 as a secondary lens into a software error-design request', () => {
+  const result = routeDomainTemplates({
+    question: 'system側の通信失敗や内部API名やstack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけを利用者向けに説明する。'
+  });
+  assert.equal(result.primary?.id, 'G29');
+  assert.equal(result.secondary.some((item) => item.id === 'G11'), false);
+});
+
+test('explicit G11 investment comparison keeps finance as the primary genre', () => {
+  const result = routeDomainTemplates({
+    question: '【G11】投資案件の比較判断について、収益性、Downside、流動性、期間、Cash Flowを確認する。'
+  });
+  assert.equal(result.primary?.id, 'G11');
+  assert.ok(result.primary.compare_lens.includes('収益性・Return'));
+  assert.ok(result.primary.compare_lens.includes('Risk・Downside'));
+  assert.ok(result.primary.compare_lens.includes('流動性'));
+});
