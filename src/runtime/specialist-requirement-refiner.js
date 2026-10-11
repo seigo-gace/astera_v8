@@ -48,6 +48,9 @@ function specialistPrimaryOwned(primary, request = {}, tasks = []) {
   const signals = unique(primary.matched_signals);
   if (!signals.length) return false;
   const ownedTasks = array(tasks).filter((task) => text(task.request_id) === text(request.id));
+  if (!ownedTasks.length) {
+    return signals.filter((signal) => signalPresent(source, signal)).length >= 2;
+  }
   if (ownedTasks.some((task) => signals.some((signal) => signalPresent(task.target, signal)))) return true;
   const usableTargets = ownedTasks.map((task) => text(task.target)).filter(Boolean);
   if (usableTargets.length) return false;
