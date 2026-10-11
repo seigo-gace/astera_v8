@@ -26,9 +26,13 @@ function primaryLensPublicRelevant(task = {}) {
   const primary = task.domain?.primary;
   if (!primary) return false;
   const signals = unique(primary.matched_signals);
-  if (signals.length >= 2) return true;
-  if (signals.length !== 1) return false;
-  return signalPresent(task.target, signals[0]);
+  if (!signals.length) return false;
+  if (signals.some((signal) => signalPresent(task.target, signal))) return true;
+  const target = clean(task.target);
+  const genericTarget = !target || /^(?:入力内容|対象|this|that|it|what|how)$/iu.test(target);
+  if (!genericTarget) return false;
+  const fallback = unique([task.objective, task.purpose, task.user_goal]).join(' ');
+  return signals.filter((signal) => signalPresent(fallback, signal)).length >= 2;
 }
 
 function taskMaterialRequirements(task = {}) {
