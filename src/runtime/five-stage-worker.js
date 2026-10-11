@@ -50,14 +50,17 @@ function normalizePayload(payload = {}) {
     .filter((record) => record.claim?.claim_id)
     .map((record) => [record.claim.claim_id, record.policy]));
   const domain = task.domain || {};
-  const lensPlan = domain.lens_plan || compileLensPlan(domain);
+  const routeText = [task.target, task.objective, task.purpose, task.source_span?.text].filter(Boolean).join(' ').toLowerCase();
+  const secondary = array(domain.secondary).filter((lens) => array(lens && lens.matched_signals).filter((signal) => routeText.includes(clean(signal).toLowerCase())).length >= 2);
+  const scopedDomain = { ...domain, secondary, lens_plan: undefined };
+  const lensPlan = compileLensPlan(scopedDomain);
   return {
     task,
     canonical,
     claims,
     results,
     policyByClaimId,
-    domain: { ...domain, lens_plan: lensPlan },
+    domain: { ...scopedDomain, lens_plan: lensPlan },
     searchPlan: canonical.search_plan || task.canonical_plan?.search_plan || {},
     probeDelayMs: Math.max(0, Number(payload.probeDelayMs || 0))
   };
