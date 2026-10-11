@@ -166,23 +166,28 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  const materialConcepts = conceptCoverage(material, expected.material_concepts || []);
-  if ((expected.material_concepts || []).length && materialConcepts.matched.length < expected.material_concepts.length) {
+  const termGold = expected.material_terms || [];
+  const derivedConcepts = expected.genre && termGold.length >= 6 && termGold.length % 2 === 0
+    ? Array.from({ length: termGold.length / 2 }, (_, index) => [termGold[index], termGold[index + termGold.length / 2]])
+    : [];
+  const requiredConcepts = (expected.material_concepts || []).length ? expected.material_concepts : derivedConcepts;
+  const materialConcepts = conceptCoverage(material, requiredConcepts);
+  if (requiredConcepts.length && materialConcepts.matched.length < requiredConcepts.length) {
     failures.push({
       code: 'DOMAIN_MATERIAL_INSUFFICIENT',
       genre: expected.genre || null,
-      required_concepts: expected.material_concepts,
+      required_concepts: requiredConcepts,
       matched_concepts: materialConcepts.matched
     });
   } else {
-    const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, (expected.material_terms || []).length));
-    if (!(expected.material_concepts || []).length && (expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+    const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, termGold.length));
+    if (!requiredConcepts.length && termGold.length && materialTerms.length < requiredMaterialTerms) {
       failures.push({
         code: 'DOMAIN_MATERIAL_INSUFFICIENT',
         genre: expected.genre || null,
         required_count: requiredMaterialTerms,
         matched_terms: materialTerms,
-        expected_terms: expected.material_terms
+        expected_terms: termGold
       });
     }
   }
