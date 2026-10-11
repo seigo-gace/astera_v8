@@ -187,9 +187,9 @@ test('repeated source-backed requests are folded without losing tasks context or
   const prepared = {
     analysis_task_packet: {
       tasks: [
-        { id: 'T01', request_id: 'R01', evidence_need: { required: false, reasons: [] } },
-        { id: 'T02', request_id: 'R02', evidence_need: { required: false, reasons: [] } },
-        { id: 'T03', request_id: 'R03', evidence_need: { required: false, reasons: [] } }
+        { id: 'T01', request_id: 'R01', action: 'verify', target: '同じ仕様を確認する。', objective: '同じ仕様を確認する。', material_only: true, evidence_need: { required: false, reasons: [] } },
+        { id: 'T02', request_id: 'R02', action: 'verify', target: '同じ仕様を確認する。', objective: '同じ仕様を確認する。', material_only: true, evidence_need: { required: false, reasons: [] } },
+        { id: 'T03', request_id: 'R03', action: 'improve', target: '別の表示を改善する。', objective: '別の表示を改善する。', material_only: true, evidence_need: { required: false, reasons: [] } }
       ],
       case_model: {
         request_count: 3,
@@ -237,7 +237,10 @@ test('repeated source-backed requests are folded without losing tasks context or
   assert.equal(model.request_count, 2);
   assert.equal(model.judgment_requests[0].occurrence_count, 2);
   assert.equal(model.judgment_requests[0].source_occurrences.length, 2);
-  assert.deepEqual(new Set(model.request_task_ids.R01), new Set(['T01', 'T02']));
+  assert.deepEqual(model.request_task_ids.R01, ['T01']);
+  assert.equal(out.analysis_task_packet.tasks.length, 2);
+  assert.deepEqual(model.normalization.duplicate_tasks_folded, ['T02']);
+  assert.deepEqual(new Set(out.analysis_task_packet.tasks[0].source_task_ids), new Set(['T01', 'T02']));
   assert.ok(model.judgment_requests[0].local_context.prohibitions.includes('推測しない'));
   assert.ok(model.judgment_requests[0].local_context.unresolved.includes('根拠未確認'));
   assert.deepEqual(model.observations.map((item) => item.request_ids), [['R01'], ['R01']]);
