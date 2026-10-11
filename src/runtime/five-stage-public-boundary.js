@@ -1,6 +1,6 @@
 'use strict';
 
-const { lensPlanValues } = require('../lens-plan');
+const { lensPlanEntries, lensPlanValues } = require('../lens-plan');
 const { DOMAIN_QUESTIONS } = require('../v4-canonical/lanes');
 const { lensMaterialRelevant } = require('./lens-material-relevance');
 
@@ -69,12 +69,44 @@ function lensRelevant(value, task = {}, canonical = {}) {
   );
 }
 
+function sourceTiers(sources = []) {
+  return new Set(array(sources).map((source) => clean(source?.tier || source?.source_tier).toUpperCase()).filter(Boolean));
+}
+
+function requestSpecialistSelected(task = {}) {
+  const profile = task.domain?.request_specialist_profile || null;
+  return Boolean(profile?.id && array(profile?.matched_signals).length);
+}
+
+function explicitPrimaryGenre(task = {}, canonical = {}) {
+  const id = clean(task.domain?.primary?.id).toUpperCase();
+  if (!/^G\d{2}$/u.test(id)) return false;
+  const matchedSignals = array(task.domain?.primary?.matched_signals).map((value) => clean(value).toUpperCase());
+  if (matchedSignals.includes(id)) return true;
+  const source = sourceText(task, canonical).toUpperCase();
+  return new RegExp(`(^|[^A-Z0-9])${id}([^A-Z0-9]|$)`, 'u').test(source);
+}
+
+function specialistOwned(value, sources = [], task = {}, canonical = {}) {
+  if (lensRelevant(value, task, canonical)) return true;
+  const tiers = sourceTiers(sources);
+  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialistSelected(task)) return true;
+  if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && explicitPrimaryGenre(task, canonical)) return true;
+  return false;
+}
+
+function lensSourcesFor(domain = {}, channel, value) {
+  const key = clean(value);
+  const match = lensPlanEntries(domain, channel).find((entry) => clean(entry?.value) === key);
+  return array(match?.sources);
+}
+
 function scopeFactLane(fact = {}, task = {}, canonical = {}) {
   const factRequirements = array(fact.fact_requirements).filter((entry) =>
-    entry?.source !== 'LENS_PLAN' || lensRelevant(entry?.item, task, canonical)
+    entry?.source !== 'LENS_PLAN' || specialistOwned(entry?.item, entry?.lens_sources, task, canonical)
   );
   const evidenceGaps = array(fact.evidence_gaps).filter((entry) =>
-    entry?.source !== 'LENS_PLAN' || lensRelevant(entry?.item, task, canonical)
+    entry?.source !== 'LENS_PLAN' || specialistOwned(entry?.item, entry?.lens_sources, task, canonical)
   );
   return {
     ...fact,
@@ -85,7 +117,7 @@ function scopeFactLane(fact = {}, task = {}, canonical = {}) {
 
 function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
   const risks = array(risk.risks).filter((entry) =>
-    entry?.source !== 'LENS_PLAN' || lensRelevant(entry?.impact, task, canonical)
+    entry?.source !== 'LENS_PLAN' || specialistOwned(entry?.impact, entry?.lens_sources, task, canonical)
   );
   const highest = [...risks].sort((a, b) => Number(b?.weight || 0) - Number(a?.weight || 0))[0] || null;
   return {
@@ -102,7 +134,7 @@ function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
 function scopeMultiLane(multi = {}, task = {}, canonical = {}) {
   const fixed = new Set(array(task.hard_blockers).concat(array(task.prohibitions)).map(clean));
   const perspectives = array(multi.perspectives).flatMap((entry) => {
-    if (entry?.source === 'LENS_PLAN' && !lensRelevant(entry?.focus, task, canonical)) return [];
+    if (entry?.source === 'LENS_PLAN' && !specialistOwned(entry?.focus, entry?.lens_sources, task, canonical)) return [];
     if (String(entry?.id || '') !== 'defensive') return [entry];
     const focusValues = Array.isArray(entry.focus) ? entry.focus : [entry.focus];
     const focus = unique(focusValues).filter((value) =>
@@ -127,10 +159,10 @@ function scopeInquiryLane(inquiry = {}, task = {}, canonical = {}) {
   const generated = new Set([...lensInquiry, ...lensEvidence, ...domainQuestions]);
 
   const inquiryLens = unique(inquiry.inquiry_lens).filter((value) =>
-    lensRelevant(value, task, canonical)
+    specialistOwned(value, lensSourcesFor(domain, 'inquiry', value), task, canonical)
   );
   const evidenceNeed = unique(inquiry.evidence_need).filter((value) =>
-    lensRelevant(value, task, canonical)
+    specialistOwned(value, lensSourcesFor(domain, 'evidence', value), task, canonical)
   );
   const missingQuestions = unique(inquiry.missing_questions).filter((value) => {
     const key = clean(value);
@@ -153,9 +185,10 @@ function scopeCompareLane(compare = {}, task = {}, canonical = {}) {
   ].map(clean));
   const comparisonRequested = explicitComparisonMaterial(task);
   const dimensions = unique(compare.dimensions).filter((value) => {
+    const sources = lensSourcesFor(domain, 'compare', value);
     if (!comparisonRequested) return lensRelevant(value, task, canonical);
     if (!lensDimensions.has(clean(value))) return true;
-    return lensRelevant(value, task, canonical);
+    return specialistOwned(value, sources, task, canonical);
   });
   const allowed = new Set(dimensions.map(clean));
   return {
@@ -183,5 +216,7 @@ module.exports = {
   lensRelevant,
   explicitRiskMaterial,
   explicitComparisonMaterial,
+  specialistOwned,
+  explicitPrimaryGenre,
   scopeFiveStageDecisionMaterial
 };
