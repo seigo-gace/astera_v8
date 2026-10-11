@@ -158,7 +158,7 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
   mergedSurvivors.forEach((request, index) => oldToNew.set(String(request.id), `R${String(index + 1).padStart(2, '0')}`));
   for (const [removedId, ownerId] of ownerByRemovedId) oldToNew.set(removedId, oldToNew.get(ownerId));
 
-  const tasks = (packet.tasks || []).map((task) => {
+  const preliminaryTasks = (packet.tasks || []).map((task) => {
     const oldRequestId = String(task.request_id || '');
     const newRequestId = oldToNew.get(oldRequestId) || oldRequestId;
     const request = mergedSurvivors.find((item) => oldToNew.get(String(item.id)) === newRequestId) || null;
@@ -176,6 +176,45 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
       }
     };
   });
+
+  const taskOwnerById = new Map();
+  const taskByKey = new Map();
+  const tasks = [];
+  const duplicateTaskIds = [];
+  for (const task of preliminaryTasks) {
+    const canFold = task?.material_only === true && String(task.request_id || '');
+    const key = canFold
+      ? [
+        task.request_id,
+        String(task.action || '').toLowerCase(),
+        norm(task.target).toLocaleLowerCase(),
+        norm(task.objective || task.purpose).toLocaleLowerCase()
+      ].join('|')
+      : '';
+    const owner = key ? taskByKey.get(key) : null;
+    if (!owner) {
+      const next = { ...task, source_task_ids: unique([...(task.source_task_ids || []), task.id]) };
+      if (key) taskByKey.set(key, next);
+      tasks.push(next);
+      continue;
+    }
+    taskOwnerById.set(String(task.id), String(owner.id));
+    duplicateTaskIds.push(String(task.id));
+    owner.source_task_ids = unique([...(owner.source_task_ids || [owner.id]), ...(task.source_task_ids || []), task.id]);
+    for (const field of ['constraints','prohibitions','preserve','completion_criteria','success_criteria','conditions','exceptions','deadlines','unresolved','material_requirements']) {
+      owner[field] = unique([...(owner[field] || []), ...(task[field] || [])]);
+    }
+    owner.evidence_need = {
+      ...(owner.evidence_need || {}),
+      required: owner.evidence_need?.required === true || task.evidence_need?.required === true,
+      queries: unique([...(owner.evidence_need?.queries || []), ...(task.evidence_need?.queries || [])]),
+      reasons: unique([...(owner.evidence_need?.reasons || []), ...(task.evidence_need?.reasons || [])])
+    };
+  }
+  for (const task of tasks) {
+    task.depends_on = unique((task.depends_on || []).map((id) => taskOwnerById.get(String(id)) || String(id)))
+      .filter((id) => id !== String(task.id));
+  }
 
   const normalizedRequests = mergedSurvivors.map((request, index) => {
     const newId = `R${String(index + 1).padStart(2, '0')}`;
@@ -228,6 +267,7 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
       parser_subtasks_folded_into_source_requests: [...ownerByRemovedId.keys()].filter((id) => !duplicateRemovedIds.has(id)),
       duplicate_source_requests_folded: [...duplicateRemovedIds],
       duplicate_group_count: duplicateGroups.length,
+      duplicate_tasks_folded: duplicateTaskIds,
       request_count_before: requests.length,
       request_count_after: normalizedRequests.length
     }
