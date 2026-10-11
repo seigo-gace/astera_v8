@@ -164,6 +164,7 @@ function sourceLenses(domain = {}) {
   const primaryId = String(domain.primary?.id || '');
   const breadth = GENRE_BREADTH_AUGMENTATIONS[primaryId] || null;
   return [
+    ...(domain.request_specialist_profile ? [{ lens: domain.request_specialist_profile, tier: 'REQUEST_SPECIALIST' }] : []),
     ...(domain.primary ? [{ lens: domain.primary, tier: 'PRIMARY' }] : []),
     ...(breadth ? [{ lens: breadth, tier: 'PRIMARY_BREADTH' }] : []),
     ...(Array.isArray(domain.secondary) ? domain.secondary.map((lens) => ({ lens, tier: 'SECONDARY' })) : []),
