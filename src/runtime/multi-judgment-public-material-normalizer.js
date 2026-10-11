@@ -152,6 +152,7 @@ function usefulCounterPart(value, model, request) {
   if (/^検討しろ[。.]?$/u.test(text)) return false;
   if (nearRequestRestatement(text, request?.request_text || '')) return false;
   if (!domainTemplateSourceBacked(text, model, request)) return false;
+  if (!requestSourceBacked(text, model, request)) return false;
   return true;
 }
 const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
@@ -168,6 +169,11 @@ function requestSourceText(model, request = {}) {
     if (belongs) values.push(clean(observation?.text || ''));
   }
   return values.filter(Boolean).join(' ');
+}
+function requestSourceBacked(value, model, request) {
+  const token = comparable(value).toLocaleLowerCase();
+  if (!token) return false;
+  return requestSourceText(model, request).toLocaleLowerCase().includes(token);
 }
 function domainTemplateSourceBacked(value, model, request) {
   const text = clean(value);
