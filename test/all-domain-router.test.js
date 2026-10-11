@@ -162,3 +162,10 @@ test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => 
   assert.match(result.lens_text, /primary=G31/);
   assert.match(result.lens_text, /overlay\.evidence_strict/);
 });
+
+test('ambiguous single terms do not override surrounding software context', () => {
+  const credit = routeDomainTemplates({ question: 'APIの利用画面でクレジット不足エラーを利用者向けに表示する。' });
+  assert.notEqual(credit.primary?.id, 'G11');
+  const architecture = routeDomainTemplates({ question: 'software architecture change for an API server' });
+  assert.notEqual(architecture.primary?.id, 'G26');
+});

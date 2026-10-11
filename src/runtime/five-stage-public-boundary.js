@@ -12,6 +12,29 @@ function unique(values = []) {
   return [...new Set(array(values).map(clean).filter(Boolean))];
 }
 
+function normalized(value) {
+  return clean(value).toLowerCase();
+}
+
+function signalPresent(text, signal) {
+  const source = normalized(text);
+  const token = normalized(signal);
+  return Boolean(source && token && source.includes(token));
+}
+
+function primaryLensPublicRelevant(task = {}) {
+  const primary = task.domain?.primary;
+  if (!primary) return false;
+  const signals = unique(primary.matched_signals);
+  if (!signals.length) return false;
+  if (signals.some((signal) => signalPresent(task.target, signal))) return true;
+  const target = clean(task.target);
+  const genericTarget = !target || /^(?:入力内容|対象|this|that|it|what|how)$/iu.test(target);
+  if (!genericTarget) return false;
+  const fallback = unique([task.objective, task.purpose, task.user_goal]).join(' ');
+  return signals.filter((signal) => signalPresent(fallback, signal)).length >= 2;
+}
+
 function taskMaterialRequirements(task = {}) {
   return unique([
     ...array(task.material_requirements),
@@ -59,7 +82,7 @@ function sourceBacked(value, source) {
 
 function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
   const source = sourceText(task, canonical);
-  const retainLens = explicitRiskMaterial(task);
+  const retainLens = explicitRiskMaterial(task) && primaryLensPublicRelevant(task);
   const risks = array(risk.risks).filter((entry) =>
     entry?.source !== 'LENS_PLAN' || retainLens || sourceBacked(entry?.impact, source)
   );
@@ -77,7 +100,7 @@ function scopeRiskLane(risk = {}, task = {}, canonical = {}) {
 
 function scopeMultiLane(multi = {}, task = {}, canonical = {}) {
   const source = sourceText(task, canonical);
-  const retainLens = explicitRiskMaterial(task);
+  const retainLens = explicitRiskMaterial(task) && primaryLensPublicRelevant(task);
   const fixed = new Set(array(task.hard_blockers).concat(array(task.prohibitions)).map(clean));
   const perspectives = array(multi.perspectives).flatMap((entry) => {
     if (entry?.source === 'LENS_PLAN' && !retainLens && !sourceBacked(entry?.focus, source)) return [];
@@ -92,6 +115,29 @@ function scopeMultiLane(multi = {}, task = {}, canonical = {}) {
     ...multi,
     perspectives,
     trade_off_map: array(multi.trade_off_map).filter((entry) => allowedIds.has(entry?.id))
+  };
+}
+
+function scopeFactLane(fact = {}, task = {}) {
+  if (primaryLensPublicRelevant(task)) return fact;
+  return {
+    ...fact,
+    fact_requirements: [],
+    evidence_gaps: array(fact.evidence_gaps).filter((entry) => entry?.source !== 'LENS_PLAN')
+  };
+}
+
+function scopeInquiryLane(inquiry = {}, task = {}) {
+  if (primaryLensPublicRelevant(task)) return inquiry;
+  const lensValues = new Set(unique([
+    ...array(inquiry.inquiry_lens),
+    ...array(inquiry.evidence_need)
+  ]));
+  return {
+    ...inquiry,
+    missing_questions: array(inquiry.missing_questions).filter((value) => !lensValues.has(clean(value))),
+    inquiry_lens: [],
+    evidence_need: []
   };
 }
 
@@ -110,8 +156,10 @@ function scopeCompareLane(compare = {}, task = {}, canonical = {}) {
 function scopeFiveStageDecisionMaterial(lanes = {}, task = {}, canonical = {}) {
   return {
     ...lanes,
+    fact: scopeFactLane(lanes.fact || {}, task),
     risk: scopeRiskLane(lanes.risk || {}, task, canonical),
     multi: scopeMultiLane(lanes.multi || {}, task, canonical),
+    inquiry: scopeInquiryLane(lanes.inquiry || {}, task),
     compare: scopeCompareLane(lanes.compare || {}, task, canonical)
   };
 }

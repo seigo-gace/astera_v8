@@ -37,6 +37,27 @@ function isStrongPrimary(primary) {
   );
 }
 
+function signalPresent(value, signal) {
+  return text(value).toLowerCase().includes(text(signal).toLowerCase());
+}
+
+function specialistPrimaryOwned(primary, request = {}, tasks = []) {
+  if (!primary) return false;
+  const source = requestText(request);
+  if (new RegExp('(?:^|[^A-Z0-9])' + primary.id + '(?:$|[^A-Z0-9])', 'i').test(source)) return true;
+  const signals = unique(primary.matched_signals);
+  if (!signals.length) return false;
+  const ownedTasks = array(tasks).filter((task) => text(task.request_id) === text(request.id));
+  if (!ownedTasks.length) {
+    return signals.filter((signal) => signalPresent(source, signal)).length >= 2;
+  }
+  if (ownedTasks.some((task) => signals.some((signal) => signalPresent(task.target, signal)))) return true;
+  const usableTargets = ownedTasks.map((task) => text(task.target)).filter(Boolean);
+  if (usableTargets.length) return false;
+  const fallback = unique(ownedTasks.flatMap((task) => [task.objective, task.purpose, task.user_goal])).join(' ');
+  return signals.filter((signal) => signalPresent(fallback, signal)).length >= 2;
+}
+
 function nextSpecialistId(requestGraph, sequence) {
   return `${requestGraph.owner_request_id}:SR${String(sequence).padStart(2, '0')}`;
 }
@@ -230,7 +251,8 @@ function refinePreparedMaterialRequirements(prepared = {}) {
   const refinedRequests = array(graph.requests).map((requestGraph, index) => {
     const request = requestById.get(text(requestGraph.owner_request_id)) || requests[index] || {};
     const route = routeDomainTemplates({ question: requestText(request), context: '' });
-    return appendNodes(requestGraph, route, request);
+    const primaryOwned = specialistPrimaryOwned(route.primary, request, packet.tasks);
+    return appendNodes(requestGraph, { ...route, primary: primaryOwned ? route.primary : null }, request);
   });
 
   return {
@@ -245,5 +267,6 @@ function refinePreparedMaterialRequirements(prepared = {}) {
 module.exports = {
   REFINEMENT_VERSION,
   isStrongPrimary,
+  specialistPrimaryOwned,
   refinePreparedMaterialRequirements
 };
