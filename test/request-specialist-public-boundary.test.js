@@ -40,3 +40,20 @@ test('software migration exposes request-local engineering checks without requir
   assert.match(out.material.text, /security regression|rollback|compatibility/u);
   assert.doesNotMatch(out.material.text, /返金負債|未使用残高管理/u);
 });
+
+
+test('incidental internal API wording does not promote the full engineering specialist profile', async () => {
+  const out = await run('ユーザーに見せるエラーを整理して。system側の内部API名やstack traceは見せず、利用者自身が対処できる案内だけにする。');
+  assert.doesNotMatch(out.material.text, /Data Loss|Downtime|vendor lock-in|irreversible migration|security regression/iu);
+});
+
+test('explicit G11 genre plus investment intent prefers request-local capital material over the fixed prepaid template', async () => {
+  const out = await run('【G11】投資案件AとBを、回収期間・キャッシュフロー・下振れリスクで比較する判断材料を整理して。');
+  assert.match(out.material.text, /cash flow assumptions|liquidity risk|downside case/iu);
+  assert.doesNotMatch(out.material.text, /前受管理|利用時認識|返金対応|失効Policy|返金負債|未使用残高管理/u);
+});
+
+test('multiple specialist signals are retained so migration is not reduced to the incidental API token', async () => {
+  const out = await run('Node.js APIを無停止で段階移行し、既存Client互換性を維持できるか比較したい。');
+  assert.match(out.material.text, /security regression|rollback|compatibility/iu);
+});

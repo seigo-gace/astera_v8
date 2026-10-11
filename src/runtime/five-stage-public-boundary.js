@@ -78,6 +78,21 @@ function requestSpecialistSelected(task = {}) {
   return Boolean(profile?.id && array(profile?.matched_signals).length);
 }
 
+const WEAK_SPECIALIST_SIGNALS = new Set([
+  'api', 'db', 'ui', 'ai', 'llm', 'model', 'data', 'kpi'
+]);
+
+function strongRequestSpecialistOwnership(task = {}) {
+  const profile = task.domain?.request_specialist_profile || null;
+  if (!profile?.id) return false;
+  return array(profile.matched_signals).some((signal) => {
+    const value = clean(signal).toLocaleLowerCase();
+    if (!value || WEAK_SPECIALIST_SIGNALS.has(value)) return false;
+    if (/^[a-z0-9]+$/u.test(value)) return value.length >= 4;
+    return value.length >= 2;
+  });
+}
+
 function explicitPrimaryGenre(task = {}, canonical = {}) {
   const id = clean(task.domain?.primary?.id).toUpperCase();
   if (!/^G\d{2}$/u.test(id)) return false;
@@ -102,8 +117,8 @@ function specialistOwned(value, sources = [], task = {}, canonical = {}) {
   if (lensRelevant(value, task, canonical)) return true;
   const tiers = sourceTiers(sources);
   const requestSpecialist = requestSpecialistSelected(task);
-  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist) return true;
-  if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && explicitPrimaryGenre(task, canonical)) return true;
+  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist && strongRequestSpecialistOwnership(task)) return true;
+  if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && explicitPrimaryGenre(task, canonical)) return true;
   if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && strongPrimaryClassification(task)) return true;
   return false;
 }
@@ -232,5 +247,6 @@ module.exports = {
   specialistOwned,
   explicitPrimaryGenre,
   strongPrimaryClassification,
+  strongRequestSpecialistOwnership,
   scopeFiveStageDecisionMaterial
 };

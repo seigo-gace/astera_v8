@@ -270,14 +270,20 @@ function cleanLine(value) {
 
 function scoreProfile(profile, text) {
   const matched = [];
+  const source = String(text || '');
   for (const signal of profile.signals || []) {
-    const hit = String(text || '').match(signal);
-    if (hit) matched.push(cleanLine(hit[0]));
+    const flags = signal.flags.includes('g') ? signal.flags : `${signal.flags}g`;
+    const globalSignal = new RegExp(signal.source, flags);
+    for (const hit of source.matchAll(globalSignal)) {
+      const value = cleanLine(hit[0]);
+      if (value) matched.push(value);
+    }
   }
+  const matchedSignals = [...new Set(matched)];
   return {
     profile,
-    score: matched.length,
-    matched_signals: [...new Set(matched)]
+    score: matchedSignals.length,
+    matched_signals: matchedSignals
   };
 }
 
