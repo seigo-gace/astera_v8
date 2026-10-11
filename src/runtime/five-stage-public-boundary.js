@@ -82,9 +82,29 @@ const WEAK_SPECIALIST_SIGNALS = new Set([
   'api', 'db', 'ui', 'ai', 'llm', 'model', 'data', 'kpi'
 ]);
 
+const EXPLICIT_GENRE_SPECIALIST_COMPATIBILITY = Object.freeze({
+  G10: Object.freeze(['business_strategy']),
+  G11: Object.freeze(['finance_capital']),
+  G12: Object.freeze(['hr_organization']),
+  G13: Object.freeze(['education_training']),
+  G23: Object.freeze(['medical_health']),
+  G29: Object.freeze(['engineering_architecture']),
+  G30: Object.freeze(['ai_ml_governance']),
+  G31: Object.freeze(['cybersecurity_privacy']),
+  G37: Object.freeze(['research_evidence'])
+});
+
+function explicitGenreCompatibleSpecialist(task = {}) {
+  const genre = clean(task.domain?.explicit_genre_hint).toUpperCase();
+  const profileId = clean(task.domain?.request_specialist_profile?.id).toLocaleLowerCase();
+  if (!genre || !profileId) return true;
+  const allowed = EXPLICIT_GENRE_SPECIALIST_COMPATIBILITY[genre];
+  return Array.isArray(allowed) && allowed.includes(profileId);
+}
+
 function strongRequestSpecialistOwnership(task = {}) {
   const profile = task.domain?.request_specialist_profile || null;
-  if (!profile?.id) return false;
+  if (!profile?.id || !explicitGenreCompatibleSpecialist(task)) return false;
   return array(profile.matched_signals).some((signal) => {
     const value = clean(signal).toLocaleLowerCase();
     if (!value || WEAK_SPECIALIST_SIGNALS.has(value)) return false;
@@ -116,8 +136,8 @@ function strongPrimaryClassification(task = {}) {
 function specialistOwned(value, sources = [], task = {}, canonical = {}) {
   if (lensRelevant(value, task, canonical)) return true;
   const tiers = sourceTiers(sources);
-  const requestSpecialist = requestSpecialistSelected(task);
-  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist && strongRequestSpecialistOwnership(task)) return true;
+  const requestSpecialist = requestSpecialistSelected(task) && strongRequestSpecialistOwnership(task);
+  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist) return true;
   if (tiers.has('PRIMARY_BREADTH') && explicitPrimaryGenre(task, canonical)) return true;
   if (tiers.has('PRIMARY') && !requestSpecialist && explicitPrimaryGenre(task, canonical)) return true;
   if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && strongPrimaryClassification(task)) return true;
@@ -249,5 +269,6 @@ module.exports = {
   explicitPrimaryGenre,
   strongPrimaryClassification,
   strongRequestSpecialistOwnership,
+  explicitGenreCompatibleSpecialist,
   scopeFiveStageDecisionMaterial
 };
