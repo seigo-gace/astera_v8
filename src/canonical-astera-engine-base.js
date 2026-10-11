@@ -339,8 +339,10 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       const routeQuestion=unique(routeParts).join('\n')||question;
       const routedDomain=routeDomainTemplates({question:routeQuestion,context});
       const specialistRouting=routeRequestSpecialistProfiles({question:routeQuestion,context});
+      const explicitGenreHint=(routeQuestion.match(/(?:^|[^A-Z0-9])(G\d{2})(?=[^A-Z0-9]|$)/iu)||[])[1]?.toUpperCase()||null;
       const domain={
         ...routedDomain,
+        ...(explicitGenreHint?{explicit_genre_hint:explicitGenreHint}:{}),
         ...(specialistRouting.primary?{
           request_specialist_profile:specialistRouting.primary,
           request_specialist_routing:{

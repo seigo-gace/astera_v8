@@ -180,8 +180,13 @@ function compileChannel(domain, field) {
       const value = clean(raw);
       if (!value) continue;
       const key = value.toLocaleLowerCase();
-      const existing = map.get(key) || { value, sources: [] };
+      const existing = map.get(key) || { value, sources: [], display_tier: tier };
       const source = sourceDescriptor(lens, tier);
+      const priority = { PRIMARY: 0, PRIMARY_BREADTH: 1, REQUEST_SPECIALIST: 2, SECONDARY: 3, OVERLAY: 4 };
+      if ((priority[tier] ?? 99) < (priority[existing.display_tier] ?? 99)) {
+        existing.value = value;
+        existing.display_tier = tier;
+      }
       if (!existing.sources.some((item) => item.tier === source.tier && item.lens_id === source.lens_id)) {
         existing.sources.push(source);
       }

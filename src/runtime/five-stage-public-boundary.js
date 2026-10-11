@@ -81,17 +81,30 @@ function requestSpecialistSelected(task = {}) {
 function explicitPrimaryGenre(task = {}, canonical = {}) {
   const id = clean(task.domain?.primary?.id).toUpperCase();
   if (!/^G\d{2}$/u.test(id)) return false;
+  if (clean(task.domain?.explicit_genre_hint).toUpperCase() === id) return true;
   const matchedSignals = array(task.domain?.primary?.matched_signals).map((value) => clean(value).toUpperCase());
   if (matchedSignals.includes(id)) return true;
   const source = sourceText(task, canonical).toUpperCase();
   return new RegExp(`(^|[^A-Z0-9])${id}([^A-Z0-9]|$)`, 'u').test(source);
 }
 
+function strongPrimaryClassification(task = {}) {
+  const domain = task.domain || {};
+  const basis = clean(domain.classification_basis || domain.primary?.classification_basis).toUpperCase();
+  const confidence = Number(domain.confidence ?? domain.primary?.confidence ?? 0);
+  const reviewRequired = Boolean(domain.taxonomy_review_required ?? domain.primary?.taxonomy_review_required);
+  return ['CONTROLLED_TERM_MATCH', 'TEXT_SCORE_MATCH'].includes(basis)
+    && confidence >= 0.72
+    && !reviewRequired;
+}
+
 function specialistOwned(value, sources = [], task = {}, canonical = {}) {
   if (lensRelevant(value, task, canonical)) return true;
   const tiers = sourceTiers(sources);
-  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialistSelected(task)) return true;
+  const requestSpecialist = requestSpecialistSelected(task);
+  if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist) return true;
   if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && explicitPrimaryGenre(task, canonical)) return true;
+  if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && strongPrimaryClassification(task)) return true;
   return false;
 }
 
@@ -218,5 +231,6 @@ module.exports = {
   explicitComparisonMaterial,
   specialistOwned,
   explicitPrimaryGenre,
+  strongPrimaryClassification,
   scopeFiveStageDecisionMaterial
 };
