@@ -118,7 +118,8 @@ function specialistOwned(value, sources = [], task = {}, canonical = {}) {
   const tiers = sourceTiers(sources);
   const requestSpecialist = requestSpecialistSelected(task);
   if (tiers.has('REQUEST_SPECIALIST') && requestSpecialist && strongRequestSpecialistOwnership(task)) return true;
-  if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && explicitPrimaryGenre(task, canonical)) return true;
+  if (tiers.has('PRIMARY_BREADTH') && explicitPrimaryGenre(task, canonical)) return true;
+  if (tiers.has('PRIMARY') && !requestSpecialist && explicitPrimaryGenre(task, canonical)) return true;
   if ((tiers.has('PRIMARY') || tiers.has('PRIMARY_BREADTH')) && !requestSpecialist && strongPrimaryClassification(task)) return true;
   return false;
 }
