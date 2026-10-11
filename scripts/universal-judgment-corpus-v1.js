@@ -195,11 +195,11 @@ function loadUniversalCorpus() {
     },
     {
       id: 'stress-ja-10k', pair: 'stress-10k', language: 'ja', kind: 'stress', input: makeStress('ja'),
-      expected: { min_requests: 8, anchors: ['目的A','目的B','Database','長文','Request','速度','Security','Performance','最終判断','日本語','38ジャンル'], evidence_requested: false }
+      expected: { min_requests: 5, max_requests: 12, max_duplicate_requests: 0, anchors: ['目的A','目的B','Database','長文','Request','速度','Security','Performance','最終判断','日本語','38ジャンル'], evidence_requested: false }
     },
     {
       id: 'stress-en-10k', pair: 'stress-10k', language: 'en', kind: 'stress', input: makeStress('en'),
-      expected: { min_requests: 8, anchors: ['Objective A','Objective B','database','long inputs','Requests','speed','Security','Performance','Final decision','Japanese','38 domains'], evidence_requested: false }
+      expected: { min_requests: 5, max_requests: 12, max_duplicate_requests: 0, anchors: ['Objective A','Objective B','database','long inputs','Requests','speed','Security','Performance','Final decision','Japanese','38 domains'], evidence_requested: false }
     },
     ...makeDomainCases()
   ];
