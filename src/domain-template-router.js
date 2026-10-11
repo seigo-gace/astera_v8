@@ -59,6 +59,76 @@ const DOMAIN_SAFETY_GATES = Object.freeze({
   G35: ['法・民間保護・Escalation Riskを必ず確認する']
 });
 
+const FINANCE_CONTEXT_PROFILES = Object.freeze({
+  payment: Object.freeze({
+    fact_lens: Object.freeze(['取引構造','金額・期間','Cash Flow','会計処理時点','返金・失効条件']),
+    risk_lens: Object.freeze(['資金流動性','会計誤分類','税務・規制','返金負債','未使用残高管理']),
+    multi_lens: Object.freeze(['利用者','経理','財務責任者','決済事業者','監査・専門家']),
+    inquiry_lens: Object.freeze(['法域と会計基準は何か','いつ権利義務が発生するか','返金・失効条件は何か','実績と予測を分けたか']),
+    compare_lens: Object.freeze(['前受管理','利用時認識','返金対応','失効Policy','専門家確認']),
+    evidence_to_collect: Object.freeze(['取引規約','Ledger','会計方針','決済記録','法域別公式資料'])
+  }),
+  investment: Object.freeze({
+    fact_lens: Object.freeze(['対象資産・投資案','投資額・期間','Cash Flow・収益性','資本Cost・評価前提','税務・規制条件']),
+    risk_lens: Object.freeze(['損失・Downside','資金流動性','評価前提の誤り','集中・Counterparty Risk','税務・規制不適合']),
+    multi_lens: Object.freeze(['投資者','財務責任者','事業責任者','取引相手','監査・専門家']),
+    inquiry_lens: Object.freeze(['投資目的と期間は何か','期待ReturnとDownsideは何か','資金拘束とExit条件は何か','評価前提と税務・規制条件は何か']),
+    compare_lens: Object.freeze(['収益性・Return','Risk・Downside','流動性','期間・回収','資本Cost・税務影響']),
+    evidence_to_collect: Object.freeze(['財務諸表・Cash Flow','投資条件・契約','市場・評価Data','Scenario・感応度Data','規制・税務公式資料'])
+  })
+});
+
+const PUBLISHING_CONTEXT_PROFILES = Object.freeze({
+  publication: Object.freeze({
+    fact_lens: Object.freeze(['対象資料・Version','公開範囲・Audience','権利・License','保存・Archive要件','更新・公開状態']),
+    risk_lens: Object.freeze(['権利侵害','機密・個人情報の誤公開','古いVersionの公開','保存・Link切れ','公開後の訂正不能']),
+    multi_lens: Object.freeze(['著者・作成者','権利者','読者・利用者','出版・Archive管理者','法務・記録管理']),
+    inquiry_lens: Object.freeze(['どのVersionを公開するか','公開範囲とAudienceは誰か','権利・License条件は何か','保存期間と更新・撤回条件は何か']),
+    compare_lens: Object.freeze(['公開範囲','Version・鮮度','権利条件','保存性','更新・撤回容易性']),
+    evidence_to_collect: Object.freeze(['版・Version情報','権利・License資料','公開承認記録','保存Policy','更新・撤回履歴'])
+  })
+});
+
+const MEDICAL_CONTEXT_PROFILES = Object.freeze({
+  program: Object.freeze({
+    fact_lens: Object.freeze(['対象集団・Population','介入・Program内容','Baseline・対象Needs','Benefit・Outcome','Harm・副作用・Access']),
+    risk_lens: Object.freeze(['Harm・有害事象','対象集団との不適合','Access・公平性低下','Evidence不確実性','運用・Resource不足']),
+    multi_lens: Object.freeze(['対象集団・患者','医療者','Program運営者','家族・地域','Benefit-Risk・公平性Reviewer']),
+    inquiry_lens: Object.freeze(['対象集団とNeedsは何か','期待Benefitと測定Outcomeは何か','Harm・副作用は何か','Access・公平性と実施能力はどうか']),
+    compare_lens: Object.freeze(['Benefit','Harm','対象集団Coverage','Access・公平性','Evidence確度・実行可能性']),
+    evidence_to_collect: Object.freeze(['対象集団Data','介入・Program仕様','Outcome・有害事象Data','診療・公衆衛生Guideline','費用・Resource・Access情報'])
+  })
+});
+
+function specializeGenreForRequest(genre, routeText = '') {
+  if (!genre) return genre;
+  const text = String(routeText || '');
+
+  if (genre.id === 'G11') {
+    const payment = /前払|前払い|クレジット|返金|失効|売上計上|決済|stored[ -]?value|prepaid|refund|revenue recognition/iu.test(text);
+    const investment = /投資|investment|portfolio|収益性|return|downside|流動性|liquidity|valuation|評価|資本cost|capital cost/iu.test(text);
+    const profile = payment && !investment
+      ? FINANCE_CONTEXT_PROFILES.payment
+      : investment
+        ? FINANCE_CONTEXT_PROFILES.investment
+        : null;
+    return profile ? { ...genre, ...profile } : genre;
+  }
+
+  if (genre.id === 'G15') {
+    const publication = /資料公開|公開方針|publication|publish|archive|保存|版管理|version|権利|license/iu.test(text);
+    return publication ? { ...genre, ...PUBLISHING_CONTEXT_PROFILES.publication } : genre;
+  }
+
+  if (genre.id === 'G23') {
+    const program = /医療プログラム|健康プログラム|health program|medical program|program policy|方針|対象集団|population|導入|公衆衛生/iu.test(text);
+    const acute = /胸痛|呼吸|意識|救急|急性|症状|診断|服薬|薬物|emergency|acute|symptom|diagnos/iu.test(text);
+    return program && !acute ? { ...genre, ...MEDICAL_CONTEXT_PROFILES.program } : genre;
+  }
+
+  return genre;
+}
+
 const MIN_CONTROLLED_PRIMARY_SCORE = 6;
 const MIN_TEXT_PRIMARY_SCORE = 8;
 const MIN_SECONDARY_SCORE = 6;
@@ -184,6 +254,7 @@ function scoreGenre(genre, text) {
   const identityAliases = aliasesForGenre(genre.id);
   let score = normalizedText.includes(anchor) ? 1000 : 0;
   let exactHits = normalizedText.includes(anchor) ? 1 : 0;
+  let identityHits = normalizedText.includes(anchor) ? 1 : 0;
   const matched = [];
 
   for (const rawTerm of genre.terms || []) {
@@ -194,6 +265,7 @@ function scoreGenre(genre, text) {
     if (exactMatch) {
       score += exactTermWeight(term, genre);
       exactHits += 1;
+      if (isGenreIdentityTerm(genre, term)) identityHits += 1;
       matched.push(rawTerm);
       continue;
     }
@@ -209,6 +281,7 @@ function scoreGenre(genre, text) {
     if (!alias || catalogTerms.has(alias) || !asciiBoundaryMatch(normalizedText, alias)) continue;
     score += aliasWeight(alias);
     exactHits += 1;
+    identityHits += 1;
     matched.push(rawAlias);
   }
 
@@ -222,13 +295,14 @@ function scoreGenre(genre, text) {
     genre,
     score,
     exact_hits: exactHits,
+    identity_hits: identityHits,
     similarity,
     matched_signals: [...new Set(matched.map(cleanLine))]
   };
 }
 
-function publicGenre(item) {
-  const genre = item.genre;
+function publicGenre(item, routeText = '') {
+  const genre = specializeGenreForRequest(item.genre, routeText);
   const gate = DOMAIN_SAFETY_GATES[genre.id] || [];
   return {
     id: genre.id,
@@ -275,7 +349,15 @@ function classifyScores(scored) {
 
 function qualifiedScore(item, secondary = false) {
   const minimum = secondary ? MIN_SECONDARY_SCORE : MIN_CONTROLLED_PRIMARY_SCORE;
-  if (!secondary && item.exact_hits >= 2 && item.score >= 4) return true;
+  if (secondary) {
+    // A secondary domain is additive context, so one incidental controlled term
+    // must not inject an entire unrelated specialist Lens into public material.
+    // A canonical identity hit (genre id/name/anchor alias) remains sufficient;
+    // otherwise require at least two independent exact signals.
+    return (item.identity_hits > 0 && item.score >= minimum)
+      || (item.exact_hits >= 2 && item.score >= minimum);
+  }
+  if (item.exact_hits >= 2 && item.score >= 4) return true;
   return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
@@ -472,13 +554,13 @@ function routeDomainTemplates({ question = '', context = '' } = {}) {
   }
 
   const classification = classifyScores(scored);
-  const primary = publicGenre({ ...best, ...classification });
+  const primary = publicGenre({ ...best, ...classification }, routeText);
   const secondary = scored.slice(1)
     .filter((item) => qualifiedScore(item, true))
     .slice(0, 3)
     .map((item) => {
       const meta = classifyScores([item]);
-      return publicGenre({ ...item, ...meta });
+      return publicGenre({ ...item, ...meta }, routeText);
     });
 
   return {

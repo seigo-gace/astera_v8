@@ -80,3 +80,14 @@ test('production runtime does not import verification corpus', () => {
   }
   assert.deepEqual(offenders, [], 'runtime must not hard-code corpus authority');
 });
+
+
+test('known mixed UI cases include negative gold for unrelated specialist material', () => {
+  const corpus = loadUniversalCorpus();
+  for (const id of ['known-noisy-multi-ja-1k', 'known-noisy-multi-en-1k']) {
+    const row = corpus.find((item) => item.id === id);
+    assert.ok(row, id);
+    assert.ok(Array.isArray(row.expected.forbidden_material_terms));
+    assert.ok(row.expected.forbidden_material_terms.length >= 5);
+  }
+});

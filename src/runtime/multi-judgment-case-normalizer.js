@@ -50,38 +50,118 @@ function remapRelation(relation, idMap) {
   if (!from || !to || from === to) return null;
   return { ...relation, from_request_id: from, to_request_id: to };
 }
+function duplicateRequestKey(request = {}) {
+  if (!sourceBacked(request)) return '';
+  const text = norm(request.request_text).toLocaleLowerCase();
+  if (!text) return '';
+  return `${String(request.action || 'analyze').toLowerCase()}|${text}`;
+}
+function mergeRequestRecords(owner, members = []) {
+  const rows = [owner, ...members.filter((item) => String(item.id) !== String(owner.id))];
+  const contextKeys = new Set(rows.flatMap((item) => Object.keys(item.local_context || {})));
+  const localContext = {};
+  for (const key of contextKeys) {
+    localContext[key] = unique(rows.flatMap((item) => item.local_context?.[key] || []));
+  }
+  const occurrences = rows
+    .map((item) => item.source_span)
+    .filter((span) => Number.isFinite(Number(span?.start)) && Number.isFinite(Number(span?.end)))
+    .map((span) => ({ ...span }));
+  return {
+    ...owner,
+    objectives: unique(rows.flatMap((item) => item.objectives || [])),
+    local_context: localContext,
+    external_evidence_requested: rows.some((item) => item.external_evidence_requested === true),
+    parser_task_ids: unique(rows.flatMap((item) => [
+      ...(item.parser_task_ids || []),
+      ...(item.parser_task_id ? [item.parser_task_id] : [])
+    ])),
+    source_atom_ids: unique(rows.flatMap((item) => [
+      ...(item.source_atom_ids || []),
+      ...(item.source_atom_id ? [item.source_atom_id] : [])
+    ])),
+    source_occurrences: occurrences,
+    occurrence_count: occurrences.length || rows.length
+  };
+}
 function normalizeMultiJudgmentCase(prepared, input = {}) {
   const packet = prepared?.analysis_task_packet;
   const originalModel = packet?.case_model || packet?.observable_material?.case_model || prepared?.observable_material?.case_model;
   if (!packet || !originalModel || Number(originalModel.request_count || 0) < 2) return prepared;
 
-  const requests = Array.isArray(originalModel.judgment_requests) ? originalModel.judgment_requests.map((request) => ({ ...request })) : [];
+  const requests = Array.isArray(originalModel.judgment_requests)
+    ? originalModel.judgment_requests.map((request) => ({
+      ...request,
+      local_context: Object.fromEntries(Object.entries(request.local_context || {}).map(([key, values]) => [key, [...(values || [])]]))
+    }))
+    : [];
   if (requests.length < 2) return prepared;
+
   const ownerByRemovedId = new Map();
+  const duplicateOwnerByKey = new Map();
+  const duplicateRemovedIds = new Set();
+  for (const request of requests) {
+    const key = duplicateRequestKey(request);
+    if (!key) continue;
+    const owner = duplicateOwnerByKey.get(key);
+    if (!owner) {
+      duplicateOwnerByKey.set(key, request);
+      continue;
+    }
+    ownerByRemovedId.set(String(request.id), String(owner.id));
+    duplicateRemovedIds.add(String(request.id));
+  }
+
   for (const child of requests) {
-    if (!parserOnly(child)) continue;
-    const owners = requests.filter((owner) => owner.id !== child.id && isSmallParserSubtask(owner, child));
+    if (!parserOnly(child) || duplicateRemovedIds.has(String(child.id))) continue;
+    const owners = requests.filter((owner) =>
+      owner.id !== child.id
+      && !ownerByRemovedId.has(String(owner.id))
+      && isSmallParserSubtask(owner, child)
+    );
     if (owners.length === 1) ownerByRemovedId.set(String(child.id), String(owners[0].id));
   }
   if (!ownerByRemovedId.size) return prepared;
+
+  const canonicalOwnerId = (id) => {
+    let current = String(id || '');
+    const seen = new Set();
+    while (ownerByRemovedId.has(current) && !seen.has(current)) {
+      seen.add(current);
+      current = String(ownerByRemovedId.get(current));
+    }
+    return current;
+  };
+  for (const [removedId, ownerId] of [...ownerByRemovedId]) {
+    ownerByRemovedId.set(removedId, canonicalOwnerId(ownerId));
+  }
+
+  const survivors = requests.filter((request) => !ownerByRemovedId.has(String(request.id)));
+  const mergedSurvivors = survivors.map((request) => {
+    const members = requests.filter((item) => canonicalOwnerId(item.id) === String(request.id));
+    return mergeRequestRecords(request, members);
+  });
 
   const ownerExtraTaskIds = new Map();
   for (const [removedId, ownerId] of ownerByRemovedId) {
     const removed = requests.find((request) => String(request.id) === removedId);
     if (!removed) continue;
     const current = ownerExtraTaskIds.get(ownerId) || [];
-    ownerExtraTaskIds.set(ownerId, unique([...current, ...(removed.parser_task_ids || []), ...(removed.parser_task_id ? [removed.parser_task_id] : [])]));
+    ownerExtraTaskIds.set(ownerId, unique([
+      ...current,
+      ...(removed.parser_task_ids || []),
+      ...(removed.parser_task_id ? [removed.parser_task_id] : [])
+    ]));
   }
 
-  const survivors = requests.filter((request) => !ownerByRemovedId.has(String(request.id)));
   const oldToNew = new Map();
-  survivors.forEach((request, index) => oldToNew.set(String(request.id), `R${String(index + 1).padStart(2, '0')}`));
+  mergedSurvivors.forEach((request, index) => oldToNew.set(String(request.id), `R${String(index + 1).padStart(2, '0')}`));
   for (const [removedId, ownerId] of ownerByRemovedId) oldToNew.set(removedId, oldToNew.get(ownerId));
 
-  const tasks = (packet.tasks || []).map((task) => {
+  const preliminaryTasks = (packet.tasks || []).map((task) => {
     const oldRequestId = String(task.request_id || '');
     const newRequestId = oldToNew.get(oldRequestId) || oldRequestId;
-    const request = survivors.find((item) => oldToNew.get(String(item.id)) === newRequestId) || null;
+    const request = mergedSurvivors.find((item) => oldToNew.get(String(item.id)) === newRequestId) || null;
     if (!request) return task;
     const explicitEvidence = taskExplicitEvidence(task, request.request_text);
     const currentReasons = task.evidence_need?.reasons || [];
@@ -97,11 +177,55 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
     };
   });
 
-  const normalizedRequests = survivors.map((request, index) => {
+  const taskOwnerById = new Map();
+  const taskByKey = new Map();
+  const tasks = [];
+  const duplicateTaskIds = [];
+  for (const task of preliminaryTasks) {
+    const canFold = task?.material_only === true && String(task.request_id || '');
+    const key = canFold
+      ? [
+        task.request_id,
+        String(task.action || '').toLowerCase(),
+        norm(task.target).toLocaleLowerCase(),
+        norm(task.objective || task.purpose).toLocaleLowerCase()
+      ].join('|')
+      : '';
+    const owner = key ? taskByKey.get(key) : null;
+    if (!owner) {
+      const next = { ...task, source_task_ids: unique([...(task.source_task_ids || []), task.id]) };
+      if (key) taskByKey.set(key, next);
+      tasks.push(next);
+      continue;
+    }
+    taskOwnerById.set(String(task.id), String(owner.id));
+    duplicateTaskIds.push(String(task.id));
+    owner.source_task_ids = unique([...(owner.source_task_ids || [owner.id]), ...(task.source_task_ids || []), task.id]);
+    for (const field of ['constraints','prohibitions','preserve','completion_criteria','success_criteria','conditions','exceptions','deadlines','unresolved','material_requirements']) {
+      owner[field] = unique([...(owner[field] || []), ...(task[field] || [])]);
+    }
+    owner.evidence_need = {
+      ...(owner.evidence_need || {}),
+      required: owner.evidence_need?.required === true || task.evidence_need?.required === true,
+      queries: unique([...(owner.evidence_need?.queries || []), ...(task.evidence_need?.queries || [])]),
+      reasons: unique([...(owner.evidence_need?.reasons || []), ...(task.evidence_need?.reasons || [])])
+    };
+  }
+  for (const task of tasks) {
+    task.depends_on = unique((task.depends_on || []).map((id) => taskOwnerById.get(String(id)) || String(id)))
+      .filter((id) => id !== String(task.id));
+  }
+
+  const normalizedRequests = mergedSurvivors.map((request, index) => {
     const newId = `R${String(index + 1).padStart(2, '0')}`;
     const extra = ownerExtraTaskIds.get(String(request.id)) || [];
-    const parserTaskIds = unique([...(request.parser_task_ids || []), ...(request.parser_task_id ? [request.parser_task_id] : []), ...extra]);
-    const explicitEvidence = EXTERNAL_EVIDENCE_CUE.test(norm(request.request_text))
+    const parserTaskIds = unique([
+      ...(request.parser_task_ids || []),
+      ...(request.parser_task_id ? [request.parser_task_id] : []),
+      ...extra
+    ]);
+    const explicitEvidence = request.external_evidence_requested === true
+      || EXTERNAL_EVIDENCE_CUE.test(norm(request.request_text))
       || tasks.filter((task) => String(task.request_id) === newId).some((task) => taskExplicitEvidence(task, request.request_text));
     return {
       ...request,
@@ -129,6 +253,7 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
     requestTaskIds[request.id] = ids;
     if (ids[0]) taskMapping[request.id] = ids[0];
   }
+  const duplicateGroups = normalizedRequests.filter((request) => Number(request.occurrence_count || 1) > 1);
   const model = {
     ...originalModel,
     request_count: normalizedRequests.length,
@@ -139,7 +264,10 @@ function normalizeMultiJudgmentCase(prepared, input = {}) {
     request_task_ids: requestTaskIds,
     task_mapping: taskMapping,
     normalization: {
-      parser_subtasks_folded_into_source_requests: [...ownerByRemovedId.keys()],
+      parser_subtasks_folded_into_source_requests: [...ownerByRemovedId.keys()].filter((id) => !duplicateRemovedIds.has(id)),
+      duplicate_source_requests_folded: [...duplicateRemovedIds],
+      duplicate_group_count: duplicateGroups.length,
+      duplicate_tasks_folded: duplicateTaskIds,
       request_count_before: requests.length,
       request_count_after: normalizedRequests.length
     }

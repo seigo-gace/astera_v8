@@ -162,3 +162,72 @@ test('OverlayはPrimaryを上書きせず必要条件だけ追加する', () => 
   assert.match(result.lens_text, /primary=G31/);
   assert.match(result.lens_text, /overlay\.evidence_strict/);
 });
+
+
+test('single incidental finance term does not inject G11 as a secondary lens into a software error-design request', () => {
+  const result = routeDomainTemplates({
+    question: 'system側の通信失敗や内部API名やstack traceは見せず、利用回数上限、クレジット不足、購入失敗、権限不足だけを利用者向けに説明する。'
+  });
+  assert.equal(result.primary?.id, 'G29');
+  assert.equal(result.secondary.some((item) => item.id === 'G11'), false);
+});
+
+test('explicit G11 investment comparison keeps finance as the primary genre', () => {
+  const result = routeDomainTemplates({
+    question: '【G11】投資案件の比較判断について、収益性、Downside、流動性、期間、Cash Flowを確認する。'
+  });
+  assert.equal(result.primary?.id, 'G11');
+  assert.ok(result.primary.compare_lens.includes('収益性・Return'));
+  assert.ok(result.primary.compare_lens.includes('Risk・Downside'));
+  assert.ok(result.primary.compare_lens.includes('流動性'));
+});
+
+
+test('G15 publication request uses publication/archive material instead of literary criticism material', () => {
+  const result = routeDomainTemplates({ question: '【G15】資料公開方針について、版、権利、保存条件を判断したい。' });
+  assert.equal(result.primary?.id, 'G15');
+  assert.ok(result.primary.fact_lens.some((value) => /Version|版/u.test(value)));
+  assert.ok(result.primary.compare_lens.some((value) => /保存/u.test(value)));
+  assert.equal(result.primary.compare_lens.includes('比較文学'), false);
+});
+
+test('G23 health-program request uses population benefit-harm material while acute clinical requests keep emergency material', () => {
+  const program = routeDomainTemplates({ question: '【G23】医療プログラム方針について対象集団への便益と害を比較したい。' });
+  assert.equal(program.primary?.id, 'G23');
+  assert.ok(program.primary.fact_lens.some((value) => /Population|対象集団/u.test(value)));
+  assert.ok(program.primary.compare_lens.includes('Benefit'));
+  assert.ok(program.primary.compare_lens.includes('Harm'));
+  assert.equal(program.primary.compare_lens.includes('救急要請'), false);
+
+  const acute = routeDomainTemplates({ question: '70歳の父が胸痛と冷や汗。救急要請が必要か判断材料が欲しい。' });
+  assert.equal(acute.primary?.id, 'G23');
+  assert.ok(acute.primary.compare_lens.includes('救急要請'));
+});
+
+
+test('G09 economics exposes baseline counterfactual and distribution as distinct judgment concepts', () => {
+  const result = routeDomainTemplates({ question: '【G09】貿易施策の影響判断について基準、反実仮想、分配影響を整理する。' });
+  assert.equal(result.primary?.id, 'G09');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /基準|Baseline/u);
+  assert.match(serialized, /反実仮想|Counterfactual/u);
+  assert.match(serialized, /分配|Distribution/u);
+});
+
+test('G13 education exposes learner population outcome and assessment', () => {
+  const result = routeDomainTemplates({ question: '【G13】教育プログラム導入判断について学習者、成果、評価方法を整理する。' });
+  assert.equal(result.primary?.id, 'G13');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /学習者|Population/u);
+  assert.match(serialized, /成果|Outcome/u);
+  assert.match(serialized, /評価|Assessment/u);
+});
+
+test('G32 compliance exposes applicable requirement evidence and exception', () => {
+  const result = routeDomainTemplates({ question: '【G32】規格適合方針について適用要求、証拠、例外条件を整理する。' });
+  assert.equal(result.primary?.id, 'G32');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /適用要求|Applicable Requirement/u);
+  assert.match(serialized, /証拠|Evidence/u);
+  assert.match(serialized, /例外/u);
+});

@@ -142,7 +142,7 @@ function usefulMissingLine(value, requestText = '') {
   if (nearRequestRestatement(text, requestText)) return false;
   return true;
 }
-function usefulCounterPart(value, requestText = '') {
+function usefulCounterPart(value, model, request) {
   const text = clean(value);
   if (!text) return false;
   if (internalMarker(text)) return false;
@@ -150,7 +150,9 @@ function usefulCounterPart(value, requestText = '') {
   if (/反例\s*条件不成立\s*例外/u.test(text)) return false;
   if (/(?:肯定形|否定形)\s*$/u.test(text)) return false;
   if (/^検討しろ[。.]?$/u.test(text)) return false;
-  if (nearRequestRestatement(text, requestText)) return false;
+  if (nearRequestRestatement(text, request?.request_text || '')) return false;
+  if (!domainTemplateSourceBacked(text, model, request)) return false;
+  if (!requestSourceBacked(text, model, request)) return false;
   return true;
 }
 const INTERNAL_DOMAIN_TEMPLATE_TOKEN = /(?:Data Loss|Downtime|Recall|保証不履行|現行維持|段階移行|修理|交換|Security Regression|Rollback不能|互換性破壊|Build vs Buy|保守性|\bRisk\b|\bCost\b)/iu;
@@ -168,6 +170,11 @@ function requestSourceText(model, request = {}) {
   }
   return values.filter(Boolean).join(' ');
 }
+function requestSourceBacked(value, model, request) {
+  const token = comparable(value).toLocaleLowerCase();
+  if (!token) return false;
+  return requestSourceText(model, request).toLocaleLowerCase().includes(token);
+}
 function domainTemplateSourceBacked(value, model, request) {
   const text = clean(value);
   const matches = text.match(new RegExp(INTERNAL_DOMAIN_TEMPLATE_TOKEN.source, 'giu')) || [];
@@ -182,6 +189,7 @@ function usefulRiskPart(value, model, request) {
   if (/Alternative evidence angle/iu.test(text)) return false;
   if (comparable(text) === comparable(request?.request_text || '')) return false;
   if (!domainTemplateSourceBacked(text, model, request)) return false;
+  if (!requestSourceBacked(text, model, request)) return false;
   return true;
 }
 function normalizeDigits(value) {
@@ -286,7 +294,7 @@ function normalizeSection05(section, model, lang) {
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = String(request.action || '') === 'verify'
         ? []
-        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, request.request_text));
+        : raw.split(/\s*\/\s*/u).filter((part) => usefulCounterPart(part, model, request));
       const out = [`    - ${label}: ${semantic}`];
       if (extras.length) out.push(`    - ${extraLabel}: ${[...new Set(extras)].join(' / ')}`);
       return out;

@@ -27,6 +27,7 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /support_evidence_refs/iu,
   /parser_overall_status/iu,
   /meaning_unresolved/iu,
+  /unsupported:\d+:\s*\{[^}]*"status"\s*:\s*"UNSUPPORTED"[^}]*\}/iu,
   /candidate_id/iu,
   /binding_id/iu,
   /RETRIEVAL_FAILED/iu,
@@ -80,6 +81,19 @@ function section07(text) {
 function uniqueRequestIds(text) {
   return [...new Set((String(text || '').match(/\bR\d{2,}\b/gu) || []))];
 }
+function publicRequestTexts(text) {
+  const firstSection = String(text || '').split(/^---$/m)[0] || '';
+  return firstSection.split('\n').map((line) => {
+    const match = /^\s*-\s+R\d{2,}\s+\[[^\]]+\]:\s*(.+)$/u.exec(line);
+    return match ? normalize(match[1]) : '';
+  }).filter(Boolean);
+}
+
+function duplicateRequestTexts(text) {
+  const counts = new Map();
+  for (const value of publicRequestTexts(text)) counts.set(value, (counts.get(value) || 0) + 1);
+  return [...counts.entries()].filter(([, count]) => count > 1).map(([value, count]) => ({ value, count }));
+}
 
 function countTerms(text, terms) {
   const n = normalize(text);
@@ -91,6 +105,19 @@ function anchorCoverage(text, anchors) {
   const matched = countTerms(text, anchors);
   return { matched, ratio: matched.length / anchors.length };
 }
+
+function conceptCoverage(text, concepts) {
+  const rows = Array.isArray(concepts) ? concepts : [];
+  const normalized = normalize(text);
+  const matched = [];
+  for (const concept of rows) {
+    const aliases = Array.isArray(concept) ? concept : [concept];
+    const hit = aliases.find((alias) => normalized.includes(normalize(alias)));
+    if (hit) matched.push({ concept: aliases[0] || '', matched_alias: hit });
+  }
+  return { matched, ratio: rows.length ? matched.length / rows.length : 1 };
+}
+
 
 function patternMatches(pattern, text) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -146,6 +173,13 @@ function evaluateCase(testCase, out, durationMs) {
   } else if (tasks.length < 1 && requests.length < 1) {
     failures.push({ code: 'NO_JUDGMENT_UNIT', internal_task_count: tasks.length, public_request_ids: requests });
   }
+  if (Number.isFinite(Number(expected.max_requests)) && requests.length > Number(expected.max_requests)) {
+    failures.push({ code: 'REQUEST_INFLATION', expected_max: Number(expected.max_requests), actual: requests.length });
+  }
+  const duplicateRequests = duplicateRequestTexts(material);
+  if (Number(expected.max_duplicate_requests) === 0 && duplicateRequests.length) {
+    failures.push({ code: 'DUPLICATE_REQUEST_INFLATION', duplicates: duplicateRequests });
+  }
 
   const anchors = anchorCoverage(material, expected.anchors || []);
   if ((expected.anchors || []).length && anchors.ratio < 0.75) {
@@ -153,8 +187,40 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  if ((expected.material_terms || []).length && materialTerms.length < 2) {
-    failures.push({ code: 'DOMAIN_MATERIAL_INSUFFICIENT', genre: expected.genre || null, matched_terms: materialTerms, expected_terms: expected.material_terms });
+  const termGold = expected.material_terms || [];
+  const derivedConcepts = expected.genre && termGold.length >= 6 && termGold.length % 2 === 0
+    ? Array.from({ length: termGold.length / 2 }, (_, index) => [termGold[index], termGold[index + termGold.length / 2]])
+    : [];
+  const requiredConcepts = (expected.material_concepts || []).length ? expected.material_concepts : derivedConcepts;
+  const materialConcepts = conceptCoverage(material, requiredConcepts);
+  if (requiredConcepts.length && materialConcepts.matched.length < requiredConcepts.length) {
+    failures.push({
+      code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+      genre: expected.genre || null,
+      required_concepts: requiredConcepts,
+      matched_concepts: materialConcepts.matched
+    });
+  } else {
+    const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, termGold.length));
+    if (!requiredConcepts.length && termGold.length && materialTerms.length < requiredMaterialTerms) {
+      failures.push({
+        code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+        genre: expected.genre || null,
+        required_count: requiredMaterialTerms,
+        matched_terms: materialTerms,
+        expected_terms: termGold
+      });
+    }
+  }
+
+  const forbiddenMaterialTerms = countTerms(material, expected.forbidden_material_terms || []);
+  if (forbiddenMaterialTerms.length) {
+    failures.push({
+      code: 'IRRELEVANT_DOMAIN_MATERIAL_LEAK',
+      genre: expected.genre || null,
+      matched_terms: forbiddenMaterialTerms,
+      forbidden_terms: expected.forbidden_material_terms
+    });
   }
 
   const leaked = novelPatternMatches(INTERNAL_PUBLIC_PATTERNS, material, testCase.input);
@@ -191,8 +257,11 @@ function evaluateCase(testCase, out, durationMs) {
     main8_sections: main8Sections,
     internal_task_count: tasks.length,
     public_request_ids: requests,
+    duplicate_public_requests: duplicateRequests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
+    domain_material_concepts_matched: materialConcepts.matched,
+    forbidden_material_terms_matched: forbiddenMaterialTerms,
     runtime_trace_available: traceValidation.complete,
     runtime_trace_validation: traceValidation,
     runtime_trace: trace,
