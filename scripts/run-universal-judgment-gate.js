@@ -153,8 +153,15 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  if ((expected.material_terms || []).length && materialTerms.length < 2) {
-    failures.push({ code: 'DOMAIN_MATERIAL_INSUFFICIENT', genre: expected.genre || null, matched_terms: materialTerms, expected_terms: expected.material_terms });
+  const requiredMaterialTerms = Number(expected.min_material_terms || Math.min(3, (expected.material_terms || []).length));
+  if ((expected.material_terms || []).length && materialTerms.length < requiredMaterialTerms) {
+    failures.push({
+      code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+      genre: expected.genre || null,
+      required_count: requiredMaterialTerms,
+      matched_terms: materialTerms,
+      expected_terms: expected.material_terms
+    });
   }
 
   const forbiddenMaterialTerms = countTerms(material, expected.forbidden_material_terms || []);
