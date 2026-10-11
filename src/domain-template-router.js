@@ -184,6 +184,7 @@ function scoreGenre(genre, text) {
   const identityAliases = aliasesForGenre(genre.id);
   let score = normalizedText.includes(anchor) ? 1000 : 0;
   let exactHits = normalizedText.includes(anchor) ? 1 : 0;
+  let identityHits = normalizedText.includes(anchor) ? 1 : 0;
   const matched = [];
 
   for (const rawTerm of genre.terms || []) {
@@ -194,6 +195,7 @@ function scoreGenre(genre, text) {
     if (exactMatch) {
       score += exactTermWeight(term, genre);
       exactHits += 1;
+      if (isGenreIdentityTerm(genre, term)) identityHits += 1;
       matched.push(rawTerm);
       continue;
     }
@@ -209,6 +211,7 @@ function scoreGenre(genre, text) {
     if (!alias || catalogTerms.has(alias) || !asciiBoundaryMatch(normalizedText, alias)) continue;
     score += aliasWeight(alias);
     exactHits += 1;
+    identityHits += 1;
     matched.push(rawAlias);
   }
 
@@ -222,6 +225,7 @@ function scoreGenre(genre, text) {
     genre,
     score,
     exact_hits: exactHits,
+    identity_hits: identityHits,
     similarity,
     matched_signals: [...new Set(matched.map(cleanLine))]
   };
@@ -275,7 +279,15 @@ function classifyScores(scored) {
 
 function qualifiedScore(item, secondary = false) {
   const minimum = secondary ? MIN_SECONDARY_SCORE : MIN_CONTROLLED_PRIMARY_SCORE;
-  if (!secondary && item.exact_hits >= 2 && item.score >= 4) return true;
+  if (secondary) {
+    // A secondary domain is additive context, so one incidental controlled term
+    // must not inject an entire unrelated specialist Lens into public material.
+    // A canonical identity hit (genre id/name/anchor alias) remains sufficient;
+    // otherwise require at least two independent exact signals.
+    return (item.identity_hits > 0 && item.score >= minimum)
+      || (item.exact_hits >= 2 && item.score >= minimum);
+  }
+  if (item.exact_hits >= 2 && item.score >= 4) return true;
   return (item.exact_hits > 0 && item.score >= minimum) || item.score >= MIN_TEXT_PRIMARY_SCORE;
 }
 
