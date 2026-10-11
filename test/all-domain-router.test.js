@@ -203,3 +203,31 @@ test('G23 health-program request uses population benefit-harm material while acu
   assert.equal(acute.primary?.id, 'G23');
   assert.ok(acute.primary.compare_lens.includes('救急要請'));
 });
+
+
+test('G09 economics exposes baseline counterfactual and distribution as distinct judgment concepts', () => {
+  const result = routeDomainTemplates({ question: '【G09】貿易施策の影響判断について基準、反実仮想、分配影響を整理する。' });
+  assert.equal(result.primary?.id, 'G09');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /基準|Baseline/u);
+  assert.match(serialized, /反実仮想|Counterfactual/u);
+  assert.match(serialized, /分配|Distribution/u);
+});
+
+test('G13 education exposes learner population outcome and assessment', () => {
+  const result = routeDomainTemplates({ question: '【G13】教育プログラム導入判断について学習者、成果、評価方法を整理する。' });
+  assert.equal(result.primary?.id, 'G13');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /学習者|Population/u);
+  assert.match(serialized, /成果|Outcome/u);
+  assert.match(serialized, /評価|Assessment/u);
+});
+
+test('G32 compliance exposes applicable requirement evidence and exception', () => {
+  const result = routeDomainTemplates({ question: '【G32】規格適合方針について適用要求、証拠、例外条件を整理する。' });
+  assert.equal(result.primary?.id, 'G32');
+  const serialized = JSON.stringify(result.primary);
+  assert.match(serialized, /適用要求|Applicable Requirement/u);
+  assert.match(serialized, /証拠|Evidence/u);
+  assert.match(serialized, /例外/u);
+});
