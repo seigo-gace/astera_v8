@@ -43,3 +43,21 @@ test('low-signal input does not turn a speculative Genre Lens into required spec
   const requiredSpecialist = request.nodes.filter((node) => node.tags?.includes('SPECIALIST_REFINEMENT') && node.required !== false);
   if (request.specialist_refinement.state === 'ABSTAINED') assert.equal(requiredSpecialist.length, 0);
 });
+
+
+test('strong finance Genre Lens does not require unrelated prepaid/refund template material for an investment comparison', () => {
+  const refined = refinePreparedMaterialRequirements(
+    preparedFor('財務・会計領域で、投資案件AとBを収益性と下振れリスクで比較する。', 'compare')
+  );
+  const request = refined.analysis_task_packet.material_requirement_graph.requests[0];
+  assert.equal(request.specialist_refinement.original_domain_classification_state, 'CLASSIFICATION_UNRESOLVED');
+  assert.equal(request.specialist_refinement.relevance_policy, 'REQUEST_LOCAL_SOURCE_GATED');
+
+  const requiredValues = request.nodes
+    .filter((node) => node.tags?.includes('SPECIALIST_REFINEMENT') && node.required !== false)
+    .flatMap((node) => node.value_refs || []);
+
+  for (const leaked of ['前受管理', '利用時認識', '返金対応', '失効Policy', '資金流動性', '会計誤分類', '返金負債', '未使用残高管理']) {
+    assert.equal(requiredValues.includes(leaked), false, `unrelated fixed finance Lens material became required: ${leaked}`);
+  }
+});
