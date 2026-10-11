@@ -181,3 +181,65 @@ test('multi-judgment public material keeps only request-local risk extras instea
   assert.match(out.text, /クレジット不足/u);
   assert.doesNotMatch(out.text, /Data Loss|Downtime|Build vs Buy|Rollback不能/u);
 });
+
+
+test('repeated source-backed requests are folded without losing tasks context or observations', () => {
+  const prepared = {
+    analysis_task_packet: {
+      tasks: [
+        { id: 'T01', request_id: 'R01', evidence_need: { required: false, reasons: [] } },
+        { id: 'T02', request_id: 'R02', evidence_need: { required: false, reasons: [] } },
+        { id: 'T03', request_id: 'R03', evidence_need: { required: false, reasons: [] } }
+      ],
+      case_model: {
+        request_count: 3,
+        judgment_requests: [
+          {
+            id: 'R01', order: 1, action: 'verify', request_text: '同じ仕様を確認する。',
+            source_origin: 'UNIVERSAL_SOURCE_GRAPH', source_atom_id: 'S01',
+            source_span: { start: 0, end: 9 }, parser_task_ids: ['T01'],
+            objectives: ['同じ仕様を確認する。'],
+            external_evidence_requested: false,
+            local_context: { prohibitions: ['推測しない'], unresolved: [], conditions: [] }
+          },
+          {
+            id: 'R02', order: 2, action: 'verify', request_text: '同じ仕様を確認する。',
+            source_origin: 'UNIVERSAL_SOURCE_GRAPH', source_atom_id: 'S02',
+            source_span: { start: 100, end: 109 }, parser_task_ids: ['T02'],
+            objectives: ['同じ仕様を確認する。'],
+            external_evidence_requested: false,
+            local_context: { prohibitions: [], unresolved: ['根拠未確認'], conditions: [] }
+          },
+          {
+            id: 'R03', order: 3, action: 'improve', request_text: '別の表示を改善する。',
+            source_origin: 'UNIVERSAL_SOURCE_GRAPH', source_atom_id: 'S03',
+            source_span: { start: 200, end: 210 }, parser_task_ids: ['T03'],
+            objectives: ['別の表示を改善する。'],
+            external_evidence_requested: false,
+            local_context: { prohibitions: [], unresolved: [], conditions: [] }
+          }
+        ],
+        observations: [
+          { id: 'O01', text: '一回目の観測', request_ids: ['R01'] },
+          { id: 'O02', text: '二回目の観測', request_ids: ['R02'] }
+        ],
+        request_relations: []
+      },
+      observable_material: {}
+    },
+    observable_material: {}
+  };
+  prepared.analysis_task_packet.observable_material.case_model = prepared.analysis_task_packet.case_model;
+  prepared.observable_material.case_model = prepared.analysis_task_packet.case_model;
+
+  const out = normalizeMultiJudgmentCase(prepared, { question: 'x' });
+  const model = out.analysis_task_packet.case_model;
+  assert.equal(model.request_count, 2);
+  assert.equal(model.judgment_requests[0].occurrence_count, 2);
+  assert.equal(model.judgment_requests[0].source_occurrences.length, 2);
+  assert.deepEqual(new Set(model.request_task_ids.R01), new Set(['T01', 'T02']));
+  assert.ok(model.judgment_requests[0].local_context.prohibitions.includes('推測しない'));
+  assert.ok(model.judgment_requests[0].local_context.unresolved.includes('根拠未確認'));
+  assert.deepEqual(model.observations.map((item) => item.request_ids), [['R01'], ['R01']]);
+  assert.deepEqual(model.normalization.duplicate_source_requests_folded, ['R02']);
+});
