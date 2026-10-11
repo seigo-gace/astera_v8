@@ -96,3 +96,33 @@ test('case Main8 removes runtime IDs and internal projection labels without dele
   assert.match(out.text, /別経路の設定状態も確認する/u);
   assert.doesNotMatch(out.text, /[0-9a-f]{64}|HAS_STATE|Task\s+T\d+|T\d+:(?:deliverable|completion_criteria|success_criteria)|\bCounter\b|Alternative evidence angle/u);
 });
+
+
+test('case Main8 uses scoped public five-stage lanes and never falls back to raw specialist leakage when public_lanes exists', () => {
+  const model = baseModel();
+  const r1 = taskResult('T01', 'R01', '設定の現在値', 'RAW_RISK_LEAK', 'RAW_MISSING_LEAK');
+  r1.multi.perspectives = [{ focus: 'RAW_MULTI_LEAK', failure_conditions: ['RAW_COUNTER_LEAK'], conditions: [] }];
+  r1.comparison = { comparison_candidates: ['RAW_CANDIDATE_LEAK'], dimensions: ['RAW_DIMENSION_LEAK'] };
+  r1.public_lanes = {
+    fact: { confirmed: [{ text: 'PUBLIC_FACT_OK' }] },
+    risk: { risks: [{ impact: 'PUBLIC_RISK_OK' }] },
+    multi: { perspectives: [{ focus: 'PUBLIC_MULTI_OK', failure_conditions: ['PUBLIC_COUNTER_OK'], conditions: [] }] },
+    inquiry: { open_items: ['PUBLIC_MISSING_OK'], missing_questions: [], missing_fields: [], inquiry_lens: [], evidence_need: [] },
+    compare: { comparison_candidates: ['PUBLIC_CANDIDATE_OK'], dimensions: ['PUBLIC_DIMENSION_OK'] }
+  };
+  const r2 = taskResult('T03', 'R02', 'ログの保存状態', '監査情報を見落とす危険', 'ログ保持期間');
+  r2.public_lanes = {
+    fact: { confirmed: [{ text: 'ログの保存状態' }] },
+    risk: { risks: [{ impact: '監査情報を見落とす危険' }] },
+    multi: { perspectives: [] },
+    inquiry: { open_items: ['ログ保持期間'], missing_questions: [], missing_fields: [], inquiry_lens: [], evidence_need: [] },
+    compare: { comparison_candidates: [], dimensions: [] }
+  };
+
+  const out = renderMultiJudgmentMain8(judgmentFor(model), { task_results: [r1, r2] });
+  assert.match(out.text, /PUBLIC_FACT_OK/u);
+  assert.match(out.text, /PUBLIC_RISK_OK/u);
+  assert.match(out.text, /PUBLIC_MULTI_OK|PUBLIC_COUNTER_OK/u);
+  assert.match(out.text, /PUBLIC_MISSING_OK/u);
+  assert.doesNotMatch(out.text, /RAW_RISK_LEAK|RAW_MULTI_LEAK|RAW_COUNTER_LEAK|RAW_MISSING_LEAK|RAW_CANDIDATE_LEAK|RAW_DIMENSION_LEAK/u);
+});
