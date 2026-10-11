@@ -181,3 +181,25 @@ test('explicit G11 investment comparison keeps finance as the primary genre', ()
   assert.ok(result.primary.compare_lens.includes('Risk・Downside'));
   assert.ok(result.primary.compare_lens.includes('流動性'));
 });
+
+
+test('G15 publication request uses publication/archive material instead of literary criticism material', () => {
+  const result = routeDomainTemplates({ question: '【G15】資料公開方針について、版、権利、保存条件を判断したい。' });
+  assert.equal(result.primary?.id, 'G15');
+  assert.ok(result.primary.fact_lens.some((value) => /Version|版/u.test(value)));
+  assert.ok(result.primary.compare_lens.some((value) => /保存/u.test(value)));
+  assert.equal(result.primary.compare_lens.includes('比較文学'), false);
+});
+
+test('G23 health-program request uses population benefit-harm material while acute clinical requests keep emergency material', () => {
+  const program = routeDomainTemplates({ question: '【G23】医療プログラム方針について対象集団への便益と害を比較したい。' });
+  assert.equal(program.primary?.id, 'G23');
+  assert.ok(program.primary.fact_lens.some((value) => /Population|対象集団/u.test(value)));
+  assert.ok(program.primary.compare_lens.includes('Benefit'));
+  assert.ok(program.primary.compare_lens.includes('Harm'));
+  assert.equal(program.primary.compare_lens.includes('救急要請'), false);
+
+  const acute = routeDomainTemplates({ question: '70歳の父が胸痛と冷や汗。救急要請が必要か判断材料が欲しい。' });
+  assert.equal(acute.primary?.id, 'G23');
+  assert.ok(acute.primary.compare_lens.includes('救急要請'));
+});
