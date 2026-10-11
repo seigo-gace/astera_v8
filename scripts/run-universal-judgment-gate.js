@@ -27,6 +27,7 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /support_evidence_refs/iu,
   /parser_overall_status/iu,
   /meaning_unresolved/iu,
+  /unsupported:\d+:\s*\{[^}]*"status"\s*:\s*"UNSUPPORTED"[^}]*\}/iu,
   /candidate_id/iu,
   /binding_id/iu,
   /RETRIEVAL_FAILED/iu,
