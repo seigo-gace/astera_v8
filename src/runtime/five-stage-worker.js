@@ -32,6 +32,51 @@ function unique(values = []) {
   return [...new Set(array(values).map(clean).filter(Boolean))];
 }
 
+function normalized(value) {
+  return clean(value).toLowerCase();
+}
+
+function signalPresent(text, signal) {
+  const haystack = normalized(text);
+  const needle = normalized(signal);
+  if (!haystack || !needle) return false;
+  if (!/^[a-z0-9.+#& -]+$/i.test(needle)) return haystack.includes(needle);
+  const padded = ' ' + haystack.replace(/[^a-z0-9.+#&-]+/g, ' ') + ' ';
+  return padded.includes(' ' + needle + ' ');
+}
+
+function taskSemanticCore(task = {}) {
+  const target = clean(task.target);
+  if (target && !/^(?:入力内容|対象|this|that|it)$/iu.test(target)) return target;
+  return unique([task.objective, task.purpose, task.user_goal]).join('\n');
+}
+
+function lensSignalHits(lens = {}, text = '') {
+  return unique(lens.matched_signals).filter((signal) => signalPresent(text, signal));
+}
+
+function scopeDomainForTask(domain = {}, task = {}) {
+  const core = taskSemanticCore(task);
+  const primary = domain.primary && lensSignalHits(domain.primary, core).length > 0
+    ? domain.primary
+    : null;
+  const secondary = array(domain.secondary).filter((lens) =>
+    lensSignalHits(lens, core).length >= 2
+  );
+  return {
+    ...domain,
+    primary,
+    secondary,
+    lens_plan: undefined,
+    task_relevance: {
+      primary_original_id: domain.primary?.id || null,
+      primary_retained: Boolean(primary),
+      secondary_original_ids: array(domain.secondary).map((lens) => lens?.id).filter(Boolean),
+      secondary_retained_ids: secondary.map((lens) => lens?.id).filter(Boolean)
+    }
+  };
+}
+
 function serializeError(error) {
   return {
     name: String(error?.name || 'Error'),
@@ -49,8 +94,8 @@ function normalizePayload(payload = {}) {
   const policyByClaimId = Object.fromEntries(records
     .filter((record) => record.claim?.claim_id)
     .map((record) => [record.claim.claim_id, record.policy]));
-  const domain = task.domain || {};
-  const lensPlan = domain.lens_plan || compileLensPlan(domain);
+  const domain = scopeDomainForTask(task.domain || {}, task);
+  const lensPlan = compileLensPlan(domain);
   return {
     task,
     canonical,
