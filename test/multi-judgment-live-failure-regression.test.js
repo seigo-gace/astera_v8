@@ -141,3 +141,43 @@ test('evidence citation boundary preserves normalized multi-judgment public mate
   assert.doesNotMatch(out.material.main8_text, /Alternative evidence angle|の完了・合格条件を明示する/);
   assert.equal(out.material.evidence_contract, 'astera.evidence-citation.v1');
 });
+
+test('multi-judgment public material keeps only request-local risk extras instead of full domain templates', () => {
+  const model = {
+    request_count: 2,
+    multi_judgment: true,
+    judgment_requests: [
+      {
+        id: 'R01',
+        action: 'improve',
+        request_text: '内部API名やstack traceは見せず、クレジット不足だけ利用者に分かる文章にする',
+        external_evidence_requested: false,
+        local_context: {}
+      },
+      {
+        id: 'R02',
+        action: 'verify',
+        request_text: '履歴保存を確認する',
+        external_evidence_requested: false,
+        local_context: {}
+      }
+    ],
+    observations: [],
+    global_context: {},
+    request_relations: []
+  };
+  const sections = [
+    '01 本当の目的\n- 今回の入力には2件の判断要求がある。',
+    '02 前提不足\n- 共通条件なし',
+    '03 事実確認\n  - R01: 確認済み事実なし\n  - R02: 確認済み事実なし',
+    '04 危機察知\n  - R01: Data Loss / Downtime / クレジット不足\n  - R02: Rollback不能',
+    '05 反対視点\n  - R01: 表示改善\n    - 反証・失敗条件: Data Loss / Downtime / Build vs Buy / クレジット不足\n  - R02: 履歴保存\n    - 反証・失敗条件: Rollback不能',
+    '06 比較案\n  - R01 [改善・見直し]\n    - 要求: 表示改善\n  - R02 [検証]\n    - 要求: 履歴保存',
+    '07 根拠成立状態\n  - R01: 入力条件\n  - R02: 入力条件',
+    '08 主役AI／利用者への再指示\n  - R01: 確認する\n  - R02: 確認する'
+  ];
+  const material = { text: sections.join('\n---\n'), sections: sections.map((text) => ({ text })) };
+  const out = normalizeMultiJudgmentPublicMaterial(material, { output_language: 'ja', observable_material: { case_model: model } });
+  assert.match(out.text, /クレジット不足/u);
+  assert.doesNotMatch(out.text, /Data Loss|Downtime|Build vs Buy|Rollback不能/u);
+});
