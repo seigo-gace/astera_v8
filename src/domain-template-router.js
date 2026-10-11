@@ -78,17 +78,55 @@ const FINANCE_CONTEXT_PROFILES = Object.freeze({
   })
 });
 
+const PUBLISHING_CONTEXT_PROFILES = Object.freeze({
+  publication: Object.freeze({
+    fact_lens: Object.freeze(['対象資料・Version','公開範囲・Audience','権利・License','保存・Archive要件','更新・公開状態']),
+    risk_lens: Object.freeze(['権利侵害','機密・個人情報の誤公開','古いVersionの公開','保存・Link切れ','公開後の訂正不能']),
+    multi_lens: Object.freeze(['著者・作成者','権利者','読者・利用者','出版・Archive管理者','法務・記録管理']),
+    inquiry_lens: Object.freeze(['どのVersionを公開するか','公開範囲とAudienceは誰か','権利・License条件は何か','保存期間と更新・撤回条件は何か']),
+    compare_lens: Object.freeze(['公開範囲','Version・鮮度','権利条件','保存性','更新・撤回容易性']),
+    evidence_to_collect: Object.freeze(['版・Version情報','権利・License資料','公開承認記録','保存Policy','更新・撤回履歴'])
+  })
+});
+
+const MEDICAL_CONTEXT_PROFILES = Object.freeze({
+  program: Object.freeze({
+    fact_lens: Object.freeze(['対象集団・Population','介入・Program内容','Baseline・対象Needs','Benefit・Outcome','Harm・副作用・Access']),
+    risk_lens: Object.freeze(['Harm・有害事象','対象集団との不適合','Access・公平性低下','Evidence不確実性','運用・Resource不足']),
+    multi_lens: Object.freeze(['対象集団・患者','医療者','Program運営者','家族・地域','Benefit-Risk・公平性Reviewer']),
+    inquiry_lens: Object.freeze(['対象集団とNeedsは何か','期待Benefitと測定Outcomeは何か','Harm・副作用は何か','Access・公平性と実施能力はどうか']),
+    compare_lens: Object.freeze(['Benefit','Harm','対象集団Coverage','Access・公平性','Evidence確度・実行可能性']),
+    evidence_to_collect: Object.freeze(['対象集団Data','介入・Program仕様','Outcome・有害事象Data','診療・公衆衛生Guideline','費用・Resource・Access情報'])
+  })
+});
+
 function specializeGenreForRequest(genre, routeText = '') {
-  if (!genre || genre.id !== 'G11') return genre;
+  if (!genre) return genre;
   const text = String(routeText || '');
-  const payment = /前払|前払い|クレジット|返金|失効|売上計上|決済|stored[ -]?value|prepaid|refund|revenue recognition/iu.test(text);
-  const investment = /投資|investment|portfolio|収益性|return|downside|流動性|liquidity|valuation|評価|資本cost|capital cost/iu.test(text);
-  const profile = payment && !investment
-    ? FINANCE_CONTEXT_PROFILES.payment
-    : investment
-      ? FINANCE_CONTEXT_PROFILES.investment
-      : null;
-  return profile ? { ...genre, ...profile } : genre;
+
+  if (genre.id === 'G11') {
+    const payment = /前払|前払い|クレジット|返金|失効|売上計上|決済|stored[ -]?value|prepaid|refund|revenue recognition/iu.test(text);
+    const investment = /投資|investment|portfolio|収益性|return|downside|流動性|liquidity|valuation|評価|資本cost|capital cost/iu.test(text);
+    const profile = payment && !investment
+      ? FINANCE_CONTEXT_PROFILES.payment
+      : investment
+        ? FINANCE_CONTEXT_PROFILES.investment
+        : null;
+    return profile ? { ...genre, ...profile } : genre;
+  }
+
+  if (genre.id === 'G15') {
+    const publication = /資料公開|公開方針|publication|publish|archive|保存|版管理|version|権利|license/iu.test(text);
+    return publication ? { ...genre, ...PUBLISHING_CONTEXT_PROFILES.publication } : genre;
+  }
+
+  if (genre.id === 'G23') {
+    const program = /医療プログラム|健康プログラム|health program|medical program|program policy|方針|対象集団|population|導入|公衆衛生/iu.test(text);
+    const acute = /胸痛|呼吸|意識|救急|急性|症状|診断|服薬|薬物|emergency|acute|symptom|diagnos/iu.test(text);
+    return program && !acute ? { ...genre, ...MEDICAL_CONTEXT_PROFILES.program } : genre;
+  }
+
+  return genre;
 }
 
 const MIN_CONTROLLED_PRIMARY_SCORE = 6;
