@@ -151,9 +151,12 @@ function scopeCompareLane(compare = {}, task = {}, canonical = {}) {
     ...lensPlanValues(domain, 'compare'),
     ...array(compare.dimension_sources).map((entry) => entry?.value)
   ].map(clean));
-  const dimensions = unique(compare.dimensions).filter((value) =>
-    !lensDimensions.has(clean(value)) || lensRelevant(value, task, canonical)
-  );
+  const comparisonRequested = explicitComparisonMaterial(task);
+  const dimensions = unique(compare.dimensions).filter((value) => {
+    if (!comparisonRequested) return lensRelevant(value, task, canonical);
+    if (!lensDimensions.has(clean(value))) return true;
+    return lensRelevant(value, task, canonical);
+  });
   const allowed = new Set(dimensions.map(clean));
   return {
     ...compare,
