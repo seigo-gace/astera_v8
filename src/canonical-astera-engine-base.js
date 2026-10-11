@@ -2,6 +2,7 @@
 
 const CanonicalEngineSupport = require('./canonical-engine-support');
 const { routeDomainTemplates } = require('./domain-template-router');
+const { routeRequestSpecialistProfiles } = require('./runtime/request-specialist-profile-router');
 const { analyzeRequest } = require('./input-understanding');
 const { normalizeEvidencePacket, deriveEvidenceNeed, unique } = require('./judgment-materials-analyzer');
 const { extractCanonicalTaskClaims, buildCanonicalTaskPlan } = require('./canonical-claim-runtime');
@@ -336,7 +337,19 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       else if (routePollutedRouteText(routeText)) routeParts.push(...unique([question,context,routeText]));
       else routeParts.push(...unique([routeText,context].filter(Boolean)));
       const routeQuestion=unique(routeParts).join('\n')||question;
-      const domain=routeDomainTemplates({question:routeQuestion,context});
+      const routedDomain=routeDomainTemplates({question:routeQuestion,context});
+      const specialistRouting=routeRequestSpecialistProfiles({question:routeQuestion,context});
+      const domain={
+        ...routedDomain,
+        ...(specialistRouting.primary?{
+          request_specialist_profile:specialistRouting.primary,
+          request_specialist_routing:{
+            source:specialistRouting.source,
+            historical_source_commit:specialistRouting.historical_source_commit,
+            secondary:specialistRouting.secondary
+          }
+        }:{})
+      };
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,evidence_need:evidenceNeed,domain};
       const canonicalPlan=buildCanonicalTaskPlan(task,domain,{extraction});
