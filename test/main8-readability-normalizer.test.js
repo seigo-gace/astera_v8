@@ -85,3 +85,16 @@ test('deadline and request target helpers are deterministic', () => {
     '2026年10月1日時点のNode.js 22の公式サポート状況'
   );
 });
+
+test('structured unsupported diagnostics are removed while ordinary unsupported wording is preserved', () => {
+  const base = main8().split('\n---\n');
+  base[7] = [
+    '08 主役AI／利用者への再指示',
+    '- 未確定を保持: unsupported:0:{"text":"医療プログラム方針","status":"UNSUPPORTED"}',
+    '- The proposal is unsupported by current evidence and must remain unresolved.'
+  ].join('\n');
+  const out = normalizeUnifiedMain8Text(base.join('\n---\n'));
+  const section = out.split('\n---\n')[7];
+  assert.doesNotMatch(section, /unsupported:0:|"status"\s*:\s*"UNSUPPORTED"/iu);
+  assert.match(section, /proposal is unsupported by current evidence/iu);
+});
