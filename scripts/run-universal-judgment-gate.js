@@ -81,6 +81,19 @@ function section07(text) {
 function uniqueRequestIds(text) {
   return [...new Set((String(text || '').match(/\bR\d{2,}\b/gu) || []))];
 }
+function publicRequestTexts(text) {
+  const firstSection = String(text || '').split(/^---$/m)[0] || '';
+  return firstSection.split('\n').map((line) => {
+    const match = /^\s*-\s+R\d{2,}\s+\[[^\]]+\]:\s*(.+)$/u.exec(line);
+    return match ? normalize(match[1]) : '';
+  }).filter(Boolean);
+}
+
+function duplicateRequestTexts(text) {
+  const counts = new Map();
+  for (const value of publicRequestTexts(text)) counts.set(value, (counts.get(value) || 0) + 1);
+  return [...counts.entries()].filter(([, count]) => count > 1).map(([value, count]) => ({ value, count }));
+}
 
 function countTerms(text, terms) {
   const n = normalize(text);
@@ -160,6 +173,13 @@ function evaluateCase(testCase, out, durationMs) {
   } else if (tasks.length < 1 && requests.length < 1) {
     failures.push({ code: 'NO_JUDGMENT_UNIT', internal_task_count: tasks.length, public_request_ids: requests });
   }
+  if (Number.isFinite(Number(expected.max_requests)) && requests.length > Number(expected.max_requests)) {
+    failures.push({ code: 'REQUEST_INFLATION', expected_max: Number(expected.max_requests), actual: requests.length });
+  }
+  const duplicateRequests = duplicateRequestTexts(material);
+  if (Number(expected.max_duplicate_requests) === 0 && duplicateRequests.length) {
+    failures.push({ code: 'DUPLICATE_REQUEST_INFLATION', duplicates: duplicateRequests });
+  }
 
   const anchors = anchorCoverage(material, expected.anchors || []);
   if ((expected.anchors || []).length && anchors.ratio < 0.75) {
@@ -237,6 +257,7 @@ function evaluateCase(testCase, out, durationMs) {
     main8_sections: main8Sections,
     internal_task_count: tasks.length,
     public_request_ids: requests,
+    duplicate_public_requests: duplicateRequests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
     domain_material_concepts_matched: materialConcepts.matched,
