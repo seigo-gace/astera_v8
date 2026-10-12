@@ -6,7 +6,13 @@
 // Historical source: 0a3568b73ee9c785af203ce8da0a1331819e9307
 
 function rx(pattern) {
-  return new RegExp(pattern, 'i');
+  const bounded = String(pattern || '').split('|').map((alternative) => {
+    if (/^[A-Za-z][A-Za-z0-9 -]*$/u.test(alternative)) {
+      return `\\b(?:${alternative})\\b`;
+    }
+    return alternative;
+  }).join('|');
+  return new RegExp(bounded, 'i');
 }
 
 const TEMPLATES = [
