@@ -364,6 +364,11 @@ function buildSemanticAtoms(sourceGraph) {
     for (const type of types) {
       const key = `${type}:${node.source_span.start}:${node.source_span.end}`;
       if (seen.has(key)) continue;
+      if (type === 'PROHIBITION' && node.kind === 'sentence' && atoms.some((atom) =>
+        atom.type === 'PROHIBITION'
+        && atom.source_span.start >= node.source_span.start
+        && atom.source_span.end <= node.source_span.end
+      )) continue;
       if (type === 'REQUEST') {
         const contained = atoms.filter((atom) => atom.type === 'REQUEST'
           && atom.source_span.start >= node.source_span.start
