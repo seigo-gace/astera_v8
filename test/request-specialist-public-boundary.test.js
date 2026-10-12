@@ -8,7 +8,7 @@ const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japa
 const silentLogger = { write() {}, async flush() {} };
 const caller = { id: 'request-specialist-public-boundary', is_global: true, plan: 'admin' };
 
-async function run(question) {
+async function run(question, language = 'ja') {
   const engine = new AsteraEngine({
     poolSize: 1,
     logger: silentLogger,
@@ -16,7 +16,10 @@ async function run(question) {
     evidenceSearchClient: null
   });
   try {
-    return await engine.process({ question, language: 'ja', llm: { chain: ['null'] } }, caller);
+    const out = await engine.process({ question, language, llm: { chain: ['null'] } }, caller);
+    assert.equal(out.result.type, 'cognitive_map', 'regression case must exercise the actual judgment pipeline');
+    assert.equal(String(out.material?.text || '').split('\n---\n').length, 8, 'regression case must produce all eight Main8 sections');
+    return out;
   } finally {
     await engine.destroy();
   }
@@ -81,11 +84,11 @@ test('specific writing intent retains request-relevant writing material', async 
 
 
 test('English history persistence does not match the creative story signal by substring', async () => {
-  const out = await run('History disappears after reload, so verify persistence and rendering without inventing a new database.');
+  const out = await run('History disappears after reload, so verify persistence and rendering without inventing a new database.', 'en');
   assert.doesNotMatch(out.material.text, /misunderstood intent|unsupported claim|wrong tone|cultural sensitivity|copyright|plagiarism/iu);
 });
 
 test('an actual story-writing request can still use writing-specific material', async () => {
-  const out = await run('Write a short story for new users and organize the judgment material for audience and tone.');
+  const out = await run('Write a short story for new users and organize the judgment material for audience and tone.', 'en');
   assert.match(out.material.text, /audience|tone|reader|purpose/iu);
 });
