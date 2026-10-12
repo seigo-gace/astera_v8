@@ -78,3 +78,14 @@ test('specific writing intent retains request-relevant writing material', async 
   const out = await run('利用者向けの記事を書いて。読者に誤解されない構成とトーンの判断材料を整理して。');
   assert.match(out.material.text, /audience|tone|reader|読者|トーン/iu);
 });
+
+
+test('English history persistence does not match the creative story signal by substring', async () => {
+  const out = await run('History disappears after reload, so verify persistence and rendering without inventing a new database.');
+  assert.doesNotMatch(out.material.text, /misunderstood intent|unsupported claim|wrong tone|cultural sensitivity|copyright|plagiarism/iu);
+});
+
+test('an actual story-writing request can still use writing-specific material', async () => {
+  const out = await run('Write a short story for new users and organize the judgment material for audience and tone.');
+  assert.match(out.material.text, /audience|tone|reader|purpose/iu);
+});
