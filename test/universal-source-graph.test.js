@@ -206,3 +206,11 @@ test('English user uncertainty is an observation, not a prohibition', () => {
   const negativeCommand = buildUniversalSourceUnderstanding("Don't add unrelated screens.", 'en').semantic_atoms;
   assert.ok(negativeCommand.atoms.some((item) => item.type === 'PROHIBITION'));
 });
+
+test('narrow clause prohibition supersedes broad sentence prohibition', () => {
+  const input = "Users are confused so review the form, and when the option is OFF do not remove the hint, show guidance.";
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  const bans = atoms.atoms.filter((item) => item.type === 'PROHIBITION');
+  assert.ok(bans.some((item) => item.text.includes('do not remove')));
+  assert.ok(!bans.some((item) => item.text.startsWith('Users are confused')));
+});
