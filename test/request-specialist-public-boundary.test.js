@@ -110,3 +110,9 @@ test('plain ASCII specialist signals do not fire inside unrelated English words'
     assert.notEqual(routed.primary?.id, forbiddenProfile, `${question} must not route to ${forbiddenProfile} by substring collision`);
   }
 });
+
+
+test('English application history does not receive historical-domain risk material', async () => {
+  const out = await run('History disappears after reload, so verify whether persistence or rendering is broken without inventing a new database.', 'en');
+  assert.doesNotMatch(out.material.text, /年代錯誤|一次史料不足|後世解釈の混同|地域差無視|出典捏造/iu);
+});
