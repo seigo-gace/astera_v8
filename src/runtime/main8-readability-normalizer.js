@@ -205,13 +205,17 @@ function normalizeReinstructionPublic(block, lang) {
 }
 
 function stripPublicInternalLines(block) {
-  return String(block || '').split('\n').filter((line) => {
-    if (/:lens-risk-\d+\[/iu.test(line)) return false;
-    if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return false;
-    if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
-    if (/\bparser_overall_status\s*:/iu.test(line)) return false;
-    if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return false;
-    return true;
+  return String(block || '').split('\n').flatMap((line) => {
+    if (/:lens-risk-\d+\[/iu.test(line)) return [];
+    if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return [];
+    if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return [];
+    if (/\bparser_overall_status\s*:/iu.test(line)) return [];
+    if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return [];
+    if (/^\s*-\s*unsupported_scope\s*:\s*claim_id\s*=/iu.test(line)) return [];
+    if (/\bclaim_id\s*=/iu.test(line)) return [];
+    const withoutTaskPrefix = line.replace(/^(\s*-\s*)T\d{2,}:[^\s]+\[\d+\]\s*/iu, '$1');
+    if (/\bUNRESOLVED_[A-Z0-9_]+\b/u.test(withoutTaskPrefix)) return [];
+    return [withoutTaskPrefix];
   }).join('\n');
 }
 
