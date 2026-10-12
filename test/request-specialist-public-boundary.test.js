@@ -116,3 +116,9 @@ test('English application history does not receive historical-domain risk materi
   const out = await run('History disappears after reload, so verify whether persistence or rendering is broken without inventing a new database.', 'en');
   assert.doesNotMatch(out.material.text, /年代錯誤|一次史料不足|後世解釈の混同|地域差無視|出典捏造/iu);
 });
+
+
+test('generic design wording does not promote migration risks into the final-decision boundary request', async () => {
+  const out = await run('回答はAsteraが判断材料を作るだけで最終決定を勝手にしない設計のはずだから、断定していないか確認して。根拠が無い時は根拠なしのまま出して。');
+  assert.doesNotMatch(out.material.text, /vendor lock-in|irreversible migration|operational complexity|data loss|downtime/iu);
+});
