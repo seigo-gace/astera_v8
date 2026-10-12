@@ -468,3 +468,82 @@ test('Story 16: evidence search boundary invokes external search client once per
     await engine.destroy();
   }
 });
+
+test('Story 17: one submission executes real dual-route Evidence Search before Main8', async () => {
+  const fs = require('node:fs/promises');
+  const os = require('node:os');
+  const path = require('node:path');
+  const createEvidenceSearchModule = require('../src/evidence-search');
+  const { createJsonProjectionProvider } = require('../src/evidence-search/providers/json-projection-provider');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-full-route-'));
+  const claim = 'ASTERA uses Node.js 22';
+  const record = (id, authority, role, family) => ({
+    canonical_record_id: id,
+    canonical_url: 'https://official.example/' + id,
+    authority_id: authority, publisher_id: authority, publisher_name: authority,
+    source_role: role, source_family_id: family, capability_id: 'projection_search',
+    title: claim, excerpt: claim, language: 'en',
+    updated_at: '2026-07-18T01:45:00.000Z',
+    version: '22.0.0', revision_id: id + '-r1',
+    retrieval_trace: { current_pointer_verified: true },
+    rights: { access: 'public', reuse: 'allowed' },
+    fields: { domain_id: 'G29', claim },
+    lineage_fingerprint: {
+      authority_id: authority, publisher_id: authority,
+      origin_record_id: id, publication_event_id: id + '-publication'
+    }
+  });
+  let engine;
+  try {
+    const specs = [
+      ['specialist', 'FREE_PROJECTION', 'PRIMARY', 'primary-authority', 'primary-family'],
+      ['current', 'FREE_OFFICIAL_LIVE', 'OFFICIAL', 'current-authority', 'current-family'],
+      ['corroboration', 'FREE_OFFICIAL_LIVE', 'OFFICIAL', 'other-authority', 'other-family']
+    ];
+    const providers = [];
+    for (const [id, sourceClass, role, authority, family] of specs) {
+      const file = path.join(root, id + '.json');
+      await fs.writeFile(file, JSON.stringify([record(id, authority, role, family)]));
+      providers.push(createJsonProjectionProvider({
+        provider_id: id, filePath: file, source_class: sourceClass,
+        source_family_id: family, capabilities: id === 'corroboration' ? ['REINFORCEMENT_ONLY'] : ['NO_REINFORCEMENT'],
+        domains: ['G29']
+      }));
+    }
+    const search = createEvidenceSearchModule({ providers });
+    const calls = [];
+    engine = new AsteraEngine({
+      poolSize: 2, logger: silentLogger,
+      japaneseParserClient: createMockJapaneseParserClient(),
+      evidenceSearchClient: {
+        async search(payload, context) {
+          const response = await search.execute({
+            schema_version: 'astera.evidence-search.module-request.v1',
+            operation: 'SEARCH_EVIDENCE',
+            context: {
+              request_id: context.requestId, caller_id: context.callerId,
+              execution_time: '2026-07-18T01:45:00.000Z',
+              effective_as_of: '2026-07-18T01:45:00.000Z'
+            },
+            payload: { ...payload, question: claim, domain_lens: { id: 'G29', taxonomy_version: '1.0.0' } }
+          });
+          calls.push(response.result.route_execution);
+          return response.result;
+        }
+      }
+    });
+    const out = await engine.process({
+      question: 'Verify that ASTERA uses Node.js 22 using official evidence.',
+      language: 'en'
+    }, caller);
+    assert.equal(out.result.type, 'cognitive_map');
+    assert.ok(calls.length > 0, 'real evidence module must be called');
+    assert.ok(calls.every((route) => route.specialist_authoritative.attempted && route.general_current.attempted));
+    assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
+    assert.equal(out.material.text.split(/^---$/m).length, 8);
+    assertNoNormativeDecisionArtifacts(out.result, out.material.text);
+  } finally {
+    await engine?.destroy();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
