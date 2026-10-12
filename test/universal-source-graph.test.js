@@ -175,3 +175,18 @@ test('short command with its own explicit subject remains an independent request
   assert.equal(atoms.request_atoms.length, 2, JSON.stringify(atoms.request_atoms, null, 2));
   assert.ok(atoms.request_atoms.some((request) => /Fix the API/iu.test(request.text)));
 });
+
+
+test('English subject-led and contracted prohibitions stay context instead of phantom requests', () => {
+  const input = [
+    'Separate user-actionable errors from internal failures: limits, credits, purchase failure, permission and unsupported file types can be explained, but internal API names, service hosts and stack traces must not leak.',
+    "Don't add unrelated screens and prefer the existing structure."
+  ].join(' ');
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.equal(atoms.request_atoms.length, 1, JSON.stringify(atoms.request_atoms, null, 2));
+  assert.match(atoms.request_atoms[0].text, /Separate user-actionable errors/iu);
+  assert.ok(!atoms.request_atoms.some((request) => /service hosts and stack traces must not leak|Don't add unrelated screens/iu.test(request.text)));
+  const prohibitions = atoms.atoms.filter((atom) => atom.type === 'PROHIBITION').map((atom) => atom.text);
+  assert.ok(prohibitions.some((value) => /stack traces must not leak/iu.test(value)));
+  assert.ok(prohibitions.some((value) => /Don't add unrelated screens/iu.test(value)));
+});
