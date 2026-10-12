@@ -412,13 +412,13 @@ function buildSemanticAtoms(sourceGraph) {
   // judgment request; it must not be silently dropped as a separate task.
   // Restrict the extension to the enclosing sentence (never the next one).
   const contextualRequests = coalesced.map((atom) => {
-    if (!/^so\\s+(?:verify|check|investigate|review|fix)\\b/iu.test(atom.text)) return atom;
+    if (!/^so\s+(?:verify|check|investigate|review|fix)\b/iu.test(atom.text)) return atom;
     const sentence = candidateNodes.find((node) => node.kind === 'sentence'
       && node.source_span.start < atom.source_span.start
       && node.source_span.end >= atom.source_span.end);
     if (!sentence) return atom;
     const preamble = source.slice(sentence.source_span.start, atom.source_span.start);
-    if (!/\\b(?:seems?|appears?|reported|observed|fails?|broken|error)\\b/iu.test(preamble)) return atom;
+    if (!/\b(?:seems?|appears?|reported|observed|fails?|broken|error)\b/iu.test(preamble)) return atom;
     const start = sentence.source_span.start;
     return { ...atom, source_span: { start, end: atom.source_span.end },
       text: source.slice(start, atom.source_span.end),
