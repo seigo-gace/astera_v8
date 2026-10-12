@@ -236,6 +236,11 @@ function isRequestText(text) {
   const negative = /\b(?:must\s+not|do\s+not|don['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|never)\b/iu.exec(value);
   if (negative) {
     const prefix = value.slice(0, negative.index).replace(/^\s*(?:but|and|or)\s+/iu, '');
+    // Subject-led normative obligations (e.g. 'Astera must only provide ...')
+    // are constraints, not a new user request. A leading imperative remains a request.
+    const subjectLedObligation = /\b(?:must|shall)\s+only\b/iu.test(prefix);
+    const leadingImperative = /^\s*(?:please\s+)?(?:verify|review|check|identify|state|provide|return|implement|add|remove|fix|preserve|separate|support|measure|show|ensure)\b/iu.test(prefix);
+    if (subjectLedObligation && !leadingImperative) return false;
     const positiveDirective = /\b(?:please|verify|review|check|identify|state|provide|return|implement|add|remove|fix|preserve|separate|support|measure|show|ensure)\b/iu.test(prefix);
     if (!positiveDirective) return false;
   }
@@ -364,8 +369,8 @@ function buildSemanticAtoms(sourceGraph) {
     for (const type of types) {
       const key = `${type}:${node.source_span.start}:${node.source_span.end}`;
       if (seen.has(key)) continue;
-      if (type === 'PROHIBITION' && node.kind === 'sentence' && atoms.some((atom) =>
-        atom.type === 'PROHIBITION'
+      if ((type === 'PROHIBITION' || type === 'CONDITION') && node.kind === 'sentence' && atoms.some((atom) =>
+        atom.type === type
         && atom.source_span.start >= node.source_span.start
         && atom.source_span.end <= node.source_span.end
       )) continue;
