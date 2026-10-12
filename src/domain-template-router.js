@@ -120,6 +120,8 @@ function isGenreIdentityTerm(genre, term) {
 
 function exactTermWeight(term, genre) {
   const compactLength = term.replace(/\s/g, '').length;
+  // Ambiguous cross-domain terms are weak evidence without their local context.
+  if ((genre?.id === 'G11' && term === 'クレジット') || (genre?.id === 'G26' && term === 'architecture')) return 3;
   if (isAsciiControlledTerm(term)) {
     return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
   }
