@@ -214,3 +214,18 @@ test('narrow clause prohibition supersedes broad sentence prohibition', () => {
   assert.ok(bans.some((item) => item.text.includes('do not remove')));
   assert.ok(!bans.some((item) => item.text.startsWith('Users are confused')));
 });
+
+test('subject-led product authority restriction stays a constraint, not a user Request', () => {
+  const input = 'Astera must only provide judgment material and must not say this is optimal.';
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  assert.equal(atoms.request_atoms.length, 0, JSON.stringify(atoms.request_atoms));
+  assert.ok(atoms.atoms.some((item) => item.type === 'PROHIBITION'));
+});
+
+test('condition atom belongs to local when-clause rather than unrelated user observation', () => {
+  const input = 'Users are unsure which control to press, and when the option is OFF show an enable hint.';
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  const conditions = atoms.atoms.filter((item) => item.type === 'CONDITION');
+  assert.ok(conditions.length > 0);
+  assert.ok(!conditions.some((item) => item.text.startsWith('Users are unsure')), JSON.stringify(conditions));
+});
