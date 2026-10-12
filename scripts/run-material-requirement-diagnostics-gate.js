@@ -160,6 +160,7 @@ async function main() {
   console.log(`MATERIAL_REQUIREMENT_GRAPH_COVERAGE=${summary.cases_with_graph}/${summary.total_cases}`);
   console.log(`MATERIAL_REQUIREMENT_STRUCTURAL_PASS=${summary.structural_pass}`);
   console.log(`MATERIAL_REQUIREMENT_STRUCTURAL_FAIL=${summary.structural_fail}`);
+  for (const entry of structuralFailures) console.error(`MATERIAL_REQUIREMENT_FAIL_CASE=${entry.case_id} REQUEST_COUNT=${entry.request_count} EXPECTED_MIN=${entry.expected_min_requests} CODES=${(entry.failures || []).map((f) => f.code).join(',')}`);
   console.log(`MATERIAL_REQUIREMENT_ACCOUNTING_COMPLETE=${summary.accounting_complete_cases}/${summary.total_cases}`);
   console.log(`MATERIAL_REQUIREMENT_DECISION_READY=${summary.decision_ready_cases}/${summary.total_cases}`);
   console.log(`MATERIAL_REQUIREMENT_TOTAL_GAPS=${summary.total_gaps}`);
