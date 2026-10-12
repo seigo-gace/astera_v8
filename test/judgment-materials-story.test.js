@@ -444,6 +444,13 @@ test('Story 16: evidence search boundary invokes external search client once per
     assert.ok(calls.length >= 1);
     assert.ok(calls.every((call) => call.payload.paid_search.enabled === false));
     assert.ok(out.result.task_results.some((result) => result.evidence?.source_status === 'FINAL_VALID'));
+    // The same user submission must carry task decomposition, Lens and evidence
+    // through to the final user-facing Main8. Separate unit PASS is insufficient.
+    assert.ok(out.result.analysis_task_packet.tasks.length > 0);
+    assert.ok(out.result.analysis_task_packet.tasks.some((task) => task.domain?.primary));
+    assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
+    assert.equal(out.material.text.split(/^---$/m).length, 8);
+    assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   } finally {
     await engine.destroy();
   }
