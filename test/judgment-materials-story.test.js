@@ -527,7 +527,7 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
             },
             payload: { ...payload, question: claim, domain_lens: { id: 'G29', taxonomy_version: '1.0.0' } }
           });
-          calls.push({ routes: response.result.route_execution, status: response.result.status, evidence_count: response.result.evidence.length });
+          calls.push({ routes: response.result.route_execution, status: response.result.status, evidence_count: response.result.evidence.length, quality: response.result.quality?.final, reinforcement: response.result.quality?.reinforcement_attempt_count });
           return response.result;
         }
       }
