@@ -79,7 +79,9 @@ function requestSpecialistSelected(task = {}) {
 }
 
 const WEAK_SPECIALIST_SIGNALS = new Set([
-  'api', 'db', 'ui', 'ai', 'llm', 'model', 'data', 'kpi'
+  'api', 'db', 'ui', 'ai', 'llm', 'model', 'data', 'kpi',
+  '更新', '文章', '評価', '調査', '根拠', '分析', '機能', '運用', 'チーム',
+  'update', 'writing', 'evaluation', 'research', 'evidence', 'analysis', 'feature', 'operations', 'team'
 ]);
 
 const EXPLICIT_GENRE_SPECIALIST_COMPATIBILITY = Object.freeze({
