@@ -398,7 +398,7 @@ async function main() {
   console.log(`UNIVERSAL_ARTIFACT_ROOT=${ARTIFACT_ROOT}`);
 
   if (failures.length) {
-    for (const f of failures.slice(0, 20)) console.error(`UNIVERSAL_FAIL_CASE=${f.case_id} CODES=${f.failures.map((x) => x.code).join(',')}`);
+    for (const f of failures.slice(0, 20)) console.error(`UNIVERSAL_FAIL_CASE=${f.case_id} CODES=${f.failures.map((x) => x.code).join(',')} PUBLIC_REQUEST_COUNT=${(f.public_request_ids || []).length} INTERNAL_TASK_COUNT=${f.internal_task_count ?? 'UNKNOWN'} EXPECTED_MIN_REQUESTS=${corpus.find((c) => c.id === f.case_id)?.expected?.min_requests ?? 'UNKNOWN'}`);
     process.exit(1);
   }
   console.log('UNIVERSAL_JUDGMENT_GATE=PASS');
