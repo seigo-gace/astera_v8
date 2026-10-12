@@ -252,7 +252,7 @@ function atomTypesFor(text) {
   if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
-  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bdon['’]t\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
+  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bdon['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
   if (/(?:許可|してよい|可能|\bmay\b|\bpermitted\b|\ballowed\b)/iu.test(value)) out.push('PERMISSION');
   if (/(?:維持|保持|残す|壊さない|変えない|\bpreserve\b|\bretain\b|\bkeep\b|without\s+changing|do\s+not\s+break)/iu.test(value)) out.push('PRESERVE');
   if (/(?:場合|なら|ならば|とき|たら|れば|\bif\b|\bwhen\b|\bunless\b|provided\s+that)/iu.test(value)) out.push('CONDITION');
