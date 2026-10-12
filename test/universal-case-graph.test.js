@@ -171,3 +171,27 @@ test('topological wave builder is fail-closed on cycles', () => {
   assert.equal(result.valid, false);
   assert.deepEqual(new Set(result.cycle), new Set(['T01', 'T02']));
 });
+
+
+test('trailing English prohibition stays with the same-sentence request and not the next request', () => {
+  const input = 'History seems to disappear after reload, so verify whether persistence is broken or only rendering is broken, fix the correct side, but do not invent a new DB. Do ten consecutive posts mixing long and short messages.';
+  const prepared = preparedWithTasks(input, [], { language: 'en', overall_status: 'PARTIAL', unresolved: ['NO_EXECUTABLE_ACTION'] });
+  const out = applyUniversalCaseGraph(prepared, { question: input, language: 'en' });
+  const requests = out.analysis_task_packet.case_model.judgment_requests;
+  assert.equal(requests.length, 2, JSON.stringify(requests, null, 2));
+  const history = requests.find((request) => /History seems to disappear/iu.test(request.request_text));
+  const posts = requests.find((request) => /ten consecutive posts/iu.test(request.request_text));
+  assert.ok(history);
+  assert.ok(posts);
+  assert.ok(history.local_context.prohibitions.some((value) => /do not invent a new DB/iu.test(value)));
+  assert.ok(!posts.local_context.prohibitions.some((value) => /do not invent a new DB/iu.test(value)));
+});
+
+test('English error separation remains one request with internal-leak prohibition attached', () => {
+  const input = 'Separate user-actionable errors from internal failures: limits, credits, purchase failure, permission and unsupported file types can be explained, but internal API names, service hosts and stack traces must not leak.';
+  const prepared = preparedWithTasks(input, [], { language: 'en', overall_status: 'PARTIAL', unresolved: ['NO_EXECUTABLE_ACTION'] });
+  const out = applyUniversalCaseGraph(prepared, { question: input, language: 'en' });
+  const requests = out.analysis_task_packet.case_model.judgment_requests;
+  assert.equal(requests.length, 1, JSON.stringify(requests, null, 2));
+  assert.ok(requests[0].local_context.prohibitions.some((value) => /stack traces must not leak/iu.test(value)));
+});
