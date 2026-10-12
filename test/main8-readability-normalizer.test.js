@@ -85,3 +85,33 @@ test('deadline and request target helpers are deterministic', () => {
     '2026年10月1日時点のNode.js 22の公式サポート状況'
   );
 });
+
+test('public Main8 keeps risk meaning while removing internal task and claim identifiers', () => {
+  const sections = main8().split('\n---\n');
+  sections[3] = [
+    '04 危機察知',
+    '- T01:prohibition:1[30] 明示禁止条件への違反',
+    '- T06:data[18] 機密性・整合性・保持／削除境界の破綻',
+    '- T06:undetermined:[22] 未確定Claimを確定事実として扱う危険'
+  ].join('\n');
+  sections[5] = [
+    '06 比較案',
+    '- unsupported_scope: claim_id=; reasons= /',
+    '- 判断・比較で揃える専門軸:',
+    '  - 安全'
+  ].join('\n');
+  sections[7] = [
+    '08 主役AI／利用者への再指示',
+    '- UNRESOLVED_JAPANESE_TARGETを変更する',
+    '- 未確定のまま保持する。'
+  ].join('\n');
+
+  const out = normalizeUnifiedMain8Text(sections.join('\n---\n'));
+  assert.match(out, /明示禁止条件への違反/);
+  assert.match(out, /機密性・整合性・保持／削除境界の破綻/);
+  assert.match(out, /未確定Claimを確定事実として扱う危険/);
+  assert.doesNotMatch(out, /\bT\d{2,}:/u);
+  assert.doesNotMatch(out, /claim_id\s*=/iu);
+  assert.doesNotMatch(out, /unsupported_scope/iu);
+  assert.doesNotMatch(out, /UNRESOLVED_JAPANESE_TARGET/u);
+});
