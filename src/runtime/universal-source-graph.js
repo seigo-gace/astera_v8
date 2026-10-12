@@ -408,7 +408,23 @@ function buildSemanticAtoms(sourceGraph) {
     atoms.filter((atom) => atom.type === 'REQUEST'),
     source
   );
-  const { actual: requests, material } = partitionMaterialShapingRequests(coalesced);
+  // A causal observation preceding "so <directive>" belongs to the same
+  // judgment request; it must not be silently dropped as a separate task.
+  // Restrict the extension to the enclosing sentence (never the next one).
+  const contextualRequests = coalesced.map((atom) => {
+    if (!/^so\\s+(?:verify|check|investigate|review|fix)\\b/iu.test(atom.text)) return atom;
+    const sentence = candidateNodes.find((node) => node.kind === 'sentence'
+      && node.source_span.start < atom.source_span.start
+      && node.source_span.end >= atom.source_span.end);
+    if (!sentence) return atom;
+    const preamble = source.slice(sentence.source_span.start, atom.source_span.start);
+    if (!/\\b(?:seems?|appears?|reported|observed|fails?|broken|error)\\b/iu.test(preamble)) return atom;
+    const start = sentence.source_span.start;
+    return { ...atom, source_span: { start, end: atom.source_span.end },
+      text: source.slice(start, atom.source_span.end),
+      normalized_text: normalized(source.slice(start, atom.source_span.end)) };
+  });
+  const { actual: requests, material } = partitionMaterialShapingRequests(contextualRequests);
   const materialOwnerByAtomId = new Map();
   for (const item of material) {
     for (const atomId of item.merged_source_atom_ids || [item.id]) {
