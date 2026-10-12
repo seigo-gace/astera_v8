@@ -197,3 +197,12 @@ test('English observation of uncertainty does not hide a following review reques
   assert.ok(atoms.request_atoms.some((request) => /review the posting form again/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
   assert.ok(atoms.request_atoms.some((request) => /show an enable-option hint/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
 });
+
+test('English user uncertainty is an observation, not a prohibition', () => {
+  const input = "Users don't always know what to press, so review the posting form again.";
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.ok(atoms.request_atoms.some((item) => /review the posting form/iu.test(item.text)));
+  assert.equal(atoms.atoms.filter((item) => item.type === 'PROHIBITION').length, 0);
+  const negativeCommand = buildUniversalSourceUnderstanding("Don't add unrelated screens.", 'en').semantic_atoms;
+  assert.ok(negativeCommand.atoms.some((item) => item.type === 'PROHIBITION'));
+});
