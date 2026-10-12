@@ -368,13 +368,23 @@ function buildSemanticAtoms(sourceGraph) {
         const contained = atoms.filter((atom) => atom.type === 'REQUEST'
           && atom.source_span.start >= node.source_span.start
           && atom.source_span.end <= node.source_span.end);
-        if (contained.length === 1 && node.kind === 'sentence' && !/\b(?:must\s+not|do\s+not|don['’]t|never)\b/iu.test(node.text)) {
+        if (contained.length === 1 && node.kind === 'sentence') {
           const existing = contained[0];
-          existing.operation = operationFor(node.text);
-          existing.source_node_id = node.id;
-          existing.source_span = { ...node.source_span };
-          existing.text = source.slice(node.source_span.start, node.source_span.end);
-          existing.normalized_text = node.normalized_text;
+          const negative = /\b(?:must\s+not|do\s+not|don['’]t|never)\b/iu.exec(node.text);
+          const beforeNegative = negative ? node.text.slice(0, negative.index) : node.text;
+          const trailingConstraint = negative ? /,\s*but\b/giu.exec(beforeNegative) : null;
+          // Only extend the request across the non-prohibitive part of its
+          // sentence. Later constraints remain independent semantic atoms.
+          const end = trailingConstraint
+            ? node.source_span.start + trailingConstraint.index
+            : negative ? existing.source_span.end : node.source_span.end;
+          if (end > existing.source_span.start) {
+            existing.operation = operationFor(source.slice(node.source_span.start, end));
+            existing.source_node_id = node.id;
+            existing.source_span = { start: node.source_span.start, end };
+            existing.text = source.slice(node.source_span.start, end);
+            existing.normalized_text = normalized(existing.text);
+          }
           continue;
         }
         if (contained.length) continue;
