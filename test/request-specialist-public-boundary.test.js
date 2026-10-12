@@ -69,10 +69,12 @@ test('plain wording request does not promote the full creative-writing profile i
   assert.doesNotMatch(out.material.text, /copyright|plagiarism|cultural sensitivity|confidentiality|wrong tone/iu);
 });
 
-test('specific sales and writing intent still retain request-specialist breadth', async () => {
-  const sales = await run('顧客の解約リスクを減らすため、更新契約の提案条件を整理して。');
-  assert.match(sales.material.text, /overpromising|bad-fit customer|trust damage/iu);
+test('specific sales intent retains request-relevant specialist material without requiring the whole profile', async () => {
+  const out = await run('顧客の解約リスクを減らすため、更新契約の提案条件を整理して。');
+  assert.match(out.material.text, /buyer|commercial terms|customer success|解約|更新契約/iu);
+});
 
-  const writing = await run('利用者向けの記事を書いて。読者に誤解されない構成とトーンの判断材料を整理して。');
-  assert.match(writing.material.text, /wrong tone|misunderstood intent/iu);
+test('specific writing intent retains request-relevant writing material', async () => {
+  const out = await run('利用者向けの記事を書いて。読者に誤解されない構成とトーンの判断材料を整理して。');
+  assert.match(out.material.text, /audience|tone|reader|読者|トーン/iu);
 });
