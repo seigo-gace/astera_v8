@@ -190,3 +190,10 @@ test('English subject-led and contracted prohibitions stay context instead of ph
   assert.ok(prohibitions.some((value) => /stack traces must not leak/iu.test(value)));
   assert.ok(prohibitions.some((value) => /Don't add unrelated screens/iu.test(value)));
 });
+
+test('English observation of uncertainty does not hide a following review request', () => {
+  const input = "Users don't always know what to press so review the posting form again, and when the option is OFF don't do nothing, show an enable-option hint.";
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.ok(atoms.request_atoms.some((request) => /review the posting form again/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
+  assert.ok(atoms.request_atoms.some((request) => /show an enable-option hint/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
+});
