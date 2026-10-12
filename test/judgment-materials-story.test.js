@@ -527,7 +527,7 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
             },
             payload: { ...payload, question: claim, domain_lens: { id: 'G29', taxonomy_version: '1.0.0' } }
           });
-          calls.push(response.result.route_execution);
+          calls.push({ routes: response.result.route_execution, status: response.result.status, evidence_count: response.result.evidence.length });
           return response.result;
         }
       }
@@ -538,7 +538,9 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
     }, caller);
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length > 0, 'real evidence module must be called');
-    assert.ok(calls.every((route) => route.specialist_authoritative.attempted && route.general_current.attempted));
+    assert.ok(calls.every((call) => call.routes.specialist_authoritative.attempted && call.routes.general_current.attempted));
+    assert.ok(calls.some((call) => call.status === 'FINAL_VALID' && call.evidence_count > 0), JSON.stringify(calls));
+    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
     assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
     assert.equal(out.material.text.split(/^---$/m).length, 8);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
