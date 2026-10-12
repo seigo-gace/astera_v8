@@ -469,7 +469,7 @@ test('Story 16: evidence search boundary invokes external search client once per
   }
 });
 
-test('Story 17: one submission executes real dual-route Evidence Search before Main8', async () => {
+test('Story 17: original user-derived search plan rejects mismatched evidence without inventing confirmation', async () => {
   const fs = require('node:fs/promises');
   const os = require('node:os');
   const path = require('node:path');
@@ -540,14 +540,14 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length > 0, 'real evidence module must be called');
     assert.ok(calls.every((call) => call.routes.specialist_authoritative.attempted && call.routes.general_current.attempted));
-    assert.ok(calls.some((call) => call.status === 'FINAL_VALID' && call.evidence_count > 0), JSON.stringify(calls));
-    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
+    assert.ok(calls.some((call) => call.status !== 'FINAL_VALID' && call.evidence_count === 0), JSON.stringify(calls));
+    assert.ok(out.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
     assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
     const evidenceSection = out.result.judgment['07_evidence_status'];
     assert.ok(evidenceSection, 'Main8 must expose evidence status');
-    assert.ok(Object.values(evidenceSection.evidence_search || {}).some((item) =>
-      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
-    ), 'adopted Evidence must reach Main8 section 07 with accepted quality');
+    assert.ok(Object.values(evidenceSection.evidence_search || {}).every((item) =>
+      item.source_status !== 'FINAL_VALID'
+    ), 'rejected evidence must not be presented as adopted in Main8 section 07');
     assert.equal(out.material.text.split(/^---$/m).length, 8);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   } finally {
