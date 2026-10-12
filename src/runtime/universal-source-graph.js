@@ -11,7 +11,7 @@ const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?
 const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
 const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
-const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:(?:but|and|however|also|yet)\s+)?(?:must\s+not|do\s+not|never)\b/iu;
+const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|\b(?:must\s+not|do\s+not|don['’]t|never)\b/iu;
 const MATERIAL_SHAPING_JA = /(?:現在分かっている事実|確認済み(?:の)?事実|未確認(?:事項|項目|点)?|未解決(?:事項|項目|点)?|主要(?:な)?(?:危険|リスク)|反対側から確認すべき条件|反証条件|失格条件|比較に必要な軸|比較軸|評価軸|必要な根拠|根拠(?:の)?成立状態|根拠状態|次に確認する(?:材料|事項|項目))/u;
 const MATERIAL_SHAPING_EN = /(?:known facts?|confirmed facts?|unresolved (?:items?|issues?|questions?)|material risks?|disconfirming conditions?|falsification conditions?|comparison dimensions?|comparison criteria|evaluation criteria|evidence requirements?|evidence status|what should be verified next|what to verify next)/iu;
 const MATERIAL_DIRECTIVE = /(?:分け|区別|整理|示|列挙|明示|確認|\bseparate\b|\bdistinguish\b|\bidentify\b|\bstate\b|\blist\b|\bshow\b|\bprovide\b|\bindicate\b|\bsay\b|\bverify\b)/iu;
@@ -232,7 +232,7 @@ function isRequestText(text) {
   if (!value) return false;
   if (objectiveCue(value)) return true;
   if (FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value)) return true;
-  if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement)/iu.test(value)) return false;
+  if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement|separate|distinguish|show|provide)/iu.test(value)) return false;
   if (FORMAL_REQUEST_TAIL_JA.test(value)) return true;
   return REQUEST_JA.test(value) || REQUEST_EN.test(value);
 }
@@ -243,7 +243,7 @@ function atomTypesFor(text) {
   if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
-  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
+  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bdon['’]t\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
   if (/(?:許可|してよい|可能|\bmay\b|\bpermitted\b|\ballowed\b)/iu.test(value)) out.push('PERMISSION');
   if (/(?:維持|保持|残す|壊さない|変えない|\bpreserve\b|\bretain\b|\bkeep\b|without\s+changing|do\s+not\s+break)/iu.test(value)) out.push('PRESERVE');
   if (/(?:場合|なら|ならば|とき|たら|れば|\bif\b|\bwhen\b|\bunless\b|provided\s+that)/iu.test(value)) out.push('CONDITION');
