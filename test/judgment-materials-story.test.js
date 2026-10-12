@@ -526,7 +526,7 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
               execution_time: '2026-07-18T01:45:00.000Z',
               effective_as_of: '2026-07-18T01:45:00.000Z'
             },
-            payload: { ...payload, question: claim, domain_lens: { id: 'G29', taxonomy_version: '1.0.0' } }
+            payload
           });
           calls.push({ routes: response.result.route_execution, status: response.result.status, evidence_count: response.result.evidence.length, quality: response.result.quality?.final, reinforcement: response.result.quality?.reinforcement_attempt_count });
           return response.result;
