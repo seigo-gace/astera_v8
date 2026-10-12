@@ -448,6 +448,19 @@ test('Story 16: evidence search boundary invokes external search client once per
     // through to the final user-facing Main8. Separate unit PASS is insufficient.
     assert.ok(out.result.analysis_task_packet.tasks.length > 0);
     assert.ok(out.result.analysis_task_packet.tasks.some((task) => task.domain?.primary));
+    const five = out.result.five_stage;
+    assert.equal(five.schema_version, 'astera.five-stage.v2');
+    assert.deepEqual(five.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
+    assert.equal(five.tasks.length, out.result.analysis_task_packet.tasks.length);
+    for (const task of five.tasks) {
+      assert.ok(task.task_id, 'five-stage task must retain owner');
+      assert.ok(task.lens_id, 'five-stage task must retain primary lens');
+      for (const lane of five.order) {
+        assert.ok(task[lane] && typeof task[lane] === 'object', 'five-stage lane missing: ' + lane);
+      }
+    }
+    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
+
     assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
     assert.equal(out.material.text.split(/^---$/m).length, 8);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
