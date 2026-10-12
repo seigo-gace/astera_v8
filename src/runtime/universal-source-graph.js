@@ -230,6 +230,15 @@ function objectiveCue(value) {
 function isRequestText(text) {
   const value = normalized(text);
   if (!value) return false;
+  // A negative clause is a constraint, not an additional executable request.
+  // Preserve a real positive directive earlier in the same sentence; it owns
+  // the trailing constraint through the existing Case Graph context binding.
+  const negative = /\b(?:must\s+not|do\s+not|don['’]t|never)\b/iu.exec(value);
+  if (negative) {
+    const prefix = value.slice(0, negative.index).replace(/^\s*(?:but|and|or)\s+/iu, '');
+    const positiveDirective = /\b(?:please|verify|review|check|identify|state|provide|return|implement|add|remove|fix|preserve|separate|support|measure|show|ensure)\b/iu.test(prefix);
+    if (!positiveDirective) return false;
+  }
   if (objectiveCue(value)) return true;
   if (FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value)) return true;
   if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement|separate|distinguish|show|provide)/iu.test(value)) return false;
