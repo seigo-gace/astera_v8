@@ -543,6 +543,11 @@ test('Story 17: one submission executes real dual-route Evidence Search before M
     assert.ok(calls.some((call) => call.status === 'FINAL_VALID' && call.evidence_count > 0), JSON.stringify(calls));
     assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
     assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
+    const evidenceSection = out.result.judgment['07_evidence_status'];
+    assert.ok(evidenceSection, 'Main8 must expose evidence status');
+    assert.ok(Object.values(evidenceSection.evidence_search || {}).some((item) =>
+      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
+    ), 'adopted Evidence must reach Main8 section 07 with accepted quality');
     assert.equal(out.material.text.split(/^---$/m).length, 8);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   } finally {
