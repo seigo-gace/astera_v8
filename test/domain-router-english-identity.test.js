@@ -63,3 +63,10 @@ test('UI history persistence context is not classified as historical research wh
   });
   assert.equal(historical.primary?.id, 'G04');
 });
+
+test('ambiguous credit and architecture tokens do not hijack a stronger software request', () => {
+  const credit = routeDomainTemplates({ question: 'APIの利用画面でクレジット不足エラーを利用者向けに表示する。' });
+  assert.notEqual(credit.primary?.id, 'G11', `credit context: ${credit.primary?.id}`);
+  const architecture = routeDomainTemplates({ question: 'software architecture change for an API server' });
+  assert.notEqual(architecture.primary?.id, 'G26', `architecture context: ${architecture.primary?.id}`);
+});
