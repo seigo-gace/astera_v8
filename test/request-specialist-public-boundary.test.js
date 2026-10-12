@@ -57,3 +57,22 @@ test('multiple specialist signals are retained so migration is not reduced to th
   const out = await run('Node.js APIを無停止で段階移行し、既存Client互換性を維持できるか比較したい。');
   assert.match(out.material.text, /security regression|rollback|compatibility/iu);
 });
+
+
+test('page refresh wording does not promote the sales/customer-success profile into history persistence risk', async () => {
+  const out = await run('履歴がページ更新すると一部消えるように見えるので、本当に保存されているか確認して。表示だけの問題なら表示を直し、保存されていないなら保存側を確認する。');
+  assert.doesNotMatch(out.material.text, /overpromising|bad-fit customer|discount trap|trust damage|churn risk/iu);
+});
+
+test('plain wording request does not promote the full creative-writing profile into user-facing error material', async () => {
+  const out = await run('ユーザーに見せるエラーを整理して、内部API名やstack traceは見せず、利用者自身が対処できる分かる文章にしてほしい。');
+  assert.doesNotMatch(out.material.text, /copyright|plagiarism|cultural sensitivity|confidentiality|wrong tone/iu);
+});
+
+test('specific sales and writing intent still retain request-specialist breadth', async () => {
+  const sales = await run('顧客の解約リスクを減らすため、更新契約の提案条件を整理して。');
+  assert.match(sales.material.text, /overpromising|bad-fit customer|trust damage/iu);
+
+  const writing = await run('利用者向けの記事を書いて。読者に誤解されない構成とトーンの判断材料を整理して。');
+  assert.match(writing.material.text, /wrong tone|misunderstood intent/iu);
+});
