@@ -229,7 +229,7 @@ const TEMPLATES = [
   {
     id: 'creative_writing',
     name: 'Creative / Writing / Content',
-    signals: [rx('文章|メール|スピーチ|記事|脚本|トーン|書いて|rewrite|write|email|speech|story|article|script|tone')],
+    signals: [rx('文章|メール|スピーチ|記事|脚本|トーン|書いて|rewrite|write|email|speech|\\bstory\\b|article|script|tone')],
     fact_lens: ['purpose', 'audience', 'desired effect', 'required facts', 'tone', 'constraints', 'forbidden claims'],
     risk_lens: ['misunderstood intent', 'unsupported claim', 'wrong tone', 'cultural sensitivity', 'confidentiality', 'copyright/plagiarism'],
     multi_lens: ['writer', 'reader', 'skeptic', 'editor', 'legal/brand reviewer'],
