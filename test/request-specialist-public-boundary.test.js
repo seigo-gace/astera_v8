@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const AsteraEngine = require('../src/astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
+const { routeRequestSpecialistProfiles } = require('../src/runtime/request-specialist-profile-router');
 
 const silentLogger = { write() {}, async flush() {} };
 const caller = { id: 'request-specialist-public-boundary', is_global: true, plan: 'admin' };
@@ -91,4 +92,21 @@ test('English history persistence does not match the creative story signal by su
 test('an actual story-writing request can still use writing-specific material', async () => {
   const out = await run('Write a short story for new users and organize the judgment material for audience and tone.', 'en');
   assert.match(out.material.text, /audience|tone|reader|purpose/iu);
+});
+
+
+test('plain ASCII specialist signals do not fire inside unrelated English words', () => {
+  const cases = [
+    ['try the posting form again', 'ai_ml_governance'],
+    ['objective three preserves request ownership', 'hr_organization'],
+    ['posts authored by humans are supported', 'cybersecurity_privacy'],
+    ['production deployment is out of scope', 'product_ux'],
+    ['hard-coded branches are forbidden', 'engineering_architecture'],
+    ['database connection details stay internal', 'data_analytics'],
+    ['distinguish supported and unsupported formats', 'product_ux']
+  ];
+  for (const [question, forbiddenProfile] of cases) {
+    const routed = routeRequestSpecialistProfiles({ question });
+    assert.notEqual(routed.primary?.id, forbiddenProfile, `${question} must not route to ${forbiddenProfile} by substring collision`);
+  }
 });
