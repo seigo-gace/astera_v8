@@ -564,6 +564,7 @@ test('Story 17: genuine user-derived evidence query adopts supported claim and r
     assert.ok(calls.length > mismatchStart);
     assert.ok(calls.slice(mismatchStart).every((call) => call.status !== 'FINAL_VALID'));
     assert.ok(mismatch.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
+    assert.doesNotMatch(mismatch.material.text, /accepted source=/, 'unmatched evidence must never appear as accepted source');
     assertNoNormativeDecisionArtifacts(mismatch.result, mismatch.material.text);
 
     // A standalone factual statement does not request external verification:
