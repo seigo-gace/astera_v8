@@ -264,7 +264,7 @@ function atomTypesFor(text) {
   if (/(?:ただし|例外|\bexcept\b|\bexcepting\b|\bhowever\b)/iu.test(value)) out.push('EXCEPTION');
   if (/(?:受入条件|完了条件|合格条件|Acceptance\s+Criteria|completion\s+criteria|pass\s+criteria)/iu.test(value)) out.push('ACCEPTANCE_CRITERION');
   if (/(?:根拠|出典|Evidence|source|事実確認|ファクトチェック|裏取り|\bverify\b|\bvalidation\b)/iu.test(value)) out.push('EVIDENCE_REQUIREMENT');
-  if (/(?:観測|報告|ように見える|ことがある|ことがあった|発生した|エラー|不具合|seems|appears|sometimes|observed|reported|failure|error)/iu.test(value)) out.push('OBSERVATION');
+  if (/(?:観測|報告|ように見える|ことがある|ことがあった|発生した|(?:エラー|不具合)(?:が|は|で|になる|となる|発生|表示|出る|出た)|seems|appears|sometimes|observed|reported|failure|error)/iu.test(value)) out.push('OBSERVATION');
   if (/(?:仮定|想定|おそらく|推測|assume|assumption|probably|likely)/iu.test(value)) out.push('ASSUMPTION');
   if (/[?？]$/u.test(value) || /(?:何|なぜ|どの|どれ|どう|\bwhat\b|\bwhy\b|\bwhich\b|\bhow\b)/iu.test(value)) out.push('QUESTION');
   if (/(?:比較軸|評価軸|criterion|criteria|dimension)/iu.test(value)) out.push('COMPARISON_CRITERION');
