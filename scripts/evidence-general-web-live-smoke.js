@@ -13,6 +13,12 @@ const { normalizeProviderResult } = require('../src/evidence-search/evidence/nor
       maximum_results: 8,
       domain_lens: { id: 'G29', taxonomy_version: '1.0.0' }
     }, { signal: controller.signal });
+    if (raw.coverage_state !== 'COMPLETE_FOR_QUERY_SCOPE') {
+      throw new Error('FREE_GENERAL_WEB live query did not complete: ' + String(raw.coverage_state));
+    }
+    if (raw.query_results?.[0]?.retrieval_status !== 'FOUND') {
+      throw new Error('FREE_GENERAL_WEB live query did not fetch evidence for planned query');
+    }
     const normalized = normalizeProviderResult(raw, provider);
     const candidates = normalized.candidates;
     if (!candidates.length) throw new Error('FREE_GENERAL_WEB live smoke returned no destination-page candidates');
@@ -29,6 +35,8 @@ const { normalizeProviderResult } = require('../src/evidence-search/evidence/nor
       status: 'FREE_GENERAL_WEB_LIVE_SEARCH_OK',
       provider_id: provider.provider_id,
       candidate_count: candidates.length,
+      coverage_state: raw.coverage_state,
+      query_status: raw.query_results[0].retrieval_status,
       sample_urls: candidates.slice(0, 3).map((candidate) => candidate.canonical_locator.url),
       search_result_used_as_evidence: false
     }, null, 2));
