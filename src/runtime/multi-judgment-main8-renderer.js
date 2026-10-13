@@ -165,26 +165,44 @@ function itemText(item) {
   if (typeof item === 'string') return sanitizePublicValue(item);
   return sanitizePublicValue(item.text || item.raw_text || item.claim?.raw_text || item.claim?.text || item.impact || item.failure_condition || item.question || '');
 }
+function publicLane(taskResult = {}, lane) {
+  if (Object.prototype.hasOwnProperty.call(taskResult, 'public_lanes')) {
+    return taskResult.public_lanes?.[lane] || {};
+  }
+  const fallback = {
+    fact: taskResult.facts,
+    risk: taskResult.risks,
+    multi: taskResult.multi,
+    inquiry: taskResult.inquiry,
+    compare: taskResult.comparison
+  };
+  return fallback[lane] || {};
+}
 function groupFacts(taskResults = []) {
   return publicValues(taskResults.flatMap((taskResult) => [
-    ...(taskResult?.facts?.confirmed || []).map(itemText),
+    ...(publicLane(taskResult, 'fact')?.confirmed || []).map(itemText),
     ...(taskResult?.task?.premises || []).map(itemText)
   ])).slice(0, 12);
 }
 function groupRisks(taskResults = []) {
-  return publicValues(taskResults.flatMap((taskResult) => (taskResult?.risks?.risks || []).map((risk) => itemText(risk)))).slice(0, 10);
+  return publicValues(taskResults.flatMap((taskResult) => (publicLane(taskResult, 'risk')?.risks || []).map((risk) => itemText(risk)))).slice(0, 10);
 }
 function groupMissing(taskResults = []) {
-  return publicValues(taskResults.flatMap((taskResult) => [
-    ...(taskResult?.inquiry?.open_items || []).map(itemText),
-    ...(taskResult?.inquiry?.missing_questions || []).map(itemText),
-    ...(taskResult?.inquiry?.missing_fields || []).map(itemText)
-  ])).slice(0, 12);
+  return publicValues(taskResults.flatMap((taskResult) => {
+    const inquiry = publicLane(taskResult, 'inquiry');
+    return [
+      ...(inquiry?.open_items || []).map(itemText),
+      ...(inquiry?.missing_questions || []).map(itemText),
+      ...(inquiry?.missing_fields || []).map(itemText),
+      ...(inquiry?.inquiry_lens || []).map(itemText),
+      ...(inquiry?.evidence_need || []).map(itemText)
+    ];
+  })).slice(0, 12);
 }
 function groupCounterMaterial(taskResults = []) {
   const values = [];
   for (const taskResult of taskResults) {
-    for (const perspective of taskResult?.multi?.perspectives || []) {
+    for (const perspective of publicLane(taskResult, 'multi')?.perspectives || []) {
       values.push(...(Array.isArray(perspective?.failure_conditions) ? perspective.failure_conditions : []));
       values.push(...(Array.isArray(perspective?.conditions) ? perspective.conditions : []));
       if (typeof perspective?.focus === 'string') values.push(perspective.focus);
@@ -195,8 +213,8 @@ function groupCounterMaterial(taskResults = []) {
 }
 function groupComparisonMaterial(taskResults = []) {
   return {
-    candidates: publicValues(taskResults.flatMap((taskResult) => (taskResult?.comparison?.comparison_candidates || []).map((item) => typeof item === 'string' ? item : item?.label))),
-    dimensions: publicValues(taskResults.flatMap((taskResult) => taskResult?.comparison?.dimensions || []))
+    candidates: publicValues(taskResults.flatMap((taskResult) => (publicLane(taskResult, 'compare')?.comparison_candidates || []).map((item) => typeof item === 'string' ? item : item?.label))),
+    dimensions: publicValues(taskResults.flatMap((taskResult) => publicLane(taskResult, 'compare')?.dimensions || []))
   };
 }
 function premiseLines(model, lang) {
@@ -421,4 +439,4 @@ function renderMultiJudgmentMain8(judgment = {}, result = {}) {
   };
 }
 
-module.exports = { renderMultiJudgmentMain8, isMultiJudgment, resultTaskGroups, sanitizePublicValue };
+module.exports = { renderMultiJudgmentMain8, isMultiJudgment, resultTaskGroups, sanitizePublicValue, publicLane };

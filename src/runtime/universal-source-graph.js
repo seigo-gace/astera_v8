@@ -5,13 +5,13 @@
 // separately. This layer does not establish truth and does not make final decisions.
 
 const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする|確認する[。！？!?]?$|(?:か)?(?:見|み)て(?:ほしい)?(?:けど)?[。！？!?]?$)/u;
-const REQUEST_EN = /(?:\bplease\b|\bI\s+need\b|\bwe\s+need\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bidentify\b|\bstate\b|\bprovide\b|\breturn\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bsupport\b|\bmeasure\b|\bshow\b|\bdo\s+not\b|\bnever\b)/iu;
+const REQUEST_EN = /(?:\bplease\b|\bI\s+need\b|\bwe\s+need\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bidentify\b|\bstate\b|\bprovide\b|\breturn\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bdistinguish\b|\bmake\b|\bsupport\b|\bmeasure\b|\bshow\b|\bdo\s+not\b|\bdo\s+(?=\d|ten\b)\b|\bnever\b)/iu;
 const OBJECTIVE_JA = /(?:^|[【\s])(第?[一二三四五六七八九十0-9]+(?:の)?目的|目的[A-Za-z0-9一二三四五六七八九十]*)(?:は|:|：)/u;
 const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*(?::|\bis\s+to\b)/iu;
 const FORMAL_REQUIREMENT_JA = /(?:必須|必要|要件|要求|求める|受入条件|完了条件|合格条件)[^。！？!?]{0,140}(?:する|である|こと)/u;
 const FORMAL_REQUIREMENT_EN = /(?:\bis required\b|\brequires?\b|\bacceptance criteria\b|\bcompletion criteria\b|\bpass criteria\b)/iu;
 const FORMAL_REQUEST_TAIL_JA = /(?:する|できる)こと[。！？!?]?$/u;
-const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|(?:^|[.;:!?]\s*)(?:must\s+not|do\s+not|never)\b/iu;
+const PURE_PROHIBITION = /(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|しないこと(?!が(?:あった|ある))|するな|してはいけない|禁止)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|禁止|せず|出さない)|\b(?:must\s+not|do\s+not|don['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|never)\b/iu;
 const MATERIAL_SHAPING_JA = /(?:現在分かっている事実|確認済み(?:の)?事実|未確認(?:事項|項目|点)?|未解決(?:事項|項目|点)?|主要(?:な)?(?:危険|リスク)|反対側から確認すべき条件|反証条件|失格条件|比較に必要な軸|比較軸|評価軸|必要な根拠|根拠(?:の)?成立状態|根拠状態|次に確認する(?:材料|事項|項目))/u;
 const MATERIAL_SHAPING_EN = /(?:known facts?|confirmed facts?|unresolved (?:items?|issues?|questions?)|material risks?|disconfirming conditions?|falsification conditions?|comparison dimensions?|comparison criteria|evaluation criteria|evidence requirements?|evidence status|what should be verified next|what to verify next)/iu;
 const MATERIAL_DIRECTIVE = /(?:分け|区別|整理|示|列挙|明示|確認|\bseparate\b|\bdistinguish\b|\bidentify\b|\bstate\b|\blist\b|\bshow\b|\bprovide\b|\bindicate\b|\bsay\b|\bverify\b)/iu;
@@ -230,9 +230,23 @@ function objectiveCue(value) {
 function isRequestText(text) {
   const value = normalized(text);
   if (!value) return false;
+  // A negative clause is a constraint, not an additional executable request.
+  // Preserve a real positive directive earlier in the same sentence; it owns
+  // the trailing constraint through the existing Case Graph context binding.
+  const negative = /\b(?:must\s+not|do\s+not|don['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|never)\b/iu.exec(value);
+  if (negative) {
+    const prefix = value.slice(0, negative.index).replace(/^\s*(?:but|and|or)\s+/iu, '');
+    // Subject-led normative obligations (e.g. 'Astera must only provide ...')
+    // are constraints, not a new user request. A leading imperative remains a request.
+    const subjectLedObligation = /\b(?:must|shall)\s+only\b/iu.test(prefix);
+    const leadingImperative = /^\s*(?:please\s+)?(?:verify|review|check|identify|state|provide|return|implement|add|remove|fix|preserve|separate|support|measure|show|ensure)\b/iu.test(prefix);
+    if (subjectLedObligation && !leadingImperative) return false;
+    const positiveDirective = /\b(?:please|verify|review|check|identify|state|provide|return|implement|add|remove|fix|preserve|separate|support|measure|show|ensure)\b/iu.test(prefix);
+    if (!positiveDirective) return false;
+  }
   if (objectiveCue(value)) return true;
   if (FORMAL_REQUIREMENT_JA.test(value) || FORMAL_REQUIREMENT_EN.test(value)) return true;
-  if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement)/iu.test(value)) return false;
+  if (PURE_PROHIBITION.test(value) && !/(?:判断材料|decision\s+material|review|verify|check|fix|remove|implement|separate|distinguish|show|provide)/iu.test(value)) return false;
   if (FORMAL_REQUEST_TAIL_JA.test(value)) return true;
   return REQUEST_JA.test(value) || REQUEST_EN.test(value);
 }
@@ -243,14 +257,14 @@ function atomTypesFor(text) {
   if (objectiveCue(value)) out.push('OBJECTIVE');
   if (isRequestText(value)) out.push('REQUEST');
   if (/(?:必須|必要|要求|要件|求める|\bmust\b|\bshall\b|\brequired\b|\brequires\b)/iu.test(value)) out.push('OBLIGATION');
-  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
+  if (/(?:(?:追加|変更|削除|作成|導入|公開|実行|使用|出力|表示|保存|送信|採用|決定|推奨|選定)しない(?:こと)?[。！？!?]?$|(?:混同|流用)しない(?:こと)?[。！？!?]?$|(?:出さ|漏らさ)ない(?:こと)?[。！？!?]?$|禁止|してはいけない|しないこと(?!が(?:あった|ある))|勝手に[^。！？!?]{0,40}(?:しない|するな)|(?:最終判断|最終結論|推奨|採用|選定)[^。！？!?]{0,80}(?:しない|しないで|せず|禁止|出さない)|\bmust\s+not\b|\bdo\s+not\b|\bdon['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|\bnever\b)/iu.test(value)) out.push('PROHIBITION');
   if (/(?:許可|してよい|可能|\bmay\b|\bpermitted\b|\ballowed\b)/iu.test(value)) out.push('PERMISSION');
   if (/(?:維持|保持|残す|壊さない|変えない|\bpreserve\b|\bretain\b|\bkeep\b|without\s+changing|do\s+not\s+break)/iu.test(value)) out.push('PRESERVE');
   if (/(?:場合|なら|ならば|とき|たら|れば|\bif\b|\bwhen\b|\bunless\b|provided\s+that)/iu.test(value)) out.push('CONDITION');
   if (/(?:ただし|例外|\bexcept\b|\bexcepting\b|\bhowever\b)/iu.test(value)) out.push('EXCEPTION');
   if (/(?:受入条件|完了条件|合格条件|Acceptance\s+Criteria|completion\s+criteria|pass\s+criteria)/iu.test(value)) out.push('ACCEPTANCE_CRITERION');
   if (/(?:根拠|出典|Evidence|source|事実確認|ファクトチェック|裏取り|\bverify\b|\bvalidation\b)/iu.test(value)) out.push('EVIDENCE_REQUIREMENT');
-  if (/(?:観測|報告|ように見える|ことがある|発生した|エラー|不具合|seems|appears|sometimes|observed|reported|failure|error)/iu.test(value)) out.push('OBSERVATION');
+  if (/(?:観測|報告|ように見える|ことがある|ことがあった|発生した|(?:エラー|不具合)(?:が|は|で|になる|となる|発生|表示|出る|出た)|seems|appears|sometimes|observed|reported|failure|error)/iu.test(value)) out.push('OBSERVATION');
   if (/(?:仮定|想定|おそらく|推測|assume|assumption|probably|likely)/iu.test(value)) out.push('ASSUMPTION');
   if (/[?？]$/u.test(value) || /(?:何|なぜ|どの|どれ|どう|\bwhat\b|\bwhy\b|\bwhich\b|\bhow\b)/iu.test(value)) out.push('QUESTION');
   if (/(?:比較軸|評価軸|criterion|criteria|dimension)/iu.test(value)) out.push('COMPARISON_CRITERION');
@@ -268,15 +282,21 @@ function atomTypesFor(text) {
   return [...new Set(out)];
 }
 
+function dependentContinuation(value) {
+  const text = normalized(value);
+  if (/^の/u.test(text)) return true;
+  return /^(?:(?:and|then|also)\s+)?(?:fix|correct|update|remove|preserve|keep|verify|check)\s+(?:it|that|this|those|them|the\s+(?:correct|same)\s+(?:side|one|thing|part|path))\b/iu.test(text);
+}
+
 function coalesceDependentRequestAtoms(requests, source) {
   const sorted = [...requests].sort((a, b) => a.source_span.start - b.source_span.start || a.source_span.end - b.source_span.end);
   const out = [];
   for (const atom of sorted) {
     const previous = out[out.length - 1];
-    const value = normalized(atom.text);
+    const gap = previous ? source.slice(previous.source_span.end, atom.source_span.start) : '';
     const directlyContinuesPrevious = previous
-      && atom.source_span.start === previous.source_span.end
-      && /^の/u.test(value);
+      && /^[\s,;:、；：—–-]*$/u.test(gap)
+      && dependentContinuation(atom.text);
     if (!directlyContinuesPrevious) {
       out.push(atom);
       continue;
@@ -349,17 +369,32 @@ function buildSemanticAtoms(sourceGraph) {
     for (const type of types) {
       const key = `${type}:${node.source_span.start}:${node.source_span.end}`;
       if (seen.has(key)) continue;
+      if ((type === 'PROHIBITION' || type === 'CONDITION' || type === 'OBSERVATION') && node.kind === 'sentence' && atoms.some((atom) =>
+        atom.type === type
+        && atom.source_span.start >= node.source_span.start
+        && atom.source_span.end <= node.source_span.end
+      )) continue;
       if (type === 'REQUEST') {
         const contained = atoms.filter((atom) => atom.type === 'REQUEST'
           && atom.source_span.start >= node.source_span.start
           && atom.source_span.end <= node.source_span.end);
         if (contained.length === 1 && node.kind === 'sentence') {
           const existing = contained[0];
-          existing.operation = operationFor(node.text);
-          existing.source_node_id = node.id;
-          existing.source_span = { ...node.source_span };
-          existing.text = source.slice(node.source_span.start, node.source_span.end);
-          existing.normalized_text = node.normalized_text;
+          const negative = /\b(?:must\s+not|do\s+not|don['’]t\s+(?=(?:add|remove|delete|change|create|invent|expose|leak|show|use|make|break|throw|do|copy|carry|publish|reveal|disclose)\b)|never)\b/iu.exec(node.text);
+          const beforeNegative = negative ? node.text.slice(0, negative.index) : node.text;
+          const trailingConstraint = negative ? /,\s*but\b/giu.exec(beforeNegative) : null;
+          // Only extend the request across the non-prohibitive part of its
+          // sentence. Later constraints remain independent semantic atoms.
+          const end = trailingConstraint
+            ? node.source_span.start + trailingConstraint.index
+            : negative ? existing.source_span.end : node.source_span.end;
+          if (end > existing.source_span.start) {
+            existing.operation = operationFor(source.slice(node.source_span.start, end));
+            existing.source_node_id = node.id;
+            existing.source_span = { start: node.source_span.start, end };
+            existing.text = source.slice(node.source_span.start, end);
+            existing.normalized_text = normalized(existing.text);
+          }
           continue;
         }
         if (contained.length) continue;
@@ -383,7 +418,23 @@ function buildSemanticAtoms(sourceGraph) {
     atoms.filter((atom) => atom.type === 'REQUEST'),
     source
   );
-  const { actual: requests, material } = partitionMaterialShapingRequests(coalesced);
+  // A causal observation preceding "so <directive>" belongs to the same
+  // judgment request; it must not be silently dropped as a separate task.
+  // Restrict the extension to the enclosing sentence (never the next one).
+  const contextualRequests = coalesced.map((atom) => {
+    if (!/^so\s+(?:verify|check|investigate|review|fix)\b/iu.test(atom.text)) return atom;
+    const sentence = candidateNodes.find((node) => node.kind === 'sentence'
+      && node.source_span.start < atom.source_span.start
+      && node.source_span.end >= atom.source_span.end);
+    if (!sentence) return atom;
+    const preamble = source.slice(sentence.source_span.start, atom.source_span.start);
+    if (!/\b(?:seems?|appears?|reported|observed|fails?|broken|error)\b/iu.test(preamble)) return atom;
+    const start = sentence.source_span.start;
+    return { ...atom, source_span: { start, end: atom.source_span.end },
+      text: source.slice(start, atom.source_span.end),
+      normalized_text: normalized(source.slice(start, atom.source_span.end)) };
+  });
+  const { actual: requests, material } = partitionMaterialShapingRequests(contextualRequests);
   const materialOwnerByAtomId = new Map();
   for (const item of material) {
     for (const atomId of item.merged_source_atom_ids || [item.id]) {

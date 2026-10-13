@@ -33,7 +33,10 @@ test('universal corpus covers JA/EN, known long failures, 10k stress and all G01
     assert.equal(rows.length, 2, `${genre} must have JA and EN cases`);
     assert.deepEqual([...new Set(rows.map((r) => r.language))].sort(), ['en', 'ja']);
     for (const row of rows) {
-      assert.ok(row.expected.material_terms.length >= 6, `${row.id} needs bilingual material-term gold`);
+      assert.ok(row.expected.material_terms.length >= 6, `${row.id} keeps legacy diagnostic material terms`);
+      assert.equal(row.expected.material_groups.length, 3, `${row.id} needs three semantic material groups`);
+      assert.equal(row.expected.min_material_groups, 2, `${row.id} must require two distinct semantic groups`);
+      assert.ok(row.expected.material_groups.every((group) => Array.isArray(group) && group.length >= 2), `${row.id} semantic groups need bilingual/alternative terms`);
     }
   }
 
@@ -66,6 +69,8 @@ test('every bilingual pair has both languages and equivalent high-level acceptan
     assert.equal(ja.expected.min_requests, en.expected.min_requests, `${pair} request gold differs by language`);
     assert.equal(ja.expected.evidence_requested, en.expected.evidence_requested, `${pair} evidence-intent gold differs by language`);
     assert.equal(ja.expected.genre || null, en.expected.genre || null, `${pair} genre differs by language`);
+    assert.deepEqual(ja.expected.material_groups || [], en.expected.material_groups || [], `${pair} semantic material groups differ by language`);
+    assert.equal(ja.expected.min_material_groups || 0, en.expected.min_material_groups || 0, `${pair} semantic group threshold differs by language`);
   }
 });
 

@@ -68,6 +68,7 @@ function requestRecords(understanding) {
     source_span: { ...atom.source_span, text: atom.text },
     source_origin: 'UNIVERSAL_SOURCE_GRAPH',
     source_atom_id: atom.id,
+    source_node_id: atom.source_node_id || null,
     parser_task_ids: [],
     external_evidence_requested: EXTERNAL_EVIDENCE_CUE.test(norm(atom.text)),
     objectives: [],
@@ -78,7 +79,18 @@ function requestRecords(understanding) {
     }
   }));
 }
-function nearestRequest(atom, requests) {
+function sourceSentenceId(nodeId, sourceGraph) {
+  if (!nodeId || !sourceGraph?.nodes) return null;
+  const nodes = new Map(sourceGraph.nodes.map((node) => [node.id, node]));
+  let node = nodes.get(nodeId) || null;
+  while (node) {
+    if (node.kind === 'sentence') return node.id;
+    node = node.parent_id ? nodes.get(node.parent_id) || null : null;
+  }
+  return null;
+}
+
+function nearestRequest(atom, requests, sourceGraph = null) {
   if (!requests.length) return null;
   let best = null;
   let bestScore = -1;
@@ -89,8 +101,24 @@ function nearestRequest(atom, requests) {
     if (overlap > 0) {
       const score = 10 + overlap / atomLen + overlap / requestLen;
       if (score > bestScore) { best = request; bestScore = score; }
-      continue;
     }
+  }
+  if (best) return best;
+
+  const atomSentence = sourceSentenceId(atom.source_node_id, sourceGraph);
+  if (atomSentence) {
+    const sameSentence = requests.filter((request) => sourceSentenceId(request.source_node_id, sourceGraph) === atomSentence);
+    const preceding = sameSentence
+      .filter((request) => request.source_span.end <= atom.source_span.start)
+      .sort((a, b) => b.source_span.end - a.source_span.end)[0];
+    if (preceding) return preceding;
+    const following = sameSentence
+      .filter((request) => request.source_span.start >= atom.source_span.end)
+      .sort((a, b) => a.source_span.start - b.source_span.start)[0];
+    if (following) return following;
+  }
+
+  for (const request of requests) {
     const distance = atom.source_span.end <= request.source_span.start
       ? request.source_span.start - atom.source_span.end
       : atom.source_span.start >= request.source_span.end
@@ -157,7 +185,7 @@ function attachSemanticOwnership(understanding, requests) {
     if (atom.type === 'REQUEST') continue;
     const text = String(atom.text || '').trim();
     if (!text) continue;
-    const owner = explicitMaterialOwner(atom, requests) || nearestRequest(atom, requests);
+    const owner = explicitMaterialOwner(atom, requests) || nearestRequest(atom, requests, understanding?.source_graph);
     const global = atom.type === 'MATERIAL_REQUIREMENT'
       ? false
       : GLOBAL_SCOPE_CUE.test(norm(text));

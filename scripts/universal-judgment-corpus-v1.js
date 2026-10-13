@@ -113,6 +113,33 @@ const DOMAINS = [
   ['G38','personal','家庭の大きな購入判断','major household purchase',['need','total cost','constraint','必要性','総費用','制約']]
 ];
 
+const REQUEST_LOCAL_MATERIAL_GROUPS = Object.freeze({
+  G11: Object.freeze([
+    Object.freeze(['time horizon','cash flow assumptions','period','期間','キャッシュフロー','期間前提']),
+    Object.freeze(['liquidity risk','downside case','risk tolerance','risk assumption','流動性','下振れ','リスク前提']),
+    Object.freeze(['forecast model','sensitivity analysis','unit economics','accounting basis','予測','感応度','収益性','会計基準'])
+  ]),
+  G29: Object.freeze([
+    Object.freeze(['current system','dependencies','compatibility','interface','dependency','現行System','依存','互換','インターフェース']),
+    Object.freeze(['security regression','regression','rollback','data loss','downtime','回帰','ロールバック','データ損失','停止']),
+    Object.freeze(['test output','architecture docs','logs','hard constraints','tests','テスト','アーキテクチャ','ログ','制約'])
+  ]),
+  G37: Object.freeze([
+    Object.freeze(['research question','hypothesis','competing hypotheses','研究課題','仮説']),
+    Object.freeze(['method','methodology','study designs','手法','方法','研究設計']),
+    Object.freeze(['limitations','falsification','reproducibility','uncertainty','限界','反証','再現性','不確実性'])
+  ])
+});
+
+function materialGroupsFor(genre, materialTerms = []) {
+  if (REQUEST_LOCAL_MATERIAL_GROUPS[genre]) return REQUEST_LOCAL_MATERIAL_GROUPS[genre].map((group) => [...group]);
+  const half = Math.floor(materialTerms.length / 2);
+  return Array.from({ length: half }, (_, index) => [
+    materialTerms[index],
+    materialTerms[index + half]
+  ].filter(Boolean));
+}
+
 function makeDomainCases() {
   return DOMAINS.flatMap(([genre, slug, jaTopic, enTopic, materialTerms]) => {
     const ja = `【${genre}】${jaTopic}について判断材料が欲しい。結論を決めず、現在分かっている事実、未確認事項、主要な危険、反対側から確認すべき条件、比較に必要な軸、必要な根拠とその成立状態、次に確認する材料を8段で示して。`;
@@ -120,6 +147,8 @@ function makeDomainCases() {
     const expected = {
       min_requests: 1,
       material_terms: materialTerms,
+      material_groups: materialGroupsFor(genre, materialTerms),
+      min_material_groups: 2,
       evidence_requested: true,
       genre
     };

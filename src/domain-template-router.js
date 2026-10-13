@@ -120,6 +120,8 @@ function isGenreIdentityTerm(genre, term) {
 
 function exactTermWeight(term, genre) {
   const compactLength = term.replace(/\s/g, '').length;
+  // Ambiguous cross-domain terms are weak evidence without their local context.
+  if ((genre?.id === 'G11' && term === 'クレジット') || (genre?.id === 'G26' && term === 'architecture')) return 3;
   if (isAsciiControlledTerm(term)) {
     return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : compactLength >= 3 ? 6 : 2;
   }
@@ -132,6 +134,16 @@ function exactTermWeight(term, genre) {
 function aliasWeight(alias) {
   const compactLength = alias.replace(/\s/g, '').length;
   return compactLength >= 10 ? 16 : compactLength >= 6 ? 10 : 8;
+}
+
+function softwareStateHistoryContext(text) {
+  const value = String(text || '');
+  if (!/(^|[^a-z0-9])history(?=$|[^a-z0-9])/iu.test(value)) return false;
+  return /(^|[^a-z0-9])(?:reload|persistence|rendering|database|db|conversation|message|session|page|browser|state)(?=$|[^a-z0-9])/iu.test(value);
+}
+
+function suppressContextuallyAmbiguousAlias(genre, alias, text) {
+  return genre?.id === 'G04' && alias === 'history' && softwareStateHistoryContext(text);
 }
 
 function ngrams(value, n = 3) {
@@ -206,7 +218,7 @@ function scoreGenre(genre, text) {
   const catalogTerms = new Set((genre.terms || []).map((term) => normalize(term)).filter(Boolean));
   for (const rawAlias of identityAliases) {
     const alias = normalize(rawAlias);
-    if (!alias || catalogTerms.has(alias) || !asciiBoundaryMatch(normalizedText, alias)) continue;
+    if (!alias || catalogTerms.has(alias) || suppressContextuallyAmbiguousAlias(genre, alias, normalizedText) || !asciiBoundaryMatch(normalizedText, alias)) continue;
     score += aliasWeight(alias);
     exactHits += 1;
     matched.push(rawAlias);

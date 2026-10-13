@@ -5,6 +5,7 @@ const assert=require('node:assert/strict');
 const CanonicalAsteraEngine=require('../src/canonical-astera-engine');
 const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
 const {buildCanonicalTaskPlan,evaluateCanonicalTaskPlan,projectFiveLanes,deterministicPerspectiveExpansion}=require('../src/canonical-claim-runtime');
+const { CanonicalTaskExecutor } = require('../src/runtime/canonical-task-executor');
 
 const silentLogger={write(){}};
 const caller={id:'worker-boundary',is_global:true,plan:'admin'};
@@ -102,5 +103,51 @@ test('Canonical Engine exposes no legacy scoring/selection aliases',async()=>{
     assert.equal(Object.hasOwn(out.result.judgment,'07_recommendation'),false);
   }finally{
     await engine.destroy();
+  }
+});
+
+
+test('CanonicalTaskExecutor preserves scoped public lanes separately from raw five-stage lanes', async () => {
+  const executor = new CanonicalTaskExecutor({ size: 1, timeoutMs: 5000 });
+  const domain = {
+    primary: {
+      id: 'G11',
+      name: 'Finance',
+      confidence: 0.95,
+      matched_signals: ['財務'],
+      fact_lens: ['取引構造'],
+      risk_lens: ['資金流動性'],
+      multi_lens: ['財務責任者'],
+      inquiry_lens: ['返金・失効条件は何か'],
+      compare_lens: ['前受管理']
+    },
+    secondary: [],
+    overlays: []
+  };
+  const source = 'ユーザー向けエラー表示をA案とB案で利用者理解と読みやすさについて比較する。';
+  const task = {
+    ...baseTask,
+    source_span: { start: 0, end: source.length, text: source },
+    raw_text: source,
+    target: 'ユーザー向けエラー表示',
+    objective: 'A案とB案を利用者理解と読みやすさで比較する',
+    action: 'compare',
+    domain,
+    observable_material: { candidates: ['A案', 'B案'], dimensions: ['利用者理解', '読みやすさ'] }
+  };
+  task.canonical_plan = buildCanonicalTaskPlan(task, domain);
+  try {
+    const projected = await executor.exec('PROJECT_CANONICAL_TASK', {
+      task,
+      evidenceRaw: notRequiredEvidence()
+    });
+    assert.ok(projected.public_lanes, 'public_lanes must survive the canonical executor boundary');
+    assert.ok(projected.lanes.risk.risks.some((item) => item.impact === '資金流動性'));
+    assert.ok(!projected.public_lanes.risk.risks.some((item) => item.impact === '資金流動性'));
+    assert.ok(projected.public_lanes.compare.dimensions.includes('利用者理解'));
+    assert.ok(projected.public_lanes.compare.dimensions.includes('読みやすさ'));
+    assert.ok(!projected.public_lanes.compare.dimensions.includes('前受管理'));
+  } finally {
+    await executor.destroy();
   }
 });

@@ -274,7 +274,12 @@ function createGeneralWebSearchProvider(options = {}) {
     certified: true,
     async search(plan, context = {}) {
       const querySet = Array.isArray(plan?.query_set) ? plan.query_set : [];
+      // Preserve a disconfirming query when the bounded provider budget is full.
       const activeQueries = querySet.slice(0, 4);
+      if (querySet.length > 4 && !activeQueries.some((q) => String(q?.role || q?.class || '').toUpperCase() === 'COUNTER')) {
+        const counter = querySet.slice(4).find((q) => String(q?.role || q?.class || '').toUpperCase() === 'COUNTER');
+        if (counter) activeQueries[3] = counter;
+      }
       const pageCache = new Map();
       const executions = await boundedMap(activeQueries, queryConcurrency, async (query) => {
         const text = String(query?.text || '').trim();
@@ -361,12 +366,12 @@ function createGeneralWebSearchProvider(options = {}) {
       });
 
       const candidates = executions.flatMap((item) => item.candidates);
-      const queryResults = executions.map((item) => item.query_result);
-      for (const query of querySet.slice(4)) {
-        queryResults.push(Object.freeze({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: Object.freeze([]), error_code: 'GENERAL_WEB_QUERY_LIMIT' }));
-      }
+      const completedByQuery = new Map(executions.map((item) => [item.query_result.query_id, item.query_result]));
+      const queryResults = querySet.map((query) => completedByQuery.get(String(query?.query_id || '')) ||
+        Object.freeze({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: Object.freeze([]), error_code: 'GENERAL_WEB_QUERY_LIMIT' }));
       return Object.freeze({
-        coverage_state: 'PARTIAL_FOR_QUERY_SCOPE',
+        coverage_state: querySet.length > activeQueries.length || queryResults.some((item) => item.retrieval_status === 'RETRIEVAL_FAILED')
+          ? 'PARTIAL_FOR_QUERY_SCOPE' : 'COMPLETE_FOR_QUERY_SCOPE',
         current_watermark: new Date().toISOString(),
         candidates: Object.freeze(candidates),
         query_results: Object.freeze(queryResults),

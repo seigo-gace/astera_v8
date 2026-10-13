@@ -29,6 +29,10 @@ const INTERNAL_PUBLIC_PATTERNS = [
   /meaning_unresolved/iu,
   /candidate_id/iu,
   /binding_id/iu,
+  /\bT\d{2,}:/u,
+  /\bclaim_id\s*=/iu,
+  /\bUNRESOLVED_[A-Z0-9_]+\b/u,
+  /\bunsupported_scope\s*:/iu,
   /RETRIEVAL_FAILED/iu,
   /INSUFFICIENT_TRADE_OFF_MATERIAL/iu,
   /Alternative evidence angle/iu,
@@ -84,6 +88,13 @@ function uniqueRequestIds(text) {
 function countTerms(text, terms) {
   const n = normalize(text);
   return [...new Set((terms || []).filter((term) => n.includes(normalize(term))))];
+}
+
+function matchMaterialGroups(text, groups = []) {
+  return (groups || []).map((alternatives, index) => {
+    const matched = countTerms(text, alternatives || []);
+    return { index, matched, pass: matched.length > 0 };
+  });
 }
 
 function anchorCoverage(text, anchors) {
@@ -153,7 +164,19 @@ function evaluateCase(testCase, out, durationMs) {
   }
 
   const materialTerms = countTerms(material, expected.material_terms || []);
-  if ((expected.material_terms || []).length && materialTerms.length < 2) {
+  const materialGroups = matchMaterialGroups(material, expected.material_groups || []);
+  const matchedMaterialGroups = materialGroups.filter((group) => group.pass);
+  const requiredMaterialGroups = Number(expected.min_material_groups || 0);
+  if (materialGroups.length && matchedMaterialGroups.length < requiredMaterialGroups) {
+    failures.push({
+      code: 'DOMAIN_MATERIAL_INSUFFICIENT',
+      genre: expected.genre || null,
+      required_groups: requiredMaterialGroups,
+      matched_group_count: matchedMaterialGroups.length,
+      matched_groups: matchedMaterialGroups,
+      expected_groups: expected.material_groups
+    });
+  } else if (!materialGroups.length && (expected.material_terms || []).length && materialTerms.length < 2) {
     failures.push({ code: 'DOMAIN_MATERIAL_INSUFFICIENT', genre: expected.genre || null, matched_terms: materialTerms, expected_terms: expected.material_terms });
   }
 
@@ -193,6 +216,8 @@ function evaluateCase(testCase, out, durationMs) {
     public_request_ids: requests,
     anchor_coverage: anchors,
     domain_material_terms_matched: materialTerms,
+    domain_material_groups: materialGroups,
+    domain_material_group_count: matchedMaterialGroups.length,
     runtime_trace_available: traceValidation.complete,
     runtime_trace_validation: traceValidation,
     runtime_trace: trace,
@@ -373,7 +398,7 @@ async function main() {
   console.log(`UNIVERSAL_ARTIFACT_ROOT=${ARTIFACT_ROOT}`);
 
   if (failures.length) {
-    for (const f of failures.slice(0, 20)) console.error(`UNIVERSAL_FAIL_CASE=${f.case_id} CODES=${f.failures.map((x) => x.code).join(',')}`);
+    for (const f of failures.slice(0, 20)) console.error(`UNIVERSAL_FAIL_CASE=${f.case_id} CODES=${f.failures.map((x) => x.code).join(',')} PUBLIC_REQUEST_COUNT=${(f.public_request_ids || []).length} INTERNAL_TASK_COUNT=${f.internal_task_count ?? 'UNKNOWN'} EXPECTED_MIN_REQUESTS=${corpus.find((c) => c.id === f.case_id)?.expected?.min_requests ?? 'UNKNOWN'}`);
     process.exit(1);
   }
   console.log('UNIVERSAL_JUDGMENT_GATE=PASS');

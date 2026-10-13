@@ -240,3 +240,15 @@ test('K: IQ with domain_lens.id=G99 remains invalid and rejected', () => {
   assert.equal(result.status, 'ERROR');
   assert.ok(result.blocking_reasons.includes('INFORMATION_PROFILE_INVALID'));
 });
+
+test('canonical evidence query excludes verification method but preserves original request as context', () => {
+  const task = unresolvedTask({
+    target: 'ASTERA uses Node.js 22 using official evidence',
+    action: 'verify',
+    source_span: { text: 'Verify that ASTERA uses Node.js 22 using official evidence.' }
+  });
+  const request = searchRequestFor(task, {}, { id: 'caller-test' }, 'req-method-separation');
+  assert.equal(request.question, 'ASTERA uses Node.js 22');
+  assert.match(request.context, /Verify that ASTERA uses Node.js 22 using official evidence/u);
+  assert.deepEqual(request.preplanned_queries, upstreamPlan().queries);
+});

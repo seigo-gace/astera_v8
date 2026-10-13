@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { routeDomainTemplates } = require('../domain-template-router');
 const { requestsFromPrepared } = require('./material-requirement-graph');
+const { requestSourceText, lensMaterialRelevant } = require('./lens-material-relevance');
 
 const REFINEMENT_VERSION = 'astera.specialist-requirement-refinement.v1';
 const GAP_STATES = new Set(['MISSING', 'UNRESOLVED', 'CONFLICTING']);
@@ -92,16 +93,24 @@ function appendNodes(requestGraph, route, request) {
   const primary = route.primary || null;
   const strongPrimary = isStrongPrimary(primary);
   const op = requestOperation(request);
+  const sourceText = requestSourceText(request);
+  const matchedSignals = array(primary?.matched_signals);
+  const relevanceRequired = (value) =>
+    strongPrimary && lensMaterialRelevant(value, sourceText, matchedSignals);
 
-  const pushMany = (kind, values, questionPrefix, { required = strongPrimary, source = 'G01_G38_GENRE_LENS', tags = [] } = {}) => {
+  const pushMany = (kind, values, questionPrefix, { required = relevanceRequired, source = 'G01_G38_GENRE_LENS', tags = [] } = {}) => {
     for (const value of unique(values)) {
+      const itemRequired = typeof required === 'function' ? Boolean(required(value)) : Boolean(required);
       nodes.push(specialistNode(requestGraph, sequence++, {
         material_kind: kind,
         question: `${questionPrefix}: ${value}`,
-        required,
+        required: itemRequired,
         source,
         source_value: value,
-        tags
+        tags: unique([
+          ...tags,
+          ...(source === 'G01_G38_GENRE_LENS' && !itemRequired ? ['PROVISIONAL_LENS_CANDIDATE'] : [])
+        ])
       }));
     }
   };
@@ -111,12 +120,16 @@ function appendNodes(requestGraph, route, request) {
     pushMany('SPECIALIST_RISK_CHECK', primary.risk_lens, 'Specialist failure/risk condition that must be checked');
     pushMany('SPECIALIST_INQUIRY_REQUIREMENT', primary.inquiry_lens, 'Specialist question that must be resolved');
     if (/^(?:compare|comparison|比較)$/iu.test(op)) {
-      pushMany('SPECIALIST_COMPARISON_DIMENSION', primary.compare_lens, 'Common specialist comparison dimension', { required: strongPrimary });
+      pushMany('SPECIALIST_COMPARISON_DIMENSION', primary.compare_lens, 'Common specialist comparison dimension', {
+        required: (value) => relevanceRequired(value)
+      });
     } else {
       pushMany('SPECIALIST_COMPARISON_DIMENSION', primary.compare_lens, 'Potential specialist comparison dimension', { required: false });
     }
     if (request.external_evidence_requested === true || request.evidence_need?.required === true) {
-      pushMany('SPECIALIST_EVIDENCE_REQUIREMENT', primary.evidence_to_collect, 'Specialist evidence characteristic/material to collect', { required: strongPrimary });
+      pushMany('SPECIALIST_EVIDENCE_REQUIREMENT', primary.evidence_to_collect, 'Specialist evidence characteristic/material to collect', {
+        required: (value) => relevanceRequired(value)
+      });
     } else {
       pushMany('SPECIALIST_EVIDENCE_REQUIREMENT', primary.evidence_to_collect, 'Potential specialist evidence characteristic/material to collect', { required: false });
     }
@@ -151,6 +164,9 @@ function appendNodes(requestGraph, route, request) {
   }
 
   const requiredNodes = nodes.filter((node) => node?.required !== false);
+  const requiredSpecialistContributions = requiredNodes.filter((node) =>
+    array(node?.tags).includes('SPECIALIST_REFINEMENT')
+  );
   const gapNodes = requiredNodes.filter((node) => GAP_STATES.has(String(node?.status || '')));
   const accounted = requiredNodes.filter((node) => ACCOUNTED_STATES.has(String(node?.status || '')));
 
@@ -174,7 +190,8 @@ function appendNodes(requestGraph, route, request) {
         lens_anchor_path: primary.classification?.lens_anchor_path || null
       } : null,
       overlays: array(route.overlays).map((overlay) => overlay.id),
-      required_contribution: strongPrimary || array(route.overlays).length > 0,
+      required_contribution: requiredSpecialistContributions.length > 0 || array(route.overlays).length > 0,
+      relevance_policy: 'REQUEST_LOCAL_SOURCE_GATED',
       authority_rule: 'Current G01-G38 Genre Lens/Overlay contributions are additive specialist requirements only. GENRE_LENS_ANCHOR is not original v4 four-level classification.'
     }
   };

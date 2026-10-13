@@ -50,6 +50,13 @@ const GENRE_BREADTH_AUGMENTATIONS = Object.freeze({
     risk_lens: Object.freeze(['Execution Risk・実行リスク']),
     compare_lens: Object.freeze(['Market・市場', 'Unit Economics・収益構造', 'Execution Risk・実行リスク'])
   }),
+  G15: Object.freeze({
+    id: 'G15-BREADTH-PUBLISHING-ARCHIVE', name: 'G15 Publishing / Archive Breadth',
+    fact_lens: Object.freeze(['Version・版', 'Rights・権利', 'Preservation・保存']),
+    risk_lens: Object.freeze(['Rights / Permission Gap・権利許諾不足', 'Version Drift・版不一致', 'Preservation Loss・保存性欠落']),
+    compare_lens: Object.freeze(['Access Scope・公開範囲', 'Rights・権利', 'Preservation・保存', 'Version・版']),
+    evidence_to_collect: Object.freeze(['Publication Version・公開版', 'Rights / License・権利許諾', 'Preservation Record・保存記録'])
+  }),
   G12: Object.freeze({
     id: 'G12-BREADTH-WORKFORCE-DYNAMICS', name: 'G12 Workforce Dynamics Breadth',
     fact_lens: Object.freeze(['Skills・技能', 'Labor Market・労働市場']),
@@ -164,6 +171,7 @@ function sourceLenses(domain = {}) {
   const primaryId = String(domain.primary?.id || '');
   const breadth = GENRE_BREADTH_AUGMENTATIONS[primaryId] || null;
   return [
+    ...(domain.request_specialist_profile ? [{ lens: domain.request_specialist_profile, tier: 'REQUEST_SPECIALIST' }] : []),
     ...(domain.primary ? [{ lens: domain.primary, tier: 'PRIMARY' }] : []),
     ...(breadth ? [{ lens: breadth, tier: 'PRIMARY_BREADTH' }] : []),
     ...(Array.isArray(domain.secondary) ? domain.secondary.map((lens) => ({ lens, tier: 'SECONDARY' })) : []),
@@ -179,8 +187,13 @@ function compileChannel(domain, field) {
       const value = clean(raw);
       if (!value) continue;
       const key = value.toLocaleLowerCase();
-      const existing = map.get(key) || { value, sources: [] };
+      const existing = map.get(key) || { value, sources: [], display_tier: tier };
       const source = sourceDescriptor(lens, tier);
+      const priority = { PRIMARY: 0, PRIMARY_BREADTH: 1, REQUEST_SPECIALIST: 2, SECONDARY: 3, OVERLAY: 4 };
+      if ((priority[tier] ?? 99) < (priority[existing.display_tier] ?? 99)) {
+        existing.value = value;
+        existing.display_tier = tier;
+      }
       if (!existing.sources.some((item) => item.tier === source.tier && item.lens_id === source.lens_id)) {
         existing.sources.push(source);
       }

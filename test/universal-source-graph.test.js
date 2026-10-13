@@ -157,3 +157,117 @@ test('G01-G38 JA/EN cases remain parseable through the same source graph contrac
     assert.ok(understanding.semantic_atoms.atoms.some((atom) => atom.type === 'EVIDENCE_REQUIREMENT'), `${row.id} lost evidence intent`);
   }
 });
+
+
+test('English dependent correction and conjunction-led prohibition do not become phantom requests', () => {
+  const input = 'History seems to disappear after reload, so verify whether persistence is broken or only rendering is broken, fix the correct side, but do not invent a new DB.';
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.equal(atoms.request_atoms.length, 1, JSON.stringify(atoms.request_atoms, null, 2));
+  assert.match(atoms.request_atoms[0].text, /verify whether persistence is broken or only rendering is broken, fix the correct side/iu);
+  const prohibitions = atoms.atoms.filter((atom) => atom.type === 'PROHIBITION').map((atom) => atom.text);
+  assert.ok(prohibitions.some((value) => /do not invent a new DB/iu.test(value)));
+  assert.ok(!atoms.request_atoms.some((request) => /do not invent a new DB/iu.test(request.text)));
+});
+
+test('short command with its own explicit subject remains an independent request', () => {
+  const input = 'Verify whether persistence is broken. Fix the API.';
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.equal(atoms.request_atoms.length, 2, JSON.stringify(atoms.request_atoms, null, 2));
+  assert.ok(atoms.request_atoms.some((request) => /Fix the API/iu.test(request.text)));
+});
+
+
+test('English subject-led and contracted prohibitions stay context instead of phantom requests', () => {
+  const input = [
+    'Separate user-actionable errors from internal failures: limits, credits, purchase failure, permission and unsupported file types can be explained, but internal API names, service hosts and stack traces must not leak.',
+    "Don't add unrelated screens and prefer the existing structure."
+  ].join(' ');
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.equal(atoms.request_atoms.length, 1, JSON.stringify(atoms.request_atoms, null, 2));
+  assert.match(atoms.request_atoms[0].text, /Separate user-actionable errors/iu);
+  assert.ok(!atoms.request_atoms.some((request) => /service hosts and stack traces must not leak|Don't add unrelated screens/iu.test(request.text)));
+  const prohibitions = atoms.atoms.filter((atom) => atom.type === 'PROHIBITION').map((atom) => atom.text);
+  assert.ok(prohibitions.some((value) => /stack traces must not leak/iu.test(value)));
+  assert.ok(prohibitions.some((value) => /Don't add unrelated screens/iu.test(value)));
+});
+
+test('English observation of uncertainty does not hide a following review request', () => {
+  const input = "Users don't always know what to press so review the posting form again, and when the option is OFF don't do nothing, show an enable-option hint.";
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.ok(atoms.request_atoms.some((request) => /review the posting form again/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
+  assert.ok(atoms.request_atoms.some((request) => /show an enable-option hint/iu.test(request.text)), JSON.stringify(atoms.request_atoms));
+});
+
+test('English user uncertainty is an observation, not a prohibition', () => {
+  const input = "Users don't always know what to press, so review the posting form again.";
+  const { semantic_atoms: atoms } = buildUniversalSourceUnderstanding(input, 'en');
+  assert.ok(atoms.request_atoms.some((item) => /review the posting form/iu.test(item.text)));
+  assert.equal(atoms.atoms.filter((item) => item.type === 'PROHIBITION').length, 0);
+  const negativeCommand = buildUniversalSourceUnderstanding("Don't add unrelated screens.", 'en').semantic_atoms;
+  assert.ok(negativeCommand.atoms.some((item) => item.type === 'PROHIBITION'));
+});
+
+test('narrow clause prohibition supersedes broad sentence prohibition', () => {
+  const input = "Users are confused so review the form, and when the option is OFF do not remove the hint, show guidance.";
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  const bans = atoms.atoms.filter((item) => item.type === 'PROHIBITION');
+  assert.ok(bans.some((item) => item.text.includes('do not remove')));
+  assert.ok(!bans.some((item) => item.text.startsWith('Users are confused')));
+});
+
+test('subject-led product authority restriction stays a constraint, not a user Request', () => {
+  const input = 'Astera must only provide judgment material and must not say this is optimal.';
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  assert.equal(atoms.request_atoms.length, 0, JSON.stringify(atoms.request_atoms));
+  assert.ok(atoms.atoms.some((item) => item.type === 'PROHIBITION'));
+});
+
+test('condition atom belongs to local when-clause rather than unrelated user observation', () => {
+  const input = 'Users are unsure which control to press, and when the option is OFF show an enable hint.';
+  const atoms = buildUniversalSourceUnderstanding(input, 'en').semantic_atoms;
+  const conditions = atoms.atoms.filter((item) => item.type === 'CONDITION');
+  assert.ok(conditions.length > 0);
+  assert.ok(!conditions.some((item) => item.text.startsWith('Users are unsure')), JSON.stringify(conditions));
+});
+
+test('observed nonresponsive button is not an instruction prohibiting button response', () => {
+  const symptom = 'コピーはできるけど編集ボタンが反応しないことがあったので編集開始から確認してほしい。';
+  const observed = buildUniversalSourceUnderstanding(symptom, 'ja').semantic_atoms.atoms;
+  assert.ok(observed.some((atom) => atom.type === 'OBSERVATION' && atom.text.includes('反応しない')));
+  assert.equal(observed.filter((atom) => atom.type === 'PROHIBITION').length, 0,
+    'a report that a button did not respond must not become a prohibition');
+  const instruction = '編集ログを保存しないこと。';
+  const prohibited = buildUniversalSourceUnderstanding(instruction, 'ja').semantic_atoms.atoms;
+  assert.ok(prohibited.some((atom) => atom.type === 'PROHIBITION'),
+    'actual explicit negative instructions must remain prohibitions');
+});
+
+test('error-handling directive stays a request, while an observed upload error stays an observation', () => {
+  const directive = '対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする。';
+  const instructionAtoms = buildUniversalSourceUnderstanding(directive, 'ja').semantic_atoms.atoms;
+  assert.equal(instructionAtoms.filter((atom) => atom.type === 'OBSERVATION').length, 0,
+    'mentioning error in a user directive must not become a reported failure');
+  const reported = 'ファイル投稿でエラーが発生したので原因を確認して。';
+  const reportedAtoms = buildUniversalSourceUnderstanding(reported, 'ja').semantic_atoms.atoms;
+  assert.ok(reportedAtoms.some((atom) => atom.type === 'OBSERVATION'));
+});
+
+test('noisy multi-request R11 retains conditional error guidance in one parent request', () => {
+  const row = byId('known-noisy-multi-ja-1k');
+  const requests = buildUniversalSourceUnderstanding(row.input, row.language).semantic_atoms.request_atoms;
+  assert.ok(requests.some((atom) =>
+    atom.text.includes('ファイル投稿はzipや画像でエラーになることがあるから')
+    && atom.text.includes('対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする')
+  ), 'conditional remediation must stay inside the source-backed upload request');
+});
+
+test('mixed upload error report and remediation keeps observation only on the source clause', () => {
+  const row = byId('known-noisy-multi-ja-1k');
+  const atoms = buildUniversalSourceUnderstanding(row.input, row.language).semantic_atoms.atoms;
+  assert.ok(atoms.some((atom) =>
+    atom.type === 'OBSERVATION' && atom.text.includes('ファイル投稿はzipや画像でエラーになることがある')
+  ), 'real user-reported upload error remains an observation');
+  assert.ok(!atoms.some((atom) =>
+    atom.type === 'OBSERVATION' && atom.text.includes('対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする')
+  ), 'remediation directive must not be absorbed into observation');
+});

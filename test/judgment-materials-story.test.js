@@ -444,7 +444,139 @@ test('Story 16: evidence search boundary invokes external search client once per
     assert.ok(calls.length >= 1);
     assert.ok(calls.every((call) => call.payload.paid_search.enabled === false));
     assert.ok(out.result.task_results.some((result) => result.evidence?.source_status === 'FINAL_VALID'));
+    // The same user submission must carry task decomposition, Lens and evidence
+    // through to the final user-facing Main8. Separate unit PASS is insufficient.
+    assert.ok(out.result.analysis_task_packet.tasks.length > 0);
+    assert.ok(out.result.analysis_task_packet.tasks.some((task) => task.domain?.primary));
+    const five = out.result.five_stage;
+    assert.equal(five.schema_version, 'astera.five-stage.v2');
+    assert.deepEqual(five.order, ['fact', 'risk', 'multi', 'inquiry', 'compare']);
+    assert.equal(five.tasks.length, out.result.analysis_task_packet.tasks.length);
+    for (const task of five.tasks) {
+      assert.ok(task.task_id, 'five-stage task must retain owner');
+      assert.ok(task.lens_id, 'five-stage task must retain primary lens');
+      for (const lane of five.order) {
+        assert.ok(task[lane] && typeof task[lane] === 'object', 'five-stage lane missing: ' + lane);
+      }
+    }
+    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
+
+    assert.deepEqual(out.result.judgment.order, MAIN8_ORDER);
+    assert.equal(out.material.text.split(/^---$/m).length, 8);
+    assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   } finally {
     await engine.destroy();
+  }
+});
+
+test('Story 17: genuine user-derived evidence query adopts supported claim and rejects mismatch', async () => {
+  const fs = require('node:fs/promises');
+  const os = require('node:os');
+  const path = require('node:path');
+  const createEvidenceSearchModule = require('../src/evidence-search');
+  const { createJsonProjectionProvider } = require('../src/evidence-search/providers/json-projection-provider');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'astera-full-route-'));
+  const claim = 'ASTERA uses Node.js 22';
+  const record = (id, authority, role, family) => ({
+    canonical_record_id: id,
+    canonical_url: 'https://official.example/' + id,
+    authority_id: authority, publisher_id: authority, publisher_name: authority,
+    source_role: role, source_family_id: family, capability_id: 'projection_search',
+    title: claim + ' independently verified by ' + authority,
+    excerpt: authority + ' independently records that ' + claim + ' without AI.', language: 'en',
+    updated_at: '2026-07-18T01:45:00.000Z',
+    version: '22.0.0', revision_id: id + '-r1',
+    retrieval_trace: { current_pointer_verified: true },
+    rights: { access: 'public', reuse: 'allowed' },
+    fields: { domain_id: 'G29', claim },
+    lineage_fingerprint: {
+      authority_id: authority, publisher_id: authority,
+      origin_record_id: id, publication_event_id: id + '-publication'
+    }
+  });
+  let engine;
+  try {
+    const specs = [
+      ['specialist', 'FREE_PROJECTION', 'PRIMARY', 'primary-authority', 'primary-family'],
+      ['current', 'FREE_OFFICIAL_LIVE', 'OFFICIAL', 'current-authority', 'current-family'],
+      ['corroboration', 'FREE_OFFICIAL_LIVE', 'OFFICIAL', 'other-authority', 'other-family']
+    ];
+    const providers = [];
+    for (const [id, sourceClass, role, authority, family] of specs) {
+      const file = path.join(root, id + '.json');
+      await fs.writeFile(file, JSON.stringify([record(id, authority, role, family)]));
+      providers.push(createJsonProjectionProvider({
+        provider_id: id, filePath: file, source_class: sourceClass,
+        source_family_id: family, capabilities: id === 'corroboration' ? ['REINFORCEMENT_ONLY'] : ['NO_REINFORCEMENT'],
+        domains: ['G29']
+      }));
+    }
+    const search = createEvidenceSearchModule({ providers });
+    const calls = [];
+    engine = new AsteraEngine({
+      poolSize: 2, logger: silentLogger,
+      japaneseParserClient: createMockJapaneseParserClient(),
+      evidenceSearchClient: {
+        async search(payload, context) {
+          const response = await search.execute({
+            schema_version: 'astera.evidence-search.module-request.v1',
+            operation: 'SEARCH_EVIDENCE',
+            context: {
+              request_id: context.requestId, caller_id: context.callerId,
+              execution_time: '2026-07-18T01:45:00.000Z',
+              effective_as_of: '2026-07-18T01:45:00.000Z'
+            },
+            payload
+          });
+          calls.push({ routes: response.result.route_execution, status: response.result.status, evidence_count: response.result.evidence.length, quality: response.result.quality?.final, reinforcement: response.result.quality?.reinforcement_attempt_count });
+          return response.result;
+        }
+      }
+    });
+    const out = await engine.process({
+      question: 'Verify that ASTERA uses Node.js 22 using official evidence.',
+      language: 'en'
+    }, caller);
+    assert.equal(out.result.type, 'cognitive_map');
+    assert.ok(calls.length > 0, 'real evidence module must be called');
+    assert.ok(calls.every((call) => call.routes.specialist_authoritative.attempted && call.routes.general_current.attempted));
+    assert.ok(calls.some((call) => call.quality?.status === 'FINAL_VALID' && call.quality?.score_bp >= 9500 && call.evidence_count > 0), JSON.stringify(calls));
+    assert.ok(calls.some((call) => call.status === 'FINAL_VALID' && call.evidence_count === 3), JSON.stringify(calls));
+    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
+    assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
+    const evidenceSection = out.result.judgment['07_evidence_status'];
+    assert.ok(evidenceSection, 'Main8 must expose evidence status');
+    assert.ok(Object.values(evidenceSection.evidence_search || {}).some((item) =>
+      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
+    ), 'accepted evidence must reach Main8 section 07');
+    assert.match(out.material.text, /accepted source=/, 'accepted source trace must be visible in Main8');
+    assert.match(out.material.text, /authority=/, 'source provenance must accompany adoption');
+    assert.equal(out.material.text.split(/^---$/m).length, 8);
+    assertNoNormativeDecisionArtifacts(out.result, out.material.text);
+
+    // An unsupported version must not inherit the adopted 22 evidence.
+    const mismatchStart = calls.length;
+    const mismatch = await engine.process({
+      question: 'Verify that ASTERA uses Node.js 23 using official evidence.',
+      language: 'en'
+    }, caller);
+    assert.equal(mismatch.result.type, 'cognitive_map');
+    assert.ok(calls.length > mismatchStart);
+    assert.ok(calls.slice(mismatchStart).every((call) => call.status !== 'FINAL_VALID'));
+    assert.ok(mismatch.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
+    assert.doesNotMatch(mismatch.material.text, /accepted source=/, 'unmatched evidence must never appear as accepted source');
+    assertNoNormativeDecisionArtifacts(mismatch.result, mismatch.material.text);
+
+    // A standalone factual statement does not request external verification:
+    // the engine must not fabricate a confirmation or spend a search request.
+    const callCountBefore = calls.length;
+    const declarative = await engine.process({ question: claim, language: 'en' }, caller);
+    assert.equal(declarative.result.type, 'cognitive_map');
+    assert.ok(declarative.result.task_results.every((item) => item.evidence?.search_state === 'NOT_REQUIRED'));
+    assert.equal(calls.length, callCountBefore, 'no implicit search on declarative-only input');
+    assertNoNormativeDecisionArtifacts(declarative.result, declarative.material.text);
+  } finally {
+    await engine?.destroy();
+    await fs.rm(root, { recursive: true, force: true });
   }
 });

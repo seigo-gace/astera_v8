@@ -50,3 +50,23 @@ test('generic English task words remain insufficient for forced domain routing',
   assert.equal(result.primary, null);
   assert.equal(result.classification_basis, 'ABSTAIN_LOW_SIGNAL');
 });
+
+
+test('UI history persistence context is not classified as historical research while real history stays G04', () => {
+  const uiHistory = routeDomainTemplates({
+    question: 'History disappears after reload, so verify persistence and rendering without inventing a new database.'
+  });
+  assert.notEqual(uiHistory.primary?.id, 'G04');
+
+  const historical = routeDomainTemplates({
+    question: 'Review the history of a medieval trade route and validate the historical claim against primary records.'
+  });
+  assert.equal(historical.primary?.id, 'G04');
+});
+
+test('ambiguous credit and architecture tokens do not hijack a stronger software request', () => {
+  const credit = routeDomainTemplates({ question: 'APIの利用画面でクレジット不足エラーを利用者向けに表示する。' });
+  assert.notEqual(credit.primary?.id, 'G11', `credit context: ${credit.primary?.id}`);
+  const architecture = routeDomainTemplates({ question: 'software architecture change for an API server' });
+  assert.notEqual(architecture.primary?.id, 'G26', `architecture context: ${architecture.primary?.id}`);
+});

@@ -271,6 +271,7 @@ class CanonicalTaskExecutor {
     return {
       canonical: evaluated.canonical,
       lanes: stage.lanes,
+      public_lanes: stage.public_lanes,
       perspective_expansion: evaluated.perspective_expansion,
       lane_execution: stage.lane_execution
     };

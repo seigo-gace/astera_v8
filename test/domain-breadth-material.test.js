@@ -12,6 +12,7 @@ const EXPECTED = {
   G08: ['Jurisdiction・管轄', 'Effective Date・施行日', 'Exception・例外'],
   G10: ['Market・市場', 'Unit Economics・収益構造', 'Execution Risk・実行リスク'],
   G12: ['Skills・技能', 'Labor Market・労働市場', 'Retention・定着'],
+  G15: ['Version・版', 'Rights・権利', 'Preservation・保存'],
   G18: ['Assumption・仮定', 'Method・手法', 'Uncertainty・不確実性'],
   G20: ['Composition・組成', 'Property・特性', 'Test Condition・試験条件'],
   G22: ['Species・種', 'Ecosystem・生態系', 'Evidence Quality・根拠品質'],

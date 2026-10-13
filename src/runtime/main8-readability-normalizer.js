@@ -40,19 +40,17 @@ function normalizePremiseSection(block) {
       if (normalized) lines[index] = `${prefix}: ${normalized}`;
     }
   }
-  if (prohibitionIndexes.length > 1) {
-    const candidates = prohibitionIndexes.map((index) => ({
-      index,
-      line: lines[index],
-      value: clean(lines[index].replace(/^\s*-\s*禁止条件\s*:\s*/u, '')),
-    }));
-    candidates.sort((a, b) => prohibitionScore(b.value) - prohibitionScore(a.value) || b.value.length - a.value.length || a.index - b.index);
-    const chosen = candidates[0];
-    const keepIndex = Math.min(...prohibitionIndexes);
-    lines[keepIndex] = `  - 禁止条件: ${chosen.value.replace(/はを禁止する/u, 'を禁止する')}`;
-    return lines.filter((_, index) => index === keepIndex || !prohibitionIndexes.includes(index)).join('\n');
-  }
-  return lines.join('\n');
+  // Presentation must not select one prohibition and discard the others.
+  // Distinct source constraints are decision-relevant, not competing phrasings.
+  const seenProhibitions = new Set();
+  return lines.filter((line) => {
+    if (!/^\s*-\s*禁止条件\s*:/u.test(line)) return true;
+    const value = clean(line.replace(/^\s*-\s*禁止条件\s*:\s*/u, ''));
+    if (seenProhibitions.has(value)) return false;
+    seenProhibitions.add(value);
+    return true;
+  }).join('\n');
+
 }
 
 function looksLikeRequestInstruction(value) {
@@ -205,26 +203,33 @@ function normalizeReinstructionPublic(block, lang) {
 }
 
 function stripPublicInternalLines(block) {
-  return String(block || '').split('\n').filter((line) => {
-    if (/:lens-risk-\d+\[/iu.test(line)) return false;
-    if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return false;
-    if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return false;
-    if (/\bparser_overall_status\s*:/iu.test(line)) return false;
-    if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return false;
-    return true;
+  return String(block || '').split('\n').flatMap((line) => {
+    if (/:lens-risk-\d+\[/iu.test(line)) return [];
+    if (/candidate_id|material_state|comparison_state|confirmed_claim_ids|undetermined_claim_ids|support_evidence_refs|counter_evidence_refs|missing_evidence_refs/iu.test(line)) return [];
+    if (/\bMATERIAL_ONLY\b|\bINSUFFICIENT_[A-Z0-9_]+\b/iu.test(line)) return [];
+    if (/\bparser_overall_status\s*:/iu.test(line)) return [];
+    if (/\btimeout:\d+:\s*\{[^}]*"(?:phase|status|elapsed_ms|hard_deadline_ms)"\s*:/iu.test(line)) return [];
+    if (/^\s*-\s*unsupported_scope\s*:\s*claim_id\s*=/iu.test(line)) return [];
+    if (/\bclaim_id\s*=/iu.test(line)) return [];
+    const withoutTaskPrefix = line.replace(/^(\s*-\s*)T\d{2,}:[^\s]+\[\d+\]\s*/iu, '$1');
+    if (/\bUNRESOLVED_[A-Z0-9_]+\b/u.test(withoutTaskPrefix)) return [];
+    return [withoutTaskPrefix];
   }).join('\n');
 }
 
+// Main8 is a decision-material projection, not a prose-editing stage.
+// Rewriting or dropping rendered rows here silently changes source meaning.
+// Keep the original output losslessly; upstream structured boundaries own filtering.
 function normalizeUnifiedMain8Text(value) {
-  const text = String(value || '');
+  const text = String(value ?? '');
   const blocks = text.split('\n---\n');
   if (blocks.length !== 8) return text;
-  const quantities = quantityByCandidate(text);
   const lang = isEnglishMain8(text) ? 'en' : 'ja';
+  // Preserve real decision material. Only the existing public/internal
+  // boundary removes internal diagnostics; no candidate-value rewriting.
   blocks[1] = normalizePremiseSection(blocks[1]);
   blocks[2] = normalizeFactsSection(blocks[2]);
-  blocks[4] = normalizeOppositionPublic(normalizeCandidateMaterial(normalizeVerificationTarget(blocks[4]), quantities), lang);
-  blocks[5] = normalizeCandidateMaterial(blocks[5], quantities);
+  blocks[4] = normalizeOppositionPublic(normalizeVerificationTarget(blocks[4]), lang);
   blocks[6] = normalizeEvidencePublic(normalizeVerificationTarget(blocks[6]), lang);
   blocks[7] = normalizeReinstructionPublic(blocks[7], lang);
   for (let index = 0; index < blocks.length; index += 1) blocks[index] = stripPublicInternalLines(blocks[index]);
