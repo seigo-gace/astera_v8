@@ -79,7 +79,7 @@ const TEMPLATES = [
   {
     id: 'marketing_growth',
     name: 'Marketing / Growth / Brand',
-    signals: [rx('マーケ|広告|集客|訴求|LP|コピー|ブランド|CV|コンバージョン|marketing|campaign|copy|positioning|conversion|brand')],
+    signals: [rx('マーケ|広告|集客|訴求|LP|広告コピー|販促コピー|セールスコピー|コピーライティング|ブランド|CV|コンバージョン|marketing|campaign|copywriting|ad copy|marketing copy|sales copy|positioning|conversion|brand')],
     fact_lens: ['product', 'target segment', 'customer pain', 'offer', 'channel', 'price', 'proof', 'conversion goal'],
     risk_lens: ['misleading claims', 'brand mismatch', 'platform policy violation', 'privacy/consent risk', 'backlash', 'weak differentiation'],
     multi_lens: ['customer', 'buyer', 'skeptical prospect', 'competitor', 'brand owner', 'platform reviewer'],
