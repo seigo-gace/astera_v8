@@ -90,3 +90,26 @@ test('general web coverage is complete only if every planned query ran without r
   const failed = await failedProvider.search({ query_set: queries.slice(0, 1) }, {});
   assert.equal(failed.coverage_state, 'PARTIAL_FOR_QUERY_SCOPE');
 });
+
+test('general web query budget preserves a counter query and reports omitted queries in original order', async () => {
+  const searched = [];
+  const provider = createGeneralWebSearchProvider({
+    searchGet: async (url) => {
+      searched.push(new URL(url).searchParams.get('q'));
+      return { status: 200, headers: {}, body: Buffer.from('no matching links') };
+    }
+  });
+  const queries = [
+    { query_id: 'q1', text: 'primary-a', role: 'PRIMARY' },
+    { query_id: 'q2', text: 'official-a', role: 'OFFICIAL' },
+    { query_id: 'q3', text: 'independent-a', role: 'INDEPENDENT' },
+    { query_id: 'q4', text: 'version-a', role: 'VERSION' },
+    { query_id: 'q5', text: 'counter-a', role: 'COUNTER' }
+  ];
+  const result = await provider.search({ query_set: queries }, {});
+  assert.deepEqual(result.query_results.map((row) => row.query_id), queries.map((q) => q.query_id));
+  assert.equal(result.query_results[3].error_code, 'GENERAL_WEB_QUERY_LIMIT');
+  assert.notEqual(result.query_results[4].error_code, 'GENERAL_WEB_QUERY_LIMIT');
+  assert.ok(searched.includes('counter-a'));
+  assert.equal(result.coverage_state, 'PARTIAL_FOR_QUERY_SCOPE');
+});
