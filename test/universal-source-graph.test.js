@@ -241,3 +241,14 @@ test('observed nonresponsive button is not an instruction prohibiting button res
   assert.ok(prohibited.some((atom) => atom.type === 'PROHIBITION'),
     'actual explicit negative instructions must remain prohibitions');
 });
+
+test('error-handling directive stays a request, while an observed upload error stays an observation', () => {
+  const directive = '対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする。';
+  const instructionAtoms = buildUniversalSourceUnderstanding(directive, 'ja').semantic_atoms.atoms;
+  assert.ok(instructionAtoms.some((atom) => atom.type === 'REQUEST'));
+  assert.equal(instructionAtoms.filter((atom) => atom.type === 'OBSERVATION').length, 0,
+    'mentioning error in a user directive must not become a reported failure');
+  const reported = 'ファイル投稿でエラーが発生したので原因を確認して。';
+  const reportedAtoms = buildUniversalSourceUnderstanding(reported, 'ja').semantic_atoms.atoms;
+  assert.ok(reportedAtoms.some((atom) => atom.type === 'OBSERVATION'));
+});
