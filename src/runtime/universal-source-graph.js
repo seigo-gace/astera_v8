@@ -4,7 +4,7 @@
 // Original source is preserved exactly as received by JavaScript. Normalization is carried
 // separately. This layer does not establish truth and does not make final decisions.
 
-const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする|確認する[。！？!?]?$|(?:か)?(?:見|み)て(?:ほしい)?(?:けど)?[。！？!?]?$)/u;
+const REQUEST_JA = /(?:判断材料(?:が欲しい|を(?:示して|出して|返して|まとめて))|してください|してくれ|してほしい|しろ|せよ|するように|ようにする[。！？!?]?$|ようにしろ|なくせ|なくして|消して|削除して|除去して|外して|直して|見直して|改善して|修正して|調整して|検討して|確認して|調査して|比較して|整理して|表示して|示して|入れて|付けて|追加して|実装して|対応して|レビューして|作成して|構築して|分離して|保持して|測定して|検証して|確認すること|維持すること|保持すること|分離すること|対応すること|確認できること|できるようにする|確認する[。！？!?]?$|(?:か)?(?:見|み)て(?:ほしい)?(?:けど)?[。！？!?]?$)/u;
 const REQUEST_EN = /(?:\bplease\b|\bI\s+need\b|\bwe\s+need\b|\bmust\b|\bshall\b|\bshould\b|\bneed(?:s)?\s+to\b|\brequired\s+to\b|\bensure\b|\bverify\b|\breview\b|\bcheck\b|\bidentify\b|\bstate\b|\bprovide\b|\breturn\b|\bimplement\b|\badd\b|\bremove\b|\bfix\b|\bpreserve\b|\bseparate\b|\bdistinguish\b|\bmake\b|\bsupport\b|\bmeasure\b|\bshow\b|\bdo\s+not\b|\bdo\s+(?=\d|ten\b)\b|\bnever\b)/iu;
 const OBJECTIVE_JA = /(?:^|[【\s])(第?[一二三四五六七八九十0-9]+(?:の)?目的|目的[A-Za-z0-9一二三四五六七八九十]*)(?:は|:|：)/u;
 const OBJECTIVE_EN = /\b(?:objective|goal|purpose|requirement)\s*(?:[a-z]+|\d+)?\s*(?::|\bis\s+to\b)/iu;
