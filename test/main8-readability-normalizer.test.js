@@ -4,130 +4,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   normalizeUnifiedMain8Text,
+  normalizeUnifiedMain8Material,
   deadlinePhrase,
   requestTarget
 } = require('../src/runtime/main8-readability-normalizer');
 
-function main8() {
-  return [
-    '01 本当の目的\n- 今回の目的: FAQ判断材料',
-    [
-      '02 前提不足',
-      '- 判断中も変えてはいけない前提・制約・未確定事項:',
-      '  - 禁止条件: 最終判断や推奨は',
-      '  - 期限: 来週金曜までにFAQへ新しい問い合わせ例を追加するための判断材料を整理して。',
-      '  - 維持条件: 公開済みの返金ポリシー文言は変えない。',
-      '  - 禁止条件: 最終判断や推奨はを禁止する',
-      '  - 禁止条件: 最終判断や推奨はしないで。',
-      '  - 未確定条件: 法務確認はまだ終わっていない。'
-    ].join('\n'),
-    [
-      '03 事実確認',
-      '- 入力で与えられた具体材料:',
-      '  - 2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。',
-      '- 区別: 上記は利用者が与えた材料として保持する。外部事実として確認済みという意味ではない。'
-    ].join('\n'),
-    '04 危機察知\n- 未確認事項を断定しない。',
-    [
-      '05 反対視点',
-      '- 確認対象: 2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。',
-      '  - A案: A案とB案を作業時間で比較して。 / A案は問い合わせ例を3件追加、B案は10件追加。',
-      '  - B案: A案とB案を作業時間で比較して。 / A案は問い合わせ例を3件追加、B案は10件追加。'
-    ].join('\n'),
-    [
-      '06 比較案',
-      '- A案 について現在ある材料: A案とB案を作業時間で比較して。 / A案は問い合わせ例を3件追加、B案は10件追加。',
-      '- B案 について現在ある材料: A案とB案を作業時間で比較して。 / A案は問い合わせ例を3件追加、B案は10件追加。',
-      '- 数量だけで確実に言える差: A案=3件、B案=10件。数量差は7件。'
-    ].join('\n'),
-    [
-      '07 根拠成立状態',
-      '- 根拠状態を判定する対象になっている入力材料:',
-      '  - 2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。',
-      '- 外部根拠は未成立。'
-    ].join('\n'),
-    '08 主役AI／利用者への再指示\n- 未確定のまま保持する。'
+test('Main8 presentation retains every decision-material line and its original ordering', () => {
+  const material = [
+    '01 本当の目的\n- 依頼',
+    '02 前提不足\n- 禁止条件: 削除禁止\n- 禁止条件: 公開禁止',
+    '03 事実確認\n- 元の依頼と観測を保持',
+    '04 危機察知\n- T01:risk[15] 実在するリスク',
+    '05 反対視点\n- failure_conditions: 条件A\n- counter_evidence_refs: E01',
+    '06 比較案\n- A案=3件\n- B案=10件',
+    '07 根拠成立状態\n- SearchExecution=NOT_EXECUTED\n- ClaimConfirmation=UNDETERMINED',
+    '08 主役AI／利用者への再指示\n- Task Wave: T01 -> T02\n- Blocking条件: 未検証'
   ].join('\n---\n');
-}
-
-test('readability normalization preserves distinct constraints and normalizes deadline', () => {
-  const out = normalizeUnifiedMain8Text(main8());
-  const section = out.split('\n---\n')[1];
-  assert.equal((section.match(/禁止条件:/g) || []).length, 3);
-  assert.match(section, /禁止条件: 最終判断や推奨はしないで。/);
-  assert.match(section, /期限: 来週金曜まで(?:\n|$)/);
-  assert.match(section, /禁止条件: 最終判断や推奨はを禁止する/);
+  assert.equal(normalizeUnifiedMain8Text(material), material);
+  assert.equal(normalizeUnifiedMain8Material({text: material, phase: 'FINAL'}).text, material);
 });
 
-test('request instructions are not presented as facts and verification target is shortened', () => {
-  const out = normalizeUnifiedMain8Text(main8());
-  const sections = out.split('\n---\n');
-  assert.match(sections[2], /依頼文そのものは事実として数えない/);
-  assert.doesNotMatch(sections[2], /入力で与えられた具体材料:\n\s+- .*してください/);
-  assert.match(sections[4], /確認対象: 2026年10月1日時点のNode\.js 22の公式サポート状況/);
-  assert.match(sections[6], /2026年10月1日時点のNode\.js 22の公式サポート状況/);
-  assert.doesNotMatch(sections[6], /判断材料として整理してください/);
+test('no hidden rewriting even for malformed or partial Main8 material', () => {
+  for (const text of ['', 'one section\n- original', '一つ\n---\n二つ', 'a  b\n-  detail']) {
+    assert.equal(normalizeUnifiedMain8Text(text), text);
+  }
 });
 
-test('candidate material is candidate-specific when quantities are known', () => {
-  const out = normalizeUnifiedMain8Text(main8());
-  const sections = out.split('\n---\n');
-  assert.match(sections[4], /A案について入力で確認できる数量は3件/);
-  assert.match(sections[4], /B案について入力で確認できる数量は10件/);
-  assert.match(sections[5], /A案について入力で確認できる数量は3件/);
-  assert.match(sections[5], /B案について入力で確認できる数量は10件/);
-});
-
-test('deadline and request target helpers are deterministic', () => {
+test('legacy pure helper functions retain deterministic behavior', () => {
   assert.equal(deadlinePhrase('来週金曜までにFAQへ追加する'), '来週金曜まで');
-  assert.equal(
-    requestTarget('2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。'),
-    '2026年10月1日時点のNode.js 22の公式サポート状況'
-  );
-});
-
-test('public Main8 keeps risk meaning while removing internal task and claim identifiers', () => {
-  const sections = main8().split('\n---\n');
-  sections[3] = [
-    '04 危機察知',
-    '- T01:prohibition:1[30] 明示禁止条件への違反',
-    '- T06:data[18] 機密性・整合性・保持／削除境界の破綻',
-    '- T06:undetermined:[22] 未確定Claimを確定事実として扱う危険'
-  ].join('\n');
-  sections[5] = [
-    '06 比較案',
-    '- unsupported_scope: claim_id=; reasons= /',
-    '- 判断・比較で揃える専門軸:',
-    '  - 安全'
-  ].join('\n');
-  sections[7] = [
-    '08 主役AI／利用者への再指示',
-    '- UNRESOLVED_JAPANESE_TARGETを変更する',
-    '- 未確定のまま保持する。'
-  ].join('\n');
-
-  const out = normalizeUnifiedMain8Text(sections.join('\n---\n'));
-  assert.match(out, /明示禁止条件への違反/);
-  assert.match(out, /機密性・整合性・保持／削除境界の破綻/);
-  assert.match(out, /未確定Claimを確定事実として扱う危険/);
-  assert.doesNotMatch(out, /\bT\d{2,}:/u);
-  assert.doesNotMatch(out, /claim_id\s*=/iu);
-  assert.doesNotMatch(out, /unsupported_scope/iu);
-  assert.doesNotMatch(out, /UNRESOLVED_JAPANESE_TARGET/u);
-});
-
-test('distinct prohibitions survive presentation unchanged and exact repeats are deduplicated', () => {
-  const blocks = main8().split('\n---\n');
-  blocks[1] = [
-    '02 前提不足',
-    '- 判断中も変えてはいけない前提・制約・未確定事項:',
-    '  - 禁止条件: 既存データを削除しない。',
-    '  - 禁止条件: 本番へ公開しない。',
-    '  - 禁止条件: 既存データを削除しない。'
-  ].join('\n');
-  const out = normalizeUnifiedMain8Text(blocks.join('\n---\n'));
-  const section = out.split('\n---\n')[1];
-  assert.match(section, /既存データを削除しない/);
-  assert.match(section, /本番へ公開しない/);
-  assert.equal((section.match(/禁止条件:/g) || []).length, 2);
+  assert.equal(requestTarget('2026年10月1日時点のNode.js 22の公式サポート状況を、公式根拠を確認して判断材料として整理してください。'), '2026年10月1日時点のNode.js 22の公式サポート状況');
 });
