@@ -540,6 +540,7 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length > 0, 'real evidence module must be called');
     assert.ok(calls.every((call) => call.routes.specialist_authoritative.attempted && call.routes.general_current.attempted));
+    assert.ok(calls.every((call) => call.quality?.status !== 'FINAL_VALID' && call.evidence_count === 0), JSON.stringify(calls));
     assert.ok(calls.some((call) => call.status !== 'FINAL_VALID' && call.evidence_count === 0), JSON.stringify(calls));
     assert.ok(out.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
     assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
@@ -549,6 +550,8 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
       item.source_status !== 'FINAL_VALID'
     ), 'rejected evidence must not be presented as adopted in Main8 section 07');
     assert.equal(out.material.text.split(/^---$/m).length, 8);
+    assert.equal(out.result.canonical_claims?.confirmed_count || 0, 0, 'rejected provider evidence cannot confirm a claim');
+    assert.ok(out.result.five_stage.tasks.every((task) => task.claim_status !== 'CONFIRMED'));
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
   } finally {
     await engine?.destroy();
