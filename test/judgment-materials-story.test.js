@@ -553,6 +553,17 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
     assert.equal(out.result.canonical_claims?.confirmed_count || 0, 0, 'rejected provider evidence cannot confirm a claim');
     assert.ok(out.result.five_stage.tasks.every((task) => task.claim_status !== 'CONFIRMED'));
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
+
+    // Positive route: no query or Lens substitution; the fixture asserts the
+    // precise claim authored by the user, not the unrelated imperative wrapper.
+    const supported = await engine.process({ question: claim, language: 'en' }, caller);
+    assert.equal(supported.result.type, 'cognitive_map');
+    assert.ok(supported.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'),
+      'genuinely matched user claim must be adoptable through the actual evidence module');
+    assert.ok(Object.values(supported.result.judgment['07_evidence_status'].evidence_search || {}).some((item) =>
+      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
+    ));
+    assertNoNormativeDecisionArtifacts(supported.result, supported.material.text);
   } finally {
     await engine?.destroy();
     await fs.rm(root, { recursive: true, force: true });
