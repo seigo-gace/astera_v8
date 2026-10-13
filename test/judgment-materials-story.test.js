@@ -518,6 +518,7 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
       japaneseParserClient: createMockJapaneseParserClient(),
       evidenceSearchClient: {
         async search(payload, context) {
+          console.log('STORY17_UPSTREAM_PLAN', JSON.stringify({ question: payload.question, conditions: payload.conditions || null, domain_lens: payload.domain_lens || null, queries: (payload.preplanned_queries || []).map((q) => ({ role: q.role, text: q.text, claim_id: q.claim_id })) }));
           const response = await search.execute({
             schema_version: 'astera.evidence-search.module-request.v1',
             operation: 'SEARCH_EVIDENCE',
