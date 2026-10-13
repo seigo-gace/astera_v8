@@ -559,7 +559,7 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
     const supported = await engine.process({ question: claim, language: 'en' }, caller);
     assert.equal(supported.result.type, 'cognitive_map');
     assert.ok(supported.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'),
-      'genuinely matched user claim must be adoptable through the actual evidence module');
+      JSON.stringify({ calls, taskResults: supported.result.task_results.map((item) => ({ task: item.task?.target, evidence: item.evidence?.source_status, state: item.evidence?.search_state })), parser: supported.result.instruction_understanding?.mode }));
     assert.ok(Object.values(supported.result.judgment['07_evidence_status'].evidence_search || {}).some((item) =>
       item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
     ));
