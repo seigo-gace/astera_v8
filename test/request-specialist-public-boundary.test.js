@@ -122,3 +122,18 @@ test('generic design wording does not promote migration risks into the final-dec
   const out = await run('回答はAsteraが判断材料を作るだけで最終決定を勝手にしない設計のはずだから、断定していないか確認して。根拠が無い時は根拠なしのまま出して。');
   assert.doesNotMatch(out.material.text, /vendor lock-in|irreversible migration|operational complexity|data loss|downtime/iu);
 });
+
+test('UI copy button is not routed to marketing growth while actual ad copy remains supported', async () => {
+  const ui = '投稿フォームのコピーボタンでコピーはできるが編集ボタンが反応しない。編集開始とキャンセルを確認してほしい。';
+  const uiProfiles = routeRequestSpecialistProfiles({ question: ui });
+  assert.ok(![uiProfiles.primary, ...uiProfiles.secondary].filter(Boolean)
+    .some((profile) => profile.id === 'marketing_growth'), 'UI copy action must not invoke advertising-risk specialist');
+  const out = await run(ui);
+  assert.doesNotMatch(out.material.text,
+    /misleading claims|brand mismatch|platform policy violation|weak differentiation/iu);
+  const marketing = routeRequestSpecialistProfiles({
+    question: '新商品の広告コピーを制作し、ブランドの訴求とコンバージョンを比較したい。'
+  });
+  assert.ok([marketing.primary, ...marketing.secondary].filter(Boolean)
+    .some((profile) => profile.id === 'marketing_growth'), 'actual advertising copy must retain marketing specialization');
+});
