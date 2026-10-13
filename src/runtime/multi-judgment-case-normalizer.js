@@ -38,7 +38,7 @@ function isSmallParserSubtask(owner, child) {
   const childSpanLength = spanLength(child.source_span);
   const ownerSpanLength = spanLength(owner.source_span);
   if (!childSpanLength || !ownerSpanLength) return false;
-  return childText.length <= 16 && childSpanLength / ownerSpanLength <= 0.35;
+  // A short parser-only imperative can cover nearly half of a short source-backed\n  // clause. It is still the same request when its span/text are fully contained.\n  return childText.length <= 16 && childSpanLength / ownerSpanLength <= 0.5;
 }
 function taskExplicitEvidence(task = {}, requestText = '') {
   if (EXTERNAL_EVIDENCE_CUE.test(norm(requestText))) return true;
