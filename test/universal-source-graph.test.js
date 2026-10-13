@@ -229,3 +229,15 @@ test('condition atom belongs to local when-clause rather than unrelated user obs
   assert.ok(conditions.length > 0);
   assert.ok(!conditions.some((item) => item.text.startsWith('Users are unsure')), JSON.stringify(conditions));
 });
+
+test('observed nonresponsive button is not an instruction prohibiting button response', () => {
+  const symptom = 'コピーはできるけど編集ボタンが反応しないことがあったので編集開始から確認してほしい。';
+  const observed = buildUniversalSourceUnderstanding(symptom, 'ja').semantic_atoms.atoms;
+  assert.ok(observed.some((atom) => atom.type === 'OBSERVATION' && atom.text.includes('反応しない')));
+  assert.equal(observed.filter((atom) => atom.type === 'PROHIBITION').length, 0,
+    'a report that a button did not respond must not become a prohibition');
+  const instruction = '編集ログを保存しないこと。';
+  const prohibited = buildUniversalSourceUnderstanding(instruction, 'ja').semantic_atoms.atoms;
+  assert.ok(prohibited.some((atom) => atom.type === 'PROHIBITION'),
+    'actual explicit negative instructions must remain prohibitions');
+});
