@@ -40,19 +40,17 @@ function normalizePremiseSection(block) {
       if (normalized) lines[index] = `${prefix}: ${normalized}`;
     }
   }
-  if (prohibitionIndexes.length > 1) {
-    const candidates = prohibitionIndexes.map((index) => ({
-      index,
-      line: lines[index],
-      value: clean(lines[index].replace(/^\s*-\s*禁止条件\s*:\s*/u, '')),
-    }));
-    candidates.sort((a, b) => prohibitionScore(b.value) - prohibitionScore(a.value) || b.value.length - a.value.length || a.index - b.index);
-    const chosen = candidates[0];
-    const keepIndex = Math.min(...prohibitionIndexes);
-    lines[keepIndex] = `  - 禁止条件: ${chosen.value.replace(/はを禁止する/u, 'を禁止する')}`;
-    return lines.filter((_, index) => index === keepIndex || !prohibitionIndexes.includes(index)).join('\n');
-  }
-  return lines.join('\n');
+  // Presentation must not select one prohibition and discard the others.
+  // Distinct source constraints are decision-relevant, not competing phrasings.
+  const seenProhibitions = new Set();
+  return lines.filter((line) => {
+    if (!/^\s*-\s*禁止条件\s*:/u.test(line)) return true;
+    const value = clean(line.replace(/^\s*-\s*禁止条件\s*:\s*/u, ''));
+    if (seenProhibitions.has(value)) return false;
+    seenProhibitions.add(value);
+    return true;
+  }).join('\n');
+
 }
 
 function looksLikeRequestInstruction(value) {
