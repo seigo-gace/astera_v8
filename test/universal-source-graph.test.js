@@ -251,3 +251,12 @@ test('error-handling directive stays a request, while an observed upload error s
   const reportedAtoms = buildUniversalSourceUnderstanding(reported, 'ja').semantic_atoms.atoms;
   assert.ok(reportedAtoms.some((atom) => atom.type === 'OBSERVATION'));
 });
+
+test('noisy multi-request R11 retains conditional error guidance in one parent request', () => {
+  const row = byId('known-noisy-multi-ja-1k');
+  const requests = buildUniversalSourceUnderstanding(row.input, row.language).semantic_atoms.request_atoms;
+  assert.ok(requests.some((atom) =>
+    atom.text.includes('ファイル投稿はzipや画像でエラーになることがあるから')
+    && atom.text.includes('対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする')
+  ), 'conditional remediation must stay inside the source-backed upload request');
+});
