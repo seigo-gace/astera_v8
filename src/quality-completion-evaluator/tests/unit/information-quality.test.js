@@ -91,3 +91,28 @@ test('existing artifact evaluate entrypoint remains callable', () => {
   assert.ok(existing);
   assert.equal(typeof existing, 'object');
 });
+
+test('a verified directly retrieved official KB original can satisfy primary and official roles', () => {
+  const r = request();
+  r.candidates = [candidate('official-direct', 'authority-direct', 'OFFICIAL')];
+  r.candidates[0].capability_id = 'public_specialist_kb_direct_record';
+  const result = evaluateInformationQuality(r);
+  assert.equal(result.blocking_reasons.includes('REQUIRED_SOURCE_ROLE_MISSING'), false);
+});
+
+test('an official label without verified original retrieval cannot replace primary evidence', () => {
+  const r = request();
+  r.candidates = [candidate('official-unverified', 'authority-direct', 'OFFICIAL')];
+  const result = evaluateInformationQuality(r);
+  assert.equal(result.status, 'REJECTED_BLOCKING');
+  assert.ok(result.blocking_reasons.includes('REQUIRED_SOURCE_ROLE_MISSING'));
+});
+
+test('verified original pointer without replayable locator still needs primary evidence', () => {
+  const r = request();
+  r.candidates = [candidate('official-unreplayable', 'authority-direct', 'OFFICIAL')];
+  r.candidates[0].capability_id = 'public_specialist_kb_direct_record';
+  r.candidates[0].canonical_locator.replayable = false;
+  const result = evaluateInformationQuality(r);
+  assert.ok(result.blocking_reasons.includes('REQUIRED_SOURCE_ROLE_MISSING'));
+});
