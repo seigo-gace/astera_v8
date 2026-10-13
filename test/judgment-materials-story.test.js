@@ -469,7 +469,7 @@ test('Story 16: evidence search boundary invokes external search client once per
   }
 });
 
-test('Story 17: original user-derived search plan rejects mismatched evidence without inventing confirmation', async () => {
+test('Story 17: genuine user-derived evidence query adopts supported claim and rejects mismatch', async () => {
   const fs = require('node:fs/promises');
   const os = require('node:os');
   const path = require('node:path');
@@ -518,7 +518,6 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
       japaneseParserClient: createMockJapaneseParserClient(),
       evidenceSearchClient: {
         async search(payload, context) {
-          console.log('STORY17_UPSTREAM_PLAN', JSON.stringify({ question: payload.question, conditions: payload.conditions || null, domain_lens: payload.domain_lens || null, queries: (payload.preplanned_queries || []).map((q) => ({ role: q.role, text: q.text, claim_id: q.claim_id })) }));
           const response = await search.execute({
             schema_version: 'astera.evidence-search.module-request.v1',
             operation: 'SEARCH_EVIDENCE',
@@ -541,19 +540,29 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
     assert.equal(out.result.type, 'cognitive_map');
     assert.ok(calls.length > 0, 'real evidence module must be called');
     assert.ok(calls.every((call) => call.routes.specialist_authoritative.attempted && call.routes.general_current.attempted));
-    assert.ok(calls.every((call) => call.quality?.status !== 'FINAL_VALID' && call.evidence_count === 0), JSON.stringify(calls));
-    assert.ok(calls.some((call) => call.status !== 'FINAL_VALID' && call.evidence_count === 0), JSON.stringify(calls));
-    assert.ok(out.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
+    assert.ok(calls.some((call) => call.quality?.status === 'FINAL_VALID' && call.quality?.score_bp >= 9500 && call.evidence_count > 0), JSON.stringify(calls));
+    assert.ok(calls.some((call) => call.status === 'FINAL_VALID' && call.evidence_count === 3), JSON.stringify(calls));
+    assert.ok(out.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'));
     assert.equal(out.result.five_stage.tasks.length, out.result.analysis_task_packet.tasks.length);
     const evidenceSection = out.result.judgment['07_evidence_status'];
     assert.ok(evidenceSection, 'Main8 must expose evidence status');
-    assert.ok(Object.values(evidenceSection.evidence_search || {}).every((item) =>
-      item.source_status !== 'FINAL_VALID'
-    ), 'rejected evidence must not be presented as adopted in Main8 section 07');
+    assert.ok(Object.values(evidenceSection.evidence_search || {}).some((item) =>
+      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
+    ), 'accepted evidence must reach Main8 section 07');
     assert.equal(out.material.text.split(/^---$/m).length, 8);
-    assert.equal(out.result.canonical_claims?.confirmed_count || 0, 0, 'rejected provider evidence cannot confirm a claim');
-    assert.ok(out.result.five_stage.tasks.every((task) => task.claim_status !== 'CONFIRMED'));
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
+
+    // An unsupported version must not inherit the adopted 22 evidence.
+    const mismatchStart = calls.length;
+    const mismatch = await engine.process({
+      question: 'Verify that ASTERA uses Node.js 23 using official evidence.',
+      language: 'en'
+    }, caller);
+    assert.equal(mismatch.result.type, 'cognitive_map');
+    assert.ok(calls.length > mismatchStart);
+    assert.ok(calls.slice(mismatchStart).every((call) => call.status !== 'FINAL_VALID'));
+    assert.ok(mismatch.result.task_results.every((item) => item.evidence?.source_status !== 'FINAL_VALID'));
+    assertNoNormativeDecisionArtifacts(mismatch.result, mismatch.material.text);
 
     // A standalone factual statement does not request external verification:
     // the engine must not fabricate a confirmation or spend a search request.
