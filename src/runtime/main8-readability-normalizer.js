@@ -221,7 +221,19 @@ function stripPublicInternalLines(block) {
 // Rewriting or dropping rendered rows here silently changes source meaning.
 // Keep the original output losslessly; upstream structured boundaries own filtering.
 function normalizeUnifiedMain8Text(value) {
-  return String(value ?? '');
+  const text = String(value ?? '');
+  const blocks = text.split('\n---\n');
+  if (blocks.length !== 8) return text;
+  const lang = isEnglishMain8(text) ? 'en' : 'ja';
+  // Preserve real decision material. Only the existing public/internal
+  // boundary removes internal diagnostics; no candidate-value rewriting.
+  blocks[1] = normalizePremiseSection(blocks[1]);
+  blocks[2] = normalizeFactsSection(blocks[2]);
+  blocks[4] = normalizeOppositionPublic(normalizeVerificationTarget(blocks[4]), lang);
+  blocks[6] = normalizeEvidencePublic(normalizeVerificationTarget(blocks[6]), lang);
+  blocks[7] = normalizeReinstructionPublic(blocks[7], lang);
+  for (let index = 0; index < blocks.length; index += 1) blocks[index] = stripPublicInternalLines(blocks[index]);
+  return blocks.join('\n---\n');
 }
 
 function normalizeUnifiedMain8Material(material = {}) {
