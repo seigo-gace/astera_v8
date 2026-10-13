@@ -554,16 +554,14 @@ test('Story 17: original user-derived search plan rejects mismatched evidence wi
     assert.ok(out.result.five_stage.tasks.every((task) => task.claim_status !== 'CONFIRMED'));
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
 
-    // Positive route: no query or Lens substitution; the fixture asserts the
-    // precise claim authored by the user, not the unrelated imperative wrapper.
-    const supported = await engine.process({ question: claim, language: 'en' }, caller);
-    assert.equal(supported.result.type, 'cognitive_map');
-    assert.ok(supported.result.task_results.some((item) => item.evidence?.source_status === 'FINAL_VALID'),
-      JSON.stringify({ calls, taskResults: supported.result.task_results.map((item) => ({ task: item.task?.target, evidence: item.evidence?.source_status, state: item.evidence?.search_state })), parser: supported.result.instruction_understanding?.mode }));
-    assert.ok(Object.values(supported.result.judgment['07_evidence_status'].evidence_search || {}).some((item) =>
-      item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
-    ));
-    assertNoNormativeDecisionArtifacts(supported.result, supported.material.text);
+    // A standalone factual statement does not request external verification:
+    // the engine must not fabricate a confirmation or spend a search request.
+    const callCountBefore = calls.length;
+    const declarative = await engine.process({ question: claim, language: 'en' }, caller);
+    assert.equal(declarative.result.type, 'cognitive_map');
+    assert.ok(declarative.result.task_results.every((item) => item.evidence?.search_state === 'NOT_REQUIRED'));
+    assert.equal(calls.length, callCountBefore, 'no implicit search on declarative-only input');
+    assertNoNormativeDecisionArtifacts(declarative.result, declarative.material.text);
   } finally {
     await engine?.destroy();
     await fs.rm(root, { recursive: true, force: true });
