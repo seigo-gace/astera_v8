@@ -96,8 +96,18 @@ function scoreSuitability(request, candidates, profile, blocking) {
   if (!candidates.length) return 0;
   const requiredRoles = profile.required_source_roles || [];
   const roleMatches = candidates.filter((candidate) => ['PRIMARY', 'OFFICIAL'].includes(candidate.source_role)).length;
+  // A directly retrieved, replayable original record from a verified official KB
+  // can establish both official provenance and primary-source status. Merely
+  // labelling a secondary page OFFICIAL must never satisfy PRIMARY.
+  const hasRole = (candidate, role) => candidate.source_role === role || (
+    role === 'PRIMARY' && candidate.source_role === 'OFFICIAL'
+    && candidate.capability_id === 'public_specialist_kb_direct_record'
+    && candidate.retrieval_trace?.current_pointer_verified === true
+    && candidate.canonical_locator?.replayable === true
+    && Boolean(candidate.canonical_record_id)
+  );
   const sourceRole = requiredRoles.length
-    ? (requiredRoles.every((role) => candidates.some((candidate) => candidate.source_role === role)) ? 400 : 0)
+    ? (requiredRoles.every((role) => candidates.some((candidate) => hasRole(candidate, role))) ? 400 : 0)
     : (roleMatches ? 400 : 300);
   if (requiredRoles.length && sourceRole === 0) blocking.push('REQUIRED_SOURCE_ROLE_MISSING');
   const resolvedDomainId = request.domain_lens?.id ? String(request.domain_lens.id).toUpperCase() : null;
