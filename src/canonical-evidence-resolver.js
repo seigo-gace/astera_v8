@@ -132,10 +132,11 @@ function failedEvidence(taskId, error, searchState = SEARCH_STATES.FAILED) {
 }
 
 function evidenceQuestion(task) {
-  const values = [task.target || '', task.source_span?.text || '']
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-  return [...new Set(values)].join('\\n') || String(task.objective || '');
+  const target = String(task.target || task.source_span?.text || task.objective || '').trim();
+  // Preserve the verbatim request in evidenceContext; verify the factual target.
+  const factualTarget = target.replace(/^(?:verify|validate|check|confirm|investigate|research)\s+(?:that\s+)?/iu, '');
+  const withoutMethod = factualTarget.replace(/\s+(?:using|with|against|from)\s+(?:(?:current|latest|official|external|independent|primary|authoritative|trusted)\s+){0,3}(?:evidence|sources?|references?|documentation)\s*[.!?]?$/iu, '').trim();
+  return withoutMethod || target;
 }
 
 function evidenceContext(task, bodyContext) {
