@@ -410,6 +410,9 @@ class CanonicalAsteraEngine extends CanonicalAsteraEngineBase {
       locale: input.locale,
       output_language: input.output_language,
       moodAnswers: input.moodAnswers,
+      // Preserve caller-scoped search limits and provider restrictions through the
+      // canonical engine handoff; resolveTaskEvidence owns their validation.
+      evidence_search: input.evidence_search,
       preparedRequest: request
     }, caller, executionContext);
     if (out?.result?.type === 'cognitive_map') {
