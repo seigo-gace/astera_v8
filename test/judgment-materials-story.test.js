@@ -549,6 +549,8 @@ test('Story 17: genuine user-derived evidence query adopts supported claim and r
     assert.ok(Object.values(evidenceSection.evidence_search || {}).some((item) =>
       item.source_status === 'FINAL_VALID' && item.quality_score_bp >= 9500
     ), 'accepted evidence must reach Main8 section 07');
+    assert.match(out.material.text, /accepted source=/, 'accepted source trace must be visible in Main8');
+    assert.match(out.material.text, /authority=/, 'source provenance must accompany adoption');
     assert.equal(out.material.text.split(/^---$/m).length, 8);
     assertNoNormativeDecisionArtifacts(out.result, out.material.text);
 
