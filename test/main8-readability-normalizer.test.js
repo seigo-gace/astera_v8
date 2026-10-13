@@ -50,13 +50,13 @@ function main8() {
   ].join('\n---\n');
 }
 
-test('readability normalization removes duplicate prohibition templates and normalizes deadline', () => {
+test('readability normalization preserves distinct constraints and normalizes deadline', () => {
   const out = normalizeUnifiedMain8Text(main8());
   const section = out.split('\n---\n')[1];
-  assert.equal((section.match(/禁止条件:/g) || []).length, 1);
+  assert.equal((section.match(/禁止条件:/g) || []).length, 3);
   assert.match(section, /禁止条件: 最終判断や推奨はしないで。/);
   assert.match(section, /期限: 来週金曜まで(?:\n|$)/);
-  assert.doesNotMatch(section, /はを禁止する/);
+  assert.match(section, /禁止条件: 最終判断や推奨はを禁止する/);
 });
 
 test('request instructions are not presented as facts and verification target is shortened', () => {
@@ -114,4 +114,20 @@ test('public Main8 keeps risk meaning while removing internal task and claim ide
   assert.doesNotMatch(out, /claim_id\s*=/iu);
   assert.doesNotMatch(out, /unsupported_scope/iu);
   assert.doesNotMatch(out, /UNRESOLVED_JAPANESE_TARGET/u);
+});
+
+test('distinct prohibitions survive presentation unchanged and exact repeats are deduplicated', () => {
+  const blocks = main8().split('\n---\n');
+  blocks[1] = [
+    '02 前提不足',
+    '- 判断中も変えてはいけない前提・制約・未確定事項:',
+    '  - 禁止条件: 既存データを削除しない。',
+    '  - 禁止条件: 本番へ公開しない。',
+    '  - 禁止条件: 既存データを削除しない。'
+  ].join('\n');
+  const out = normalizeUnifiedMain8Text(blocks.join('\n---\n'));
+  const section = out.split('\n---\n')[1];
+  assert.match(section, /既存データを削除しない/);
+  assert.match(section, /本番へ公開しない/);
+  assert.equal((section.match(/禁止条件:/g) || []).length, 2);
 });
