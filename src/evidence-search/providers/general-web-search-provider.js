@@ -366,7 +366,8 @@ function createGeneralWebSearchProvider(options = {}) {
         queryResults.push(Object.freeze({ query_id: String(query?.query_id || ''), retrieval_status: 'RETRIEVAL_FAILED', candidate_record_ids: Object.freeze([]), error_code: 'GENERAL_WEB_QUERY_LIMIT' }));
       }
       return Object.freeze({
-        coverage_state: 'PARTIAL_FOR_QUERY_SCOPE',
+        coverage_state: querySet.length > activeQueries.length || queryResults.some((item) => item.retrieval_status === 'RETRIEVAL_FAILED')
+          ? 'PARTIAL_FOR_QUERY_SCOPE' : 'COMPLETE_FOR_QUERY_SCOPE',
         current_watermark: new Date().toISOString(),
         candidates: Object.freeze(candidates),
         query_results: Object.freeze(queryResults),
