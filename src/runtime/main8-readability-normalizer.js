@@ -217,20 +217,11 @@ function stripPublicInternalLines(block) {
   }).join('\n');
 }
 
+// Main8 is a decision-material projection, not a prose-editing stage.
+// Rewriting or dropping rendered rows here silently changes source meaning.
+// Keep the original output losslessly; upstream structured boundaries own filtering.
 function normalizeUnifiedMain8Text(value) {
-  const text = String(value || '');
-  const blocks = text.split('\n---\n');
-  if (blocks.length !== 8) return text;
-  const quantities = quantityByCandidate(text);
-  const lang = isEnglishMain8(text) ? 'en' : 'ja';
-  blocks[1] = normalizePremiseSection(blocks[1]);
-  blocks[2] = normalizeFactsSection(blocks[2]);
-  blocks[4] = normalizeOppositionPublic(normalizeCandidateMaterial(normalizeVerificationTarget(blocks[4]), quantities), lang);
-  blocks[5] = normalizeCandidateMaterial(blocks[5], quantities);
-  blocks[6] = normalizeEvidencePublic(normalizeVerificationTarget(blocks[6]), lang);
-  blocks[7] = normalizeReinstructionPublic(blocks[7], lang);
-  for (let index = 0; index < blocks.length; index += 1) blocks[index] = stripPublicInternalLines(blocks[index]);
-  return blocks.join('\n---\n');
+  return String(value ?? '');
 }
 
 function normalizeUnifiedMain8Material(material = {}) {
