@@ -260,3 +260,14 @@ test('noisy multi-request R11 retains conditional error guidance in one parent r
     && atom.text.includes('対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする')
   ), 'conditional remediation must stay inside the source-backed upload request');
 });
+
+test('mixed upload error report and remediation keeps observation only on the source clause', () => {
+  const row = byId('known-noisy-multi-ja-1k');
+  const atoms = buildUniversalSourceUnderstanding(row.input, row.language).semantic_atoms.atoms;
+  assert.ok(atoms.some((atom) =>
+    atom.type === 'OBSERVATION' && atom.text.includes('ファイル投稿はzipや画像でエラーになることがある')
+  ), 'real user-reported upload error remains an observation');
+  assert.ok(!atoms.some((atom) =>
+    atom.type === 'OBSERVATION' && atom.text.includes('対応外なら内部エラーじゃなく普通に利用者へ案内を出すようにする')
+  ), 'remediation directive must not be absorbed into observation');
+});
