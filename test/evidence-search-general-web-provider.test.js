@@ -68,3 +68,25 @@ test('free general web provider is selected by default even when no domain lens 
   const selected = registry.select(plan, 'INITIAL');
   assert.deepEqual(selected.map((item) => item.provider_id), ['free-general-web-search']);
 });
+
+test('general web coverage is complete only if every planned query ran without retrieval failure', async () => {
+  const destination = 'https://example.org/reference';
+  const searchHtml = '<a class="result__a" href="//duckduckgo.com/l/?uddg=' + encodeURIComponent(destination) + '">Reference</a>';
+  const provider = createGeneralWebSearchProvider({
+    searchGet: async () => ({ status: 200, headers: {}, body: Buffer.from(searchHtml) }),
+    pageGet: async (url) => ({
+      url, status: 200, headers: { 'content-type': 'text/html' },
+      body: Buffer.from('<title>Primary reference</title><p>Actual independent source details are present on this retrieved public page and are long enough to extract.</p>')
+    })
+  });
+  const queries = Array.from({ length: 5 }, (_, i) => ({ query_id: 'q' + i, text: 'reference' }));
+  const complete = await provider.search({ query_set: queries.slice(0, 3) }, {});
+  assert.equal(complete.query_results.length, 3);
+  assert.equal(complete.coverage_state, 'COMPLETE_FOR_QUERY_SCOPE');
+  const capped = await provider.search({ query_set: queries }, {});
+  assert.equal(capped.coverage_state, 'PARTIAL_FOR_QUERY_SCOPE');
+  assert.equal(capped.query_results[4].error_code, 'GENERAL_WEB_QUERY_LIMIT');
+  const failedProvider = createGeneralWebSearchProvider({ searchGet: async () => { throw new Error('network failed'); } });
+  const failed = await failedProvider.search({ query_set: queries.slice(0, 1) }, {});
+  assert.equal(failed.coverage_state, 'PARTIAL_FOR_QUERY_SCOPE');
+});
