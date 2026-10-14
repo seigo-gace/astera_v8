@@ -217,6 +217,26 @@ test('material evidence ledger rejects executions carrying another Request or re
   }
 });
 
+test('Evidence Search module-response envelope preserves adopted requirement lineage', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan = materialEvidencePlan(task, graph, {}, base);
+  const query = plan.search_plan.queries.find(q => q.requirement_slot_id === 'R01:MR01');
+  const raw = { status:'FINAL_VALID', evidence:[{
+    candidate_id:'wrapped-candidate', canonical_record_id:'wrapped-record'
+  }], query_execution:{initial:[{
+    query_id:query.query_id, claim_id:query.claim_id, status:'FOUND',
+    provider_records:[{provider_id:'official-one',status:'FOUND',
+      candidate_record_ids:['wrapped-candidate']}]
+  }],reinforcement:[]} };
+  const flat = materialEvidenceExecution(plan,raw,{state:'VALID'});
+  const wrapped = materialEvidenceExecution(plan,{
+    schema_version:'astera.evidence-search.module-response.v1', result:raw
+  },{state:'VALID'});
+  assert.deepEqual(wrapped.requirements,flat.requirements);
+  assert.equal(wrapped.attributed_adopted_count,1);
+  assert.equal(wrapped.requirements.find(r=>r.slot_id==='R01:MR01').confirmation_status,'UNRESOLVED');
+});
+
 test('Reinforcement Evidence is attributed by originating slot and cannot confirm a judgment by itself', () => {
   const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
   const plan = materialEvidencePlan(task,graph,{},base);
