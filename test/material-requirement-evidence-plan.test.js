@@ -361,3 +361,51 @@ test('five-stage Inquiry owns full deferred specialist slot ledger and does not 
   assert.equal(lane.problem_health.healthy,false);
   assert.ok(lane.missing_questions.some(q=>q.includes('Was the failure confirmed?')));
 });
+
+
+test('required falsifiers and comparison bases outrank generic question slots when the fixed query limit is reached', () => {
+  const nodes = Array.from({length: 74}, (_, i) => ({
+    slot_id:'R01:GENERIC_'+String(i).padStart(3,'0'),
+    material_kind:'SUBQUESTION_ANSWER',
+    question:'Generic required question '+i,
+    status:'MISSING',required:true
+  }));
+  nodes.push({
+    slot_id:'R01:LATE_COUNTEREXAMPLE',
+    material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+    question:'Safety failure condition that invalidates the entire proposal',
+    status:'CONFLICTING',required:true
+  },{
+    slot_id:'R01:LATE_COMPARISON',
+    material_kind:'COMPARISON_BASIS',
+    question:'Equal decision metric for two competing options',
+    status:'MISSING',required:true
+  });
+  const many={requests:[{owner_request_id:'R01',nodes}]};
+  const plan=materialEvidencePlan(task,many,{},base);
+  const contract=plan.material_evidence_plan;
+  assert.equal(plan.search_plan.queries.length,128,'must preserve external 128-query contract');
+  assert.equal(contract.planned_slot_ids.length,64);
+  assert.equal(contract.unplanned_slot_ids.length,12);
+  assert.ok(contract.planned_slot_ids.includes('R01:LATE_COUNTEREXAMPLE'),
+    'last-listed mandatory disqualifier must be searched, not displaced by generic questions');
+  assert.ok(contract.planned_slot_ids.includes('R01:LATE_COMPARISON'),
+    'decision comparison basis must remain searchable under fixed budget');
+  assert.ok(!contract.coverage_complete,'unsearched required slots cannot be described as complete');
+  assert.equal(contract.unplanned_reasons.length,12);
+  assert.ok(contract.unplanned_reasons.every(row=>row.reason==='PLAN_QUERY_LIMIT'));
+  assert.deepEqual(new Set(contract.unplanned_reasons.map(row=>row.slot_id)),
+    new Set(contract.unplanned_slot_ids));
+  assert.deepEqual(new Set([...contract.planned_slot_ids,...contract.unplanned_slot_ids]),
+    new Set(contract.required_slot_ids),'budget priorities must never erase source requirements');
+});
+
+test('local-only and uncertain specialist slots retain distinct reasons, never invented search coverage',()=>{
+  const taskWithoutNetwork={...task,evidence_need:{required:false}};
+  const plan=materialEvidencePlan(taskWithoutNetwork,graph,{},base);
+  assert.equal(plan.material_evidence_plan.search_authorized,false);
+  assert.ok(plan.material_evidence_plan.unplanned_reasons.every(
+    item=>item.reason==='EXTERNAL_SEARCH_NOT_AUTHORIZED'
+      || item.reason==='DEFERRED_APPLICABILITY_UNKNOWN'));
+  assert.equal(plan.material_evidence_plan.coverage_complete,false);
+});
