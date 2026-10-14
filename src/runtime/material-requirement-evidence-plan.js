@@ -211,7 +211,8 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       ? 'NOT_PLANNED'
       : !executions.length
         ? 'NOT_EXECUTED_OR_UNATTRIBUTED'
-        : executions.some(q => String(q.status).toUpperCase() === 'FOUND')
+        : attributed.size > 0 ? 'ADOPTED_EVIDENCE_ATTRIBUTED_REQUIREMENT_UNCONFIRMED'
+          : executions.some(q => String(q.status).toUpperCase() === 'FOUND')
           ? 'CANDIDATES_FOUND_NOT_BOUND'
           : executions.some(q => String(q.status).toUpperCase() === 'RETRIEVAL_FAILED')
             ? 'RETRIEVAL_FAILED'
