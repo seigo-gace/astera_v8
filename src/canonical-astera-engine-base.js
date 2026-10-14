@@ -10,7 +10,7 @@ const { projectCanonicalFailure } = require('./canonical-task-projection');
 const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 const { UndeterminedReason } = require('./v4-canonical/confirmation');
 const { parserFailClosedRequest } = require('./deterministic-task-decomposer');
-const { materialEvidenceExecution } = require('./runtime/material-requirement-evidence-plan');
+const { materialEvidencePlan, materialEvidenceExecution, requestGraphForTask, selectRequestMaterialOwners } = require('./runtime/material-requirement-evidence-plan');
 
 const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
 const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
@@ -327,8 +327,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions,clarification_code:'USER_CLARIFICATION_REQUIRED'},material:{...this.clarify(questions,renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     }
 
-    const plannedRequirementOwners = new Set();
-    const tasks=packet.tasks.map((baseTask)=>{
+    const routedTasks = packet.tasks.map((baseTask)=>{
       const extraction=extractCanonicalTaskClaims(baseTask);
       const routeText=taskText(baseTask,extraction.claims);
       const spanText=String(baseTask.source_span?.text||'').trim();
@@ -356,15 +355,24 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       };
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,evidence_need:evidenceNeed,domain};
-      const owner = String(baseTask.request_id || baseTask.id || '');
-      const ownsRequest = !plannedRequirementOwners.has(owner);
-      plannedRequirementOwners.add(owner);
       const canonicalPlan = buildCanonicalTaskPlan(task, domain, {
         extraction,
-        material_requirement_graph: packet.material_requirement_graph,
-        ownsRequest
+        deferMaterialEvidencePlan: true
       });
-      return{...task,canonical_plan:canonicalPlan};
+      return {...task, canonical_plan: canonicalPlan};
+    });
+    const owners = selectRequestMaterialOwners(routedTasks, packet.material_requirement_graph);
+    const tasks = routedTasks.map(task => {
+      const graph = requestGraphForTask(task, packet.material_requirement_graph);
+      const ownerRequestId = String(graph?.owner_request_id || task.request_id || task.id);
+      const ownsRequest = owners.get(ownerRequestId) === String(task.id);
+      return {
+        ...task,
+        canonical_plan: materialEvidencePlan(
+          task, packet.material_requirement_graph, task.domain, task.canonical_plan,
+          { ownsRequest }
+        )
+      };
     });
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
 
