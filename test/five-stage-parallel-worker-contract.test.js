@@ -79,3 +79,37 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
     await executor.destroy();
   }
 });
+
+
+test('parallel and serial Fact lanes preserve identical source-owned unverified verification targets', async()=>{
+  const sourceText='Task 1 — Establish facts: Audit dated maps, original shipping ledger and archival custody. Identify dates, scope and primary records.';
+  const domain=routeDomainTemplates({question:sourceText,context:''});
+  const taskBase={
+    id:'T01',request_id:'R01',action:'verify',target:'historical claim',
+    purpose:'Verify an archival chronology without inventing facts',
+    objective:'Audit original archival records and unresolved provenance',
+    source_span:{start:0,end:sourceText.length,text:sourceText},raw_text:sourceText,
+    premises:[],constraints:[],prohibitions:[],preserve:[],replace:[],
+    conditions:[],exceptions:[],depends_on:[],domain
+  };
+  const task={...taskBase,canonical_plan:buildCanonicalTaskPlan(taskBase,domain)};
+  const outputs=[];
+  for(const enableFiveStageParallel of [false,true]){
+    const executor=new CanonicalTaskExecutor({size:1,timeoutMs:8000,
+      enableFiveStageParallel,logger:silentLogger});
+    try{
+      outputs.push(await executor.exec('PROJECT_CANONICAL_TASK',{
+        task,evidenceRaw:rejectedEvidence(task.id)
+      }));
+    }finally{await executor.destroy();}
+  }
+  const serial=outputs[0].lanes.fact.verification_targets;
+  const parallel=outputs[1].lanes.fact.verification_targets;
+  assert.equal(serial.length,1);
+  assert.deepEqual(parallel,serial,
+    'the parallel Worker must not silently discard Task source semantics');
+  assert.deepEqual(outputs[1].public_lanes.fact.verification_targets,serial,
+    'public projection must preserve source-owned unverified Fact targets');
+  assert.equal(serial[0].status,'UNVERIFIED');
+  assert.equal(serial[0].request_id,'R01');
+});
