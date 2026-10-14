@@ -94,8 +94,17 @@ function splitEnglishDimensionList(value = '') {
 }
 
 function extractComparisonCandidates(task = {}) {
+  const knownCandidates = uniqueStrings([
+    ...(Array.isArray(task.candidates) ? task.candidates : []),
+    ...(Array.isArray(task.observable_material?.candidates) ? task.observable_material.candidates : [])
+  ].map(value => typeof value === 'string' ? value : value?.label || value?.name || ''));
+  if (knownCandidates.length >= 2) return knownCandidates;
   const text = comparisonTaskText(task);
-  if (!text) return [];
+  if (!text) return knownCandidates;
+  const explicitCandidates = uniqueStrings([...text.matchAll(
+    /(?:候補|選択肢|案)\\s*[A-Za-z0-9]+(?:の[^、，。とを;；\\n]{1,40})?/gu
+  )].map(match => match[0].trim()));
+  if (explicitCandidates.length >= 2) return explicitCandidates;
   const xyMatch = text.match(/^(.+?)と(.+?)を/u);
   if (xyMatch && /比較/u.test(text)) {
     const left = xyMatch[1].trim();
