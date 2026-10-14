@@ -352,19 +352,34 @@ function section04(model, groups, lang) {
   return lines.join('\n');
 }
 function section05(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '要求ごとの反対視点・失敗条件（未確認事項は断定しない）' : 'Request-local counterevidence and failure conditions (unverified unless supported)'}:`];
+  // Keep each request's concrete opposition without reproducing complete
+  // expanded generic perspective trees and the Request in multiple sections.
+  const lines = [`- ${lang === 'ja' ? '判断要求ごとの反証・失敗条件' : 'Request-local counterevidence and failure conditions'}:`];
   for (const request of model.judgment_requests || []) {
+    const taskResults = groups.get(request.id) || [];
+    const sourceRisks = publicValues(taskResults.flatMap(result =>
+      (publicLane(result, 'risk')?.risks || [])
+        .filter(item => item?.source === 'TASK_SOURCE_UNVERIFIED')
+        .map(item => item.impact)
+    ));
     const source = sanitizePublicValue(request.request_text);
-    const counter = groupCounterMaterial(groups.get(request.id) || []);
-    const sourceItems = counter.filter(item => {
-      const words = String(item).toLowerCase().match(/[a-z]{5,}/g) || [];
-      return words.some(word => source.toLowerCase().includes(word));
-    });
-    // Do not duplicate the full Request or every generic Lens perspective.
-    // The complete independent five-stage perspectives remain structured.
-    const focused = unique(sourceItems.length ? sourceItems : counter.slice(0, 2));
-    lines.push(`  - ${request.id} [${actionLabel(request.action,lang)}]: ${focused.length
-      ? focused.join(' / ') : operationCounterMaterial(request.action,lang)}`);
+    // Preserve user-stated potential failure conditions (NOT confirmed harms).
+    const riskDetail = sourceRisks.length
+      ? (lang === 'ja' ? '原文指定の未検証リスク: ' : 'User-stated unverified risk: ') + sourceRisks.join(' / ')
+      : operationCounterMaterial(request.action, lang);
+    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${riskDetail}`);
+    // Retain externally linked counter-evidence when actually available,
+    // without repeating the same evidence record for every template view.
+    const evidence = [];
+    for (const result of taskResults) {
+      for (const perspective of publicLane(result, 'multi')?.perspectives || []) {
+        for (const ref of perspective.counter_evidence_refs || []) {
+          const locator = ref.canonical_locator?.url || ref.url || ref.candidate_id || ref.evidence_id;
+          if (locator) evidence.push(String(locator));
+        }
+      }
+    }
+    if (evidence.length) lines.push(`    - ${lang === 'ja' ? '反証根拠候補' : 'Counterevidence references'}: ${unique(evidence).join(' / ')}`);
   }
   return lines.join('\n');
 }
@@ -378,6 +393,12 @@ function section06(model, groups, lang) {
     const observations = publicValues(observationsFor(model, request).map(item=>item.text));
     const gaps = groupMissing(results);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
+    if (String(request.action || '') === 'compare') {
+      // The original alternatives can be embedded in a prose request rather
+      // than normalized into explicit candidates. They remain judgment inputs,
+      // NOT observations verified as external fact.
+      lines.push(`    - ${lang === 'ja' ? '原文指定の比較案' : 'Source-specified alternatives (unverified)'}: ${sanitizePublicValue(request.request_text)}`);
+    }
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
     const known = unique([...facts, ...observations]);
