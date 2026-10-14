@@ -176,25 +176,25 @@ function formatMaterialBulletField(key, value) {
 }
 
 function formatTradeOffMaterialText(material) {
-  const empty = !material || typeof material !== 'object' || Array.isArray(material);
-  const lines = [
-    formatMaterialBulletField('status', empty ? '-' : material.status),
-    formatMaterialBulletField('dimensions', !empty && material.dimensions?.length ? join(material.dimensions) : '-'),
-    formatMaterialBulletField('confirmed_claim_ids', !empty && material.confirmed_claim_ids?.length ? join(material.confirmed_claim_ids) : '-'),
-    formatMaterialBulletField('undetermined_claim_ids', !empty && material.undetermined_claim_ids?.length ? join(material.undetermined_claim_ids) : '-'),
-    formatMaterialBulletField('support_evidence_refs', !empty && material.support_evidence_refs?.length ? formatEvidenceRefList(material.support_evidence_refs) : '-'),
-    formatMaterialBulletField('counter_evidence_refs', !empty && material.counter_evidence_refs?.length ? formatEvidenceRefList(material.counter_evidence_refs) : '-'),
-    formatMaterialBulletField('missing_evidence_refs', !empty && material.missing_evidence_refs?.length ? formatMissingEvidenceRefList(material.missing_evidence_refs) : '-')
-  ];
-  if (!empty && material.policy_notes?.length) {
-    lines.push(formatMaterialBulletField('policy_notes', join(material.policy_notes)));
-  }
-  if (!empty && material.material_by_dimension && typeof material.material_by_dimension === 'object') {
+  if (!material || typeof material !== 'object' || Array.isArray(material)) return '';
+  const lines = [];
+  const push = (key,value) => {
+    if (value !== undefined && value !== null && value !== '' && value !== '-') {
+      lines.push(formatMaterialBulletField(key,value));
+    }
+  };
+  push('status', material.status);
+  if (material.dimensions?.length) push('dimensions', join(material.dimensions));
+  if (material.confirmed_claim_ids?.length) push('confirmed_claim_ids', join(material.confirmed_claim_ids));
+  if (material.undetermined_claim_ids?.length) push('undetermined_claim_ids', join(material.undetermined_claim_ids));
+  if (material.support_evidence_refs?.length) push('support_evidence_refs', formatEvidenceRefList(material.support_evidence_refs));
+  if (material.counter_evidence_refs?.length) push('counter_evidence_refs', formatEvidenceRefList(material.counter_evidence_refs));
+  if (material.missing_evidence_refs?.length) push('missing_evidence_refs', formatMissingEvidenceRefList(material.missing_evidence_refs));
+  if (material.policy_notes?.length) push('policy_notes', join(material.policy_notes));
+  if (material.material_by_dimension && typeof material.material_by_dimension === 'object') {
     for (const [dimension, entry] of Object.entries(material.material_by_dimension)) {
-      const value = typeof entry === 'string'
-        ? entry
-        : join(entry.observations || entry.conditions || []);
-      lines.push(formatMaterialBulletField(dimension, value));
+      const value = typeof entry === 'string' ? entry : join(entry.observations || entry.conditions || []);
+      push(dimension, value);
     }
   }
   return lines.join('\n');
@@ -218,13 +218,18 @@ function formatCandidateMaterialBlock(entry = {}) {
 }
 
 function formatTradeOffDifferenceBlock(entry = {}) {
-  const lines = [
-    formatMaterialBulletField('dimension', entry.dimension),
-    formatMaterialBulletField('comparison_state', entry.comparison_state || entry.status),
-    formatMaterialBulletField('conditions', entry.conditions?.length ? join(entry.conditions) : '-')
-  ];
+  const lines = [formatMaterialBulletField('dimension', entry.dimension)];
+  if (entry.comparison_state || entry.status) lines.push(formatMaterialBulletField('comparison_state', entry.comparison_state || entry.status));
+  if (entry.conditions?.length) lines.push(formatMaterialBulletField('conditions', join(entry.conditions)));
+  // Each candidate's complete material was printed once above. Under each
+  // dimension print only its delta, not all claim IDs and Evidence a second time.
   for (const candidate of entry.per_candidate || []) {
-    lines.push(formatPerCandidateBlock(candidate));
+    const label = candidate.label || candidate.candidate_id;
+    const details = [candidate.material_state || 'UNRESOLVED'];
+    if (candidate.observations?.length) details.push('observations: ' + candidate.observations.map(line).join(' / '));
+    if (candidate.supported_scopes?.length) details.push('supported scopes: ' + candidate.supported_scopes.map(formatSupportedScopeEntry).join(' / '));
+    if (candidate.evidence_refs?.length) details.push('sources: ' + formatEvidenceRefList(candidate.evidence_refs));
+    lines.push(formatMaterialBulletField('candidate_dimension', label + ': ' + details.join('; ')));
   }
   return lines.join('\n');
 }
@@ -240,7 +245,7 @@ function formatSection05Pass(section) {
       formatMaterialBulletField('id', perspective.id || perspective.class),
       formatMaterialBulletField('focus', focusText),
       formatMaterialBulletField('conditions', join(perspective.conditions)),
-      formatMaterialBulletField('failure_conditions', join(perspective.failure_conditions)),
+      ...(perspective.failure_conditions?.length ? [formatMaterialBulletField('failure_conditions', join(perspective.failure_conditions))] : []),
       formatTradeOffMaterialText(perspective.trade_off_material)
     ].join('\n');
   }).join('\n\n');
