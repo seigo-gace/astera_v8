@@ -210,3 +210,16 @@ test('Reinforcement Evidence is attributed by originating slot and cannot confir
   assert.equal(ledger.requirements.find(r=>r.slot_id==='R01:MR01').adopted_evidence_refs.length,0);
   assert.equal(ledger.requirements.find(r=>r.slot_id==='R01:MR02').confirmation_status,'UNRESOLVED');
 });
+
+
+test('comparison lane preserves both candidates even inside longer Japanese Request text', () => {
+  const { extractComparisonCandidates } = require('../src/v4-canonical/lanes');
+  const sentence = '背景：予約変更の応答が遅いという未検証の報告がある。候補Aのキャッシュと候補Bの検索最適化を同一の速度・整合性条件で比較し、最終選定は行わない。';
+  assert.deepEqual(extractComparisonCandidates({source_span:{text:sentence}}),
+    ['候補Aのキャッシュ','候補Bの検索最適化']);
+  assert.deepEqual(extractComparisonCandidates({
+    candidates:[{label:'候補Aのキャッシュ'},{label:'候補Bの検索最適化'}],
+    source_span:{text:'既存データを失わず両候補を比較する'}
+  }), ['候補Aのキャッシュ','候補Bの検索最適化']);
+  assert.deepEqual(extractComparisonCandidates({source_span:{text:'単一の現行システムを調査する。'}}),[]);
+});
