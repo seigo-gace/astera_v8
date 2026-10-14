@@ -31,6 +31,12 @@ function providerSearchText(text) {
   const normalized = normalizeText(text);
   const cves = [...new Set((normalized.match(/CVE-\d{4}-\d+/gi) || []))];
   if (cves.length) return cves.join(' ');
+  // Do not discard non-ASCII source terms merely because a query also contains
+  // API, model, product or version identifiers. Preserve mixed-language meaning.
+  const multilingual = normalized
+    .replace(/\b(?:VERIFICATION_TARGET|VER|OFFICIAL|PRIMARY|COUNTER)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if (/[^\x00-\x7f]/u.test(multilingual)) return multilingual;
   const ascii = normalized
     .replace(/VERIFICATION_TARGET/gi, ' ')
     .replace(/\b(VER|OFFICIAL|PRIMARY|COUNTER|\d{3})\b/gi, ' ')
