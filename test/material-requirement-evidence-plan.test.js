@@ -223,3 +223,13 @@ test('comparison lane preserves both candidates even inside longer Japanese Requ
   }), ['候補Aのキャッシュ','候補Bの検索最適化']);
   assert.deepEqual(extractComparisonCandidates({source_span:{text:'単一の現行システムを調査する。'}}),[]);
 });
+
+test('Japanese text survives mixed ASCII query compilation', () => {
+  const sample='API予約管理の整合性と公式情報';
+  const queries=[{query_id:'ja-1',claim_id:'ja-case',role:'OFFICIAL',text:sample},
+    {query_id:'ja-2',claim_id:'ja-case',role:'COUNTER',text:sample+' 反証'}];
+  const plan=compileQueryPlan({question:sample,upstream_search_plan:{queries}});
+  assert.match(plan.primary_query_set[0].text,/予約管理/u);
+  assert.match(plan.primary_query_set[0].text,/API/u);
+  assert.match(plan.primary_query_set[1].text,/反証/u);
+});
