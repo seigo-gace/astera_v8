@@ -233,3 +233,19 @@ test('Japanese text survives mixed ASCII query compilation', () => {
   assert.match(plan.primary_query_set[0].text,/API/u);
   assert.match(plan.primary_query_set[1].text,/反証/u);
 });
+
+test('a source-backed disqualifying risk must still be searched, not treated as verified', () => {
+  const sourceRisk={requests:[{owner_request_id:'R01',nodes:[
+    {slot_id:'R01:MR_RISK',required:true,material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+      question:'Unverified overheating during repeated use',status:'SATISFIED',
+      truth_state:'SOURCE_BACKED_RULE_OR_CONTEXT',value_refs:['overheating']},
+    {slot_id:'R01:MR_RULE',required:true,material_kind:'BOUNDARY_OR_PRECONDITION',
+      question:'Keep the existing safety inspection record',status:'SATISFIED'}
+  ]}]};
+  const plan=materialEvidencePlan(task,sourceRisk,{},base);
+  assert.ok(plan.material_evidence_plan.planned_slot_ids.includes('R01:MR_RISK'));
+  assert.ok(!plan.material_evidence_plan.planned_slot_ids.includes('R01:MR_RULE'));
+  const execution=require('../src/runtime/material-requirement-evidence-plan')
+    .materialEvidenceExecution(plan,null,{state:'REJECTED'});
+  assert.equal(execution.requirements.find(r=>r.slot_id==='R01:MR_RISK').confirmation_status,'UNRESOLVED');
+});
