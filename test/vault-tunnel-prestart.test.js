@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { mkdtemp, writeFile, rm } = require("node:fs/promises");
+const { mkdtemp, writeFile, symlink, rm } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const test = require("node:test");
@@ -26,4 +26,21 @@ test("Vault Tunnel pre-start refuses world-readable internal authentication file
     }), /VAULT_API_AUTH_FILE_UNSAFE/);
     assert.equal(calls, 0);
   } finally { await rm(dir, {recursive:true, force:true}); }
+});
+
+test("Vault Tunnel pre-start rejects symbolic-link API credentials without making a request", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "astera-vault-symlink-test-"));
+  try {
+    const source = join(dir, "real-credential");
+    const link = join(dir, "alias");
+    await writeFile(source, "long-private-credential-value", { mode: 0o600 });
+    await symlink(source, link);
+    let calls = 0;
+    await assert.rejects(prepareTunnelSecret({
+      authFile: link,
+      targetFile: "/run/user/1000/astera_v8_cloudflare_tunnel_token",
+      fetchImpl: async () => { calls++; throw Error("must not send"); }
+    }), /VAULT_API_AUTH_FILE_UNSAFE/);
+    assert.equal(calls, 0);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
