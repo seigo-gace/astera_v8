@@ -325,7 +325,14 @@ function section03(model, groups, lang) {
   for (const item of model.observations || []) lines.push(`  - ${item.id}: ${sanitizePublicValue(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
-    lines.push(`  - ${request.id}: ${facts.length ? facts.join(' / ') : (lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.')}`);
+    const sourceRequest = sanitizePublicValue(request.request_text);
+    const sourceVerification = /\\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\\b/iu.test(sourceRequest)
+      && !/\\b(?:risk|hazard|counterevidence|compare options)\\b/iu.test(sourceRequest.slice(0,65));
+    if (sourceVerification) {
+      lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
+    }
+    if (facts.length) lines.push(`  - ${request.id} ${lang === 'ja' ? '確認済み材料' : 'Confirmed material'}: ${facts.join(' / ')}`);
+    else if (!sourceVerification) lines.push(`  - ${request.id}: ${lang === 'ja' ? '外部確認済み事実なし' : 'No externally confirmed facts available'}`);
   }
   lines.push(`- ${lang === 'ja' ? '区別: 利用者が要求したこと／利用者が観測したこと／コードや外部根拠で確認済みの事実を混ぜない。' : 'Boundary: keep requested behavior, user-observed state, and code/external-evidence-confirmed facts separate.'}`);
   return lines.join('\n');
@@ -345,49 +352,51 @@ function section04(model, groups, lang) {
   return lines.join('\n');
 }
 function section05(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '各判断要求について反証・失敗側の材料を別々に保持する' : 'Keep counter-evidence and failure-side material separate for each judgment request'}:`];
+  const lines = [`- ${lang === 'ja' ? '要求ごとの反対視点・失敗条件（未確認事項は断定しない）' : 'Request-local counterevidence and failure conditions (unverified unless supported)'}:`];
   for (const request of model.judgment_requests || []) {
+    const source = sanitizePublicValue(request.request_text);
     const counter = groupCounterMaterial(groups.get(request.id) || []);
-    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
-    lines.push(`  - ${request.id}: ${sanitizePublicValue(request.request_text)}`);
-    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : operationCounterMaterial(request.action, lang)}`);
-    if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告' : 'User report'}: ${observations.join(' / ')}`);
+    const sourceItems = counter.filter(item => {
+      const words = String(item).toLowerCase().match(/[a-z]{5,}/g) || [];
+      return words.some(word => source.toLowerCase().includes(word));
+    });
+    // Do not duplicate the full Request or every generic Lens perspective.
+    // The complete independent five-stage perspectives remain structured.
+    const focused = unique(sourceItems.length ? sourceItems : counter.slice(0, 2));
+    lines.push(`  - ${request.id} [${actionLabel(request.action,lang)}]: ${focused.length
+      ? focused.join(' / ') : operationCounterMaterial(request.action,lang)}`);
   }
   return lines.join('\n');
 }
+
 function section06(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在分かること・まだ言えないこと・追加で必要な材料を分ける' : 'Even without A/B candidates, separate what is known, what cannot yet be concluded, and what additional material is required for each judgment request'}:`];
+  const lines = [`- ${lang === 'ja' ? '各要求の選択肢・比較可能性・不足根拠' : 'Alternatives, comparability and evidence gaps for each request'}:`];
   for (const request of model.judgment_requests || []) {
-    const taskResults = groups.get(request.id) || [];
-    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
-    const facts = groupFacts(taskResults);
-    const missing = groupMissing(taskResults);
-    const comparison = groupComparisonMaterial(taskResults);
-    const localContext = requestContextLines(request, lang);
-    const available = unique([...observations, ...facts]);
-    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
-    lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${sanitizePublicValue(request.request_text)}`);
-    if (localContext.length) lines.push(`    - ${lang === 'ja' ? '要求固有条件' : 'Request-specific conditions'}: ${localContext.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? '現在分かること' : 'What is currently known'}: ${available.join(' / ') || (lang === 'ja' ? '要求本文と明示条件は保持しているが、現在実装・発生条件・原因は未確認。' : 'The request and explicit conditions are preserved, but current implementation, trigger conditions, and causes remain unverified.')}`);
+    const results = groups.get(request.id) || [];
+    const comparison = groupComparisonMaterial(results);
+    const facts = groupFacts(results);
+    const observations = publicValues(observationsFor(model, request).map(item=>item.text));
+    const gaps = groupMissing(results);
+    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
+    const known = unique([...facts, ...observations]);
+    if (known.length) lines.push(`    - ${lang === 'ja' ? '原文由来・根拠付き材料（区別して扱う）' : 'Source observations and established materials (not equivalent)'}: ${known.join(' / ')}`);
+    lines.push(`    - ${lang === 'ja' ? '現時点の結論限界' : 'Unresolved judgment boundary'}: ${lang === 'ja'
+      ? '同条件の採用根拠と未解決要件が揃うまで優劣・完了を断定しない。'
+      : 'No option or completion state is established without comparable accepted evidence and resolved requirements.'}`);
     if (String(request.action || '') === 'compare') {
-      const dimensions = comparison.dimensions.length ? comparison.dimensions : [];
-      const unknown = lang === 'ja'
-        ? `${dimensions.length ? dimensions.join('・') : '各比較軸'}について、入力中の件数・数量差だけでは候補の優劣、品質、安全性、法務上の妥当性をまだ確定できない。`
-        : `For ${dimensions.length ? dimensions.join(', ') : 'the comparison dimensions'}, input counts or quantities alone cannot establish superiority, quality, safety, or legal validity.`;
-      const required = dimensions.length
-        ? dimensions.map((dimension) => comparisonMissingForDimension(dimension, lang))
-        : [operationMissingMaterial(request.action, lang)];
-      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${unknown}`);
-      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${unique([...missing, ...required]).join(' / ')}`);
-    } else {
-      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${lang === 'ja' ? '現在状態・原因・実装経路・完了条件を確認していないため、要求を満たしているか、どの変更が必要かはまだ確定できない。' : 'Current state, causes, implementation path, and completion conditions have not been verified, so compliance and required changes cannot yet be concluded.'}`);
-      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang)}`);
+      const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
+      if (needed.length) lines.push(`    - ${lang === 'ja' ? '比較に必要な根拠' : 'Evidence needed for comparison'}: ${unique(needed).join(' / ')}`);
+    } else if (gaps.length) {
+      // Full gap rows are retained in Inquiry and Section08; avoid reproducing
+      // the same list in both 06 and 08 of the public material.
+      lines.push(`    - ${lang === 'ja' ? '未解決の必要材料' : 'Unresolved material needs'}: ${gaps.length} ${lang === 'ja' ? '項目（08に確認事項を記載）' : 'items; see request-local verification steps in Section08'}`);
     }
   }
   return lines.join('\n');
 }
+
 function section07(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
