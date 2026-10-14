@@ -281,7 +281,7 @@ function normalizeSection05(section, model, lang) {
     const extraLabel = lang === 'ja' ? '追加の反証材料' : 'Additional counter material';
     const semantic = semanticCounterSummary(request, lang);
     block = block.split('\n').flatMap((line) => {
-      if (line.startsWith(marker)) return [line]; // Counter/failure material is directly below.
+      if (line.startsWith(marker)) return [clean(request.request_text).length < 120 ? `${line} / ${semantic}` : line]; // Keep concise source-specific semantic counter on R## header.
       if (!line.includes(`${label}:`)) return [line];
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = String(request.action || '') === 'verify'
