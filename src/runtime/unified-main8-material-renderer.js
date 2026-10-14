@@ -150,22 +150,36 @@ function section02(judgment, lang) {
   if (!items.length) return `- ${lang === 'ja' ? '明示された前提・制約・未確定事項を十分に抽出できていない。この不足を埋めずに判断すると、入力条件を落とす可能性がある。' : 'Explicit premises, constraints, and unresolved items were not sufficiently extracted. Deciding before filling this gap risks dropping user conditions.'}`;
   return [`- ${lang === 'ja' ? '判断中も変えてはいけない前提・制約・未確定事項' : 'Premises, constraints, and unresolved items that must remain fixed'}:`, ...items.map((v) => `  - ${v}`)].join('\n');
 }
+function unconfirmedSourceClaims(judgment) {
+  const section = judgment['03_facts'] || {};
+  return unique((section.unconfirmed || []).map(factText).filter(Boolean));
+}
+function sourceBackedRiskItems(judgment) {
+  const rows = (judgment['04_crisis']?.risks || []).filter(row =>
+    row.source === 'TASK_SOURCE_UNVERIFIED' && row.impact);
+  return unique(rows.map(row => clean(row.impact)));
+}
 function section03(judgment, lang) {
   const section = judgment['03_facts'] || {};
   const supplied = observableClaims(judgment);
   const confirmed = unique((section.confirmed || []).map(factText).filter(Boolean));
+  const sourceClaims = unconfirmedSourceClaims(judgment);
   const diff = quantityDifference(judgment, lang);
   const lines = [];
   if (supplied.length) {
     lines.push(`- ${lang === 'ja' ? '入力で与えられた具体材料' : 'Concrete material supplied in the input'}:`);
     for (const value of supplied) lines.push(`  - ${clean(value)}`);
   }
+  if (sourceClaims.length) {
+    lines.push(`- ${lang === 'ja' ? '要検証の原文由来Claim・調査項目（事実確定ではない）' : 'Source-backed verification targets (not established facts)'}:`);
+    for (const value of sourceClaims) lines.push(`  - ${value}`);
+  }
   if (diff) lines.push(`- ${lang === 'ja' ? '入力値から直接計算できる差' : 'Difference directly calculable from supplied values'}: ${diff}`);
   if (confirmed.length) {
     lines.push(`- ${lang === 'ja' ? '外部根拠まで成立した事実' : 'Facts supported by accepted external evidence'}:`);
     for (const value of confirmed) lines.push(`  - ${value}`);
   }
-  if (supplied.length && !confirmed.length) lines.push(`- ${lang === 'ja' ? '区別' : 'Boundary'}: ${lang === 'ja' ? '上記は利用者が与えた材料として保持する。外部事実として確認済みという意味ではない。' : 'The items above are preserved as user-supplied material; they are not automatically externally verified facts.'}`);
+  if ((supplied.length || sourceClaims.length) && !confirmed.length) lines.push(`- ${lang === 'ja' ? '区別' : 'Boundary'}: ${lang === 'ja' ? '上記は利用者が与えた材料として保持する。外部事実として確認済みという意味ではない。' : 'The items above are preserved as user-supplied material; they are not automatically externally verified facts.'}`);
   if (!lines.length) lines.push(`- ${lang === 'ja' ? '現時点では、具体的な事実材料を判断に使える形で抽出できていない。' : 'No concrete factual material is currently available in a form usable for judgment.'}`);
   return lines.join('\n');
 }
@@ -173,7 +187,10 @@ function section04(judgment, lang) {
   const premises = premiseLines(judgment, lang).join(' / ');
   const dims = dimensions(judgment);
   const lines = [`- ${lang === 'ja' ? '危機として見るのは「どちらが悪いか」ではなく、材料不足や条件違反のまま決めた場合に何を誤るか' : 'Risk means what could be decided incorrectly because material is missing or constraints are violated, not which candidate is “bad”'}:`];
-  for (const risk of usefulRisks(judgment).slice(0, 6)) lines.push(`  - ${clean(risk.impact || risk.failure_condition || risk.key)}`);
+  for (const item of sourceBackedRiskItems(judgment))
+    lines.push(`  - ${lang === 'ja' ? '原文で指定された要検証リスク（発生確定ではない）' : 'Source-stated risk to investigate (not a confirmed occurrence)'}: ${item}`);
+  for (const risk of usefulRisks(judgment).filter(row => row.source !== 'TASK_SOURCE_UNVERIFIED').slice(0, 6))
+    lines.push(`  - ${clean(risk.impact || risk.failure_condition || risk.key)}`);
   if (/未確定|未確認|未完了/u.test(premises) && dims.some((d) => /法務|legal/iu.test(d))) lines.push(`  - ${lang === 'ja' ? '法務確認が未完了なので、法務リスク軸でA/Bの優劣を確定すると未確認事項を事実扱いすることになる。' : 'Legal review is incomplete, so declaring a winner on legal risk would turn an unresolved item into an assumed fact.'}`);
   if (/変えない|維持|保持/u.test(premises)) lines.push(`  - ${lang === 'ja' ? '既存内容を変えない条件がある。抵触する候補は、好みや性能の比較以前に条件不一致として分けて扱う必要がある。' : 'A preserve constraint exists. A candidate that violates it must first be treated as condition-incompatible, before preference or performance is considered.'}`);
   if (quantityDifference(judgment, lang) && dims.some((d) => /作業時間|工数|時間|effort|time/iu.test(d))) lines.push(`  - ${lang === 'ja' ? '件数差は作業量の手掛かりにはなるが、1件あたり工数が不明なため、件数だけで総作業時間を断定すると誤る。' : 'Count is a workload clue, but per-item effort is unknown, so count alone cannot establish total work time.'}`);
@@ -190,8 +207,9 @@ function section05(judgment, lang) {
     for (const candidate of candidates) {
       const values = observations.get(candidate) || [];
       lines.push(`  - ${candidate}: ${values.length ? values.join(' / ') : (lang === 'ja' ? '候補固有の具体材料が不足している。' : 'Candidate-specific concrete material is missing.')}`);
-      if (dims.length) lines.push(`    - ${lang === 'ja' ? '同じ条件で確認が必要な観点' : 'Dimensions that still need same-condition material'}: ${dims.join(' / ')}`);
+
     }
+    if (dims.length) lines.push(`- ${lang === 'ja' ? '候補間で共有する検証観点' : 'Shared dimensions requiring comparable evidence'}: ${dims.join(' / ')}`);
     const diff = quantityDifference(judgment, lang);
     if (diff) lines.push(`- ${lang === 'ja' ? '反対側からの読み方' : 'Counter-reading'}: ${diff}`);
     lines.push(`- ${lang === 'ja' ? '共通の反証条件' : 'Common falsification rule'}: ${lang === 'ja' ? '件数や単一指標だけで優劣を決めず、各観点で候補ごとの成立条件と不足材料が揃うまで結論を固定しない。' : 'Do not infer superiority from count or one metric; keep the conclusion open until comparable conditions and missing material are available for every dimension.'}`);
@@ -219,25 +237,28 @@ function knownForDimension(dimension, judgment, lang) {
 function section06(judgment, lang) {
   const candidates = candidateLabels(judgment);
   const dims = dimensions(judgment);
-  if (!candidates.length) return `- ${lang === 'ja' ? '今回は複数候補の比較ではない。比較表を無理に作らず、事実・根拠成立状態・不足情報を使って対象主張を判断する。' : 'This request does not contain multiple candidates. Do not invent a comparison; judge the target claim from facts, evidence status, and missing information.'}`;
+  if (!candidates.length) return `- ${lang === 'ja' ? '入力には比較候補がないため、比較案を捏造しない。' : 'No source-backed alternatives were supplied; do not invent a comparison.'}`;
   const observations = candidateObservations(judgment);
   const lines = [`- ${lang === 'ja' ? '比較対象' : 'Candidates'}: ${candidates.join(' / ')}`];
   for (const candidate of candidates) {
     const values = observations.get(candidate) || [];
-    lines.push(`- ${candidate} ${lang === 'ja' ? 'について現在ある材料' : 'material available now'}: ${values.length ? values.join(' / ') : (lang === 'ja' ? '候補固有の具体値なし' : 'no candidate-specific concrete value')}`);
+    lines.push(`- ${candidate}: ${values.length ? values.join(' / ') : lang === 'ja' ? '候補固有の根拠は未成立' : 'No candidate-specific evidence is established'}`);
   }
-  lines.push(`- ${lang === 'ja' ? '各観点では「分かること」「まだ言えないこと」「追加で必要な材料」を分ける' : 'For every dimension, separate what is known, what is not yet justified, and what additional material is needed'}:`);
+  // Explain the common no-winner boundary once. Repeating the same three
+  // sentences per dimension previously drowned out unique decision material.
+  lines.push(`- ${lang === 'ja'
+    ? '比較の境界: 同一条件の採用根拠がない観点は、優劣未判定のままにする。'
+    : 'Comparison boundary: without accepted evidence under matched conditions, no dimension establishes a winner.'}`);
   for (const dimension of dims) {
     const known = knownForDimension(dimension, judgment, lang);
-    lines.push(`  - ${lang === 'ja' ? '観点' : 'Dimension'}: ${dimension}`);
-    lines.push(`    - ${lang === 'ja' ? '現在分かること' : 'Known now'}: ${known.length ? known.join(' / ') : (lang === 'ja' ? '候補間で同じ条件の具体値はまだない。' : 'No comparable same-condition value is available yet.')}`);
-    lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'Not yet justified'}: ${lang === 'ja' ? `${dimension}について、どちらが有利・不利かは現材料だけでは確定できない。` : `The current material does not establish which candidate is better or worse on ${dimension}.`}`);
-    lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material needed'}: ${missingForDimension(dimension, lang)}`);
+    const need = missingForDimension(dimension, lang);
+    lines.push(`  - ${lang === 'ja' ? '観点' : 'Dimension'}: ${dimension}; ${lang === 'ja' ? '確認できる材料' : 'Available'}: ${known.length ? known.join(' / ') : lang === 'ja' ? '比較可能な確認済み値なし' : 'no confirmed comparable values'}; ${lang === 'ja' ? '不足根拠' : 'Needed'}: ${need}`);
   }
   const diff = quantityDifference(judgment, lang);
-  if (diff) lines.push(`- ${lang === 'ja' ? '数量だけで確実に言える差' : 'Difference established by quantity alone'}: ${diff}`);
+  if (diff) lines.push(`- ${lang === 'ja' ? '入力から計算できる数量差' : 'Source-calculable quantity difference'}: ${diff}`);
   return lines.join('\n');
 }
+
 function evidenceExplanation(entry, lang) {
   const search = clean(entry?.search_state);
   const state = clean(entry?.source_status || entry?.state);
