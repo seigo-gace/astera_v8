@@ -82,3 +82,41 @@ test('Query plan capacity is explicit and never silently drops a material requir
   assert.equal(plan.material_evidence_plan.planned_slot_ids.length, 64);
   assert.equal(plan.material_evidence_plan.unplanned_slot_ids.length, 26);
 });
+
+
+test('Public AsteraEngine sends decision requirement and Lens searches before five lanes', { timeout: 120000 }, async () => {
+  const AsteraEngine = require('../src/astera-engine');
+  const { defaultMockJapaneseParserClient } = require('./helpers/default-mock-japanese-parser');
+  const calls = [];
+  const engine = new AsteraEngine({
+    poolSize: 2,
+    japaneseParserClient: defaultMockJapaneseParserClient(),
+    evidenceSearchClient: {
+      async search(payload) {
+        calls.push(payload);
+        return {
+          schema_version: 'astera.evidence-search.result.v1',
+          status: 'REJECTED_NO_EVIDENCE',
+          evidence: [],
+          quality: { final: { status: 'REJECTED_NO_EVIDENCE', blocking_reasons: ['NO_EVIDENCE_CANDIDATE'] } },
+          provider_execution: { initial: [], reinforcement: [] },
+          query_execution: { initial: [], reinforcement: [] }
+        };
+      }
+    },
+    logger: { write() {}, async flush() {} }
+  });
+  try {
+    const out = await engine.process({
+      question: '予約変更の安全性を公式資料と一次資料で調査して検証する。既存予約データは必ず保持する。候補Aのキャッシュと候補Bの検索最適化を同一の速度・整合性基準で比較し、二重予約の失敗条件と未確認情報を示してください。'
+    }, { id: 'material-evidence-integration', is_global: true, plan: 'admin' });
+    assert.equal(out.result?.type, 'cognitive_map');
+    assert.ok(calls.length > 0, 'Evidence Search API must be called');
+    const allQueries = calls.flatMap(c => c.upstream_search_plan?.queries || []);
+    assert.ok(allQueries.some(q => q.requirement_slot_id && q.material_kind), 'decision material evidence is missing from actual Evidence request');
+    assert.ok(allQueries.some(q => q.material_kind.startsWith('LENS_')), 'specialist requirements must reach Evidence Search');
+    assert.ok(allQueries.some(q => q.material_kind === 'FALSIFICATION_OR_DISQUALIFIER' || q.material_kind === 'DECISION_CRITERION'));
+    assert.ok(out.result?.five_stage?.tasks?.length > 0);
+    assert.equal(out.result?.canonical_claims?.confirmed_count || 0, 0, 'search attempt must not auto-confirm claims');
+  } finally { await engine.destroy(); }
+});
