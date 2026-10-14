@@ -26,6 +26,8 @@ const { projectFiveLaneMaterialToMain8 } = require('./runtime/five-lane-main8-pr
 const { buildPublicFiveStageAggregate, publicTaskResults } = require('./runtime/five-stage-public-aggregate');
 const { normalizeUnifiedMain8Material } = require('./runtime/main8-readability-normalizer');
 const { attachEvidenceCitations } = require('./runtime/evidence-citation-material');
+const { renderMultiJudgmentMain8, isMultiJudgment } = require('./runtime/multi-judgment-main8-renderer');
+const { normalizeMultiJudgmentPublicMaterial } = require('./runtime/multi-judgment-public-material-normalizer');
 const {
   explicitPurposeIntent,
   applyExplicitPurposeControl
@@ -117,9 +119,17 @@ class AsteraEngine extends CanonicalAsteraEngine {
     return trace ? trace.measureSync('main8_render', project, { cache_unknown: 0 }) : project();
   }
 
-  material(judgment) {
+  material(judgment, renderContext = null) {
     const trace = activeTrace();
     const normalize = () => {
+      // All Task results and scoped five-stage material must be available
+      // BEFORE presenting multi-request output. Render only once here;
+      // Evidence Citation is append-only and must never reconstruct Main8.
+      if (renderContext && isMultiJudgment(judgment)) {
+        const rendered = renderMultiJudgmentMain8(judgment, renderContext);
+        if (!rendered) throw new Error('MULTI_MAIN8_RENDER_MISSING');
+        return normalizeMultiJudgmentPublicMaterial(rendered, judgment);
+      }
       const fiveLaneRendered = renderFiveLaneMain8(judgment, super.material(judgment));
       return normalizeUnifiedMain8Material(fiveLaneRendered);
     };
