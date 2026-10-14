@@ -6,14 +6,14 @@ function loadEnglishThreeTaskCases() {
     const domain=DOMAINS.find(row=>row[0]===id);
     if (!domain) throw new Error('Unknown canonical domain: '+id);
     const subject=domain[3];
-    const task1='Task 1 — Factual basis. Audit '+sources+'. Identify the relevant parties, versions, dates and original records before accepting any assertion. Distinguish reported observations from independently established facts, and specify what primary sources are still needed.';
-    const task2='Task 2 — Risks and challenge. Investigate '+risks+'. Include opposing stakeholder positions, test alternative explanations and state conditions that would invalidate the proposal. Do not fabricate measurements, causal claims, citations or favorable outcomes.';
-    const task3='Task 3 — Comparative judgment material. Evaluate '+alternatives+'. Use identical criteria for feasibility, cost, harms, source authority, reversibility and unresolved conditions. Explain what evidence would allow the final decision maker to compare the options without selecting one.';
+    const task1='Task 1 — Establish facts: Audit '+sources+'. Identify dates, scope and primary records. Separate reported observations from independently verified facts and list uncertainties.';
+    const task2='Task 2 — Examine risk: Investigate '+risks+'. Consider competing explanations, affected stakeholders, failure conditions and counterevidence. Do not invent findings.';
+    const task3='Task 3 — Compare options: Evaluate '+alternatives+'. Use common feasibility, cost, impact and reversibility criteria. State what evidence is missing; choose no winner.';
     const input=[
       'Decision brief — '+subject+'.',
       'Context: '+context+' The claim is a provisional observation rather than a verified conclusion.',
       task1,task2,task3,
-      'Requirements: Preserve all three separate requests and their intent. Select the appropriate specialist lens; plan authoritative and counterevidence for each necessary judgment item across Fact, Risk, Multi, Inquiry and Compare. Track missing information through all eight final sections. Mark unsupported claims as unresolved; never invent sources or make the final choice. A human or main AI retains decision authority.'
+      'Requirements: Keep three tasks separate. After the specialist lens, search evidence for all Fact, Risk, Multi, Inquiry and Compare needs before Main8. Track sources, gaps and contradictions in eight sections. Never invent a source, a measured result or a final decision; a human or Main AI decides.'
     ].join('\n\n');
     return {id,subject,input,length:input.length,tasks:[task1,task2,task3],sources,risks,alternatives};
   });
