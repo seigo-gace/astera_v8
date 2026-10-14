@@ -56,7 +56,14 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
   const out = [];
   if (row && ownsRequest) {
     for (const node of (Array.isArray(row.nodes) ? row.nodes : [])) {
-      if (node.required === false || !GAP.has(node.status) || !EXTERNALLY_RESEARCHABLE.has(node.material_kind)) continue;
+      // A user-supplied failure condition is source-backed as a requirement,
+      // not verified as an actual safety or performance fact.
+      const sourceBackedDisqualifier = node.material_kind === 'FALSIFICATION_OR_DISQUALIFIER'
+        && node.status === 'SATISFIED'
+        && node.truth_state === 'SOURCE_BACKED_RULE_OR_CONTEXT';
+      if (node.required === false ||
+          (!GAP.has(node.status) && !sourceBackedDisqualifier) ||
+          !EXTERNALLY_RESEARCHABLE.has(node.material_kind)) continue;
       out.push({
         slot_id: node.slot_id,
         owner_request_id: row.owner_request_id,
