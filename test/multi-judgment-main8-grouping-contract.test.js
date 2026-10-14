@@ -126,3 +126,33 @@ test('case Main8 uses scoped public five-stage lanes and never falls back to raw
   assert.match(out.text, /PUBLIC_MISSING_OK/u);
   assert.doesNotMatch(out.text, /RAW_RISK_LEAK|RAW_MULTI_LEAK|RAW_COUNTER_LEAK|RAW_MISSING_LEAK|RAW_CANDIDATE_LEAK|RAW_DIMENSION_LEAK/u);
 });
+
+
+test('Main8 Fact section uses scoped five-stage verification targets and never promotes Task premises to confirmed facts',()=>{
+  const model=baseModel();
+  const result={
+    task_results:[
+      {
+        task:{id:'T01',request_id:'R01',premises:['PREMISE_UNVERIFIED_NEVER_FACT']},
+        public_lanes:{
+          fact:{confirmed:[],verification_targets:[{
+            text:'VERIFY_SOURCE_SCOPE_IN_FACT_LANE',
+            source:'TASK_SOURCE_UNVERIFIED',status:'UNVERIFIED',request_id:'R01'
+          }]},
+          risk:{risks:[]},multi:{perspectives:[]},
+          inquiry:{open_items:[]},compare:{comparison_candidates:[],dimensions:[]}
+        }
+      },
+      {task:{id:'T03',request_id:'R02',premises:[]},public_lanes:{
+        fact:{confirmed:[]},risk:{risks:[]},multi:{perspectives:[]},
+        inquiry:{open_items:[]},compare:{comparison_candidates:[],dimensions:[]}
+      }}
+    ]
+  };
+  const resultMaterial=renderMultiJudgmentMain8(judgmentFor(model),result);
+  const section=resultMaterial.sections.find(s=>s.key==='03_facts').text;
+  assert.match(section,/R01[\s\S]*VERIFY_SOURCE_SCOPE_IN_FACT_LANE/);
+  assert.doesNotMatch(section,/PREMISE_UNVERIFIED_NEVER_FACT/,
+    'a user-origin premise cannot be included in a confirmed Fact list');
+  assert.match(section,/要検証項目/);
+});
