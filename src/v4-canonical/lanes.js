@@ -102,7 +102,7 @@ function extractComparisonCandidates(task = {}) {
   const text = comparisonTaskText(task);
   if (!text) return knownCandidates;
   const explicitCandidates = uniqueStrings([...text.matchAll(
-    /(?:候補|選択肢|案)\\s*[A-Za-z0-9]+(?:の[^、，。とを;；\\n]{1,40})?/gu
+    /(?:候補|選択肢|案)\s*[A-Za-z0-9]+(?:の[^、，。とを;；\n]{1,40})?/gu
   )].map(match => match[0].trim()));
   if (explicitCandidates.length >= 2) return explicitCandidates;
   const xyMatch = text.match(/^(.+?)と(.+?)を/u);
