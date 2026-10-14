@@ -162,7 +162,7 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
 }
 
 
-function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null) {
+function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, normalizedEvidence = null) {
   const plan = canonicalPlan.material_evidence_plan || {};
   const queries = canonicalPlan.search_plan?.queries || [];
   const planned = new Set(plan.planned_slot_ids || []);
@@ -171,6 +171,12 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null) {
     ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
   ];
   const byQuery = new Map(queryExecutions.map(q => [String(q.query_id || ''), q]));
+  const accepted = normalizedEvidence?.state === 'VALID';
+  const adoptedById = new Map();
+  if (accepted) for (const candidate of (rawEvidence?.evidence || [])) {
+    if (candidate.candidate_id) adoptedById.set(String(candidate.candidate_id), candidate);
+    if (candidate.canonical_record_id) adoptedById.set(String(candidate.canonical_record_id), candidate);
+  }
   const requirements = (plan.targets || []).map(target => {
     const scopedQueries = queries.filter(q => q.requirement_slot_id === target.slot_id);
     const executions = scopedQueries.map(q => byQuery.get(q.query_id)).filter(Boolean);
