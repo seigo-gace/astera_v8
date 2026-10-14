@@ -268,6 +268,25 @@ function riskLane(claims, results, task, domain) {
   const targets = claims.filter((claim) => criticalIds.has(claim.claim_id));
   const signalText = taskSignalText(task, claims);
   const riskItems = [];
+  // A source-named risk is an investigation target, not a confirmed incident.
+  const riskSource = String(task.source_span?.text || task.raw_text || '');
+  const riskHeading = /^(?:(?:Task|Request)\s+\d+\s*[—–:-]\s*)?[^.!?\n]{0,55}\b(?:risk|hazard|failure|counterevidence)\b[^:]{0,40}:\s*(?:Investigate|Examine|Review|Check|Evaluate)\s+([^.!?\n]+)/iu.exec(riskSource);
+  const statedRisks = uniqueStrings([
+    ...(riskHeading ? [riskHeading[1].trim()] : []),
+    ...(task.local_context?.risk_signals || []),
+    ...(task.risk_signals || [])
+  ]);
+  for (const [index, describedRisk] of statedRisks.entries()) {
+    riskItems.push({
+      rule_id: 'RISK-SOURCE-UNVERIFIED',
+      key: 'source-risk:' + (index + 1),
+      impact: describedRisk,
+      failure_condition: 'The source requested investigation; independent evidence has not established an occurrence.',
+      weight: 26,
+      source: 'TASK_SOURCE_UNVERIFIED',
+      claim_ids: []
+    });
+  }
 
   for (const rule of RISK_RULES) {
     const match = signalText.match(rule.re);
