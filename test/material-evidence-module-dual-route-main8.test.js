@@ -86,6 +86,15 @@ for (const [label,size] of [['1k',1000],['5k',5000],['10k',10000]]) {
         }))));
       assert.ok(results.every(x=>x.provider_execution.initial.length===2),'two real provider execution paths');
       assert.ok(out.result.five_stage.tasks.length>0,'five-stage completed');
+      const graph=out.result.analysis_task_packet?.material_requirement_graph;
+      assert.ok(graph?.requests?.length>0,'decision-backward material requirements must exist');
+      assert.ok(graph.accounting_complete,'every decision requirement must be accounted for');
+      const needs=out.result.task_results.flatMap(r=>r.task?.material_evidence_execution?.requirements||[]);
+      assert.ok(needs.length>0,'required Evidence items must survive planning');
+      assert.ok(needs.every(r=>r.confirmation_status==='UNRESOLVED'),
+        'search attempt cannot resolve unsupported judgment requirements');
+      assert.match(String(out.material.sections[6].text||''),/根拠|未確認|未検索/u,
+        'Main8 Section07 must expose missing evidential basis');
       assert.equal(out.material?.sections?.length,8);
       assert.equal(out.result.canonical_claims.confirmed_count,0,'no evidence is not confirmed');
       assert.match(String(out.material.text),/根拠|未確認|未検索|未確定|確認/u);
@@ -94,7 +103,9 @@ for (const [label,size] of [['1k',1000],['5k',5000],['10k',10000]]) {
       console.log(JSON.stringify({case:label,characters:question.length,
         module_requests:results.length,dual_route_attempts:results.length,
         tasks:out.result.five_stage.tasks.length,section_count:8,
-        adopted:0,confirmed:0}));
+        adopted:0,confirmed:0,graph_nodes:graph.totals?.nodes,
+        missing:graph.totals?.missing,unresolved:graph.totals?.unresolved,
+        requirement_evidence_slots:needs.length,decision_ready:graph.decision_ready}));
     } finally { await engine.destroy(); }
   });
 }
