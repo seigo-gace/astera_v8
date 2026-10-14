@@ -237,6 +237,24 @@ test('Evidence Search module-response envelope preserves adopted requirement lin
   assert.equal(wrapped.requirements.find(r=>r.slot_id==='R01:MR01').confirmation_status,'UNRESOLVED');
 });
 
+test('adopted candidate with foreign explicit scope never satisfies local requirement attribution', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan = materialEvidencePlan(task, graph, {}, base);
+  const query = plan.search_plan.queries.find(q => q.requirement_slot_id === 'R01:MR01');
+  const run = {query_id:query.query_id,claim_id:query.claim_id,status:'FOUND',
+    provider_records:[{provider_id:'official-one',status:'FOUND',candidate_record_ids:['candidate-scope']}]};
+  const ledger = (fields) => materialEvidenceExecution(plan,{status:'FINAL_VALID',
+    evidence:[{candidate_id:'candidate-scope',canonical_record_id:'record-scope',...fields}],
+    query_execution:{initial:[run],reinforcement:[]}}, {state:'VALID'});
+  assert.equal(ledger({owner_request_id:'R01',requirement_slot_id:'R01:MR01'}).attributed_adopted_count,1);
+  for (const foreign of [{owner_request_id:'R02'}, {requirement_slot_id:'R01:MR02'},
+    {owner_request_id:'R02',requirement_slot_id:'R01:MR02'}]) {
+    const result=ledger(foreign);
+    assert.equal(result.attributed_adopted_count,0);
+    assert.equal(result.requirements.find(row=>row.slot_id==='R01:MR01').confirmation_status,'UNRESOLVED');
+  }
+});
+
 test('Reinforcement Evidence is attributed by originating slot and cannot confirm a judgment by itself', () => {
   const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
   const plan = materialEvidencePlan(task,graph,{},base);
