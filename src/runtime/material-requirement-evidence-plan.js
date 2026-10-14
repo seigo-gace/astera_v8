@@ -4,7 +4,7 @@
 // Claim policies own confirmation. This adapter only adds scoped search work;
 // it never creates a confirmed Claim from a search result.
 const { createQueryId, deepFreeze, sanitizeQueryTerm } = require('../v4-canonical/core');
-const { lensPlanValues } = require('../lens-plan');
+const { lensPlanEntries } = require('../lens-plan');
 
 const LIMIT = 128; // Evidence Search upstream-search-plan API maximum.
 const QUERY_VERSION = 'material-requirement-evidence-v1';
@@ -93,12 +93,32 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
   const links = ownsRequest ? out.filter(item =>
     item.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT') : [];
   for (const channel of LENS_CHANNELS) {
-    const terms = [...new Set((lensPlanValues(domain, channel) || []).map(clean).filter(Boolean))];
+    const entries = lensPlanEntries(domain, channel) || [];
+    const sourceTerm = clean(task?.source_span?.text || task?.raw_text || task?.target || '').toLowerCase();
     const scoped = links.filter(item => LENS_REQUIREMENT_LINKS[channel].includes(item.material_kind));
-    const applicable = scoped.length > 0;
-    for (const [i, term] of terms.entries()) {
+    const seen = new Set();
+    let ordinal = 0;
+    for (const entry of entries) {
+      const term = clean(entry?.value);
+      if (!term || seen.has(term.toLowerCase())) continue;
+      seen.add(term.toLowerCase());
+      ordinal += 1;
+      const tiers = (entry?.sources || []).map(item => item.tier);
+      const primarySpecialist = tiers.some(tier =>
+        ['PRIMARY','PRIMARY_BREADTH','REQUEST_SPECIALIST'].includes(tier));
+      // A secondary/overlay specialist can also become applicable through
+      // explicit source/requirement scope. Generic channel placeholder wording
+      // does NOT on its own establish the specialist subdomain.
+      const meaningfulParts = term.split(/[・;；,、/]/u)
+        .map(part => clean(part).toLowerCase()).filter(part => part.length >= 5);
+      const directMatch = meaningfulParts.some(part =>
+        sourceTerm.includes(part) || scoped.some(item =>
+          clean(item.question).toLowerCase().includes(part) &&
+          item.applicability === 'APPLICABLE_REQUIRED'
+        ));
+      const applicable = scoped.length > 0 && (primarySpecialist || directMatch);
       out.push({
-        slot_id: `${owner}:${clean(task?.id || 'TASK')}:LENS:${channel}:${i + 1}`,
+        slot_id: `${owner}:${clean(task?.id || 'TASK')}:LENS:${channel}:${ordinal}`,
         owner_request_id: owner,
         source: 'ADDITIVE_SPECIALIST_LENS',
         material_kind: `LENS_${channel.toUpperCase()}`,
@@ -106,9 +126,14 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
         status: 'UNRESOLVED',
         applicability: applicable ? 'APPLICABLE_REQUIRED' : 'DEFERRED_APPLICABILITY_UNKNOWN',
         applicability_reason: applicable
-          ? `REQUIRED_BY_${channel.toUpperCase()}_MATERIAL_REQUIREMENT`
-          : `NO_REQUEST_LOCAL_${channel.toUpperCase()}_REQUIREMENT_LINK`,
-        linked_requirement_slot_ids: scoped.map(item => item.slot_id)
+          ? (primarySpecialist
+              ? `REQUIRED_BY_${channel.toUpperCase()}_PRIMARY_SPECIALIST_REQUIREMENT`
+              : `REQUIRED_BY_${channel.toUpperCase()}_EXPLICIT_SOURCE_SCOPE`)
+          : scoped.length > 0
+            ? `SECONDARY_OR_OVERLAY_${channel.toUpperCase()}_APPLICABILITY_NOT_ESTABLISHED`
+            : `NO_REQUEST_LOCAL_${channel.toUpperCase()}_REQUIREMENT_LINK`,
+        linked_requirement_slot_ids: scoped.map(item => item.slot_id),
+        lens_source_tiers: tiers
       });
     }
   }
