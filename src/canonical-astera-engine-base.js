@@ -330,7 +330,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
     // A document-level explicit Gxx lens is a scoped instruction for its
     // constituent tasks unless a task itself explicitly selects another lens.
     // This must not leak a domain across unrelated requests without that scope.
-    const globalLensMatch = question.match(/^\\s*\\[(G(?:0[1-9]|[12][0-9]|3[0-8]))\\](?=\\s|$)/iu);
+    const globalLensMatch = question.match(/^\s*\[(G(?:0[1-9]|[12][0-9]|3[0-8]))\](?=\s|$)/iu);
     const globalExplicitLens = globalLensMatch ? globalLensMatch[1].toUpperCase() : null;
     const routedTasks = packet.tasks.map((baseTask)=>{
       const extraction=extractCanonicalTaskClaims(baseTask);
@@ -343,7 +343,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       else if (routePollutedRouteText(routeText)) routeParts.push(...unique([question,context,routeText]));
       else routeParts.push(...unique([routeText,context].filter(Boolean)));
       const routeQuestion=unique(routeParts).join('\n')||question;
-      const taskExplicitLens=(routeQuestion.match(/(?:^|[^A-Z0-9])(G\\d{2})(?=[^A-Z0-9]|$)/iu)||[])[1]?.toUpperCase()||null;
+      const taskExplicitLens=(routeQuestion.match(/(?:^|[^A-Z0-9])(G\d{2})(?=[^A-Z0-9]|$)/iu)||[])[1]?.toUpperCase()||null;
       const scopedLens=globalExplicitLens && !taskExplicitLens ? globalExplicitLens : null;
       const routedDomain=routeDomainTemplates({
         question:scopedLens ? `[${scopedLens}] ${routeQuestion}` : routeQuestion,
