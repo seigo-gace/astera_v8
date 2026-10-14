@@ -28,6 +28,29 @@ function requestGraphForTask(task, graph) {
   return requests.length === 1 ? requests[0] : null;
 }
 
+function selectRequestMaterialOwners(tasks = [], graph = {}) {
+  const grouped = new Map();
+  for (const task of tasks) {
+    const request = requestGraphForTask(task, graph);
+    const id = clean(request?.owner_request_id || task?.request_id || task?.id);
+    if (!id) continue;
+    if (!grouped.has(id)) grouped.set(id, []);
+    grouped.get(id).push(task);
+  }
+  const owners = new Map();
+  for (const [id, group] of grouped) {
+    const preferred = group.find(task =>
+      task?.evidence_need?.required === true ||
+      (Array.isArray(task?.canonical_plan?.search_plan?.queries) &&
+       task.canonical_plan.search_plan.queries.length > 0)
+    );
+    // When no task requires external Evidence, keep the full unsatisfied
+    // requirement inventory on the first task WITHOUT authorizing network search.
+    owners.set(id, clean((preferred || group[0]).id));
+  }
+  return owners;
+}
+
 function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) {
   const row = requestGraphForTask(task, graph);
   const out = [];
@@ -49,7 +72,7 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
     const terms = [...new Set((lensPlanValues(domain, channel) || []).map(clean).filter(Boolean))];
     for (const [i, term] of terms.entries()) {
       out.push({
-        slot_id: `${owner}:LENS:${channel}:${i + 1}`,
+        slot_id: `${owner}:${clean(task?.id || "TASK")}:LENS:${channel}:${i + 1}`,
         owner_request_id: owner,
         source: 'ADDITIVE_SPECIALIST_LENS',
         material_kind: `LENS_${channel.toUpperCase()}`,
@@ -64,7 +87,12 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
 function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   const current = existingPlan?.search_plan?.queries || [];
   const targets = materialTargets(task, graph, domain, options);
-  const searchRequired = current.length > 0 || task?.evidence_need?.required === true;
+  const graphEvidenceRequested = options.ownsRequest !== false && Boolean(
+    requestGraphForTask(task, graph)?.nodes?.some(node =>
+      node?.required !== false && node?.material_kind === 'EVIDENCE_SUPPORT'
+      && GAP.has(node.status))
+  );
+  const searchRequired = current.length > 0 || task?.evidence_need?.required === true || graphEvidenceRequested;
   // A local-only request must not be exported to network providers just because a
   // generic requirement such as decision criteria is not yet resolved.
   if (!searchRequired) {
@@ -178,4 +206,4 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null) {
   });
 }
 
-module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask, materialEvidenceExecution };
+module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask, selectRequestMaterialOwners, materialEvidenceExecution };
