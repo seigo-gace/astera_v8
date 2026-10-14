@@ -339,3 +339,25 @@ test('false secondary/overlay Lens match is deferred with reason; explicit local
   assert.match(activated.applicability_reason,/EXPLICIT_SOURCE_SCOPE/);
   assert.ok(justified.material_evidence_plan.planned_slot_ids.includes(activated.slot_id));
 });
+
+
+test('five-stage Inquiry owns full deferred specialist slot ledger and does not disguise unknown as a healthy case', () => {
+  const { inquiryLane } = require('../src/v4-canonical/lanes');
+  const requirements = [
+    {slot_id:'R01:LENS:risk:1',source:'ADDITIVE_SPECIALIST_LENS',material_kind:'LENS_RISK',
+      planning_status:'DEFERRED_APPLICABILITY_UNKNOWN',confirmation_status:'UNRESOLVED'},
+    {slot_id:'R01:LENS:fact:2',source:'ADDITIVE_SPECIALIST_LENS',material_kind:'LENS_FACT',
+      planning_status:'DEFERRED_APPLICABILITY_UNKNOWN',confirmation_status:'UNRESOLVED'},
+    {slot_id:'R01:MR01',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+      question:'Was the failure confirmed?',planning_status:'PLANNED',confirmation_status:'UNRESOLVED'}
+  ];
+  const lane = inquiryLane([],[],{primary:{id:'G99'}},
+    {id:'T01',target:'Check an unresolved proposal',material_evidence_execution:{requirements}});
+  assert.equal(lane.specialist_applicability.state,'DEFERRED_APPLICABILITY_UNKNOWN');
+  assert.equal(lane.specialist_applicability.deferred_count,2);
+  assert.deepEqual(lane.specialist_applicability.slot_ids,
+    ['R01:LENS:risk:1','R01:LENS:fact:2']);
+  assert.deepEqual(lane.specialist_applicability.material_kinds,['FACT','RISK']);
+  assert.equal(lane.problem_health.healthy,false);
+  assert.ok(lane.missing_questions.some(q=>q.includes('Was the failure confirmed?')));
+});
