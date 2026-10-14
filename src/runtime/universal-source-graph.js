@@ -414,9 +414,27 @@ function buildSemanticAtoms(sourceGraph) {
     }
   }
 
+  // A labelled Task block is one source-owned request. Do not let a later
+  // generic imperative sentence replace its subject, risks, or alternatives.
+  // This refinement applies only to explicit paragraph-level Task labels.
+  const taskBlockNodes = (sourceGraph?.nodes || []).filter(node =>
+    node.kind === 'paragraph' &&
+    /^\\s*(?:Task|Request)\\s+[1-9]\\d*\\s*(?:—|–|-|:)\\s*/iu.test(node.text)
+  );
+  const taskBlockAtoms = taskBlockNodes.map(node => ({
+    id: `A${String(++order).padStart(5, '0')}`,
+    type: 'REQUEST',
+    operation: operationFor(node.text),
+    source_node_id: node.id,
+    source_span: { ...node.source_span },
+    text: source.slice(node.source_span.start, node.source_span.end),
+    normalized_text: normalized(node.text),
+    language: sourceGraph.language,
+    truth_state: 'NOT_APPLICABLE'
+  }));
+  atoms.push(...taskBlockAtoms);
   const coalesced = coalesceDependentRequestAtoms(
-    atoms.filter((atom) => atom.type === 'REQUEST'),
-    source
+    atoms.filter((atom) => atom.type === 'REQUEST'), source
   );
   // A causal observation preceding "so <directive>" belongs to the same
   // judgment request; it must not be silently dropped as a separate task.
@@ -434,8 +452,25 @@ function buildSemanticAtoms(sourceGraph) {
       text: source.slice(start, atom.source_span.end),
       normalized_text: normalized(source.slice(start, atom.source_span.end)) };
   });
-  const { actual: requests, material } = partitionMaterialShapingRequests(contextualRequests);
-  const materialOwnerByAtomId = new Map();
+  const ownersForContained = new Map();
+  const exactScoped = taskBlockAtoms.length
+    ? contextualRequests.filter(atom => {
+      if (taskBlockAtoms.some(block => block.id === atom.id)) return true;
+      const owner = taskBlockAtoms.find(block =>
+        atom.source_span.start >= block.source_span.start
+        && atom.source_span.end <= block.source_span.end
+      );
+      if (owner) { ownersForContained.set(atom.id, owner.id); return false; }
+      const requirementFooter = /^\\s*Requirements\\s*:/iu.test(atom.text);
+      if (requirementFooter) {
+        ownersForContained.set(atom.id, taskBlockAtoms[taskBlockAtoms.length - 1].id);
+        return false;
+      }
+      return true;
+    })
+    : contextualRequests;
+  const { actual: requests, material } = partitionMaterialShapingRequests(exactScoped);
+  const materialOwnerByAtomId = new Map(ownersForContained);
   for (const item of material) {
     for (const atomId of item.merged_source_atom_ids || [item.id]) {
       materialOwnerByAtomId.set(atomId, item.material_requirement_owner_atom_id);
