@@ -10,6 +10,7 @@ const { projectCanonicalFailure } = require('./canonical-task-projection');
 const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 const { UndeterminedReason } = require('./v4-canonical/confirmation');
 const { parserFailClosedRequest } = require('./deterministic-task-decomposer');
+const { materialEvidenceExecution } = require('./runtime/material-requirement-evidence-plan');
 
 const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
 const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
@@ -378,9 +379,10 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
         if(searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,caller,request,signal});
         if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
         evidenceRawByTask.set(String(task.id),evidenceRaw);
-        const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task,evidenceRaw},{signal});
+        const evidenceTask = { ...task, material_evidence_execution: materialEvidenceExecution(task.canonical_plan, evidenceRaw) };
+        const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task:evidenceTask,evidenceRaw},{signal});
         const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,publicLanes=projected.public_lanes,perspectiveExpansion=projected.perspective_expansion;
-        return{task,evidence,evidence_raw:evidenceRaw,canonical,lanes,...(publicLanes?{public_lanes:publicLanes}:{}),perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
+        return{task:evidenceTask,evidence,evidence_raw:evidenceRaw,canonical,lanes,...(publicLanes?{public_lanes:publicLanes}:{}),perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
       }
     });
     if(signal?.aborted){const error=new Error('Request cancelled');error.code='REQUEST_CANCELLED';error.status=499;throw error;}
