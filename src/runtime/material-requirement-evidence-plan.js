@@ -261,17 +261,19 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
 
 
 function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, normalizedEvidence = null) {
+  const source = rawEvidence?.schema_version === 'astera.evidence-search.module-response.v1'
+    ? rawEvidence.result : rawEvidence;
   const plan = canonicalPlan.material_evidence_plan || {};
   const queries = canonicalPlan.search_plan?.queries || [];
   const planned = new Set(plan.planned_slot_ids || []);
   const reasons = new Map((plan.unplanned_reasons || []).map(item => [item.slot_id, item.reason]));
   const queryExecutions = [
-    ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
-    ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
+    ...(Array.isArray(source?.query_execution?.initial) ? source.query_execution.initial : []),
+    ...(Array.isArray(source?.query_execution?.reinforcement) ? source.query_execution.reinforcement : [])
   ];
   const accepted = normalizedEvidence?.state === 'VALID';
   const adoptedById = new Map();
-  if (accepted) for (const candidate of (rawEvidence?.evidence || [])) {
+  if (accepted) for (const candidate of (source?.evidence || [])) {
     if (candidate.candidate_id) adoptedById.set(String(candidate.candidate_id), candidate);
     if (candidate.canonical_record_id) adoptedById.set(String(candidate.canonical_record_id), candidate);
   }
