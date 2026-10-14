@@ -499,6 +499,20 @@ function inquiryLane(claims, results, domain, task = {}) {
   if (materialGaps.length > 12) {
     materialGapQuestions.push(`ほか${materialGaps.length - 12}件の必要根拠が未確認です。`);
   }
+  // A deferred specialist rule is NOT an inapplicable rule. The original
+  // slot-level audit remains complete, while public Main8 receives a
+  // concise, lane-owned applicability gap rather than hundreds of phrases.
+  const deferredSpecialist = (task.material_evidence_execution?.requirements || [])
+    .filter(entry => entry.source === 'ADDITIVE_SPECIALIST_LENS'
+      && entry.planning_status === 'DEFERRED_APPLICABILITY_UNKNOWN');
+  const specialistKinds = [...new Set(deferredSpecialist.map(entry =>
+    String(entry.material_kind || '').replace(/^LENS_/u, '')).filter(Boolean))].sort();
+  const specialistApplicability = {
+    state: deferredSpecialist.length ? 'DEFERRED_APPLICABILITY_UNKNOWN' : 'NO_DEFERRED_SPECIALIST_LENS',
+    deferred_count: deferredSpecialist.length,
+    material_kinds: specialistKinds,
+    slot_ids: deferredSpecialist.map(entry => entry.slot_id)
+  };
   const weakTarget = /^(?:どう|これ|それ|あれ|ここ|そこ|this|that|it|what|how)$/i.test(String(task.target || '').trim());
   const missingTarget = !String(task.target || '').trim() || weakTarget || (task.unresolved || []).some((item) => /:target$/.test(String(item)));
   const actionNeedsCompletion = ['implement', 'improve', 'migrate', 'integrate', 'remove', 'replace', 'change', 'update'].includes(String(task.action || '').toLowerCase());
@@ -524,12 +538,15 @@ function inquiryLane(claims, results, domain, task = {}) {
   return deepFreeze({
     lane: 'inquiry',
     problem_health: {
-      healthy: missingFields.length === 0 && open.length === 0,
-      reason: missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
+      healthy: missingFields.length === 0 && open.length === 0 && deferredSpecialist.length === 0,
+      reason: deferredSpecialist.length
+        ? '専門Lensの適用性が未確定。検索対象に含めるべきか原資料で確認が必要。'
+        : missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
     },
     open_items: open,
     missing_fields: missingFields,
     missing_questions: missingQuestions,
+    specialist_applicability: specialistApplicability,
     inquiry_lens: inquiryPrompts,
     evidence_need: evidenceNeeds,
     assumptions: [
