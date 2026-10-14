@@ -72,7 +72,17 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
     output_chars:plain.length,output_to_input_ratio:Number((plain.length/caseRow.length).toFixed(1)),
     confirmed_claims:result.canonical_claims?.confirmed_count||0,
     truly_decision_ready:false, // The fake providers return NO EVIDENCE. Never report product completion.
-    failures:Object.keys(checks).filter(k=>!checks[k])
+    failures:Object.keys(checks).filter(k=>!checks[k]),
+    ...(caseRow.id==='G01'||caseRow.id==='G29'?{
+      diagnostic_excerpt:{
+        task_source_spans:(packet.tasks||[]).slice(0,6).map(x=>String(x.source_span?.text||x.raw_text||x.target||'').slice(0,150)),
+        original_requests:sourceRequests.slice(0,6).map(x=>String(x.request_text||x.text||'').slice(0,135)),
+        section03:String(sections[2]?.text||'').slice(0,550),
+        section04:String(sections[3]?.text||'').slice(0,550),
+        section06:String(sections[5]?.text||'').slice(0,550),
+        raw_task_count:packet.tasks?.length
+      }
+    }:{})
   };
 }
 
