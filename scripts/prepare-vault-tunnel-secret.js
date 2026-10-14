@@ -1,5 +1,5 @@
 "use strict";
-const { readFile, stat } = require("node:fs/promises");
+const { readFile, lstat } = require("node:fs/promises");
 
 const ACTION_PATH = "/internal/v1/actions/astera-tunnel/materialize";
 const FIXED_ORIGIN = "http://127.0.0.1:8791";
@@ -17,8 +17,8 @@ async function prepareTunnelSecret({
       !/^\/run\/[a-zA-Z0-9/_-]+$/.test(targetFile)) {
     throw new Error("TUNNEL_SECRET_CONFIG_MISSING_OR_UNSAFE");
   }
-  const authStat = await stat(authFile);
-  if (!authStat.isFile() || (authStat.mode & 0o077) !== 0) {
+  const authStat = await lstat(authFile);
+  if (!authStat.isFile() || authStat.isSymbolicLink() || (authStat.mode & 0o077) !== 0) {
     throw new Error("VAULT_API_AUTH_FILE_UNSAFE");
   }
   const tokenBytes = await readFile(authFile);
@@ -37,7 +37,7 @@ async function prepareTunnelSecret({
   } finally {
     tokenBytes.fill(0);
   }
-  const secretStat = await stat(targetFile);
+  const secretStat = await lstat(targetFile);
   if (!secretStat.isFile() || secretStat.isSymbolicLink() || secretStat.size === 0 ||
       (secretStat.mode & 0o077) !== 0) {
     throw new Error("TUNNEL_RUNTIME_SECRET_FILE_INVALID");
