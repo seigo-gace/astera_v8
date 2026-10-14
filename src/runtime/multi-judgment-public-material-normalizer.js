@@ -313,7 +313,7 @@ function normalizeSection06(section, model, lang) {
       : /^\s+-\s+(?:Candidates|Dimensions):/iu;
     const lines = block.split('\n').flatMap((line) => {
       if (String(request.action || '') !== 'compare' && comparisonOnlyLabel.test(line)) return [];
-      if (String(request.action || '') === 'verify' && missingLabel.test(line)) {
+      if (String(request.action || '') !== 'compare' && missingLabel.test(line)) {
         const colon = line.indexOf(':');
         if (colon < 0) return [];
         return [`${line.slice(0, colon + 1)} ${ontology}`];
