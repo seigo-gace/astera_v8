@@ -124,6 +124,8 @@ test('Public AsteraEngine sends decision requirement and Lens searches before fi
     assert.ok(out.result.five_stage.tasks.some(row =>
       (row.inquiry?.missing_questions || []).some(q => String(q).includes('必要根拠が未確認') || String(q).includes('必要根拠が未検索'))),
       'unverified evidence needs must enter five-stage inquiry before Main8');
+    assert.match(String(out.material?.text || ''), /必要根拠が未確認|必要根拠が未検索/u,
+      'a missing judgment material source must reach public Main8, not remain only in an internal trace');
     assert.equal(out.result?.canonical_claims?.confirmed_count || 0, 0, 'search attempt must not auto-confirm claims');
   } finally { await engine.destroy(); }
 });
