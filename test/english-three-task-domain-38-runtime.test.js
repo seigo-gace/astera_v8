@@ -42,6 +42,11 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
   const stageTasks=result.five_stage?.tasks||[];
   const evidencePlans=tasks.flatMap(r=>r.task?.canonical_plan?.search_plan?.queries||[]);
   const materialPlans=tasks.flatMap(r=>r.task?.material_evidence_execution?.requirements||[]);
+  const queryKeys=evidencePlans.map(q=>[
+    q.owner_request_id||'NO_OWNER',q.role||'NO_ROLE',
+    String(q.text||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase()
+  ].join('|'));
+  const uniqueQueryKeys=new Set(queryKeys);
   const lenses=tasks.map(r=>r.task?.domain?.primary?.id||'NONE');
   const stages=['fact','risk','multi','inquiry','compare'];
 
@@ -69,6 +74,11 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
     natural_lens:naturalRoute,runtime_lenses:[...new Set(lenses)],
     source_requests:sourceRequests.length,tasks:tasks.length,
     search_calls:searchRecords.length,queries:evidencePlans.length,
+    exact_query_duplicates:queryKeys.length-uniqueQueryKeys.size,
+    distinct_search_queries:uniqueQueryKeys.size,
+    planned_query_roles:Object.fromEntries(['OFFICIAL','COUNTER'].map(role=>
+      [role,evidencePlans.filter(q=>q.role===role).length])),
+
     requirement_slots:materialPlans.length,sections:sections.length,
     output_chars:plain.length,output_to_input_ratio:Number((plain.length/caseRow.length).toFixed(1)),
     section_chars:sections.map(s=>String(s.text||'').length),
