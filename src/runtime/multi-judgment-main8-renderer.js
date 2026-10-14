@@ -326,8 +326,8 @@ function section03(model, groups, lang) {
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
     const sourceRequest = sanitizePublicValue(request.request_text);
-    const sourceVerification = /\\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\\b/iu.test(sourceRequest)
-      && !/\\b(?:risk|hazard|counterevidence|compare options)\\b/iu.test(sourceRequest.slice(0,65));
+    const sourceVerification = /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest)
+      && !/\b(?:risk|hazard|counterevidence|compare options)\b/iu.test(sourceRequest.slice(0,65));
     if (sourceVerification) {
       lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
     }
