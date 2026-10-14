@@ -113,9 +113,19 @@ async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null,
   let active = 0;
   let completed = 0;
 
+  // Keep deterministic source order without re-sorting the entire ready queue
+  // after each dependency release. The queue is request-local and bounded by
+  // the validated task graph; no semantic/task priority changes are made.
   const enqueueReady = (taskId) => {
-    ready.push(taskId);
-    ready.sort((left, right) => originalIndex.get(left) - originalIndex.get(right));
+    const rank = originalIndex.get(taskId);
+    let low = 0;
+    let high = ready.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (originalIndex.get(ready[middle]) < rank) low = middle + 1;
+      else high = middle;
+    }
+    ready.splice(low, 0, taskId);
   };
   for (const task of tasks) {
     if ((remainingDependencies.get(String(task.id)) || 0) === 0) enqueueReady(String(task.id));
