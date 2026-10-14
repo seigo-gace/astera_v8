@@ -127,8 +127,10 @@ async function executeTaskWaves({ tasks, executionWaves, runTask, signal = null,
     }
     ready.splice(low, 0, taskId);
   };
+  // Initial tasks are already in original source order, so append them
+  // directly rather than repeatedly shifting an increasingly large array.
   for (const task of tasks) {
-    if ((remainingDependencies.get(String(task.id)) || 0) === 0) enqueueReady(String(task.id));
+    if ((remainingDependencies.get(String(task.id)) || 0) === 0) ready.push(String(task.id));
   }
 
   const touchWaveStart = (taskId, now = Date.now()) => {
