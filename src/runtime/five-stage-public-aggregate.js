@@ -39,10 +39,10 @@ function mergeConditionDifferences(results = [], fallback = {}) {
 
 function buildPublicFiveStageAggregate(rawAggregate = {}, taskResults = []) {
   const results = publicTaskResults(taskResults);
-  const riskItems = results.flatMap((result) => array(result?.lanes?.risk?.risks).map((item) => ({ task_id: result.task.id, ...item })))
+  const riskItems = results.flatMap((result) => array(result?.lanes?.risk?.risks).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null })))
     .sort((a, b) => Number(b.weight || 0) - Number(a.weight || 0) || String(a.key || '').localeCompare(String(b.key || '')));
-  const perspectives = results.flatMap((result) => array(result?.lanes?.multi?.perspectives).map((item) => ({ task_id: result.task.id, ...item })));
-  const tradeOffMap = results.flatMap((result) => array(result?.lanes?.multi?.trade_off_map).map((item) => ({ task_id: result.task.id, ...item })));
+  const perspectives = results.flatMap((result) => array(result?.lanes?.multi?.perspectives).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null })));
+  const tradeOffMap = results.flatMap((result) => array(result?.lanes?.multi?.trade_off_map).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null })));
   const dimensions = unique(results.flatMap((result) => array(result?.lanes?.compare?.dimensions)));
 
   return {
@@ -71,12 +71,12 @@ function buildPublicFiveStageAggregate(rawAggregate = {}, taskResults = []) {
       ...(rawAggregate.comparison || {}),
       dimensions,
       comparison_candidates: comparisonCandidates(results),
-      candidate_materials: results.flatMap((result) => array(result?.lanes?.compare?.candidate_materials).map((item) => ({ task_id: result.task.id, ...item }))),
-      trade_off_differences: results.flatMap((result) => array(result?.lanes?.compare?.trade_off_differences).map((item) => ({ task_id: result.task.id, ...item }))),
-      scope_booleans: results.flatMap((result) => array(result?.lanes?.compare?.scope_booleans).map((item) => ({ task_id: result.task.id, ...item }))),
-      supported_scope: results.flatMap((result) => array(result?.lanes?.compare?.supported_scope).map((item) => ({ task_id: result.task.id, ...item }))),
-      unsupported_scope: results.flatMap((result) => array(result?.lanes?.compare?.unsupported_scope).map((item) => ({ task_id: result.task.id, ...item }))),
-      contradiction_map: results.flatMap((result) => array(result?.lanes?.compare?.contradiction_map).map((item) => ({ task_id: result.task.id, ...item }))),
+      candidate_materials: results.flatMap((result) => array(result?.lanes?.compare?.candidate_materials).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
+      trade_off_differences: results.flatMap((result) => array(result?.lanes?.compare?.trade_off_differences).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
+      scope_booleans: results.flatMap((result) => array(result?.lanes?.compare?.scope_booleans).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
+      supported_scope: results.flatMap((result) => array(result?.lanes?.compare?.supported_scope).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
+      unsupported_scope: results.flatMap((result) => array(result?.lanes?.compare?.unsupported_scope).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
+      contradiction_map: results.flatMap((result) => array(result?.lanes?.compare?.contradiction_map).map((item) => ({ ...item, task_id: result.task.id, request_id: result.task.request_id || result.task.owner_request_id || null }))),
       condition_differences: mergeConditionDifferences(results, rawAggregate.comparison?.condition_differences),
       selected_candidate: null,
       candidate_ranking: [],
