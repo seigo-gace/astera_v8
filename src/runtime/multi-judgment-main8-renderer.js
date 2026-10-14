@@ -446,7 +446,7 @@ function section06(model, groups, lang) {
 }
 
 function section07(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
+  const lines = [`- ${lang === 'ja' ? '要求ごとの根拠成立状態' : 'Evidence status by request'}:`];
   for (const request of model.judgment_requests || []) {
     const results = groups.get(request.id) || [];
     const states = groupEvidence(results, request, lang);
@@ -460,7 +460,8 @@ function section07(model, groups, lang) {
       lines.push(`    - ${lang === 'ja' ? '専門Lensの適用性が未確認' : 'Specialist Lens applicability unresolved'}: ${count} ${lang === 'ja' ? '項目' : 'candidate slots'} (${kinds.join(' / ')})`);
     }
   }
-  lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。別R##のEvidenceを流用しない。' : 'User input supports what was requested or observed but does not verify implementation facts or causes. Evidence from one R## must not be silently reused for another.'}`);
+  // Source/Fact and cross-Request Evidence boundaries are enforced by lanes and
+  // evidence scopes; do not repeat generic implementation rules in user material.
   return lines.join('\n');
 }
 function section08(model, groups, lang) {
