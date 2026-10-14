@@ -57,6 +57,24 @@ for (const [label, target] of [['clean-1k',1000],['clean-5k',5000],['clean-10k',
       assert.match(premises + publicText, /削除|維持|データ/u, 'data preservation is not lost');
       assert.match(comparison + publicText, /候補A|候補B|キャッシュ|データベース/u, 'case-specific alternatives remain');
       assert.match(evidence + publicText, /根拠|証拠|未確認|未確定|取得/u, 'evidence state must remain visible');
+      // Stage-by-stage diagnosis: a configured search plan must not be silently declared complete.
+      const searchTasks = packet.tasks.filter(task => (task?.canonical_plan?.search_plan?.queries || []).length > 0 || task?.evidence_need?.required);
+      const evidenceRows = out.result.task_results || [];
+      const searchStates = evidenceRows.map(row => ({
+        task_id: row.task?.id,
+        state: row.evidence?.state,
+        search_state: row.evidence?.search_state,
+        confirmed_claims: row.canonical?.confirmed_count || 0
+      }));
+      assert.ok(searchTasks.length > 0, 'STAGE_EVIDENCE_PLAN_MISSING: evidence-needed input was not scheduled for evidence search');
+      for (const row of evidenceRows) {
+        const needs = searchTasks.some(t => t.id === row.task?.id);
+        if (!needs) continue;
+        assert.equal(row.evidence?.search_state, 'NOT_EXECUTED', 'STAGE_EVIDENCE_NOT_CONFIGURED must be explicitly visible');
+        assert.notEqual(row.evidence?.state, 'FINAL_VALID', 'STAGE_EVIDENCE_FALSE_ADOPTION: cannot adopt evidence without Module');
+      }
+      assert.equal(out.result.canonical_claims?.confirmed_count || 0, 0, 'STAGE_CLAIM_FALSE_CONFIRMATION: cannot confirm external claims without search');
+      console.log(JSON.stringify({case:label,stage_diagnosis:{source:'EXECUTED',task_graph:'EXECUTED',domain_lens:'EXECUTED',evidence_plan:'EXECUTED',evidence_module:'NOT_EXECUTED',claim_binding:'UNVERIFIED',five_stage:'EXECUTED',main8:'EXECUTED'},searchTasks:searchTasks.length,searchStates}));
       assert.equal(out.result.no_normative_decision_generated, true);
       assert.equal(out.result.judgment['06_comparison']?.selected_candidate, null);
       assert.deepEqual(out.result.judgment['06_comparison']?.candidate_ranking || [], []);
