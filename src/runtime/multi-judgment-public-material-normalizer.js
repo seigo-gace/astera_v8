@@ -328,9 +328,15 @@ function normalizeSection06(section, model, lang) {
         .filter((part) => usefulMissingLine(part, request.request_text));
       if (!parts.length) return [];
       return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
-    }).map((line) => line.startsWith(marker) && !block.includes(ontology) ? `${line}: ${ontology}` : line);
+    }).map((line) => {
+      const hasRequestMaterial = /(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block);
+      return line.startsWith(marker) && !block.includes(ontology) && !hasRequestMaterial
+        ? `${line}: ${ontology}` : line;
+    });
     block = lines.join('\n');
-    if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
+    if (!block.includes(ontology)
+      && !/(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block))
+      block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
     text = text.slice(0, start) + block + text.slice(end);
   }
   return text;
