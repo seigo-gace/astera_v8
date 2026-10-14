@@ -326,8 +326,10 @@ function section03(model, groups, lang) {
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
     const sourceRequest = sanitizePublicValue(request.request_text);
-    const sourceVerification = /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest)
-      && !/\b(?:risk|hazard|counterevidence|compare options)\b/iu.test(sourceRequest.slice(0,65));
+    const explicitFactTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Establish facts|Audit|Verify facts|Fact check|Inspect records|Measure baseline)/iu.test(sourceRequest);
+    const explicitOtherTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Examine risk|Compare options)/iu.test(sourceRequest);
+    const sourceVerification = explicitFactTask || (!explicitOtherTask
+      && /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest));
     if (sourceVerification) {
       lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
     }
@@ -370,9 +372,14 @@ function section05(model, groups, lang) {
     ]);
     const checked = sourceCounter.slice(0, 2);
     const operation = operationCounterMaterial(request.action, lang);
+    const softwareMigration = String(request.action || '') === 'migrate'
+      && /(?:Node\.js|API|Client|software|server|database|service|system)/iu.test(requestText);
+    const migrationChecks = softwareMigration
+      ? 'software migration check: rollback, data/contract compatibility, security regression'
+      : '';
     if (String(request.action || '') === 'compare') lines.push(`  - ${request.id}: ${requestText}`);
     else lines.push(`  - ${request.id} [${actionLabel(request.action,lang)}]`);
-    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${checked.length ? checked.join(' / ') : operation}`);
+    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${unique([...(checked.length ? checked : [operation]), migrationChecks]).join(' / ')}`);
     const evidence = [];
     for (const result of results) for (const perspective of publicLane(result,'multi')?.perspectives || []) {
       for (const ref of perspective.counter_evidence_refs || []) {
@@ -386,7 +393,12 @@ function section05(model, groups, lang) {
 }
 
 function section06(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '各要求の選択肢・比較可能性・不足根拠' : 'Alternatives, comparability and evidence gaps for each request'}:`];
+  const lines = [
+    `- ${lang === 'ja' ? '各要求の選択肢・比較可能性・不足根拠' : 'Alternatives, comparability and evidence gaps for each request'}:`,
+    `- ${lang === 'ja' ? 'まだ言えないこと' : 'Not yet justified'}: ${lang === 'ja'
+      ? '同一条件で採用可能な根拠が揃うまで、どの案が有利か、必要な変更が完了したかを確定しない。'
+      : 'No option is selected and completion cannot be confirmed until the required comparable evidence is accepted.'}`
+  ];
   for (const request of model.judgment_requests || []) {
     const results = groups.get(request.id) || [];
     const comparison = groupComparisonMaterial(results);
@@ -394,6 +406,8 @@ function section06(model, groups, lang) {
     const observations = publicValues(observationsFor(model, request).map(item=>item.text));
     const gaps = groupMissing(results);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
+    const local = requestContextLines(request, lang);
+    if (local.length) lines.push(`    - ${lang === 'ja' ? '要求固有の条件' : 'Request-local conditions'}: ${local.join(' / ')}`);
     if (/(?:オプション.*OFF|\\bON\\b|\\bOFF\\b|toggle|無停止|互換性)/iu.test(String(request.request_text || ''))
       && String(request.action || '') !== 'compare')
       lines.push(`    - ${lang === 'ja' ? '入力で固定された条件' : 'Source-stated fixed condition'}: ${sanitizePublicValue(request.request_text)}`);
@@ -407,9 +421,7 @@ function section06(model, groups, lang) {
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
     const known = unique([...facts, ...observations]);
     if (known.length) lines.push(`    - ${lang === 'ja' ? '現在分かること（入力由来は未検証）' : 'Currently known (source observations remain unverified)'}: ${known.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? '現時点の結論限界' : 'Unresolved judgment boundary'}: ${lang === 'ja'
-      ? '同条件の採用根拠と未解決要件が揃うまで優劣・完了を断定しない。'
-      : 'No option or completion state is established without comparable accepted evidence and resolved requirements.'}`);
+    // The common unknown-vs-confirmed boundary is stated once above.
     if (String(request.action || '') === 'compare') {
       const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
       if (needed.length) lines.push(`    - ${lang === 'ja' ? '比較に必要な根拠' : 'Evidence needed for comparison'}: ${unique(needed).join(' / ')}`);
