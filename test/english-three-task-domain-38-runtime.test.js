@@ -76,6 +76,13 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
     search_calls:searchRecords.length,queries:evidencePlans.length,
     exact_query_duplicates:queryKeys.length-uniqueQueryKeys.size,
     distinct_search_queries:uniqueQueryKeys.size,
+    query_material_kind_counts:Object.fromEntries(
+      [...new Set(evidencePlans.map(q=>String(q.material_kind||'CANONICAL_CLAIM')))]
+        .sort().map(kind=>[kind,evidencePlans.filter(q=>String(q.material_kind||'CANONICAL_CLAIM')===kind).length])
+    ),
+    lens_expansion_queries:evidencePlans.filter(q=>String(q.material_kind||'').startsWith('LENS_')).length,
+    base_requirement_queries:evidencePlans.filter(q=>
+      !!q.material_kind && !String(q.material_kind).startsWith('LENS_')).length,
     planned_query_roles:Object.fromEntries(['OFFICIAL','COUNTER'].map(role=>
       [role,evidencePlans.filter(q=>q.role===role).length])),
 
