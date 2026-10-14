@@ -301,7 +301,8 @@ function section01(model, lang) {
   const requests = model.judgment_requests || [];
   const lines = [`- ${lang === 'ja' ? `今回の入力には${requests.length}件の判断要求がある。` : `This input contains ${requests.length} judgment requests.`}`];
   for (const request of requests) lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${sanitizePublicValue(request.request_text)}`);
-  lines.push(`- ${lang === 'ja' ? '処理原則: 判断要求R##を一つに潰さず保持し、各R##に必要な実行Taskを1件以上紐付ける。実行Taskが複数でも、それだけで判断要求を水増ししない。' : 'Processing rule: preserve each R## judgment request and map one or more execution tasks to it. Multiple execution tasks do not create extra judgment requests by themselves.'}`);
+  // Request/Task cardinality is already machine-enforced; do not present
+  // the internal control-plane invariant as a user-domain decision material.
   return lines.join('\n');
 }
 function section02(judgment, model, lang) {
@@ -350,7 +351,8 @@ function section04(model, groups, lang) {
     lines.push(`- ${lang === 'ja' ? '入力条件・未確定事項から直接保持するRisk' : 'Risks preserved directly from input constraints and unresolved items'}:`);
     lines.push(...sourceRisks.map((risk) => `  - ${risk}`));
   }
-  lines.push(`- ${lang === 'ja' ? '共通Risk: 複数要求を1件に潰すと、一部要求の消失、条件混同、別要求の根拠流用が起きる。利用者報告の現象は原因確認前なので、原因を推測で確定しない。' : 'Common risk: collapsing requests can drop requirements, mix constraints, or reuse evidence across requests. User-reported symptoms do not establish their cause.'}`);
+  // Task collapse and cross-request evidence leakage are enforcement invariants,
+  // not the customer's case-specific Risk; do not duplicate them in Main8.
   return lines.join('\n');
 }
 function section05(model, groups, lang) {
