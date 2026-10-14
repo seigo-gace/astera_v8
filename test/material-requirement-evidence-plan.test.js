@@ -195,6 +195,28 @@ test('Requirement attribution uses matching query candidate lineage and eligible
   assert.equal(materialEvidenceExecution(plan,crossed,{state:'VALID'}).attributed_adopted_count,0);
 });
 
+test('material evidence ledger rejects executions carrying another Request or requirement slot', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan = materialEvidencePlan(task, graph, {}, base);
+  const query = plan.search_plan.queries.find(q => q.requirement_slot_id === 'R01:MR01');
+  const candidate = { candidate_id:'request-isolated', canonical_record_id:'record-isolated' };
+  const execution = {
+    query_id: query.query_id, claim_id: query.claim_id, status:'FOUND',
+    provider_records:[{provider_id:'provider',status:'FOUND',candidate_record_ids:['request-isolated']}]
+  };
+  const packet = (patch) => ({ status:'FINAL_VALID', evidence:[candidate],
+    query_execution:{initial:[{...execution,...patch}],reinforcement:[]} });
+  const observed = materialEvidenceExecution(plan,packet({}),{state:'VALID'});
+  assert.equal(observed.requirements.find(r => r.slot_id === 'R01:MR01').adopted_evidence_refs.length,1);
+  for (const foreign of [{owner_request_id:'R02'},{requirement_slot_id:'R01:MR02'},
+    {owner_request_id:'R02',requirement_slot_id:'R01:MR02'}]) {
+    const isolated = materialEvidenceExecution(plan,packet(foreign),{state:'VALID'});
+    assert.equal(isolated.requirements.find(r => r.slot_id === 'R01:MR01').adopted_evidence_refs.length,0);
+    assert.equal(isolated.attributed_adopted_count,0);
+    assert.equal(isolated.requirements.find(r => r.slot_id === 'R01:MR01').confirmation_status,'UNRESOLVED');
+  }
+});
+
 test('Reinforcement Evidence is attributed by originating slot and cannot confirm a judgment by itself', () => {
   const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
   const plan = materialEvidencePlan(task,graph,{},base);
