@@ -74,7 +74,8 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
         schema_version: 'astera.material-evidence-plan.v1',
         search_authorized: false, required_slot_ids: targets.map(t => t.slot_id),
         planned_slot_ids: [], unplanned_slot_ids: targets.map(t => t.slot_id),
-        coverage_complete: targets.length === 0
+        coverage_complete: targets.length === 0,
+        targets
       }
     });
   }
@@ -159,6 +160,7 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null) {
       slot_id: target.slot_id,
       owner_request_id: target.owner_request_id,
       material_kind: target.material_kind,
+      source: target.source,
       question: target.question,
       planning_status: planned.has(target.slot_id) ? 'PLANNED' : 'NOT_PLANNED',
       search_status,
