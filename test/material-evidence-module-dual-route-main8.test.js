@@ -69,7 +69,11 @@ for (const [label,size] of [['1k',1000],['5k',5000],['10k',10000]]) {
     try {
       const question=documentOf(size);
       assert.ok(Math.abs(question.length-size)<400,'actual Japanese input size');
-      const out=await engine.process({question},{id:'real-evidence-module-'+label,is_global:true,plan:'admin'});
+      // All two-route fake providers are explicitly eligible for this isolated
+      // wiring test. Default registry routing eligibility is tested separately.
+      const out=await engine.process({
+        question,evidence_search:{provider_allowlist:['authoritative','general']}
+      },{id:'real-evidence-module-'+label,is_global:true,plan:'admin'});
       assert.equal(out.result?.type,'cognitive_map');
       assert.ok(results.length>0,'Task plan reaches real Evidence Search Module');
       assert.ok(results.every(x=>x.route_execution?.dual_route_complete===true),'both routes attempted');
