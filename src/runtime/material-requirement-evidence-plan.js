@@ -264,6 +264,7 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
   const plan = canonicalPlan.material_evidence_plan || {};
   const queries = canonicalPlan.search_plan?.queries || [];
   const planned = new Set(plan.planned_slot_ids || []);
+  const reasons = new Map((plan.unplanned_reasons || []).map(item => [item.slot_id, item.reason]));
   const queryExecutions = [
     ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
     ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
@@ -323,6 +324,8 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       question: target.question,
       applicability: target.applicability || 'APPLICABLE_REQUIRED',
       applicability_reason: target.applicability_reason || null,
+      planning_deferral_reason: planned.has(target.slot_id) ? null
+        : reasons.get(target.slot_id) || 'UNPLANNED_REASON_UNKNOWN',
       linked_requirement_slot_ids: target.linked_requirement_slot_ids || [],
       planning_status: planned.has(target.slot_id) ? 'PLANNED'
         : target.applicability === 'DEFERRED_APPLICABILITY_UNKNOWN'
