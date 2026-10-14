@@ -16,6 +16,32 @@ const EXTERNALLY_RESEARCHABLE = new Set([
 ]);
 const LENS_CHANNELS = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare', 'evidence']);
 const ROLES = Object.freeze(['OFFICIAL', 'COUNTER']);
+const REQUIRED_MATERIAL_PRIORITY = Object.freeze({
+  FALSIFICATION_OR_DISQUALIFIER: 0,
+  COMPARISON_BASIS: 1,
+  DECISION_CRITERION: 2,
+  OBSERVATION_VALIDATION: 3,
+  ASSUMPTION_VALIDATION: 4,
+  EVIDENCE_SUPPORT: 5,
+  UNRESOLVED_ITEM: 6,
+  SUBQUESTION_ANSWER: 7
+});
+function planningPriority(target) {
+  // A missing safety counterexample and the basis for comparing options must
+  // not be silently pushed behind a large set of generic subquestions.
+  // This only changes execution ordering; it does not drop or resolve slots.
+  const kind = target?.material_kind;
+  const base = REQUIRED_MATERIAL_PRIORITY[kind];
+  return Number.isInteger(base) ? base : (String(kind || '').startsWith('LENS_') ? 8 : 9);
+}
+function prioritizedMaterialTargets(targets) {
+  return targets.map((value, index) => ({ value, index })).sort((a, b) =>
+    planningPriority(a.value) - planningPriority(b.value)
+    || (a.value.status === 'CONFLICTING' ? -1 : 0) - (b.value.status === 'CONFLICTING' ? -1 : 0)
+    || a.index - b.index
+  ).map(row => row.value);
+}
+
 const LENS_REQUIREMENT_LINKS = Object.freeze({
   fact: ['OBSERVATION_VALIDATION', 'ASSUMPTION_VALIDATION', 'SUBQUESTION_ANSWER', 'EVIDENCE_SUPPORT'],
   risk: ['FALSIFICATION_OR_DISQUALIFIER'],
@@ -159,6 +185,11 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
         search_authorized: false, required_slot_ids: targets.map(t => t.slot_id),
         planned_slot_ids: [], unplanned_slot_ids: targets.map(t => t.slot_id),
         coverage_complete: targets.length === 0,
+        unplanned_reasons: targets.map(t => ({
+          slot_id: t.slot_id,
+          reason: t.applicability === 'DEFERRED_APPLICABILITY_UNKNOWN'
+            ? 'DEFERRED_APPLICABILITY_UNKNOWN' : 'EXTERNAL_SEARCH_NOT_AUTHORIZED'
+        })),
         deferred_slot_ids: targets.filter(t => t.applicability === 'DEFERRED_APPLICABILITY_UNKNOWN').map(t => t.slot_id),
         targets
       }
@@ -166,22 +197,25 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   }
 
   const queries = [...current];
-  const planned = [], unplanned = [], deferred = [];
+  const planned = [], unplanned = [], deferred = [], unplannedReasons = [];
   const objective = clean(task?.target || task?.purpose || task?.objective || task?.source_span?.text).slice(0, 320);
   const domainId = clean(domain?.primary?.id) || null;
-  for (const target of targets) {
+  for (const target of prioritizedMaterialTargets(targets)) {
     if (target.applicability !== 'APPLICABLE_REQUIRED') {
       unplanned.push(target.slot_id);
       deferred.push(target.slot_id);
+      unplannedReasons.push({slot_id: target.slot_id, reason: 'DEFERRED_APPLICABILITY_UNKNOWN'});
       continue;
     }
     if (queries.length + ROLES.length > LIMIT) {
       unplanned.push(target.slot_id);
+      unplannedReasons.push({slot_id: target.slot_id, reason: 'PLAN_QUERY_LIMIT'});
       continue;
     }
     const subject = sanitizeQueryTerm(`${objective} ${target.question}`).slice(0, 600);
     if (!subject) {
       unplanned.push(target.slot_id);
+      unplannedReasons.push({slot_id: target.slot_id, reason: 'EMPTY_SEARCH_SUBJECT'});
       continue;
     }
     const claimId = `material-requirement:${target.slot_id}`;
@@ -216,6 +250,7 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
       required_slot_ids: targets.map(t => t.slot_id),
       planned_slot_ids: planned,
       unplanned_slot_ids: unplanned,
+      unplanned_reasons: unplannedReasons,
       deferred_slot_ids: deferred,
       coverage_complete: unplanned.length === 0,
       // These are search plans, not verified facts or adopted Evidence.
