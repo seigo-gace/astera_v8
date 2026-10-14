@@ -461,6 +461,18 @@ function buildSemanticAtoms(sourceGraph) {
         && atom.source_span.end <= block.source_span.end
       );
       if (owner) { ownersForContained.set(atom.id, owner.id); return false; }
+      // A paragraph explicitly labelled Context is case background even if it
+      // says the subject "must" make a decision. It is not a fourth user Task.
+      const backgroundBlock = (sourceGraph?.nodes || []).find(node =>
+        node.kind === 'paragraph'
+        && /^\s*Context\s*:/iu.test(node.text)
+        && atom.source_span.start >= node.source_span.start
+        && atom.source_span.end <= node.source_span.end
+      );
+      if (backgroundBlock) {
+        ownersForContained.set(atom.id, taskBlockAtoms[0].id);
+        return false;
+      }
       const requirementFooter = /^\s*Requirements\s*:/iu.test(atom.text);
       if (requirementFooter) {
         ownersForContained.set(atom.id, taskBlockAtoms[taskBlockAtoms.length - 1].id);
