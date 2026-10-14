@@ -67,7 +67,14 @@ function projectFiveLaneMaterialToMain8(judgment = {}, taskResults = []) {
   ));
   const missingMaterial = itemsFromLane(taskResults, 'inquiry', 'missing_fields');
   const inquiryRequirements = itemsFromLane(taskResults, 'inquiry', 'inquiry_lens');
-  const evidenceRequirements = itemsFromLane(taskResults, 'inquiry', 'evidence_need');
+  // These questions were produced by the Inquiry lane, never invented by Main8.
+  // A missing evidence requirement must remain visible even when no source was adopted.
+  const unverifiedMaterialEvidence = itemsFromLane(taskResults, 'inquiry', 'missing_questions')
+    .filter((value) => /^(?:必要根拠が未確認|必要根拠が未検索):|^ほか\d+件の必要根拠が未確認/u.test(value));
+  const evidenceRequirements = unique([
+    ...itemsFromLane(taskResults, 'inquiry', 'evidence_need'),
+    ...unverifiedMaterialEvidence
+  ]);
   const comparisonDimensions = unique(array(taskResults)
     .filter((result) => taskNeedsComparison(result) || taskRequestsComparisonMaterial(result))
     .flatMap((result) => array(lanesOf(result)?.compare?.dimensions)));
