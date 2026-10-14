@@ -4,6 +4,7 @@ const assert=require('node:assert/strict');
 const AsteraEngine=require('../src/astera-engine');
 const createEvidenceSearchModule=require('../src/evidence-search');
 const {routeDomainTemplates}=require('../src/domain-template-router');
+const {buildUniversalSourceUnderstanding}=require('../src/runtime/universal-source-graph');
 const {loadEnglishThreeTaskCases}=require('./english-three-task-domain-38-corpus');
 
 const CASES=loadEnglishThreeTaskCases();
@@ -96,6 +97,19 @@ test('38 unique canonical English cases have three domain-specific tasks and ~10
     for(const n of [1,2,3]) assert.ok(row.input.includes('Task '+n+' —'),row.id+' task '+n);
     assert.ok(!inputs.has(row.input),row.id+' input duplicated');
     inputs.add(row.input);
+  }
+});
+
+test('all 38 upstream English task blocks retain their own subject, risk and comparison without phantom requests',()=>{
+  for(const row of CASES) {
+    const source=buildUniversalSourceUnderstanding(row.input,'en');
+    const req=source.semantic_atoms.request_atoms;
+    assert.equal(req.length,3,row.id+' request count / '+req.map(x=>x.text.slice(0,100)).join(' | '));
+    for(const [index,value] of [row.sources,row.risks,row.alternatives].entries()){
+      assert.ok(req[index].text.includes(value),row.id+' task '+(index+1)+' lost domain-specific material');
+      assert.ok(row.input.slice(req[index].source_span.start,req[index].source_span.end)===req[index].text,
+        row.id+' task '+(index+1)+' source span drift');
+    }
   }
 });
 
