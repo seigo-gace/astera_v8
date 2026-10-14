@@ -117,6 +117,13 @@ test('Public AsteraEngine sends decision requirement and Lens searches before fi
     assert.ok(allQueries.some(q => String(q.material_kind || '').startsWith('LENS_')), 'specialist requirements must reach Evidence Search');
     assert.ok(allQueries.some(q => q.material_kind === 'FALSIFICATION_OR_DISQUALIFIER' || q.material_kind === 'DECISION_CRITERION'));
     assert.ok(out.result?.five_stage?.tasks?.length > 0);
+    const materialRecords = out.result.task_results.flatMap(row =>
+      row.task?.material_evidence_execution?.requirements || []);
+    assert.ok(materialRecords.some(row => row.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'));
+    assert.ok(materialRecords.every(row => row.confirmation_status === 'UNRESOLVED'));
+    assert.ok(out.result.five_stage.tasks.some(row =>
+      (row.inquiry?.missing_questions || []).some(q => String(q).includes('必要根拠が未確認') || String(q).includes('必要根拠が未検索'))),
+      'unverified evidence needs must enter five-stage inquiry before Main8');
     assert.equal(out.result?.canonical_claims?.confirmed_count || 0, 0, 'search attempt must not auto-confirm claims');
   } finally { await engine.destroy(); }
 });
