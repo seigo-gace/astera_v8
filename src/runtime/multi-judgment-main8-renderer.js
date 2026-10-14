@@ -329,10 +329,10 @@ function section03(model, groups, lang) {
     const sourceVerification = /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest)
       && !/\b(?:risk|hazard|counterevidence|compare options)\b/iu.test(sourceRequest.slice(0,65));
     if (sourceVerification) {
-      lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
+      lines.push(`  - ${request.id}: ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
     }
-    if (facts.length) lines.push(`  - ${request.id} ${lang === 'ja' ? '確認済み材料' : 'Confirmed material'}: ${facts.join(' / ')}`);
-    else if (!sourceVerification) lines.push(`  - ${request.id}: ${lang === 'ja' ? '外部確認済み事実なし' : 'No externally confirmed facts available'}`);
+    if (facts.length) lines.push(`  - ${request.id}: ${facts.join(' / ')}`);
+    else if (!sourceVerification) lines.push(`  - ${request.id}: ${lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.'}`);
   }
   lines.push(`- ${lang === 'ja' ? '区別: 利用者が要求したこと／利用者が観測したこと／コードや外部根拠で確認済みの事実を混ぜない。' : 'Boundary: keep requested behavior, user-observed state, and code/external-evidence-confirmed facts separate.'}`);
   return lines.join('\n');
@@ -352,31 +352,31 @@ function section04(model, groups, lang) {
   return lines.join('\n');
 }
 function section05(model, groups, lang) {
-  // Keep each request's concrete opposition without reproducing complete
-  // expanded generic perspective trees and the Request in multiple sections.
+  // Public 05 is a concise view of the scoped Counter lane. Retain meaningful
+  // source-specific counter-claims and evidence, not every repeated template.
+  // Full lane provenance remains in result.task_results.
   const lines = [`- ${lang === 'ja' ? '判断要求ごとの反証・失敗条件' : 'Request-local counterevidence and failure conditions'}:`];
   for (const request of model.judgment_requests || []) {
-    const taskResults = groups.get(request.id) || [];
-    const sourceRisks = publicValues(taskResults.flatMap(result =>
+    const results = groups.get(request.id) || [];
+    const counter = groupCounterMaterial(results);
+    const sourceRisks = publicValues(results.flatMap(result =>
       (publicLane(result, 'risk')?.risks || [])
         .filter(item => item?.source === 'TASK_SOURCE_UNVERIFIED')
-        .map(item => item.impact)
-    ));
-    const source = sanitizePublicValue(request.request_text);
-    // Preserve user-stated potential failure conditions (NOT confirmed harms).
-    const riskDetail = sourceRisks.length
-      ? (lang === 'ja' ? '原文指定の未検証リスク: ' : 'User-stated unverified risk: ') + sourceRisks.join(' / ')
-      : operationCounterMaterial(request.action, lang);
-    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${riskDetail}`);
-    // Retain externally linked counter-evidence when actually available,
-    // without repeating the same evidence record for every template view.
+        .map(item => item.impact)));
+    const requestText = sanitizePublicValue(request.request_text);
+    const sourceCounter = unique([
+      ...(sourceRisks.length ? sourceRisks : []),
+      ...counter.filter(v => !/^(?:MAINLINE|OPPOSITION|THIRD_WAY|HUMAN_FIT)$/iu.test(v))
+    ]);
+    const checked = sourceCounter.slice(0, 4);
+    const operation = operationCounterMaterial(request.action, lang);
+    lines.push(`  - ${request.id}: ${requestText}`);
+    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${checked.length ? checked.join(' / ') : operation}`);
     const evidence = [];
-    for (const result of taskResults) {
-      for (const perspective of publicLane(result, 'multi')?.perspectives || []) {
-        for (const ref of perspective.counter_evidence_refs || []) {
-          const locator = ref.canonical_locator?.url || ref.url || ref.candidate_id || ref.evidence_id;
-          if (locator) evidence.push(String(locator));
-        }
+    for (const result of results) for (const perspective of publicLane(result,'multi')?.perspectives || []) {
+      for (const ref of perspective.counter_evidence_refs || []) {
+        const locator = ref.canonical_locator?.url || ref.url || ref.candidate_id || ref.evidence_id;
+        if (locator) evidence.push(String(locator));
       }
     }
     if (evidence.length) lines.push(`    - ${lang === 'ja' ? '反証根拠候補' : 'Counterevidence references'}: ${unique(evidence).join(' / ')}`);
@@ -409,10 +409,10 @@ function section06(model, groups, lang) {
     if (String(request.action || '') === 'compare') {
       const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
       if (needed.length) lines.push(`    - ${lang === 'ja' ? '比較に必要な根拠' : 'Evidence needed for comparison'}: ${unique(needed).join(' / ')}`);
-    } else if (gaps.length) {
-      // Full gap rows are retained in Inquiry and Section08; avoid reproducing
-      // the same list in both 06 and 08 of the public material.
-      lines.push(`    - ${lang === 'ja' ? '未解決の必要材料' : 'Unresolved material needs'}: ${gaps.length} ${lang === 'ja' ? '項目（08に確認事項を記載）' : 'items; see request-local verification steps in Section08'}`);
+    } else {
+      const required = operationMissingMaterial(request.action, lang);
+      lines.push(`    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${required}`);
+      if (gaps.length) lines.push(`    - ${lang === 'ja' ? '未解決の必要材料' : 'Unresolved material needs'}: ${gaps.length} ${lang === 'ja' ? '項目（08に確認事項を記載）' : 'items; see request-local verification steps in Section08'}`);
     }
   }
   return lines.join('\n');
