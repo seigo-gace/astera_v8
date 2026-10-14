@@ -377,7 +377,10 @@ function section05(model, groups, lang) {
     const migrationChecks = softwareMigration
       ? 'software migration check: rollback, data/contract compatibility, security regression'
       : '';
-    if (String(request.action || '') === 'compare') lines.push(`  - ${request.id}: ${requestText}`);
+    if (String(request.action || '') === 'compare') {
+      const explicitOptions = /^(?:Task|Request)\s+\d+\s*[—–-]\s*Compare options:\s*(?:Evaluate\s+)?([^.!?\n]+)/iu.exec(requestText);
+      lines.push(`  - ${request.id}: ${explicitOptions ? explicitOptions[1] : requestText}`);
+    }
     else lines.push(`  - ${request.id}: [${actionLabel(request.action,lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${unique([...(checked.length ? checked : [operation]), migrationChecks]).join(' / ')}`);
     const evidence = [];
@@ -407,7 +410,14 @@ function section06(model, groups, lang) {
     const gaps = groupMissing(results);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
     const local = requestContextLines(request, lang);
-    if (local.length) lines.push(`    - ${lang === 'ja' ? '要求固有の条件' : 'Request-local conditions'}: ${local.join(' / ')}`);
+    const originalRequests = model.judgment_requests || [];
+    const longMultiRequest = originalRequests.reduce((n, item) =>
+      n + String(item.request_text || '').length, 0) > 400;
+    if (local.length) {
+      lines.push(`    - ${lang === 'ja' ? '要求固有の条件' : 'Request-local conditions'}: ${longMultiRequest
+        ? (lang === 'ja' ? '02節の同じ要求IDで原文どおり保持' : 'Preserved under the same request ID in Section02')
+        : local.join(' / ')}`);
+    }
     if (/(?:オプション.*OFF|\\bON\\b|\\bOFF\\b|toggle|無停止|互換性)/iu.test(String(request.request_text || ''))
       && String(request.action || '') !== 'compare')
       lines.push(`    - ${lang === 'ja' ? '入力で固定された条件' : 'Source-stated fixed condition'}: ${sanitizePublicValue(request.request_text)}`);
