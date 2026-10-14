@@ -199,3 +199,66 @@ Main8 MUST NOT:
 - use presentation cleanup as a substitute for repairing Task / Requirement / Claim or the owning five-stage lane.
 
 When Main8 lacks required material, the repair point is the upstream Task / Requirement / Claim model or the owning five-stage lane. The renderer is not a fallback semantic generator.
+
+## 10. 2026-10-14 root-cause investigation: restore one semantic owner
+
+Status: DESIGN CORRECTION within the existing approved architecture. Implementation is NOT qualified by this document. This is the controlling PR #40 correction of §§3, 5, 9, not a new Module, business decision engine or change in eight-section user contract.
+
+### 10.1 Verified faults and their exact ownership
+
+1. **Two semantic render paths.** In src/astera-engine.js, material() executes super.material -> renderFiveLaneMain8 -> normalizeUnifiedMain8Material. The subsequent process() invokes attachEvidenceCitations, and src/runtime/evidence-citation-material.js lines 182–210 invokes renderMultiJudgmentMain8 and normalizeMultiJudgmentPublicMaterial, replacing the preceding material for a multi-Request case. Citation attachment is therefore a SECOND semantic render entry.
+2. **Semantics generated after five stages.** src/runtime/multi-judgment-main8-renderer.js owns section01–08, reads raw Case Model/request and operation templates, and invokes operationCounterMaterial, operationMissingMaterial and comparisonMissingForDimension. src/runtime/multi-judgment-public-material-normalizer.js then adds materialOntology, semanticCounterSummary and nextStepOntology and rewrites section text. These paths violate §9: only Fact/Risk/Multi/Inquiry/Compare may generate judgment semantics. Presentation cleanup cannot repair missing prior-lane material.
+3. **Fact-provenance risk.** groupFacts in the multi-request renderer concatenates public Fact CONFIRMED items and task.premises into one fact list. This is an observed Source construction defect/risk, not a claim that a particular real external source was falsely accepted. Test negative input to ensure unverified premise or user report cannot be rendered under a confirmed-Fact label.
+4. **Search-plan expansion vs sufficiency.** src/runtime/material-requirement-evidence-plan.js iterates unsatisfied material nodes and six Lens channels, generating OFFICIAL and COUNTER queries until LIMIT 128 per plan. Deferred slots are counted, but planning hundreds of queries neither guarantees distinct required facts nor validly bound Evidence. Do not assume 12,547 planned queries were 12,547 external requests.
+5. **False confidence from smoke tests.** At exact Source HEAD 351bfda72718f1f3d3b7e3ee31505d563a89b9fc, three CI runs succeeded: Astera Verify 38532116769; Universal Judgment 38532116815; Universal Structure 38532116986. English 38-case, three-task test: 38/38 passed its defined checks. Mean input 1,129 characters, mean Main8 9,044 characters; total 12,547 planned queries (~330/case), 8,551 requirement execution slots (~225/case). All simulated Providers returned no candidates, all 38 cases had 0 confirmed Claims and truly_decision_ready=false. The test forcibly supplies [Gxx] to runtime, separately checks natural classification, checks token presence/section count, and imposes an arbitrary 9x output ratio. Such PASS neither measures external adopted-Evidence validity nor complete case-specific decision sufficiency.
+
+**Status labels:** Source facts and exact CI = VERIFIED. Semantic causality of regressions = supported architectural diagnosis, needs negative tests. Actual Host/production and live accepted external Evidence = NOT_VERIFIED.
+
+### 10.2 Target authority, unchanged product purpose
+
+Source span + Request/Objective/constraints
+ -> decision-backward per-Request Material Requirement Graph
+ -> additive original four-level Domain + Genre Lens + subject/context refinements
+ -> Claim / question-local Evidence need
+ -> bounded, attributable two-route Evidence Search with FINAL candidate adoption
+ -> Request-local validated/unresolved Claim and material-slot ledger
+ -> **ONE canonical five-stage public material projection** (Fact/Risk/Multi/Inquiry/Compare)
+ -> **ONE Main8 projection** (eight sections, R## grouping for multiple Requests)
+ -> citations **annotate only**, no re-render and no semantic rewriting
+ -> external Human/Main AI decision.
+
+The existing Case Graph, requirement graph, Evidence Search module and five-stage lanes remain owners. Do not create a parallel module, a fourth semantic stage, an independent fact source, or alternate Main8 content generator. The multi-Request path differs in grouping, NOT authority or semantic generation. All cases must preserve original Request IDs, constraints, dependencies, source spans and Evidence/UNKNOWN distinctions.
+
+### 10.3 Technical correction contract
+
+**Canonical semantic item:** Reuse existing per-Task public lanes and aggregate into typed Request-indexed material items before formatting. Each item must carry request_id, material_kind and lane, origin/source_span or Claim ID, originating requirement_slot_id where applicable, truth/verification status, actual evidence-binding refs, value and unavailability/rejection reason. This is a target internal adapter contract, not proof of an implemented new schema. Full structured ledger is not truncated when compact public presentation omits repeated prose.
+
+**Single render owner:** Both single/multi public Main8 read ONLY five-stage public projection. Refactor semantic-generation duties out of operationMissingMaterial, operationCounterMaterial, comparisonMissingForDimension, materialOntology, semanticCounterSummary, nextStepOntology and other Case-Graph fallback wording into their existing owning Requirement or five-stage lane. Preserve the genuinely helpful operation-specific semantic criteria by moving their ownership upstream; do not delete them just to shorten the answer. If a required item is not supplied by the five-stage contract, expose the absence as a failed material slot, not an invented narrative conclusion.
+
+**Citation invariant:** attachEvidenceCitations operates on the already final eight sections without invoking another semantic renderer. It may add references for bound Claims, including contradictions and qualifications, but cannot rebuild risk, alternative, missing item, Evidence status or facts. Assert equality of semantic items before/after citation; only citation metadata may change.
+
+**Facts/requirements invariant:** A user-stated acceptance rule or risk is SOURCE_SPECIFIED, not VERIFIED. Keep requirement_specification_state distinct from proposition_verification_state, especially for SATISFIED source-backed disqualifier nodes. Premises and observations cannot enter confirmed Fact lanes without confirmation; Evidence Search candidate discovery, attempted route, FINAL adoption, bound Claim and requirement resolution are distinct.
+
+**Evidence search economy without lost ability:** Generate a small discriminating topology from each unsatisfied or externally-verification-needed slot, including falsifiers and comparable measurement bases. Deduplicate semantically equivalent queries by Request/Claim/support-scope keys, not substring alone. Preserve both Specialist/Authoritative and General/Current provider execution for every authorized Evidence Search call; preserve independent provenance and no cross-Request evidence reuse without explicit shared Claim. Preserve the existing 128-query plan boundary and account DEFERRED/MISSING slots honestly, rather than dropping any to pass a count. Measure planned vs provider-executed vs FINAL-adopted vs usable bound queries. Do not optimize by lowering answer completeness.
+
+**Public output economy:** Deduplicate typed semantic items using owner, material kind, source/evidence identity, Claim relation and condition scope BEFORE final formatting. Keep case-specific risk, falsification, candidate and unresolved item; display a compact readable case/request-based account and machine-readable complete items. Character ratio is a diagnostic, not an objective to game.
+
+### 10.4 Earliest-failing-stage verification and incremental replacement
+
+A. FREEZE this exact CI-green Source as regression reference in existing PR #40. Do not promote Draft/merge or claim Host qualification. Retain all existing golden tests.
+
+B. TRACE source_span -> Request -> requirement slots -> planned/attempted search -> FINAL adopted candidate -> direct Claim binding -> five-stage public semantic item -> Main8 section -> citation; classify every loss, false insertion, wrong Request, false Fact promotion and duplicated presentation at the earliest stage. Include JA/EN clean/noisy short/1k/5k/10k, independent/conditional/shared tasks, 38 Lens and source/evidence counterexamples.
+
+C. TEST NEGATIVE ownership: with empty public lanes, Main8 must not manufacture case-specific confirmed Facts, risks, counterevidence, candidates or missing requirements from Request text/Genre alone. Source Request/constraint can still be quoted as user intent but NEVER labeled verified. With public lanes populated, all required semantic items must survive single and multi-request grouping.
+
+D. MIGRATE ONE path at a time: move operation material to five-stage ownership; build shared typed projection and renderer; make post-render normalizers format-only; make citations append-only. Run exact golden + metamorphic parity after EACH slice. Preserve compatibility/API shape; use one writer on the existing PR/branch. A compatibility dual-render may run for comparison only, never use fallback output as semantically authoritative.
+
+E. VERIFY EVIDENCE independently: deterministic zero-evidence, supporting/contradicting, wrong-Request and fake-provider tests, then actual authorized free External Specialist + General routes, FINAL validity and Claim/Requirement attribution. Never state that the 38 fake-provider cases prove product quality or search completion. Search limits are counted separately from true material-slot sufficiency.
+
+F. ACCEPTANCE by the original mission: all source-backed requests and constraints retained; every required decision material slot SATISFIED or honestly MISSING/UNRESOLVED/CONFLICTING, not omitted; no false accepted Evidence, cross-Request laundering or false Fact; five-stage owns each material item; one Main8 semantic render; no post-hoc semantic invention; substantive domain-specific Risk, opposition and comparable alternatives when needed; both machine-based semantic gold and representative independent substantive reviews. No requirement weakening, arbitrary length PASS, fixture hard-coding or inferred real-world result.
+
+G. Source, CI, real External Evidence E2E and real Host Source/Deploy are separate. server-core Issue #10 Current still marks Astera-v8 current-main Source/Deploy admission NOT_QUALIFIED. Old fixed DebugAI route is retired, and this design CU makes NO protected Host change.
+
+### 10.5 Audit verdict
+
+ROOT_DESIGN_DRIFT_IDENTIFIED (duplicate render and post-hoc semantic generation); CURRENT_REGRESSION_SNAPSHOT_CI_PASS; PRODUCT_QUALITY_UNPROVEN; STRUCTURAL_MIGRATION_NOT_IMPLEMENTED; EXTERNAL_ADOPTED_EVIDENCE_E2E_NOT_VERIFIED; HOST_DEPLOY_NOT_QUALIFIED. Existing §9 is the design authority: this investigation restores that intent, not a new product purpose.
