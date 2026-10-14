@@ -72,6 +72,8 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
       && typeof t.applicability_reason==='string');
   checks.deferred_lens_never_claims_complete=scopedPlans.every(plan=>
     !(plan.deferred_slot_ids||[]).length || plan.coverage_complete===false);
+  checks.unresolved_specialist_visible=deferredLens.length===0
+    || /Specialist Lens applicability unresolved|専門Lensの適用性が未確認/iu.test(String(sections[6]?.text||''));
 
   checks.both_search_routes=searchRecords.length>0&&searchRecords.every(x=>
     x.route_execution?.specialist_authoritative?.attempted&&x.route_execution?.general_current?.attempted&&x.route_execution?.distinct_provider_count>=2);
