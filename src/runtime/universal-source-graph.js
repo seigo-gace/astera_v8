@@ -419,7 +419,7 @@ function buildSemanticAtoms(sourceGraph) {
   // This refinement applies only to explicit paragraph-level Task labels.
   const taskBlockNodes = (sourceGraph?.nodes || []).filter(node =>
     node.kind === 'paragraph' &&
-    /^\\s*(?:Task|Request)\\s+[1-9]\\d*\\s*(?:—|–|-|:)\\s*/iu.test(node.text)
+    /^\s*(?:Task|Request)\s+[1-9]\d*\s*(?:—|–|-|:)\s*/iu.test(node.text)
   );
   const taskBlockAtoms = taskBlockNodes.map(node => ({
     id: `A${String(++order).padStart(5, '0')}`,
@@ -461,7 +461,7 @@ function buildSemanticAtoms(sourceGraph) {
         && atom.source_span.end <= block.source_span.end
       );
       if (owner) { ownersForContained.set(atom.id, owner.id); return false; }
-      const requirementFooter = /^\\s*Requirements\\s*:/iu.test(atom.text);
+      const requirementFooter = /^\s*Requirements\s*:/iu.test(atom.text);
       if (requirementFooter) {
         ownersForContained.set(atom.id, taskBlockAtoms[taskBlockAtoms.length - 1].id);
         return false;
