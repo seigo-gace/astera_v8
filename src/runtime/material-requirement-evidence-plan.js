@@ -282,6 +282,8 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
         (String(record.query_id || '').startsWith('retry_') &&
           String(record.query_id).endsWith('_' + q.query_id)))
       && (!record.claim_id || record.claim_id === q.claim_id)
+      && (!record.owner_request_id || record.owner_request_id === target.owner_request_id)
+      && (!record.requirement_slot_id || record.requirement_slot_id === target.slot_id)
     ));
     const attributed = new Map();
     for (const record of executions) {
