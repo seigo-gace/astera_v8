@@ -76,7 +76,11 @@ for (const [label,size] of [['1k',1000],['5k',5000],['10k',10000]]) {
       },{id:'real-evidence-module-'+label,is_global:true,plan:'admin'});
       assert.equal(out.result?.type,'cognitive_map');
       assert.ok(results.length>0,'Task plan reaches real Evidence Search Module');
-      assert.ok(results.every(x=>x.route_execution?.dual_route_complete===true),'both routes attempted');
+      assert.ok(results.every(x=>x.route_execution?.dual_route_complete===true),
+        'both routes attempted: '+JSON.stringify(results.map(x=>({
+          status:x.status,route:x.route_execution,
+          providers:x.provider_execution?.initial?.map(p=>({id:p.provider_id,status:p.status,source_class:p.source_class}))
+        }))));
       assert.ok(results.every(x=>x.provider_execution.initial.length===2),'two real provider execution paths');
       assert.ok(out.result.five_stage.tasks.length>0,'five-stage completed');
       assert.equal(out.material?.sections?.length,8);
