@@ -308,6 +308,7 @@ function normalizeSection06(section, model, lang) {
     const missingLabel = lang === 'ja'
       ? /(?:まだ不足している材料|追加で必要な材料)/u
       : /(?:Material still missing|Additional material required)/iu;
+    const shortInline = String(request.action || '') !== 'compare' && clean(request.request_text).length <= 130;
     const comparisonOnlyLabel = lang === 'ja'
       ? /^\s+-\s+(?:候補|比較観点):/u
       : /^\s+-\s+(?:Candidates|Dimensions):/iu;
@@ -329,10 +330,15 @@ function normalizeSection06(section, model, lang) {
       if (!parts.length) return [];
       return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
     }).map((line) => {
+      if (line.startsWith(marker) && shortInline) {
+        // Short requests remain readable with their full required material
+        // immediately after R##, without printing it again as a child row.
+        return `${line}${line.endsWith(':') ? '' : ':'} ${ontology}`;
+      }
       const hasRequestMaterial = /(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block);
       return line.startsWith(marker) && !block.includes(ontology) && !hasRequestMaterial
         ? `${line}: ${ontology}` : line;
-    });
+    }).filter((line) => !(shortInline && /^\\s+-\\s+(?:追加で必要な材料|Additional material required)/iu.test(line)));
     block = lines.join('\n');
     if (!block.includes(ontology)
       && !/(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block))
