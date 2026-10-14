@@ -162,3 +162,51 @@ test('Request Graph explicit external Evidence support can authorize required se
   assert.equal(plan.material_evidence_plan.search_authorized,true);
   assert.ok(plan.material_evidence_plan.planned_slot_ids.includes('R07:MR09'));
 });
+
+
+test('Requirement attribution uses matching query candidate lineage and eligible adopted evidence only', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan = materialEvidencePlan(task,graph,{},base);
+  const query = plan.search_plan.queries.find(q => q.requirement_slot_id === 'R01:MR01' && q.role === 'OFFICIAL');
+  const candidate = {
+    candidate_id: 'accepted-one', canonical_record_id: 'record-one',
+    provider_id: 'official-one', source_family_id: 'primary-series',
+    canonical_locator: { url:'https://example.org/reference' }
+  };
+  const result = {
+    status:'FINAL_VALID',
+    evidence:[candidate],
+    query_execution: {initial:[{
+      query_id:query.query_id, claim_id:query.claim_id, role:query.role, status:'FOUND',
+      provider_records:[{provider_id:'official-one',status:'FOUND',candidate_record_ids:['record-one']}]
+    }],reinforcement:[]}
+  };
+  const verified = materialEvidenceExecution(plan,result,{state:'VALID'});
+  const row = verified.requirements.find(r=>r.slot_id==='R01:MR01');
+  assert.equal(row.adopted_evidence_refs.length,1);
+  assert.equal(row.adopted_evidence_refs[0].candidate_id,'accepted-one');
+  assert.equal(row.confirmation_status,'UNRESOLVED');
+  assert.equal(verified.attributed_adopted_count,1);
+  const notAdopted = materialEvidenceExecution(plan,result,{state:'REJECTED'});
+  assert.deepEqual(notAdopted.requirements.find(r=>r.slot_id==='R01:MR01').adopted_evidence_refs,[]);
+  const crossed = { ...result, query_execution: {initial:[
+    {...result.query_execution.initial[0],claim_id:'material-requirement:R02:MR01'}
+  ],reinforcement:[]} };
+  assert.equal(materialEvidenceExecution(plan,crossed,{state:'VALID'}).attributed_adopted_count,0);
+});
+
+test('Reinforcement Evidence is attributed by originating slot and cannot confirm a judgment by itself', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan = materialEvidencePlan(task,graph,{},base);
+  const counter = plan.search_plan.queries.find(q => q.requirement_slot_id === 'R01:MR02' && q.role === 'COUNTER');
+  const result = {status:'FINAL_VALID',evidence:[{
+    candidate_id:'candidate-retry',canonical_record_id:'record-retry'
+  }],query_execution:{initial:[],reinforcement:[{
+    query_id:'retry_1_'+counter.query_id,claim_id:counter.claim_id,
+    status:'FOUND',provider_records:[{provider_id:'independent',status:'FOUND',candidate_record_ids:['candidate-retry']}]
+  }]}};
+  const ledger = materialEvidenceExecution(plan,result,{state:'VALID'});
+  assert.equal(ledger.requirements.find(r=>r.slot_id==='R01:MR02').adopted_evidence_refs.length,1);
+  assert.equal(ledger.requirements.find(r=>r.slot_id==='R01:MR01').adopted_evidence_refs.length,0);
+  assert.equal(ledger.requirements.find(r=>r.slot_id==='R01:MR02').confirmation_status,'UNRESOLVED');
+});
