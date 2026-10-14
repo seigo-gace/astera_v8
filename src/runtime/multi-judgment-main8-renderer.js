@@ -329,7 +329,7 @@ function section03(model, groups, lang) {
     const sourceVerification = /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest)
       && !/\b(?:risk|hazard|counterevidence|compare options)\b/iu.test(sourceRequest.slice(0,65));
     if (sourceVerification) {
-      lines.push(`  - ${request.id}: ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
+      lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
     }
     if (facts.length) lines.push(`  - ${request.id}: ${facts.join(' / ')}`);
     else if (!sourceVerification) lines.push(`  - ${request.id}: ${lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.'}`);
@@ -368,9 +368,10 @@ function section05(model, groups, lang) {
       ...(sourceRisks.length ? sourceRisks : []),
       ...counter.filter(v => !/^(?:MAINLINE|OPPOSITION|THIRD_WAY|HUMAN_FIT)$/iu.test(v))
     ]);
-    const checked = sourceCounter.slice(0, 4);
+    const checked = sourceCounter.slice(0, 2);
     const operation = operationCounterMaterial(request.action, lang);
-    lines.push(`  - ${request.id}: ${requestText}`);
+    if (String(request.action || '') === 'compare') lines.push(`  - ${request.id}: ${requestText}`);
+    else lines.push(`  - ${request.id} [${actionLabel(request.action,lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${checked.length ? checked.join(' / ') : operation}`);
     const evidence = [];
     for (const result of results) for (const perspective of publicLane(result,'multi')?.perspectives || []) {
@@ -393,6 +394,9 @@ function section06(model, groups, lang) {
     const observations = publicValues(observationsFor(model, request).map(item=>item.text));
     const gaps = groupMissing(results);
     lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
+    if (/(?:オプション.*OFF|\\bON\\b|\\bOFF\\b|toggle|無停止|互換性)/iu.test(String(request.request_text || ''))
+      && String(request.action || '') !== 'compare')
+      lines.push(`    - ${lang === 'ja' ? '入力で固定された条件' : 'Source-stated fixed condition'}: ${sanitizePublicValue(request.request_text)}`);
     if (String(request.action || '') === 'compare') {
       // The original alternatives can be embedded in a prose request rather
       // than normalized into explicit candidates. They remain judgment inputs,
@@ -402,7 +406,7 @@ function section06(model, groups, lang) {
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
     const known = unique([...facts, ...observations]);
-    if (known.length) lines.push(`    - ${lang === 'ja' ? '原文由来・根拠付き材料（区別して扱う）' : 'Source observations and established materials (not equivalent)'}: ${known.join(' / ')}`);
+    if (known.length) lines.push(`    - ${lang === 'ja' ? '現在分かること（入力由来は未検証）' : 'Currently known (source observations remain unverified)'}: ${known.join(' / ')}`);
     lines.push(`    - ${lang === 'ja' ? '現時点の結論限界' : 'Unresolved judgment boundary'}: ${lang === 'ja'
       ? '同条件の採用根拠と未解決要件が揃うまで優劣・完了を断定しない。'
       : 'No option or completion state is established without comparable accepted evidence and resolved requirements.'}`);
@@ -433,7 +437,7 @@ function section08(model, groups, lang) {
     const missing = groupMissing(groups.get(request.id) || []);
     const localContext = requestContextLines(request, lang);
     const next = missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang);
-    lines.push(`  - ${request.id}: ${lang === 'ja' ? `「${sanitizePublicValue(request.request_text)}」について、${next}を確認する。` : `For “${sanitizePublicValue(request.request_text)}”, verify ${next}.`}`);
+    lines.push(`  - ${request.id}: ${lang === 'ja' ? `01の該当要求について、${next}を確認する。` : `For the original request in Section01, verify ${next}.`}`);
     if (localContext.length) lines.push(`    - ${lang === 'ja' ? '固定して保持する要求固有条件' : 'Request-specific conditions to preserve'}: ${localContext.join(' / ')}`);
   }
   lines.push(`- ${lang === 'ja' ? 'ある判断要求が未確認でも、別要求の材料で穴埋めしない。未確認はそのR##に残す。' : 'If one judgment request remains unresolved, do not fill the gap with material from another request; keep the uncertainty on that R##.'}`);
