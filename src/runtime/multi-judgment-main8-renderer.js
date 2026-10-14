@@ -179,10 +179,9 @@ function publicLane(taskResult = {}, lane) {
   return fallback[lane] || {};
 }
 function groupFacts(taskResults = []) {
-  return publicValues(taskResults.flatMap((taskResult) => [
-    ...(publicLane(taskResult, 'fact')?.confirmed || []).map(itemText),
-    ...(taskResult?.task?.premises || []).map(itemText)
-  ])).slice(0, 12);
+  return publicValues(taskResults.flatMap((taskResult) =>
+    (publicLane(taskResult, 'fact')?.confirmed || []).map(itemText)
+  )).slice(0, 12);
 }
 function groupRisks(taskResults = []) {
   return publicValues(taskResults.flatMap((taskResult) => (publicLane(taskResult, 'risk')?.risks || []).map((risk) => itemText(risk)))).slice(0, 10);
@@ -326,16 +325,16 @@ function section03(model, groups, lang) {
   for (const item of model.observations || []) lines.push(`  - ${item.id}: ${sanitizePublicValue(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
-    const sourceRequest = sanitizePublicValue(request.request_text);
-    const explicitFactTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Establish facts|Audit|Verify facts|Fact check|Inspect records|Measure baseline)/iu.test(sourceRequest);
-    const explicitOtherTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Examine risk|Compare options)/iu.test(sourceRequest);
-    const sourceVerification = explicitFactTask || (!explicitOtherTask
-      && /\b(?:audit|verify|inspect|fact|measurement|records|baseline|source)\b/iu.test(sourceRequest));
-    if (sourceVerification) {
-      lines.push(`  - ${request.id} ${lang === 'ja' ? '原文指定の要検証項目（確認済み事実ではない）' : 'Source-specified verification target (not an established fact)'}: ${sourceRequest}`);
+    const verificationTargets = publicValues((groups.get(request.id) || []).flatMap(taskResult =>
+      (publicLane(taskResult, 'fact')?.verification_targets || [])
+        .filter(item => item?.status === 'UNVERIFIED' && item?.source === 'TASK_SOURCE_UNVERIFIED')
+        .map(item => itemText(item))
+    ));
+    if (verificationTargets.length) {
+      lines.push(`  - ${request.id} ${lang === 'ja' ? 'Fact段階で抽出された要検証項目（確認済み事実ではない）' : 'Five-stage Fact verification targets (not established facts)'}: ${verificationTargets.join(' / ')}`);
     }
     if (facts.length) lines.push(`  - ${request.id}: ${facts.join(' / ')}`);
-    else if (!sourceVerification) lines.push(`  - ${request.id}: ${lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.'}`);
+    else if (!verificationTargets.length) lines.push(`  - ${request.id}: ${lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.'}`);
   }
   lines.push(`- ${lang === 'ja' ? '区別: 利用者が要求したこと／利用者が観測したこと／コードや外部根拠で確認済みの事実を混ぜない。' : 'Boundary: keep requested behavior, user-observed state, and code/external-evidence-confirmed facts separate.'}`);
   return lines.join('\n');
