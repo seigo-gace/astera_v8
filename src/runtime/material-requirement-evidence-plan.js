@@ -295,6 +295,9 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
         for (const id of (provider.candidate_record_ids || [])) {
           const candidate = adoptedById.get(String(id));
           if (!candidate) continue;
+          // A provider's query attribution cannot override an explicit candidate scope.
+          if (candidate.owner_request_id && candidate.owner_request_id !== target.owner_request_id) continue;
+          if (candidate.requirement_slot_id && candidate.requirement_slot_id !== target.slot_id) continue;
           const key = String(candidate.candidate_id || candidate.canonical_record_id || '');
           if (!key || attributed.has(key)) continue;
           attributed.set(key, {
