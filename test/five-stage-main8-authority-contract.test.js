@@ -16,7 +16,13 @@ test('public final path keeps five-stage authority before Main8', () => {
   const engine = source('src/astera-engine.js');
   const renderer = source('src/runtime/five-lane-main8-material-renderer.js');
 
-  assert.doesNotMatch(engine, /normalizeMultiJudgmentPublicMaterial/);
+  // The multi-request presentation runs ONCE in the material phase; citation
+  // attachment is prohibited from re-invoking any semantic renderer.
+  const citation = source('src/runtime/evidence-citation-material.js');
+  assert.match(engine, /normalizeMultiJudgmentPublicMaterial/);
+  assert.match(engine, /renderMultiJudgmentMain8/);
+  assert.doesNotMatch(citation, /renderMultiJudgmentMain8|normalizeMultiJudgmentPublicMaterial/);
+  assert.match(citation, /const baseMaterial = out\.material/);
   assert.doesNotMatch(engine, /observable\.candidates|observable\.risks|observableFactItems/);
   assert.match(engine, /projectFiveLaneMaterialToMain8/);
   assert.match(engine, /renderFiveLaneMain8\(judgment, super\.material\(judgment\)\)/);
