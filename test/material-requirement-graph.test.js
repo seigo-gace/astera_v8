@@ -125,3 +125,20 @@ test('runtime attachment creates Material Requirement Graph for ordinary task pa
   assert.ok(graph.requests[0].nodes.length >= 4);
   assert.equal(graph.derivation_authority, DERIVATION_AUTHORITY);
 });
+
+
+test('source-stated risk observations are verification needs, not settled safety facts or satisfied disqualifiers',()=>{
+  const graph=buildMaterialRequirementGraph({requests:[{
+    id:'R01',action:'verify',request_text:'Verify whether equipment overheating invalidates a release',
+    local_context:{
+      acceptance_criteria:['No unacceptable thermal failure'],
+      risk_signals:['overheating occurred during repeat usage']
+    }
+  }]});
+  const risk=graph.requests[0].nodes.find(n=>n.material_kind==='FALSIFICATION_OR_DISQUALIFIER');
+  assert.equal(risk.status,'UNRESOLVED');
+  assert.equal(risk.truth_state,'SOURCE_BACKED_UNVERIFIED');
+  assert.ok(graph.gap_slot_ids.includes(risk.slot_id));
+  assert.equal(graph.decision_ready,false);
+  assert.equal(graph.accounting_complete,true);
+});
