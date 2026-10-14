@@ -162,7 +162,7 @@ async function runLane(lane, payload) {
   let value;
   switch (lane) {
     case 'fact': {
-      const base = factLane(normalized.claims, normalized.results, normalized.domain);
+      const base = factLane(normalized.claims, normalized.results, normalized.domain, normalized.task);
       value = Object.freeze({ ...base, fact_requirements: factRequirements(normalized.domain) });
       break;
     }
