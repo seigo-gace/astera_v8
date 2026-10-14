@@ -10,6 +10,7 @@ const { planQueriesForClaim, planTaskQueries } = require('./v4-canonical/query-p
 const { bindClaimEvidence } = require('./v4-canonical/evidence-binding');
 const { ClaimStatus, evaluateClaimConfirmation } = require('./v4-canonical/confirmation');
 const { buildFiveLanes } = require('./v4-canonical/lanes');
+const { materialEvidencePlan } = require('./runtime/material-requirement-evidence-plan');
 
 const CONFIRMED = ClaimStatus.CONFIRMED;
 const UNDETERMINED = ClaimStatus.UNDETERMINED;
@@ -73,7 +74,7 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
   const policyByClaim = {};
   for (const claim of extraction.claims) policyByClaim[claim.claim_id] = policyForClaim(claim);
   const searchPlan = planTaskQueries(extraction.claims, policyByClaim, domain);
-  return deepFreeze({
+  return materialEvidencePlan(task, options.material_requirement_graph || null, domain, {
     schema_version: 'astera.canonical-task-plan.v2',
     task_id: task.id,
     fragments: extraction.fragments,
@@ -86,7 +87,7 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
       task_id: task.id,
       planned_query_roles: unique(searchPlan.queries.map((query) => query.role)).sort()
     }
-  });
+  }, { ownsRequest: options.ownsRequest !== false });
 }
 
 function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidateById = new Map()) {
