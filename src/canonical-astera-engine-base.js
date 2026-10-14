@@ -327,6 +327,11 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions,clarification_code:'USER_CLARIFICATION_REQUIRED'},material:{...this.clarify(questions,renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     }
 
+    // A document-level explicit Gxx lens is a scoped instruction for its
+    // constituent tasks unless a task itself explicitly selects another lens.
+    // This must not leak a domain across unrelated requests without that scope.
+    const globalLensMatch = question.match(/^\\s*\\[(G(?:0[1-9]|[12][0-9]|3[0-8]))\\](?=\\s|$)/iu);
+    const globalExplicitLens = globalLensMatch ? globalLensMatch[1].toUpperCase() : null;
     const routedTasks = packet.tasks.map((baseTask)=>{
       const extraction=extractCanonicalTaskClaims(baseTask);
       const routeText=taskText(baseTask,extraction.claims);
@@ -338,9 +343,14 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       else if (routePollutedRouteText(routeText)) routeParts.push(...unique([question,context,routeText]));
       else routeParts.push(...unique([routeText,context].filter(Boolean)));
       const routeQuestion=unique(routeParts).join('\n')||question;
-      const routedDomain=routeDomainTemplates({question:routeQuestion,context});
+      const taskExplicitLens=(routeQuestion.match(/(?:^|[^A-Z0-9])(G\\d{2})(?=[^A-Z0-9]|$)/iu)||[])[1]?.toUpperCase()||null;
+      const scopedLens=globalExplicitLens && !taskExplicitLens ? globalExplicitLens : null;
+      const routedDomain=routeDomainTemplates({
+        question:scopedLens ? `[${scopedLens}] ${routeQuestion}` : routeQuestion,
+        context
+      });
       const specialistRouting=routeRequestSpecialistProfiles({question:routeQuestion,context});
-      const explicitGenreHint=(routeQuestion.match(/(?:^|[^A-Z0-9])(G\d{2})(?=[^A-Z0-9]|$)/iu)||[])[1]?.toUpperCase()||null;
+      const explicitGenreHint=taskExplicitLens||scopedLens||null;
       const domain={
         ...routedDomain,
         ...(explicitGenreHint?{explicit_genre_hint:explicitGenreHint}:{}),
