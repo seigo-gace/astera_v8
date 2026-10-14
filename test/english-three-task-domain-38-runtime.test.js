@@ -42,6 +42,10 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
   const stageTasks=result.five_stage?.tasks||[];
   const evidencePlans=tasks.flatMap(r=>r.task?.canonical_plan?.search_plan?.queries||[]);
   const materialPlans=tasks.flatMap(r=>r.task?.material_evidence_execution?.requirements||[]);
+  const scopedPlans=tasks.map(r=>r.task?.canonical_plan?.material_evidence_plan).filter(Boolean);
+  const allMaterialTargets=scopedPlans.flatMap(p=>p.targets||[]);
+  const deferredLens=allMaterialTargets.filter(t=>t.source==='ADDITIVE_SPECIALIST_LENS'
+    && t.applicability==='DEFERRED_APPLICABILITY_UNKNOWN');
   const queryKeys=evidencePlans.map(q=>[
     q.owner_request_id||'NO_OWNER',q.role||'NO_ROLE',
     String(q.text||'').normalize('NFKC').replace(/\s+/g,' ').trim().toLowerCase()
@@ -58,6 +62,17 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
   checks.canonical_need_graph=Array.isArray(graph.requests)&&graph.requests.length>=3;
   checks.evidence_planned=evidencePlans.length>=3&&evidencePlans.some(q=>String(q.requirement_slot_id||'').length>0);
   checks.requirement_lineage=materialPlans.length>0&&materialPlans.some(x=>x.source==='DECISION_BACKWARD_MATERIAL_REQUIREMENT');
+  checks.all_material_slots_accounted=scopedPlans.every(plan=>{
+    const accounted=new Set([...(plan.planned_slot_ids||[]),...(plan.unplanned_slot_ids||[])]);
+    return (plan.targets||[]).every(t=>accounted.has(t.slot_id));
+  });
+  checks.lens_search_has_requirement_owner=allMaterialTargets.filter(t=>
+    t.source==='ADDITIVE_SPECIALIST_LENS' && t.applicability==='APPLICABLE_REQUIRED')
+    .every(t=>Array.isArray(t.linked_requirement_slot_ids)&&t.linked_requirement_slot_ids.length>0
+      && typeof t.applicability_reason==='string');
+  checks.deferred_lens_never_claims_complete=scopedPlans.every(plan=>
+    !(plan.deferred_slot_ids||[]).length || plan.coverage_complete===false);
+
   checks.both_search_routes=searchRecords.length>0&&searchRecords.every(x=>
     x.route_execution?.specialist_authoritative?.attempted&&x.route_execution?.general_current?.attempted&&x.route_execution?.distinct_provider_count>=2);
   checks.five_substantive_lanes=stageTasks.length>=3&&stageTasks.every(t=>stages.every(k=>t[k]&&typeof t[k]==='object'));
@@ -86,7 +101,12 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
     planned_query_roles:Object.fromEntries(['OFFICIAL','COUNTER'].map(role=>
       [role,evidencePlans.filter(q=>q.role===role).length])),
 
-    requirement_slots:materialPlans.length,sections:sections.length,
+    requirement_slots:materialPlans.length,
+    deferred_lens_slots:deferredLens.length,
+    lens_targets_applicable:allMaterialTargets.filter(t=>t.source==='ADDITIVE_SPECIALIST_LENS'
+      && t.applicability==='APPLICABLE_REQUIRED').length,
+    material_slots_without_plan:scopedPlans.reduce((a,p)=>a+(p.unplanned_slot_ids||[]).length,0),
+    sections:sections.length,
     output_chars:plain.length,output_to_input_ratio:Number((plain.length/caseRow.length).toFixed(1)),
     section_chars:sections.map(s=>String(s.text||'').length),
     confirmed_claims:result.canonical_claims?.confirmed_count||0,
