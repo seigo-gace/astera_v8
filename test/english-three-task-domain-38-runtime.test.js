@@ -47,7 +47,7 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
   checks.natural_lens=naturalRoute===caseRow.id;
   checks.runtime_lens=lenses.includes(caseRow.id);
   checks.three_separate_tasks=sourceRequests.length>=3;
-  checks.no_phantom_sprawl=sourceRequests.length<=5;
+  checks.no_phantom_sprawl=sourceRequests.length===3; // Context/requirements are not independent Tasks.
   checks.task_source_preservation=[1,2,3].every(n=>rawTaskText.includes('Task '+n));
   checks.canonical_need_graph=Array.isArray(graph.requests)&&graph.requests.length>=3;
   checks.evidence_planned=evidencePlans.length>=3&&evidencePlans.some(q=>String(q.requirement_slot_id||'').length>0);
