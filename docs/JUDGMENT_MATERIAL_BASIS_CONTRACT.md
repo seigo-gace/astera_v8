@@ -265,3 +265,24 @@ G. Source, CI, real External Evidence E2E and real Host Source/Deploy are separa
 ### 10.5 Audit verdict
 
 ROOT_DESIGN_DRIFT_IDENTIFIED (duplicate render and post-hoc semantic generation); CURRENT_REGRESSION_SNAPSHOT_CI_PASS; PRODUCT_QUALITY_UNPROVEN; STRUCTURAL_MIGRATION_NOT_IMPLEMENTED; EXTERNAL_ADOPTED_EVIDENCE_E2E_NOT_VERIFIED; HOST_DEPLOY_NOT_QUALIFIED. Existing §9 is the design authority: this investigation restores that intent, not a new product purpose.
+
+### 10.6 Search over-expansion is NOT an exact-duplicate problem: measured 38-Lens baseline
+
+Evidence: exact-head GitHub Actions Source test at [Astera Verify run 38541082324](https://github.com/seigo-gace/astera_v8/actions/runs/38541082324). The 38 separate English cases each contain three independent user Tasks (~1,129 input characters mean) and execute the actual internal Evidence Search orchestration through two *fake* Providers returning zero candidates. These numbers are **planned Query entries** only, not claims about outbound Web requests, authoritative Provider coverage, FINAL-adopted Sources or decision readiness.
+
+| Planning origin | Query entries | Portion of 12,547 |
+|---|---:|---:|
+| Automatically added Lens fact, risk, multi, inquiry, compare, evidence channels | 10,746 | 85.6% |
+| Decision-backward base Requirement nodes | 1,276 | 10.2% |
+| Canonical Claim planning | 525 | 4.2% |
+| Total | **12,547** | 100% |
+
+Of 12,547 planned Query entries, 12,365 are exact-distinct on (Request owner, role, full normalized query text), with only 182 exact repeats (**1.45%**). A naive unique-query filter could not materially solve the observed expense/latency risk. Existing Lens distribution: FACT 2,562; RISK 2,986; MULTI 2,008; INQUIRY 1,366; COMPARE 1,138; EVIDENCE 686. The 38/38 current test assertions PASS, but all 38 have adopted Evidence 0 and decision-ready 0; no useful true external source quality conclusion follows.
+
+**Root design correction:** The existing target says universal Material Requirement Graph is the authority; original four-level Domain/Genre refines the specific decision need additively. Thus a selected Lens MUST NOT imply automatically searching *all* generic phrases in all six channels. Replace such unconditional channel enumeration with an explicit, traceable **applicability assessment per Requirement / source-backed Claim / needed comparison or falsifier**. Keep the original Lens catalog and full semantic capabilities, but map each specialist source term to the case-specific requirement it refines and to its actual applicable time/jurisdiction/subject/operation scope. Classify each candidate Lens term as APPLICABLE_REQUIRED, DEFERRED_APPLICABILITY_UNKNOWN, NOT_APPLICABLE_WITH_REASON or ALREADY_COVERED_BY_EQUIVALENT_SEARCH; the classification must have a deterministic, inspectable source/requirement justification, never a topical-keyword shortcut alone.
+
+Search both specialist-authoritative and general-current routes for applicable claims as before. Search *every* genuinely relevant missing/falsifying requirement within a bounded prioritized plan, and record any deferred items honestly (no false coverage_complete, no accidental SATISFIED). Preserve the existing 128-query plan contract. Favor high-discrimination external Facts, controls, thresholds and opposing evidence over generic instruction wording. Exact-equivalent queries may share one retrieval when Request/Claim/Evidence scope really matches, with all originating slot IDs retained; forbid silent cross-Request evidence laundering. Measure Request-level required-slot coverage, adopted-and-bound evidence, counterevidence, deferred slots, outbound provider calls and wall/CPU time independently.
+
+**Required negative tests before replacing planner:** a relevant specialist rule absent from the source must still be searched if independently required to judge the case; a false Lens match must not cause off-topic search inflation; two semantically similar Req slots must not share Evidence if their populations/dates/jurisdictions differ; distinct falsifiers cannot be deduplicated to one source; no requested material can disappear just to improve Query counts. The current total Query count is a diagnostic benchmark only, not permission to reduce required coverage.
+
+**Completion for this measurement CU:** measured cause and architecture correction recorded; planner optimization **NOT YET IMPLEMENTED**. Source/CI PASS confirms the measurement and earlier single-render / Worker parity regression fixes, not the true external Evidence sufficiency.
