@@ -224,7 +224,7 @@ function buildTradeOffDifference(dimension, candidateLabels, candidateMaterials,
   };
 }
 
-function factLane(claims, results, domain = {}) {
+function factLane(claims, results, domain = {}, task = {}) {
   const byId = resultMap(results);
   const confirmedClaims = claims.filter((claim) => byId.get(claim.claim_id)?.status === ClaimStatus.CONFIRMED);
   const undeterminedClaims = claims.filter((claim) => byId.get(claim.claim_id)?.status === ClaimStatus.UNDETERMINED);
@@ -234,6 +234,16 @@ function factLane(claims, results, domain = {}) {
     source: 'LENS_PLAN',
     lens_sources: entry.sources
   }));
+  // Source-stated Fact verification targets belong to the Fact lane, NOT
+  // to an eight-section renderer interpreting the raw Request after the fact.
+  // Target != independent Fact: a source Request can be displayed only as an
+  // unverified investigation need until its Claims have acceptable bindings.
+  const source = String(task.source_span?.text || task.raw_text || '');
+  const explicitFactTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Establish facts|Audit|Verify facts|Fact check|Inspect records|Measure baseline)/iu.test(source);
+  const verificationTargets = explicitFactTask
+    ? [{ text:source,source:'TASK_SOURCE_UNVERIFIED',request_id:task.request_id || null,
+       source_span:task.source_span || null,status:'UNVERIFIED' }]
+    : [];
   const unresolvedEvidence = undeterminedClaims.map((claim) => ({
     item: claim.raw_text,
     reason: reasonsFor(byId.get(claim.claim_id)).join(' / '),
@@ -250,6 +260,7 @@ function factLane(claims, results, domain = {}) {
       supported_scope: byId.get(claim.claim_id).supported_scope,
       bindings: byId.get(claim.claim_id).support_binding_ids || []
     })),
+    verification_targets: verificationTargets,
     unconfirmed: undeterminedClaims.map((claim) => ({
       claim_id: claim.claim_id,
       text: claim.raw_text,
@@ -652,7 +663,7 @@ function buildFiveLanes({ claims, results, policyByClaimId, task = {}, domain = 
   const effectiveDomain = { ...domain, lens_plan: lensPlan };
   return deepFreeze({
     lens_plan: lensPlan,
-    fact: factLane(claims, results, effectiveDomain),
+    fact: factLane(claims, results, effectiveDomain, task),
     risk: riskLane(claims, results, task, effectiveDomain),
     multi: multiLane(claims, results, effectiveDomain, task, searchPlan),
     inquiry: inquiryLane(claims, results, effectiveDomain, task),
