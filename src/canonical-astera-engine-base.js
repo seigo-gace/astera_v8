@@ -387,9 +387,10 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
         if(searchRequired)evidenceRaw=await this.resolveEvidenceForTask({task,input,caller,request,signal});
         if(!evidenceRaw)evidenceRaw=notProvidedEvidence(task.id);
         evidenceRawByTask.set(String(task.id),evidenceRaw);
-        const evidenceTask = { ...task, material_evidence_execution: materialEvidenceExecution(task.canonical_plan, evidenceRaw) };
+        const normalizedEvidence=normalizeEvidencePacket(evidenceRaw);
+        const evidenceTask = { ...task, material_evidence_execution: materialEvidenceExecution(task.canonical_plan, evidenceRaw, normalizedEvidence) };
         const projected=await executor.exec('PROJECT_CANONICAL_TASK',{task:evidenceTask,evidenceRaw},{signal});
-        const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,publicLanes=projected.public_lanes,perspectiveExpansion=projected.perspective_expansion;
+        const evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),canonical=projected.canonical,lanes=projected.lanes,publicLanes=projected.public_lanes,perspectiveExpansion=projected.perspective_expansion;
         return{task:evidenceTask,evidence,evidence_raw:evidenceRaw,canonical,lanes,...(publicLanes?{public_lanes:publicLanes}:{}),perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare};
       }
     });
