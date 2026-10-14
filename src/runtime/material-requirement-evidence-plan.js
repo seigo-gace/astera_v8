@@ -16,6 +16,15 @@ const EXTERNALLY_RESEARCHABLE = new Set([
 ]);
 const LENS_CHANNELS = Object.freeze(['fact', 'risk', 'multi', 'inquiry', 'compare', 'evidence']);
 const ROLES = Object.freeze(['OFFICIAL', 'COUNTER']);
+const LENS_REQUIREMENT_LINKS = Object.freeze({
+  fact: ['OBSERVATION_VALIDATION', 'ASSUMPTION_VALIDATION', 'SUBQUESTION_ANSWER', 'EVIDENCE_SUPPORT'],
+  risk: ['FALSIFICATION_OR_DISQUALIFIER'],
+  multi: ['FALSIFICATION_OR_DISQUALIFIER', 'DECISION_CRITERION'],
+  inquiry: ['UNRESOLVED_ITEM', 'SUBQUESTION_ANSWER', 'EVIDENCE_SUPPORT'],
+  compare: ['COMPARISON_BASIS', 'DECISION_CRITERION'],
+  evidence: ['EVIDENCE_SUPPORT', 'OBSERVATION_VALIDATION', 'ASSUMPTION_VALIDATION']
+});
+
 
 function clean(value) {
   return String(value ?? '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
@@ -56,8 +65,6 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
   const out = [];
   if (row && ownsRequest) {
     for (const node of (Array.isArray(row.nodes) ? row.nodes : [])) {
-      // A user-supplied failure condition is source-backed as a requirement,
-      // not verified as an actual safety or performance fact.
       const sourceBackedDisqualifier = node.material_kind === 'FALSIFICATION_OR_DISQUALIFIER'
         && node.status === 'SATISFIED'
         && node.truth_state === 'SOURCE_BACKED_RULE_OR_CONTEXT';
@@ -70,21 +77,38 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
         source: 'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
         material_kind: node.material_kind,
         question: clean(node.question),
-        status: node.status
+        status: node.status,
+        applicability: 'APPLICABLE_REQUIRED',
+        applicability_reason: 'UNRESOLVED_OR_SOURCE_SPECIFIED_GRAPH_REQUIREMENT',
+        linked_requirement_slot_ids: [node.slot_id]
       });
     }
   }
+  // A routed specialist Lens alone is NOT evidence that every generic phrase
+  // in every channel must be searched. Preserve its full candidate set,
+  // but give each external query a case-specific Requirement owner.
+  // Missing/uncertain applicability is DEFERRED, never silently NOT_APPLICABLE
+  // and never interpreted as SATISFIED.
   const owner = clean(task?.request_id || row?.owner_request_id || task?.id);
+  const links = ownsRequest ? out.filter(item =>
+    item.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT') : [];
   for (const channel of LENS_CHANNELS) {
     const terms = [...new Set((lensPlanValues(domain, channel) || []).map(clean).filter(Boolean))];
+    const scoped = links.filter(item => LENS_REQUIREMENT_LINKS[channel].includes(item.material_kind));
+    const applicable = scoped.length > 0;
     for (const [i, term] of terms.entries()) {
       out.push({
-        slot_id: `${owner}:${clean(task?.id || "TASK")}:LENS:${channel}:${i + 1}`,
+        slot_id: `${owner}:${clean(task?.id || 'TASK')}:LENS:${channel}:${i + 1}`,
         owner_request_id: owner,
         source: 'ADDITIVE_SPECIALIST_LENS',
         material_kind: `LENS_${channel.toUpperCase()}`,
         question: term,
-        status: 'UNRESOLVED'
+        status: 'UNRESOLVED',
+        applicability: applicable ? 'APPLICABLE_REQUIRED' : 'DEFERRED_APPLICABILITY_UNKNOWN',
+        applicability_reason: applicable
+          ? `REQUIRED_BY_${channel.toUpperCase()}_MATERIAL_REQUIREMENT`
+          : `NO_REQUEST_LOCAL_${channel.toUpperCase()}_REQUIREMENT_LINK`,
+        linked_requirement_slot_ids: scoped.map(item => item.slot_id)
       });
     }
   }
@@ -110,16 +134,22 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
         search_authorized: false, required_slot_ids: targets.map(t => t.slot_id),
         planned_slot_ids: [], unplanned_slot_ids: targets.map(t => t.slot_id),
         coverage_complete: targets.length === 0,
+        deferred_slot_ids: targets.filter(t => t.applicability === 'DEFERRED_APPLICABILITY_UNKNOWN').map(t => t.slot_id),
         targets
       }
     });
   }
 
   const queries = [...current];
-  const planned = [], unplanned = [];
+  const planned = [], unplanned = [], deferred = [];
   const objective = clean(task?.target || task?.purpose || task?.objective || task?.source_span?.text).slice(0, 320);
   const domainId = clean(domain?.primary?.id) || null;
   for (const target of targets) {
+    if (target.applicability !== 'APPLICABLE_REQUIRED') {
+      unplanned.push(target.slot_id);
+      deferred.push(target.slot_id);
+      continue;
+    }
     if (queries.length + ROLES.length > LIMIT) {
       unplanned.push(target.slot_id);
       continue;
@@ -161,6 +191,7 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
       required_slot_ids: targets.map(t => t.slot_id),
       planned_slot_ids: planned,
       unplanned_slot_ids: unplanned,
+      deferred_slot_ids: deferred,
       coverage_complete: unplanned.length === 0,
       // These are search plans, not verified facts or adopted Evidence.
       targets
@@ -230,7 +261,12 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       material_kind: target.material_kind,
       source: target.source,
       question: target.question,
-      planning_status: planned.has(target.slot_id) ? 'PLANNED' : 'NOT_PLANNED',
+      applicability: target.applicability || 'APPLICABLE_REQUIRED',
+      applicability_reason: target.applicability_reason || null,
+      linked_requirement_slot_ids: target.linked_requirement_slot_ids || [],
+      planning_status: planned.has(target.slot_id) ? 'PLANNED'
+        : target.applicability === 'DEFERRED_APPLICABILITY_UNKNOWN'
+          ? 'DEFERRED_APPLICABILITY_UNKNOWN' : 'NOT_PLANNED',
       search_status,
       adopted_evidence_refs: adoptedRefs,
       // Requirement-to-Claim evidence validation is still separate.
