@@ -249,3 +249,65 @@ test('a source-backed disqualifying risk must still be searched, not treated as 
     .materialEvidenceExecution(plan,null,{state:'REJECTED'});
   assert.equal(execution.requirements.find(r=>r.slot_id==='R01:MR_RISK').confirmation_status,'UNRESOLVED');
 });
+
+
+test('specialist mandatory counterevidence is searched when linked to a real risk requirement even if not literally named in the input', () => {
+  const domain = { primary: {
+    id: 'G99', risk_lens: ['pressure relief valve failure mode'],
+    compare_lens: ['unrelated financial forecast'],
+    fact_lens: ['unrelated rainfall index']
+  } };
+  const need = { requests: [{ owner_request_id:'R01', nodes: [{
+    slot_id:'R01:REAL_RISK', material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+    question:'Which independent safety failure condition can invalidate the proposal?',
+    required:true,status:'MISSING'
+  }]}] };
+  const plan = materialEvidencePlan({ ...task,target:'Inspect the new pump proposal' },need,domain,base);
+  const risk = plan.material_evidence_plan.targets.find(t=>t.question==='pressure relief valve failure mode');
+  const unrelated = plan.material_evidence_plan.targets.find(t=>t.question==='unrelated financial forecast');
+  assert.equal(risk.applicability,'APPLICABLE_REQUIRED');
+  assert.deepEqual(risk.linked_requirement_slot_ids,['R01:REAL_RISK']);
+  assert.ok(plan.material_evidence_plan.planned_slot_ids.includes(risk.slot_id));
+  assert.equal(plan.search_plan.queries.filter(q=>q.requirement_slot_id===risk.slot_id).length,2);
+  assert.equal(unrelated.applicability,'DEFERRED_APPLICABILITY_UNKNOWN');
+  assert.match(unrelated.applicability_reason,/NO_REQUEST_LOCAL_COMPARE_REQUIREMENT_LINK/);
+  assert.ok(plan.material_evidence_plan.unplanned_slot_ids.includes(unrelated.slot_id));
+  assert.ok(plan.material_evidence_plan.deferred_slot_ids.includes(unrelated.slot_id));
+  assert.equal(plan.search_plan.queries.filter(q=>q.requirement_slot_id===unrelated.slot_id).length,0);
+  assert.equal(plan.material_evidence_plan.coverage_complete,false);
+});
+
+test('distinct risk falsifiers and different Request scopes cannot be merged to reduce query counts', () => {
+  const need={ requests:[{owner_request_id:'R01',nodes:[
+    {slot_id:'R01:SAFETY_A',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+      question:'Failure under hot weather',status:'UNRESOLVED',required:true},
+    {slot_id:'R01:SAFETY_B',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+      question:'Failure after cold storage',status:'UNRESOLVED',required:true}
+  ]},{owner_request_id:'R02',nodes:[
+    {slot_id:'R02:SAFETY_A',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+      question:'Failure under hot weather in another jurisdiction',status:'UNRESOLVED',required:true}
+  ]}]};
+  const domain={primary:{id:'G99',risk_lens:['Safety inspection protocol']}};
+  const first=materialEvidencePlan(task,need,domain,base);
+  const second=materialEvidencePlan({...task,id:'T02',request_id:'R02'},need,domain,base);
+  for(const slot of ['R01:SAFETY_A','R01:SAFETY_B']){
+    assert.equal(first.search_plan.queries.filter(q=>q.requirement_slot_id===slot).length,2);
+  }
+  assert.equal(second.search_plan.queries.filter(q=>q.requirement_slot_id==='R02:SAFETY_A').length,2);
+  const firstIds=new Set(first.search_plan.queries.map(q=>q.query_id));
+  assert.ok(second.search_plan.queries.every(q=>!firstIds.has(q.query_id)));
+});
+
+test('uncertain Lens applicability is explicitly deferred, never fabricated as search coverage',()=>{
+  const domain={primary:{id:'G99',fact_lens:['authoritative independent standard'],
+    risk_lens:['engineering failure threshold']}};
+  const plan=materialEvidencePlan({...task,target:'Assess an unspecified proposal'},null,domain,base);
+  assert.equal(plan.material_evidence_plan.search_authorized,true);
+  assert.equal(plan.material_evidence_plan.planned_slot_ids.length,0);
+  assert.equal(plan.material_evidence_plan.deferred_slot_ids.length,2);
+  assert.equal(plan.material_evidence_plan.coverage_complete,false);
+  const ledger=require('../src/runtime/material-requirement-evidence-plan')
+    .materialEvidenceExecution(plan,null,{state:'REJECTED'});
+  assert.equal(ledger.unresolved_count,2);
+  assert.ok(ledger.requirements.every(r=>r.planning_status==='DEFERRED_APPLICABILITY_UNKNOWN'));
+});
