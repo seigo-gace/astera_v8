@@ -236,56 +236,86 @@ function formatTradeOffDifferenceBlock(entry = {}) {
 
 function formatSection05Pass(section) {
   const perspectives = section.expanded_perspectives?.length
-    ? section.expanded_perspectives
-    : (section.perspectives || []);
-  if (!perspectives.length) return `- ${line(section.summary)}`;
-  return perspectives.map((perspective) => {
-    const focusText = Array.isArray(perspective.focus) ? join(perspective.focus) : line(perspective.focus);
-    return [
-      formatMaterialBulletField('id', perspective.id || perspective.class),
-      formatMaterialBulletField('focus', focusText),
-      formatMaterialBulletField('conditions', join(perspective.conditions)),
-      ...(perspective.failure_conditions?.length ? [formatMaterialBulletField('failure_conditions', join(perspective.failure_conditions))] : []),
-      formatTradeOffMaterialText(perspective.trade_off_material)
-    ].join('\n');
-  }).join('\n\n');
+    ? section.expanded_perspectives : (section.perspectives || []);
+  if (!perspectives.length) return '- No source-backed opposing material is available.';
+  // Merge duplicate lens perspectives across Task instances only in the public
+  // prose; retain the complete per-Task material in the structured judgment.
+  const groups = new Map();
+  for (const perspective of perspectives) {
+    const id = String(perspective.id || perspective.class || 'counter-perspective');
+    const key = String(perspective.class || id);
+    if (!groups.has(key)) groups.set(key, { labels: [], focus: [], conditions: [],
+      failures: [], support: [], counter: [], missing: [] });
+    const row = groups.get(key);
+    row.labels.push(id);
+    row.focus.push(...(Array.isArray(perspective.focus) ? perspective.focus : [perspective.focus]));
+    row.conditions.push(...(perspective.conditions || []));
+    row.failures.push(...(perspective.failure_conditions || []));
+    const material = perspective.trade_off_material || {};
+    row.support.push(...(material.support_evidence_refs || []));
+    row.counter.push(...(material.counter_evidence_refs || []));
+    row.missing.push(...(material.missing_evidence_refs || []));
+  }
+  const lines = [];
+  for (const [id, record] of groups) {
+    lines.push('- perspective: ' + id);
+    if (unique(record.focus).length) lines.push('  - focus: ' + join(unique(record.focus)));
+    if (unique(record.conditions).length) lines.push('  - conditions: ' + join(unique(record.conditions)));
+    if (unique(record.failures).length) lines.push('  - failure_conditions: ' + join(unique(record.failures)));
+    if (record.support.length) lines.push('  - support_sources: ' + formatEvidenceRefList(record.support));
+    if (record.counter.length) lines.push('  - counter_sources: ' + formatEvidenceRefList(record.counter));
+    if (record.missing.length) lines.push('  - missing_sources: ' + formatMissingEvidenceRefList(record.missing));
+  }
+  return lines.join('\n');
 }
 
 function formatSection06Pass(section) {
-  const candidates = (section.comparison_candidates || []).map((candidate) =>
-    typeof candidate === 'string' ? candidate : (candidate.label || candidate.candidate_id || '-')
-  ).filter((candidate) => candidate && candidate !== '-');
-  const candidateMaterialBlocks = (section.candidate_materials || []).map((entry) => formatCandidateMaterialBlock(entry));
-  if (!candidates.length && !candidateMaterialBlocks.length) {
-    return '- 比較候補は入力されていない';
-  }
-  const tradeOffDiffBlocks = (section.trade_off_differences || []).map((entry) => formatTradeOffDifferenceBlock(entry));
-  const conditionDiff = section.condition_differences || {};
-  const contradictionBlocks = (section.contradiction_map || []).map((entry) => [
-    formatMaterialBulletField('type', entry.type),
-    formatMaterialBulletField('claim_id', entry.claim_id),
-    formatMaterialBulletField('reasons', join(entry.reasons))
-  ].join('\n'));
-  const supportedBlocks = (section.supported_scope || []).map((entry) => formatMaterialBulletField('supported_scope', formatSupportedScopeEntry(entry)));
-  const unsupportedBlocks = (section.unsupported_scope || []).map((entry) => formatMaterialBulletField('unsupported_scope', formatUnsupportedScopeEntry(entry)));
+  const labels = unique((section.comparison_candidates || []).map(candidate =>
+    typeof candidate === 'string' ? candidate : candidate?.label || candidate?.candidate_id).filter(Boolean));
+  const material = section.candidate_materials || [];
+  if (!labels.length && !material.length) return '- No source-backed alternatives were supplied.';
   const lines = [];
-  if (candidates.length) lines.push(formatMaterialBulletField('candidates', join(candidates)));
-  if (section.dimensions?.length) lines.push(formatMaterialBulletField('dimensions', join(section.dimensions)));
-  lines.push(...candidateMaterialBlocks, ...tradeOffDiffBlocks);
-  const conditionFields = [
-    ['constraints', conditionDiff.constraints],
-    ['prohibitions', conditionDiff.prohibitions],
-    ['preserve', conditionDiff.preserve],
-    ['replace', conditionDiff.replace],
-    ['conditions_diff', conditionDiff.conditions],
-    ['exceptions', conditionDiff.exceptions],
-    ['dependencies', conditionDiff.dependencies]
-  ];
-  for (const [key, values] of conditionFields) {
-    if (values?.length) lines.push(formatMaterialBulletField(key, join(values)));
+  if (labels.length) lines.push('- candidates: ' + join(labels));
+  const seen = new Set();
+  for (const entry of material) {
+    const label = String(entry.label || entry.candidate_id || '');
+    const observation = unique(entry.observations || []);
+    const sources = entry.evidence_refs || [];
+    const fingerprint = JSON.stringify([label,entry.material_state,observation,sources]);
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    lines.push('- candidate: ' + label + '; state: ' + String(entry.material_state || 'UNRESOLVED'));
+    if (observation.length) lines.push('  - source_observations: ' + join(observation));
+    if (sources.length) lines.push('  - evidence_refs: ' + formatEvidenceRefList(sources));
   }
-  lines.push(...contradictionBlocks, ...supportedBlocks, ...unsupportedBlocks);
-  return lines.filter(Boolean).join('\n') || '- 比較候補は入力されていない';
+  const dimensions = unique(section.dimensions || []);
+  if (dimensions.length) lines.push('- shared_comparison_dimensions: ' + join(dimensions));
+  // The same per-candidate ledger is not reproduced under every dimension.
+  // Unique per-dimension differences, conditions and evidence remain visible.
+  const tradeOffSeen = new Set();
+  for (const entry of section.trade_off_differences || []) {
+    const dim = String(entry.dimension || '');
+    const conditions = unique(entry.conditions || []);
+    const differences = unique((entry.per_candidate || []).flatMap(candidate => {
+      const observed = unique(candidate.observations || []);
+      return observed.map(value => String(candidate.label || candidate.candidate_id) + ': ' + value);
+    }));
+    const rowKey = JSON.stringify([dim,conditions,differences,entry.comparison_state]);
+    if (tradeOffSeen.has(rowKey)) continue;
+    tradeOffSeen.add(rowKey);
+    lines.push('- dimension: ' + dim + '; status: ' + String(entry.comparison_state || entry.status || 'UNRESOLVED'));
+    if (conditions.length) lines.push('  - conditions: ' + join(conditions));
+    const newDifferences = differences.filter(value => ![...seen].some(fp => fp.includes(value)));
+    if (newDifferences.length) lines.push('  - candidate_differences: ' + join(newDifferences));
+  }
+  const conditionDiff = section.condition_differences || {};
+  for (const [name,values] of Object.entries(conditionDiff)) {
+    if (unique(values || []).length) lines.push('- ' + name + ': ' + join(unique(values)));
+  }
+  const conflicts = section.contradiction_map || [];
+  if (conflicts.length) lines.push('- conflicts: ' + join(unique(conflicts.map(row =>
+    String(row.type || 'CONFLICT') + ': ' + join(row.reasons || [])))));
+  return lines.join('\n');
 }
 
 function aggregateTaskResults(taskResults){
