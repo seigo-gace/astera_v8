@@ -446,7 +446,7 @@ function section06(model, groups, lang) {
 }
 
 function section07(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '要求ごとの根拠成立状態' : 'Evidence status by request'}:`];
+  const lines = [`- ${lang === 'ja' ? '要求ごとに根拠状態を分離' : 'Evidence status by request'}:`];
   for (const request of model.judgment_requests || []) {
     const results = groups.get(request.id) || [];
     const states = groupEvidence(results, request, lang);
