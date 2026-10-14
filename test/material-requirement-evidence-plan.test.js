@@ -129,3 +129,36 @@ test('Public AsteraEngine sends decision requirement and Lens searches before fi
     assert.equal(out.result?.canonical_claims?.confirmed_count || 0, 0, 'search attempt must not auto-confirm claims');
   } finally { await engine.destroy(); }
 });
+
+
+test('multi-task Request gives requirement searches to evidence-capable Task, never silently to its earlier local Task', () => {
+  const { selectRequestMaterialOwners } = require('../src/runtime/material-requirement-evidence-plan');
+  const localTask = {
+    id:'T01',request_id:'R01', evidence_need:{required:false},
+    canonical_plan: {search_plan:{queries:[]}}
+  };
+  const evidenceTask = {
+    id:'T02',request_id:'R01', evidence_need:{required:true},
+    canonical_plan: {search_plan:{queries:[]}}
+  };
+  const owners = selectRequestMaterialOwners([localTask,evidenceTask],graph);
+  assert.equal(owners.get('R01'), 'T02');
+  const absentFromLocal = materialEvidencePlan(localTask,graph,{},base,{ownsRequest:false});
+  const presentInSearch = materialEvidencePlan(evidenceTask,graph,{},base,{ownsRequest:true});
+  assert.equal(absentFromLocal.search_plan.queries.length,0);
+  assert.ok(presentInSearch.material_evidence_plan.planned_slot_ids.includes('R01:MR01'));
+  assert.ok(presentInSearch.material_evidence_plan.planned_slot_ids.includes('R01:MR02'));
+});
+
+test('Request Graph explicit external Evidence support can authorize required search without keyword matching', () => {
+  const { selectRequestMaterialOwners } = require('../src/runtime/material-requirement-evidence-plan');
+  const noKeyword = { id:'T07', request_id:'R07',target:'安全性の判断材料',evidence_need:{required:false},canonical_plan:{search_plan:{queries:[]}} };
+  const explicit = {requests:[{owner_request_id:'R07',nodes:[
+    {slot_id:'R07:MR09',material_kind:'EVIDENCE_SUPPORT',question:'判断材料の裏付けとなる一次根拠',status:'MISSING',required:true}
+  ]}]};
+  const owners = selectRequestMaterialOwners([noKeyword],explicit);
+  assert.equal(owners.get('R07'),'T07');
+  const plan = materialEvidencePlan(noKeyword,explicit,{},base,{ownsRequest:true});
+  assert.equal(plan.material_evidence_plan.search_authorized,true);
+  assert.ok(plan.material_evidence_plan.planned_slot_ids.includes('R07:MR09'));
+});
