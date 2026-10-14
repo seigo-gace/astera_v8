@@ -170,7 +170,6 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
     ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
     ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
   ];
-  const byQuery = new Map(queryExecutions.map(q => [String(q.query_id || ''), q]));
   const accepted = normalizedEvidence?.state === 'VALID';
   const adoptedById = new Map();
   if (accepted) for (const candidate of (rawEvidence?.evidence || [])) {
@@ -179,8 +178,35 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
   }
   const requirements = (plan.targets || []).map(target => {
     const scopedQueries = queries.filter(q => q.requirement_slot_id === target.slot_id);
-    const executions = scopedQueries.map(q => byQuery.get(q.query_id)).filter(Boolean);
+    const executions = queryExecutions.filter(record => scopedQueries.some(q =>
+      (record.query_id === q.query_id ||
+        (String(record.query_id || '').startsWith('retry_') &&
+          String(record.query_id).endsWith('_' + q.query_id)))
+      && (!record.claim_id || record.claim_id === q.claim_id)
+    ));
+    const attributed = new Map();
+    for (const record of executions) {
+      if (record.status !== 'FOUND') continue;
+      for (const provider of (record.provider_records || [])) {
+        if (provider.status !== 'FOUND') continue;
+        for (const id of (provider.candidate_record_ids || [])) {
+          const candidate = adoptedById.get(String(id));
+          if (!candidate) continue;
+          const key = String(candidate.candidate_id || candidate.canonical_record_id || '');
+          if (!key || attributed.has(key)) continue;
+          attributed.set(key, {
+            candidate_id: key,
+            canonical_record_id: candidate.canonical_record_id || null,
+            provider_id: provider.provider_id || candidate.provider_id || null,
+            source_family_id: candidate.source_family_id || null,
+            source_url: candidate.canonical_locator?.url || null,
+            query_id: record.query_id
+          });
+        }
+      }
+    }
     // Executed search != adopted evidence != confirmed claim.
+    const adoptedRefs = [...attributed.values()];
     const search_status = !planned.has(target.slot_id)
       ? 'NOT_PLANNED'
       : !executions.length
@@ -198,6 +224,7 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       question: target.question,
       planning_status: planned.has(target.slot_id) ? 'PLANNED' : 'NOT_PLANNED',
       search_status,
+      adopted_evidence_refs: adoptedRefs,
       // Requirement-to-Claim evidence validation is still separate.
       confirmation_status: 'UNRESOLVED'
     };
@@ -207,6 +234,7 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
     planning_complete: plan.coverage_complete === true,
     required_count: requirements.length,
     search_execution_count: queryExecutions.length,
+    attributed_adopted_count: requirements.reduce((sum, row) => sum + row.adopted_evidence_refs.length, 0),
     unresolved_count: requirements.length,
     requirements
   });
