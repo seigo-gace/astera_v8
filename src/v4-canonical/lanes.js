@@ -449,6 +449,17 @@ function inquiryLane(claims, results, domain, task = {}) {
   const evidenceNeeds = lensPlanValues(domain, 'evidence');
   const inquiryPrompts = lensPlanValues(domain, 'inquiry');
   const primaryId = domain.primary?.id || null;
+  // Requirements are not satisfied merely because the Search API was called.
+  // Preserve unmet decision-backward evidence needs inside the Inquiry lane.
+  const materialGaps = (task.material_evidence_execution?.requirements || [])
+    .filter((entry) => entry.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
+      && entry.confirmation_status !== 'CONFIRMED');
+  const materialGapQuestions = materialGaps.slice(0, 12).map((entry) =>
+    `${entry.planning_status === 'PLANNED' ? '必要根拠が未確認' : '必要根拠が未検索'}: ${entry.question}`
+  );
+  if (materialGaps.length > 12) {
+    materialGapQuestions.push(`ほか${materialGaps.length - 12}件の必要根拠が未確認です。`);
+  }
   const weakTarget = /^(?:どう|これ|それ|あれ|ここ|そこ|this|that|it|what|how)$/i.test(String(task.target || '').trim());
   const missingTarget = !String(task.target || '').trim() || weakTarget || (task.unresolved || []).some((item) => /:target$/.test(String(item)));
   const actionNeedsCompletion = ['implement', 'improve', 'migrate', 'integrate', 'remove', 'replace', 'change', 'update'].includes(String(task.action || '').toLowerCase());
@@ -466,6 +477,7 @@ function inquiryLane(claims, results, domain, task = {}) {
     ...open.flatMap((item) => item.reasons),
     ...domainQuestions,
     ...evidenceNeeds,
+    ...materialGapQuestions,
     ...(missingTarget ? ['判断対象・変更対象を一意に確定する。'] : []),
     ...(missingCompletion ? [`Task ${task.id || '-'} の完了・合格条件を明示する。`] : []),
     ...(task.hard_blockers || []).map((item) => `Hard Blockerを解消する: ${item}`)
