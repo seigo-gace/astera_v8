@@ -311,3 +311,31 @@ test('uncertain Lens applicability is explicitly deferred, never fabricated as s
   assert.equal(ledger.unresolved_count,2);
   assert.ok(ledger.requirements.every(r=>r.planning_status==='DEFERRED_APPLICABILITY_UNKNOWN'));
 });
+
+
+test('false secondary/overlay Lens match is deferred with reason; explicit local applicability can activate it',()=>{
+  const graph={requests:[{owner_request_id:'R01',nodes:[{
+    slot_id:'R01:DISQUALIFIER',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+    question:'Identify a valid independent safety counterexample',required:true,status:'MISSING'
+  }]}]};
+  const domain={
+    primary:{id:'G99',risk_lens:['Primary safety examination']},
+    overlays:[{id:'O1',risk_lens:['Highly specific river-basin flooding control']}]
+  };
+  const unqualified=materialEvidencePlan(
+    {...task,target:'Inspect a pump under pressure'},graph,domain,base);
+  const primary=unqualified.material_evidence_plan.targets.find(t=>t.question==='Primary safety examination');
+  const overlay=unqualified.material_evidence_plan.targets.find(t=>t.question==='Highly specific river-basin flooding control');
+  assert.equal(primary.applicability,'APPLICABLE_REQUIRED');
+  assert.equal(overlay.applicability,'DEFERRED_APPLICABILITY_UNKNOWN');
+  assert.deepEqual(overlay.lens_source_tiers,['OVERLAY']);
+  assert.ok(unqualified.material_evidence_plan.unplanned_slot_ids.includes(overlay.slot_id));
+  assert.ok(!unqualified.material_evidence_plan.coverage_complete);
+  const justified=materialEvidencePlan({...task,
+    source_span:{text:'Inspect the pump and Highly specific river-basin flooding control'},
+    target:'Inspect a pump under pressure'},graph,domain,base);
+  const activated=justified.material_evidence_plan.targets.find(t=>t.question===overlay.question);
+  assert.equal(activated.applicability,'APPLICABLE_REQUIRED');
+  assert.match(activated.applicability_reason,/EXPLICIT_SOURCE_SCOPE/);
+  assert.ok(justified.material_evidence_plan.planned_slot_ids.includes(activated.slot_id));
+});
