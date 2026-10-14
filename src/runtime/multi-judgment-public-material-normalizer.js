@@ -281,7 +281,7 @@ function normalizeSection05(section, model, lang) {
     const extraLabel = lang === 'ja' ? '追加の反証材料' : 'Additional counter material';
     const semantic = semanticCounterSummary(request, lang);
     block = block.split('\n').flatMap((line) => {
-      if (line.startsWith(marker)) return [`${line} / ${semantic}`];
+      if (line.startsWith(marker)) return [line]; // Counter/failure material is directly below.
       if (!line.includes(`${label}:`)) return [line];
       const raw = line.slice(line.indexOf(':') + 1);
       const extras = String(request.action || '') === 'verify'
@@ -328,7 +328,7 @@ function normalizeSection06(section, model, lang) {
         .filter((part) => usefulMissingLine(part, request.request_text));
       if (!parts.length) return [];
       return [`${prefix} ${[...new Set(parts)].join(' / ')}`];
-    }).map((line) => line.startsWith(marker) ? `${line}: ${ontology}` : line);
+    }).map((line) => line.startsWith(marker) && !block.includes(ontology) ? `${line}: ${ontology}` : line);
     block = lines.join('\n');
     if (!block.includes(ontology)) block += `\n    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${ontology}`;
     text = text.slice(0, start) + block + text.slice(end);
@@ -386,8 +386,15 @@ function normalizeSection08(section, model, lang) {
     const end = nextMatch ? start + marker.length + nextMatch.index : text.length;
     let block = text.slice(start, end);
     const ontology = nextStepOntology(request, lang);
+    const allRequests = model.judgment_requests || [];
+    const repeatLongSource = allRequests.reduce((total, item) => total + clean(item.request_text).length, 0) > 400;
     block = block.split('\n').map((line) => {
       if (!/^\s*-\s*R\d{2}:/.test(line)) return line;
+      // Full source wording already exists in section 01 under the same R##.
+      // Avoid 3+ long requests copied verbatim into sections 05/06/08.
+      if (repeatLongSource) return lang === 'ja'
+        ? `  - ${request.id}: 01の該当要求について、${ontology}。`
+        : `  - ${request.id}: For the corresponding request in Section01, ${ontology}.`;
       return lang === 'ja'
         ? `  - ${request.id}: 「${clean(request.request_text)}」について、${ontology}。`
         : `  - ${request.id}: For “${clean(request.request_text)}”, ${ontology}.`;
