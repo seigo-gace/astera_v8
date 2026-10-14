@@ -114,7 +114,7 @@ test('Public AsteraEngine sends decision requirement and Lens searches before fi
     assert.ok(calls.length > 0, 'Evidence Search API must be called');
     const allQueries = calls.flatMap(c => c.upstream_search_plan?.queries || []);
     assert.ok(allQueries.some(q => q.requirement_slot_id && q.material_kind), 'decision material evidence is missing from actual Evidence request');
-    assert.ok(allQueries.some(q => q.material_kind.startsWith('LENS_')), 'specialist requirements must reach Evidence Search');
+    assert.ok(allQueries.some(q => String(q.material_kind || '').startsWith('LENS_')), 'specialist requirements must reach Evidence Search');
     assert.ok(allQueries.some(q => q.material_kind === 'FALSIFICATION_OR_DISQUALIFIER' || q.material_kind === 'DECISION_CRITERION'));
     assert.ok(out.result?.five_stage?.tasks?.length > 0);
     assert.equal(out.result?.canonical_claims?.confirmed_count || 0, 0, 'search attempt must not auto-confirm claims');
