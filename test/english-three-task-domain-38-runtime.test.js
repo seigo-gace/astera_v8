@@ -71,6 +71,7 @@ function evaluate(caseRow,out,searchRecords,naturalRoute) {
     search_calls:searchRecords.length,queries:evidencePlans.length,
     requirement_slots:materialPlans.length,sections:sections.length,
     output_chars:plain.length,output_to_input_ratio:Number((plain.length/caseRow.length).toFixed(1)),
+    section_chars:sections.map(s=>String(s.text||'').length),
     confirmed_claims:result.canonical_claims?.confirmed_count||0,
     truly_decision_ready:false, // The fake providers return NO EVIDENCE. Never report product completion.
     failures:Object.keys(checks).filter(k=>!checks[k]),
