@@ -326,6 +326,7 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       return{result:{type:'clarification_needed',non_ai:true,no_normative_decision_generated:true,decision_authority:'EXTERNAL_ONLY',request_model:request,questions,clarification_code:'USER_CLARIFICATION_REQUIRED'},material:{...this.clarify(questions,renderLang),no_normative_decision_generated:true},prompt:'',runtime:{ai_used:false,llm_called:false,engine:'v8_canonical_global_rules'}};
     }
 
+    const plannedRequirementOwners = new Set();
     const tasks=packet.tasks.map((baseTask)=>{
       const extraction=extractCanonicalTaskClaims(baseTask);
       const routeText=taskText(baseTask,extraction.claims);
@@ -354,7 +355,14 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       };
       const evidenceNeed=deriveEvidenceNeed(baseTask,domain);
       const task={...baseTask,evidence_need:evidenceNeed,domain};
-      const canonicalPlan=buildCanonicalTaskPlan(task,domain,{extraction});
+      const owner = String(baseTask.request_id || baseTask.id || '');
+      const ownsRequest = !plannedRequirementOwners.has(owner);
+      plannedRequirementOwners.add(owner);
+      const canonicalPlan = buildCanonicalTaskPlan(task, domain, {
+        extraction,
+        material_requirement_graph: packet.material_requirement_graph,
+        ownsRequest
+      });
       return{...task,canonical_plan:canonicalPlan};
     });
     request.analysis_task_packet={...packet,tasks:tasks.map(({canonical_plan,...task})=>task),execution_waves:packet.execution_waves};
