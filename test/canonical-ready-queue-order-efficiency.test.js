@@ -49,3 +49,17 @@ test('failed prerequisite remains skipped, unrelated ready work completes', asyn
   assert.equal(output.skipped.get('B').status, 'SKIPPED_DEPENDENCY');
   assert.equal(output.results.get('C'), 'C');
 });
+
+test('initial ready queue retains stable order under a large bounded concurrency workload', async () => {
+  const count = 4096;
+  const tasks = Array.from({ length: count }, (_, index) => ({ id: 'Q' + index }));
+  const seen = [];
+  const output = await executeTaskWaves({
+    tasks, executionWaves: [tasks.map(task => task.id)], maxConcurrency: 8,
+    runTask: async task => { seen.push(task.id); return task.id; }
+  });
+  assert.deepEqual(seen, tasks.map(task => task.id));
+  assert.equal(output.results.size, count);
+  assert.equal(output.failures.size, 0);
+  assert.equal(output.skipped.size, 0);
+});
