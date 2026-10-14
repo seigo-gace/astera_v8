@@ -338,7 +338,7 @@ function normalizeSection06(section, model, lang) {
       const hasRequestMaterial = /(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block);
       return line.startsWith(marker) && !block.includes(ontology) && !hasRequestMaterial
         ? `${line}: ${ontology}` : line;
-    }).filter((line) => !(shortInline && /^\\s+-\\s+(?:追加で必要な材料|Additional material required)/iu.test(line)));
+    }).filter((line) => !(shortInline && /^\s+-\s+(?:追加で必要な材料|Additional material required)/iu.test(line)));
     block = lines.join('\n');
     if (!block.includes(ontology)
       && !/(?:追加で必要な材料|Additional material required|判断に必要な確認材料|Material required for judgment)/iu.test(block))
