@@ -74,7 +74,7 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
   const policyByClaim = {};
   for (const claim of extraction.claims) policyByClaim[claim.claim_id] = policyForClaim(claim);
   const searchPlan = planTaskQueries(extraction.claims, policyByClaim, domain);
-  return materialEvidencePlan(task, options.material_requirement_graph || null, domain, {
+  const basePlan = {
     schema_version: 'astera.canonical-task-plan.v2',
     task_id: task.id,
     fragments: extraction.fragments,
@@ -87,7 +87,9 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
       task_id: task.id,
       planned_query_roles: unique(searchPlan.queries.map((query) => query.role)).sort()
     }
-  }, { ownsRequest: options.ownsRequest !== false });
+  };
+  if (options.deferMaterialEvidencePlan === true) return deepFreeze(basePlan);
+  return materialEvidencePlan(task, options.material_requirement_graph || null, domain, basePlan, { ownsRequest: options.ownsRequest !== false });
 }
 
 function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidateById = new Map()) {
