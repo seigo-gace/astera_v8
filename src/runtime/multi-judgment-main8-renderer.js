@@ -4,7 +4,7 @@ const ORDER = Object.freeze([
   '01_purpose','02_premise','03_facts','04_crisis',
   '05_opposition','06_comparison','07_evidence_status','08_reinstruction'
 ]);
-const INTERNAL = /PARSER_|TASK_GRAPH|MATERIAL_ONLY|INSUFFICIENT_|RETRIEVAL_FAILED|VERIFICATION_TARGET|NO_EXECUTABLE_ACTION|claim_id|candidate_id|binding_id|SearchExecution|EvidenceQuality/iu;
+const INTERNAL = /\b(?:PARSE|PARSER|TASK_GRAPH|SCOPE)_[A-Z0-9_]+\b|MATERIAL_ONLY|INSUFFICIENT_|RETRIEVAL_FAILED|VERIFICATION_TARGET|NO_EXECUTABLE_ACTION|claim_id|candidate_id|binding_id|SearchExecution|EvidenceQuality/iu;
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
