@@ -132,4 +132,48 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   });
 }
 
-module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask };
+
+function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null) {
+  const plan = canonicalPlan.material_evidence_plan || {};
+  const queries = canonicalPlan.search_plan?.queries || [];
+  const planned = new Set(plan.planned_slot_ids || []);
+  const queryExecutions = [
+    ...(Array.isArray(rawEvidence?.query_execution?.initial) ? rawEvidence.query_execution.initial : []),
+    ...(Array.isArray(rawEvidence?.query_execution?.reinforcement) ? rawEvidence.query_execution.reinforcement : [])
+  ];
+  const byQuery = new Map(queryExecutions.map(q => [String(q.query_id || ''), q]));
+  const requirements = (plan.targets || []).map(target => {
+    const scopedQueries = queries.filter(q => q.requirement_slot_id === target.slot_id);
+    const executions = scopedQueries.map(q => byQuery.get(q.query_id)).filter(Boolean);
+    // Executed search != adopted evidence != confirmed claim.
+    const search_status = !planned.has(target.slot_id)
+      ? 'NOT_PLANNED'
+      : !executions.length
+        ? 'NOT_EXECUTED_OR_UNATTRIBUTED'
+        : executions.some(q => String(q.status).toUpperCase() === 'FOUND')
+          ? 'CANDIDATES_FOUND_NOT_BOUND'
+          : executions.some(q => String(q.status).toUpperCase() === 'RETRIEVAL_FAILED')
+            ? 'RETRIEVAL_FAILED'
+            : 'NO_ATTRIBUTED_EVIDENCE';
+    return {
+      slot_id: target.slot_id,
+      owner_request_id: target.owner_request_id,
+      material_kind: target.material_kind,
+      question: target.question,
+      planning_status: planned.has(target.slot_id) ? 'PLANNED' : 'NOT_PLANNED',
+      search_status,
+      // Requirement-to-Claim evidence validation is still separate.
+      confirmation_status: 'UNRESOLVED'
+    };
+  });
+  return deepFreeze({
+    schema_version: 'astera.material-evidence-execution.v1',
+    planning_complete: plan.coverage_complete === true,
+    required_count: requirements.length,
+    search_execution_count: queryExecutions.length,
+    unresolved_count: requirements.length,
+    requirements
+  });
+}
+
+module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask, materialEvidenceExecution };
