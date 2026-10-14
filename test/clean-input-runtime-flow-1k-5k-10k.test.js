@@ -56,6 +56,10 @@ for (const [label, target] of [['clean-1k',1000],['clean-5k',5000],['clean-10k',
       assert.match(publicText, /予約|システム|利用者/u, 'input topic survives through full pipeline');
       assert.match(premises + publicText, /削除|維持|データ/u, 'data preservation is not lost');
       assert.match(comparison + publicText, /候補A|候補B|キャッシュ|データベース/u, 'case-specific alternatives remain');
+      assert.match(comparison, /候補A|キャッシュ/u,
+        'Main8 Section06 must contain candidate A, not merely mention it elsewhere');
+      assert.match(comparison, /候補B|データベース/u,
+        'Main8 Section06 must contain candidate B, not merely mention it elsewhere');
       assert.match(evidence + publicText, /根拠|証拠|未確認|未確定|取得/u, 'evidence state must remain visible');
       // Stage-by-stage diagnosis: a configured search plan must not be silently declared complete.
       const searchTasks = packet.tasks.filter(task => (task?.canonical_plan?.search_plan?.queries || []).length > 0 || task?.evidence_need?.required);
