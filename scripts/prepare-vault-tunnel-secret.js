@@ -48,9 +48,9 @@ module.exports = { prepareTunnelSecret };
 
 if (require.main === module) {
   prepareTunnelSecret().then(
-    () => { process.stdout.write("ASTERA_V8_VAULT_TUNNEL_SECRET_READY=YES\\n"); },
+    () => { process.stdout.write("ASTERA_V8_VAULT_TUNNEL_SECRET_READY=YES\n"); },
     (error) => {
-      process.stderr.write(`ASTERA_V8_VAULT_TUNNEL_SECRET_READY=NO reason=${error.code || error.message}\\n`);
+      process.stderr.write(`ASTERA_V8_VAULT_TUNNEL_SECRET_READY=NO reason=${error.code || error.message}\n`);
       process.exitCode = 1;
     }
   );
