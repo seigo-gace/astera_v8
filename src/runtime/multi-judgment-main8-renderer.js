@@ -448,8 +448,17 @@ function section06(model, groups, lang) {
 function section07(model, groups, lang) {
   const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
   for (const request of model.judgment_requests || []) {
-    const states = groupEvidence(groups.get(request.id) || [], request, lang);
+    const results = groups.get(request.id) || [];
+    const states = groupEvidence(results, request, lang);
     lines.push(`  - ${request.id}: ${states.join(' / ')}`);
+    const pending = results.map(result =>
+      publicLane(result,'inquiry')?.specialist_applicability).filter(item =>
+        item?.state === 'DEFERRED_APPLICABILITY_UNKNOWN');
+    const count = pending.reduce((n, item) => n + Number(item.deferred_count || 0), 0);
+    if (count) {
+      const kinds = unique(pending.flatMap(item => item.material_kinds || []));
+      lines.push(`    - ${lang === 'ja' ? '専門Lensの適用性が未確認' : 'Specialist Lens applicability unresolved'}: ${count} ${lang === 'ja' ? '項目' : 'candidate slots'} (${kinds.join(' / ')})`);
+    }
   }
   lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。別R##のEvidenceを流用しない。' : 'User input supports what was requested or observed but does not verify implementation facts or causes. Evidence from one R## must not be silently reused for another.'}`);
   return lines.join('\n');
