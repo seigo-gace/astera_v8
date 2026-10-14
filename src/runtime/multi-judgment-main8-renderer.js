@@ -424,10 +424,10 @@ function section06(model, groups, lang) {
     // The common unknown-vs-confirmed boundary is stated once above.
     if (String(request.action || '') === 'compare') {
       const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
-      if (needed.length) lines.push(`    - ${lang === 'ja' ? '比較に必要な根拠' : 'Evidence needed for comparison'}: ${unique(needed).join(' / ')}`);
+      if (needed.length) lines.push(`    - ${lang === 'ja' ? '追加で必要な材料（比較根拠）' : 'Additional material required (comparison evidence)'}: ${unique(needed).join(' / ')}`);
     } else {
       const required = operationMissingMaterial(request.action, lang);
-      lines.push(`    - ${lang === 'ja' ? '判断に必要な確認材料' : 'Material required for judgment'}: ${required}`);
+      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料（判断用）' : 'Additional material required for judgment'}: ${required}`);
       if (gaps.length) lines.push(`    - ${lang === 'ja' ? '未解決の必要材料' : 'Unresolved material needs'}: ${gaps.length} ${lang === 'ja' ? '項目（08に確認事項を記載）' : 'items; see request-local verification steps in Section08'}`);
     }
   }
