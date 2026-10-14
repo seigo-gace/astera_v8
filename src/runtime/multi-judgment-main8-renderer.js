@@ -378,7 +378,7 @@ function section05(model, groups, lang) {
       ? 'software migration check: rollback, data/contract compatibility, security regression'
       : '';
     if (String(request.action || '') === 'compare') lines.push(`  - ${request.id}: ${requestText}`);
-    else lines.push(`  - ${request.id} [${actionLabel(request.action,lang)}]`);
+    else lines.push(`  - ${request.id}: [${actionLabel(request.action,lang)}]`);
     lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${unique([...(checked.length ? checked : [operation]), migrationChecks]).join(' / ')}`);
     const evidence = [];
     for (const result of results) for (const perspective of publicLane(result,'multi')?.perspectives || []) {
