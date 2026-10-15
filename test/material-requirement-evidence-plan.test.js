@@ -513,3 +513,21 @@ test('colliding adopted candidate identifiers fail closed rather than attribute 
   assert.equal(collision.attributed_adopted_count,0);
   assert.equal(collision.requirements.find(row=>row.slot_id==='R01:MR01').confirmation_status,'UNRESOLVED');
 });
+
+
+test('Inquiry lane distinguishes Claim confirmation from Requirement satisfaction', () => {
+  const { inquiryLane } = require('../src/v4-canonical/lanes');
+  const taskWithStatus = status => ({
+    id:'T01',request_id:'R01',target:'予約システムの妥当性検証',
+    material_evidence_execution:{requirements:[{
+      slot_id:'R01:MR01',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+      planning_status:'PLANNED',question:'公式根拠と反例は十分か',confirmation_status:status
+    }]}
+  });
+  const unresolved = inquiryLane([],[],{},taskWithStatus('UNRESOLVED'));
+  const claimOnly = inquiryLane([],[],{},taskWithStatus('CONFIRMED'));
+  const complete = inquiryLane([],[],{},taskWithStatus('SATISFIED'));
+  assert.ok(unresolved.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
+  assert.ok(claimOnly.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
+  assert.ok(!complete.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
+});
