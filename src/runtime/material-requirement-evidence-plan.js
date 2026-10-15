@@ -378,7 +378,9 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
     const sourceMatches = records.filter(record =>
       sourceTexts.has(clean(record?.claim?.raw_text))
       && (!record?.claim?.owner_request_id || record.claim.owner_request_id === row.owner_request_id)
-      && (!record?.claim?.requirement_slot_id || record.claim.requirement_slot_id === row.slot_id));
+      && (!record?.claim?.requirement_slot_id || record.claim.requirement_slot_id === row.slot_id)
+      && (!canonical.task_id || !record?.claim?.source_axes?.task_id
+        || record.claim.source_axes.task_id === canonical.task_id));
     const matching = records.filter(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id
