@@ -603,3 +603,23 @@ test('Inquiry and five-stage keep directly attributed counterevidence unresolved
   assert.equal(inquiry.problem_health.healthy,false);
   assert.ok(inquiry.missing_questions.some(q=>q.includes('必要根拠に反証あり: 二重予約を生む反例')));
 });
+
+
+test('source-backed requirement traces existing exact-text Claim without declaring verification', () => {
+  const { reconcileMaterialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const ledger={requirements:[{
+    slot_id:'R01:MR08',owner_request_id:'R01',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+    question:'既存データを削除しない',source_ref_texts:['既存データを削除しない'],
+    adopted_evidence_refs:[],confirmation_status:'UNRESOLVED'
+  }]};
+  const record={claim:{claim_id:'parsed-1',raw_text:'既存データを削除しない'},
+    confirmation:{status:'UNDETERMINED',bindings:[]}};
+  const result=reconcileMaterialEvidenceExecution(ledger,{records:[record]});
+  assert.deepEqual(result.requirements[0].source_matched_claim_ids,['parsed-1']);
+  assert.deepEqual(result.requirements[0].confirmed_claim_ids,[]);
+  assert.equal(result.requirements[0].confirmation_status,'UNRESOLVED');
+  const unrelated=reconcileMaterialEvidenceExecution(ledger,{records:[
+    {claim:{claim_id:'parsed-other',raw_text:'既存データを削除してよい'},confirmation:{status:'CONFIRMED',bindings:[]}}
+  ]});
+  assert.deepEqual(unrelated.requirements[0].source_matched_claim_ids,[]);
+});
