@@ -430,12 +430,22 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
     const hasDirectClaim = records.some(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id);
+    // Observation validation has one precise criterion: one source assertion
+    // confirmed under canonical Claim gates with direct adopted external support.
+    // Other material kinds require their own criterion/countercondition contracts.
+    const observationVerified = row.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
+      && row.material_kind === 'OBSERVATION_VALIDATION'
+      && row.planning_status === 'PLANNED'
+      && row.search_status === 'ADOPTED_EVIDENCE_ATTRIBUTED_REQUIREMENT_UNCONFIRMED'
+      && sourceTexts.size === 1 && sourceMatches.length === 1
+      && matching.length === 1 && contradictory.length === 0
+      && sourceMatches[0].claim.claim_id === matching[0].claim.claim_id;
     return { ...row, source_matched_claim_ids: sourceMatches.map(record => record.claim.claim_id),
       confirmed_claim_ids: matching.map(record => record.claim.claim_id),
       contradictory_claim_ids: contradictory.map(record => record.claim.claim_id),
-      proposition_verification_state: contradictory.length ? 'CONTRADICTED' : matching.length ? 'DIRECT_CLAIM_CONFIRMED_REQUIREMENT_UNRESOLVED' : 'UNVERIFIED',
-      confirmation_status: 'UNRESOLVED',
-      confirmation_reason: contradictory.length ? 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' : matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
+      proposition_verification_state: contradictory.length ? 'CONTRADICTED' : observationVerified ? 'VERIFIED' : matching.length ? 'DIRECT_CLAIM_CONFIRMED_REQUIREMENT_UNRESOLVED' : 'UNVERIFIED',
+      confirmation_status: observationVerified ? 'SATISFIED' : 'UNRESOLVED',
+      confirmation_reason: observationVerified ? 'OBSERVATION_CONFIRMED_BY_DIRECT_ADOPTED_CLAIM' : contradictory.length ? 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' : matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
         : ids.size && !hasDirectClaim ? 'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT'
           : ids.size ? 'ADOPTED_EVIDENCE_NOT_DIRECTLY_CONFIRMED_FOR_REQUIREMENT'
             : 'NO_ATTRIBUTABLE_CONFIRMED_EVIDENCE' };
