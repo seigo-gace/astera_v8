@@ -273,10 +273,16 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
   ];
   const accepted = normalizedEvidence?.state === 'VALID';
   const adoptedById = new Map();
+  const ambiguousIds = new Set();
   if (accepted) for (const candidate of (source?.evidence || [])) {
-    if (candidate.candidate_id) adoptedById.set(String(candidate.candidate_id), candidate);
-    if (candidate.canonical_record_id) adoptedById.set(String(candidate.canonical_record_id), candidate);
+    for (const rawId of [candidate.candidate_id, candidate.canonical_record_id]) {
+      if (!rawId) continue;
+      const id = String(rawId);
+      if (adoptedById.has(id) && adoptedById.get(id) !== candidate) ambiguousIds.add(id);
+      else adoptedById.set(id, candidate);
+    }
   }
+  for (const id of ambiguousIds) adoptedById.delete(id);
   const requirements = (plan.targets || []).map(target => {
     const scopedQueries = queries.filter(q => q.requirement_slot_id === target.slot_id);
     const executions = queryExecutions.filter(record => scopedQueries.some(q =>
