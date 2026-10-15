@@ -432,8 +432,8 @@ function section06(model, groups, lang) {
     }
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
-    const known = unique([...facts, ...observations]);
-    if (known.length) lines.push(`    - ${lang === 'ja' ? '現在分かること（入力由来は未検証）' : 'Currently known (source observations remain unverified)'}: ${known.join(' / ')}`);
+    if (facts.length) lines.push(`    - ${lang === 'ja' ? '確認済みFact段階の材料' : 'Confirmed Fact-lane material'}: ${facts.join(' / ')}`);
+    if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告の観測（外部未検証）' : 'User-reported observations (not externally verified)'}: ${observations.join(' / ')}`);
     // The common unknown-vs-confirmed boundary is stated once above.
     if (String(request.action || '') === 'compare') {
       const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
