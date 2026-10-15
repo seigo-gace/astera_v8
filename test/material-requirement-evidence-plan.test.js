@@ -489,3 +489,21 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
   assert.equal(matched.requirements[0].confirmation_reason,'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED');
   assert.equal(matched.unresolved_count,1);
 });
+
+
+test('colliding adopted candidate identifiers fail closed rather than attribute another source', () => {
+  const { materialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const plan=materialEvidencePlan(task,graph,{},base);
+  const query=plan.search_plan.queries.find(q => q.requirement_slot_id==='R01:MR01');
+  const packet=(evidence)=>({status:'FINAL_VALID',evidence,
+    query_execution:{initial:[{query_id:query.query_id,claim_id:query.claim_id,status:'FOUND',
+      provider_records:[{provider_id:'primary',status:'FOUND',candidate_record_ids:['same-id']}]}],reinforcement:[]}});
+  const valid=materialEvidenceExecution(plan,packet([{candidate_id:'same-id',canonical_record_id:'record-1'}]),{state:'VALID'});
+  assert.equal(valid.attributed_adopted_count,1);
+  const collision=materialEvidenceExecution(plan,packet([
+    {candidate_id:'same-id',canonical_record_id:'record-1'},
+    {candidate_id:'same-id',canonical_record_id:'record-2',owner_request_id:'R02'}
+  ]),{state:'VALID'});
+  assert.equal(collision.attributed_adopted_count,0);
+  assert.equal(collision.requirements.find(row=>row.slot_id==='R01:MR01').confirmation_status,'UNRESOLVED');
+});
