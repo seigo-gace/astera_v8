@@ -663,3 +663,33 @@ test('only unique exact direct assertions acquire requirement ownership', () => 
   }]}]};
   assert.ok(materialEvidencePlan(task,otherKind,{},original).claims.every(claim => !claim.requirement_slot_id));
 });
+
+
+test('only a single fully confirmed observation with direct adopted evidence can satisfy its Requirement', () => {
+  const { reconcileMaterialEvidenceExecution }=require('../src/runtime/material-requirement-evidence-plan');
+  const row={slot_id:'R01:MR01',owner_request_id:'R01',
+    source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',material_kind:'OBSERVATION_VALIDATION',
+    question:'遅延は発生したか',source_ref_texts:['遅延が発生した'],
+    planning_status:'PLANNED',search_status:'ADOPTED_EVIDENCE_ATTRIBUTED_REQUIREMENT_UNCONFIRMED',
+    adopted_evidence_refs:[{candidate_id:'e1'}],confirmation_status:'UNRESOLVED'};
+  const record={claim:{claim_id:'c1',raw_text:'遅延が発生した',owner_request_id:'R01',
+    requirement_slot_id:'R01:MR01'},confirmation:{status:'CONFIRMED',bindings:[
+      {candidate_id:'e1',relation:'SUPPORTS',evidence_source:'EXTERNAL_RETRIEVED_EVIDENCE'}]}};
+  const reconcile=(override={},records=[record])=>reconcileMaterialEvidenceExecution({
+    requirements:[{...row,...override}]},{task_id:'T01',records}).requirements[0];
+  assert.equal(reconcile().confirmation_status,'SATISFIED');
+  assert.equal(reconcile().proposition_verification_state,'VERIFIED');
+  assert.equal(reconcile().confirmation_reason,'OBSERVATION_CONFIRMED_BY_DIRECT_ADOPTED_CLAIM');
+  for(const fields of [
+    {material_kind:'DECISION_CRITERION'},
+    {source_ref_texts:['遅延が発生した','別の観測']},
+    {planning_status:'NOT_PLANNED'},
+    {search_status:'CANDIDATES_FOUND_NOT_BOUND'},
+    {owner_request_id:'R02'}
+  ]) assert.equal(reconcile(fields).confirmation_status,'UNRESOLVED');
+  const counter={claim:{...record.claim,claim_id:'c2'},
+    confirmation:{status:'UNDETERMINED',bindings:[{
+      candidate_id:'e1',relation:'CONTRADICTS',evidence_source:'EXTERNAL_RETRIEVED_EVIDENCE'}]}};
+  assert.equal(reconcile({},[record,counter]).confirmation_status,'UNRESOLVED');
+  assert.equal(reconcile({},[{...record,confirmation:{status:'UNDETERMINED',bindings:record.confirmation.bindings}}]).confirmation_status,'UNRESOLVED');
+});
