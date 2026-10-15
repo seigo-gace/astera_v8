@@ -104,6 +104,7 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
         material_kind: node.material_kind,
         question: clean(node.question),
         status: node.status,
+        truth_state: node.truth_state || null,
         applicability: 'APPLICABLE_REQUIRED',
         applicability_reason: 'UNRESOLVED_OR_SOURCE_SPECIFIED_GRAPH_REQUIREMENT',
         linked_requirement_slot_ids: [node.slot_id]
@@ -335,6 +336,9 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       material_kind: target.material_kind,
       source: target.source,
       question: target.question,
+      requirement_specification_state: target.status === 'SATISFIED'
+        && target.truth_state === 'SOURCE_BACKED_RULE_OR_CONTEXT' ? 'SOURCE_SPECIFIED' : 'UNRESOLVED',
+      proposition_verification_state: 'UNVERIFIED',
       applicability: target.applicability || 'APPLICABLE_REQUIRED',
       applicability_reason: target.applicability_reason || null,
       planning_deferral_reason: planned.has(target.slot_id) ? null
