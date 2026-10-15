@@ -722,6 +722,11 @@ test('planned observation Requirement reaches SATISFIED only through attributabl
   const verified=reconcileMaterialEvidenceExecution(ledger,canonical);
   assert.equal(verified.requirements.find(row=>row.slot_id==='R01:MR01').confirmation_status,'SATISFIED');
   assert.equal(verified.unresolved_count,0);
+  const { inquiryLane }=require('../src/v4-canonical/lanes');
+  const projectedInquiry=inquiryLane([],[],{},{id:'T01',request_id:'R01',
+    target:'遅延ログの確認',material_evidence_execution:verified});
+  assert.ok(!projectedInquiry.missing_questions.some(q=>q.includes('遅延ログは確認できるか')),
+    'resolved observation must not remain a false missing Requirement in five-stage Inquiry');
   const notFinal=reconcileMaterialEvidenceExecution(materialEvidenceExecution(plan,raw,{state:'INVALID'}),canonical);
   assert.equal(notFinal.requirements[0].confirmation_status,'UNRESOLVED');
 });
