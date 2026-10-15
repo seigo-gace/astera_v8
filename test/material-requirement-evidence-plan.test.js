@@ -490,6 +490,10 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
   assert.equal(matched.requirements[0].confirmation_status,'UNRESOLVED');
   assert.equal(matched.requirements[0].confirmation_reason,'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED');
   assert.equal(matched.unresolved_count,1);
+  assert.equal(matched.directly_linked_confirmed_claim_count,1);
+  assert.equal(matched.missing_direct_claim_count,0);
+  assert.equal(missingRelation.missing_direct_claim_count,1);
+  assert.equal(missingRelation.directly_linked_confirmed_claim_count,0);
 });
 
 
