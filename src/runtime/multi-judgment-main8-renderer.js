@@ -372,12 +372,8 @@ function section05(model, groups, lang) {
       ...counter.filter(v => !/^(?:MAINLINE|OPPOSITION|THIRD_WAY|HUMAN_FIT)$/iu.test(v))
     ]);
     const checked = sourceCounter.slice(0, 2);
-    const operation = operationCounterMaterial(request.action, lang);
-    const softwareMigration = String(request.action || '') === 'migrate'
-      && /(?:Node\.js|API|Client|software|server|database|service|system)/iu.test(requestText);
-    const migrationChecks = softwareMigration
-      ? 'software migration check: rollback, data/contract compatibility, security regression'
-      : '';
+    const operation = lang === 'ja' ? '5段Logicに反証・失敗条件が未提示' : 'No counterevidence or failure condition provided by the five-stage lanes';
+    const migrationChecks = '';
     if (String(request.action || '') === 'compare') {
       const explicitOptions = /^(?:Task|Request)\s+\d+\s*[—–-]\s*Compare options:\s*(?:Evaluate\s+)?([^.!?\n]+)/iu.exec(requestText);
       lines.push(`  - ${request.id}: ${explicitOptions ? explicitOptions[1] : requestText}`);
@@ -469,7 +465,7 @@ function section08(model, groups, lang) {
   for (const request of model.judgment_requests || []) {
     const missing = groupMissing(groups.get(request.id) || []);
     const localContext = requestContextLines(request, lang);
-    const next = missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang);
+    const next = missing.length ? missing.join(' / ') : (lang === 'ja' ? '5段Logicから確認対象が供給されていない（必要判断材料は未立証）' : 'No verification targets supplied by the five-stage lanes (material sufficiency unverified)');
     lines.push(`  - ${request.id}: ${lang === 'ja' ? `01の該当要求について、${next}を確認する。` : `For the original request in Section01, verify ${next}.`}`);
     if (localContext.length) lines.push(`    - ${lang === 'ja' ? '固定して保持する要求固有条件' : 'Request-specific conditions to preserve'}: ${localContext.join(' / ')}`);
   }
