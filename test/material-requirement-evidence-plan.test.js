@@ -693,3 +693,35 @@ test('only a single fully confirmed observation with direct adopted evidence can
   assert.equal(reconcile({},[record,counter]).confirmation_status,'UNRESOLVED');
   assert.equal(reconcile({},[{...record,confirmation:{status:'UNDETERMINED',bindings:record.confirmation.bindings}}]).confirmation_status,'UNRESOLVED');
 });
+
+
+test('planned observation Requirement reaches SATISFIED only through attributable FINAL-adopted confirmed Claim', () => {
+  const { materialEvidenceExecution, reconcileMaterialEvidenceExecution } =
+    require('../src/runtime/material-requirement-evidence-plan');
+  const observation='計測ログに遅延が記録された';
+  const graph={requests:[{owner_request_id:'R01',nodes:[{
+    slot_id:'R01:MR01',material_kind:'OBSERVATION_VALIDATION',
+    question:'遅延ログは確認できるか',status:'UNRESOLVED',required:true,
+    source_refs:[{text:observation}]
+  }]}]};
+  const claim={claim_id:'observation-claim',claim_origin:'DIRECT_ASSERTION',raw_text:observation};
+  const plan=materialEvidencePlan(task,graph,{}, {...base,claims:[claim]});
+  assert.equal(plan.claims[0].requirement_slot_id,'R01:MR01');
+  const query=plan.search_plan.queries.find(q=>q.requirement_slot_id==='R01:MR01'&&q.role==='OFFICIAL');
+  assert.ok(query);
+  const raw={status:'FINAL_VALID',evidence:[{candidate_id:'adopted-1'}],
+    query_execution:{initial:[{query_id:query.query_id,claim_id:query.claim_id,
+      owner_request_id:'R01',requirement_slot_id:'R01:MR01',status:'FOUND',
+      provider_records:[{provider_id:'primary',status:'FOUND',candidate_record_ids:['adopted-1']}]}],reinforcement:[]}};
+  const ledger=materialEvidenceExecution(plan,raw,{state:'VALID'});
+  assert.equal(ledger.attributed_adopted_count,1);
+  const canonical={task_id:'T01',records:[{claim:plan.claims[0],
+    confirmation:{status:'CONFIRMED',bindings:[{
+      candidate_id:'adopted-1',relation:'SUPPORTS',evidence_source:'EXTERNAL_RETRIEVED_EVIDENCE'
+    }]}}]};
+  const verified=reconcileMaterialEvidenceExecution(ledger,canonical);
+  assert.equal(verified.requirements.find(row=>row.slot_id==='R01:MR01').confirmation_status,'SATISFIED');
+  assert.equal(verified.unresolved_count,0);
+  const notFinal=reconcileMaterialEvidenceExecution(materialEvidenceExecution(plan,raw,{state:'INVALID'}),canonical);
+  assert.equal(notFinal.requirements[0].confirmation_status,'UNRESOLVED');
+});
