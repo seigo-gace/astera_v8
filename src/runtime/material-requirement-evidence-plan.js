@@ -375,7 +375,10 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
     // Exact source text links existing parsed Claims without manufacturing an
     // assertion or granting external verification authority.
     const sourceTexts = new Set((row.source_ref_texts || []).map(clean).filter(Boolean));
-    const sourceMatches = records.filter(record => sourceTexts.has(clean(record?.claim?.raw_text)));
+    const sourceMatches = records.filter(record =>
+      sourceTexts.has(clean(record?.claim?.raw_text))
+      && (!record?.claim?.owner_request_id || record.claim.owner_request_id === row.owner_request_id)
+      && (!record?.claim?.requirement_slot_id || record.claim.requirement_slot_id === row.slot_id));
     const matching = records.filter(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id
