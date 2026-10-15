@@ -384,7 +384,11 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
           : ids.size ? 'ADOPTED_EVIDENCE_NOT_DIRECTLY_CONFIRMED_FOR_REQUIREMENT'
             : 'NO_ATTRIBUTABLE_CONFIRMED_EVIDENCE' };
   });
+  const directlyLinkedClaimCount = requirements.reduce((sum, row) => sum + row.confirmed_claim_ids.length, 0);
+  const noDirectClaimCount = requirements.filter(row => row.confirmation_reason === 'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT').length;
   return deepFreeze({ ...ledger, requirements,
+    directly_linked_confirmed_claim_count: directlyLinkedClaimCount,
+    missing_direct_claim_count: noDirectClaimCount,
     unresolved_count: requirements.filter(row => row.confirmation_status !== 'SATISFIED').length });
 }
 
