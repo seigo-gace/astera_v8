@@ -383,6 +383,7 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
       && record?.claim?.owner_request_id === row.owner_request_id
       && (record.confirmation?.bindings || record.bindings || []).some(binding =>
         binding.relation === 'CONTRADICTS'
+        && binding.evidence_source === 'EXTERNAL_RETRIEVED_EVIDENCE'
         && [binding.candidate_id, binding.canonical_record_id].filter(Boolean).some(id => ids.has(String(id)))));
     // A confirmed Claim that shares one source is still not proof that a whole
     // requirement, including its counterconditions, has been verified.
