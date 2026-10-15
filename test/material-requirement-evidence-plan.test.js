@@ -628,4 +628,10 @@ test('source-backed requirement traces existing exact-text Claim without declari
   ]});
   assert.deepEqual(foreign.requirements[0].source_matched_claim_ids,[],
     'identical wording does not borrow another Request or slot');
+  const wrongTask=reconcileMaterialEvidenceExecution(ledger,{task_id:'T01',records:[
+    {claim:{claim_id:'task-foreign',raw_text:'既存データを削除しない',
+      source_axes:{task_id:'T02'}},confirmation:{status:'UNDETERMINED',bindings:[]}}
+  ]});
+  assert.deepEqual(wrongTask.requirements[0].source_matched_claim_ids,[],
+    'canonical task cannot borrow an identically worded Claim from another Task');
 });
