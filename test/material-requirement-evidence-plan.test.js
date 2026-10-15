@@ -622,4 +622,10 @@ test('source-backed requirement traces existing exact-text Claim without declari
     {claim:{claim_id:'parsed-other',raw_text:'既存データを削除してよい'},confirmation:{status:'CONFIRMED',bindings:[]}}
   ]});
   assert.deepEqual(unrelated.requirements[0].source_matched_claim_ids,[]);
+  const foreign=reconcileMaterialEvidenceExecution(ledger,{records:[
+    {claim:{claim_id:'foreign',raw_text:'既存データを削除しない',owner_request_id:'R02'},confirmation:{status:'UNDETERMINED',bindings:[]}},
+    {claim:{claim_id:'wrong-slot',raw_text:'既存データを削除しない',owner_request_id:'R01',requirement_slot_id:'R01:MR99'},confirmation:{status:'UNDETERMINED',bindings:[]}}
+  ]});
+  assert.deepEqual(foreign.requirements[0].source_matched_claim_ids,[],
+    'identical wording does not borrow another Request or slot');
 });
