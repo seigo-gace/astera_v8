@@ -541,7 +541,7 @@ function inquiryLane(claims, results, domain, task = {}) {
       healthy: missingFields.length === 0 && open.length === 0 && deferredSpecialist.length === 0 && materialGaps.length === 0,
       reason: deferredSpecialist.length
         ? '専門Lensの適用性が未確定。検索対象に含めるべきか原資料で確認が必要。'
-        : missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
+        : materialGaps.length ? '必要な判断要件の成立確認が未完了。' : missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
     },
     open_items: open,
     missing_fields: missingFields,
