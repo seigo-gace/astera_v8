@@ -105,6 +105,7 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
         question: clean(node.question),
         status: node.status,
         truth_state: node.truth_state || null,
+        source_ref_texts: (node.source_refs || []).map(ref => clean(ref.text)).filter(Boolean),
         applicability: 'APPLICABLE_REQUIRED',
         applicability_reason: 'UNRESOLVED_OR_SOURCE_SPECIFIED_GRAPH_REQUIREMENT',
         linked_requirement_slot_ids: [node.slot_id]
@@ -336,6 +337,7 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
       material_kind: target.material_kind,
       source: target.source,
       question: target.question,
+      source_ref_texts: target.source_ref_texts || [],
       requirement_specification_state: target.status === 'SATISFIED'
         && target.truth_state === 'SOURCE_BACKED_RULE_OR_CONTEXT' ? 'SOURCE_SPECIFIED' : 'UNRESOLVED',
       proposition_verification_state: 'UNVERIFIED',
@@ -370,6 +372,10 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
   const requirements = (ledger.requirements || []).map(row => {
     const ids = new Set((row.adopted_evidence_refs || []).flatMap(ref =>
       [ref.candidate_id, ref.canonical_record_id].filter(Boolean).map(String)));
+    // Exact source text links existing parsed Claims without manufacturing an
+    // assertion or granting external verification authority.
+    const sourceTexts = new Set((row.source_ref_texts || []).map(clean).filter(Boolean));
+    const sourceMatches = records.filter(record => sourceTexts.has(clean(record?.claim?.raw_text)));
     const matching = records.filter(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id
@@ -390,7 +396,8 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
     const hasDirectClaim = records.some(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id);
-    return { ...row, confirmed_claim_ids: matching.map(record => record.claim.claim_id),
+    return { ...row, source_matched_claim_ids: sourceMatches.map(record => record.claim.claim_id),
+      confirmed_claim_ids: matching.map(record => record.claim.claim_id),
       contradictory_claim_ids: contradictory.map(record => record.claim.claim_id),
       proposition_verification_state: contradictory.length ? 'CONTRADICTED' : matching.length ? 'DIRECT_CLAIM_CONFIRMED_REQUIREMENT_UNRESOLVED' : 'UNVERIFIED',
       confirmation_status: 'UNRESOLVED',
