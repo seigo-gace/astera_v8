@@ -37,6 +37,12 @@ test('public AsteraEngine carries the Material Requirement Graph from prepareReq
       'each requirement receives post-canonical reconciliation diagnostics: '+JSON.stringify({missing:requirementRows.filter(row => typeof row.confirmation_reason !== 'string').slice(0,3),failures:out.result?.parallel_execution?.failures,skipped:out.result?.parallel_execution?.skipped}));
     assert.ok((out.result?.five_stage?.tasks || []).length > 0,'five-stage output remains intact');
     assert.equal(out.material?.sections?.length,8,'Main8 remains intact');
+    for (const entry of out.result.task_results || []) {
+      const unresolved = (entry.task?.material_evidence_execution?.requirements || []).some(row =>
+        row.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT' && row.confirmation_status !== 'SATISFIED');
+      if (unresolved) assert.equal(entry.inquiry?.problem_health?.healthy,false,
+        'public Inquiry health cannot be true while required material is unresolved');
+    }
   } finally {
     await engine.destroy();
   }
