@@ -492,7 +492,7 @@ function inquiryLane(claims, results, domain, task = {}) {
   // Preserve unmet decision-backward evidence needs inside the Inquiry lane.
   const materialGaps = (task.material_evidence_execution?.requirements || [])
     .filter((entry) => entry.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
-      && entry.confirmation_status !== 'CONFIRMED');
+      && entry.confirmation_status !== 'SATISFIED');
   const materialGapQuestions = materialGaps.slice(0, 12).map((entry) =>
     `${entry.planning_status === 'PLANNED' ? '必要根拠が未確認' : '必要根拠が未検索'}: ${entry.question}`
   );
