@@ -186,3 +186,15 @@ test('populated five-stage counter and inquiry survive without template substitu
   assert.match(next,/R02:[\s\S]*ログ改変の反証Bを確認/);
   assert.doesNotMatch(next,/5段Logicから確認対象が供給されていない/);
 });
+
+
+test('comparison keeps user observations separate from confirmed five-stage facts', () => {
+  const model=baseModel();
+  model.observations=[{id:'O1',text:'利用者申告の遅延',request_id:'R01'}];
+  const result={task_results:[taskResult('T01','R01','ログで確認した設定','危険','追加の計測')]};
+  const rendered=renderMultiJudgmentMain8(judgmentFor(model),result);
+  const comparison=rendered.sections.find(section=>section.key==='06_comparison').text;
+  assert.match(comparison,/確認済みFact段階の材料: ログで確認した設定/);
+  assert.match(comparison,/利用者報告の観測（外部未検証）: 利用者申告の遅延/);
+  assert.doesNotMatch(comparison,/現在分かること（入力由来は未検証）/);
+});
