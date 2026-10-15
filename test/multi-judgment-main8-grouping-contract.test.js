@@ -169,3 +169,20 @@ test('empty five-stage lanes cannot invent operation-specific counterevidence or
   assert.doesNotMatch(opposition,/見直しで必要情報まで隠さないか|支持材料だけでなく反証・例外/);
   assert.doesNotMatch(next,/現在状態、問題が出る条件|検証対象、再現条件/);
 });
+
+
+test('populated five-stage counter and inquiry survive without template substitution', () => {
+  const model=baseModel();
+  const result={task_results:[
+    taskResult('T01','R01','検証済み設定','条件付き危険','根拠資料Aを確認'),
+    taskResult('T03','R02','検証済みログ','ログ保全の危険','ログ改変の反証Bを確認')
+  ]};
+  const rendered=renderMultiJudgmentMain8(judgmentFor(model),result);
+  const opposition=rendered.sections.find(section=>section.key==='05_opposition').text;
+  const next=rendered.sections.find(section=>section.key==='08_reinstruction').text;
+  assert.match(opposition,/R01:[\s\S]*検証済み設定の失敗条件/);
+  assert.match(opposition,/R02:[\s\S]*検証済みログの失敗条件/);
+  assert.match(next,/R01:[\s\S]*根拠資料Aを確認/);
+  assert.match(next,/R02:[\s\S]*ログ改変の反証Bを確認/);
+  assert.doesNotMatch(next,/5段Logicから確認対象が供給されていない/);
+});
