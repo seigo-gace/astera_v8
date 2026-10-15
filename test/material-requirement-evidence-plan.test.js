@@ -496,6 +496,11 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
   assert.deepEqual(conflicted.requirements[0].contradictory_claim_ids,['counter']);
   assert.equal(conflicted.requirements[0].confirmation_reason,'ATTRIBUTED_CONTRADICTORY_EVIDENCE');
   assert.equal(conflicted.requirements[0].confirmation_status,'UNRESOLVED');
+  const localCounter={...contrary,confirmation:{status:'UNDETERMINED',bindings:[{
+    candidate_id:'e1',relation:'CONTRADICTS',evidence_source:'LOCAL_INPUT_EVIDENCE'}]}};
+  const noExternalCounter=reconcileMaterialEvidenceExecution(ledger,{records:[localCounter]});
+  assert.deepEqual(noExternalCounter.requirements[0].contradictory_claim_ids,[]);
+  assert.equal(noExternalCounter.requirements[0].confirmation_reason,'ADOPTED_EVIDENCE_NOT_DIRECTLY_CONFIRMED_FOR_REQUIREMENT');
   const local={...claim('R01','R01:MR01','e1'),confirmation:{status:'CONFIRMED',bindings:[{candidate_id:'e1',relation:'SUPPORTS',evidence_source:'LOCAL_INPUT_EVIDENCE'}]}};
   assert.equal(reconcileMaterialEvidenceExecution(ledger,{records:[local]}).directly_linked_confirmed_claim_count,0);
 
