@@ -469,3 +469,23 @@ test('local-only and uncertain specialist slots retain distinct reasons, never i
       || item.reason==='DEFERRED_APPLICABILITY_UNKNOWN'));
   assert.equal(plan.material_evidence_plan.coverage_complete,false);
 });
+
+
+test('post-canonical reconciliation requires direct claim owner/slot and bound adopted source', () => {
+  const { reconcileMaterialEvidenceExecution } = require('../src/runtime/material-requirement-evidence-plan');
+  const ledger={requirements:[{slot_id:'R01:MR01',owner_request_id:'R01',confirmation_status:'UNRESOLVED',
+    adopted_evidence_refs:[{candidate_id:'e1'}]}],unresolved_count:1};
+  const claim=(owner,slot,id,status='CONFIRMED')=>({claim:{claim_id:'c1',owner_request_id:owner,requirement_slot_id:slot},
+    confirmation:{status,bindings:[{candidate_id:id}]}});
+  for(const record of [claim('R02','R01:MR01','e1'),claim('R01','R01:MR02','e1'),
+    claim('R01','R01:MR01','different'),claim('R01','R01:MR01','e1','UNDETERMINED')]) {
+    const result=reconcileMaterialEvidenceExecution(ledger,{records:[record]});
+    assert.deepEqual(result.requirements[0].confirmed_claim_ids,[]);
+    assert.equal(result.requirements[0].confirmation_status,'UNRESOLVED');
+  }
+  const matched=reconcileMaterialEvidenceExecution(ledger,{records:[claim('R01','R01:MR01','e1')]});
+  assert.deepEqual(matched.requirements[0].confirmed_claim_ids,['c1']);
+  assert.equal(matched.requirements[0].confirmation_status,'UNRESOLVED');
+  assert.equal(matched.requirements[0].confirmation_reason,'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED');
+  assert.equal(matched.unresolved_count,1);
+});
