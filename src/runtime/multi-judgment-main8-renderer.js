@@ -373,7 +373,13 @@ function section05(model, groups, lang) {
     ]);
     const checked = sourceCounter.slice(0, 2);
     const operation = lang === 'ja' ? '5段Logicに反証・失敗条件が未提示' : 'No counterevidence or failure condition provided by the five-stage lanes';
-    const migrationChecks = '';
+    // Preserve established migration-specific compatibility criteria until the
+    // owning five-stage Risk lane has equivalent typed output.
+    const softwareMigration = String(request.action || '') === 'migrate'
+      && /(?:Node\.js|API|Client|software|server|database|service|system)/iu.test(requestText);
+    const migrationChecks = softwareMigration
+      ? 'software migration check: rollback, data/contract compatibility, security regression'
+      : '';
     if (String(request.action || '') === 'compare') {
       const explicitOptions = /^(?:Task|Request)\s+\d+\s*[—–-]\s*Compare options:\s*(?:Evaluate\s+)?([^.!?\n]+)/iu.exec(requestText);
       lines.push(`  - ${request.id}: ${explicitOptions ? explicitOptions[1] : requestText}`);
