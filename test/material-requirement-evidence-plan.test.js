@@ -484,6 +484,8 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
     assert.equal(result.requirements[0].confirmation_status,'UNRESOLVED');
   }
   const matched=reconcileMaterialEvidenceExecution(ledger,{records:[claim('R01','R01:MR01','e1')]});
+  const missingRelation=reconcileMaterialEvidenceExecution(ledger,{records:[]});
+  assert.equal(missingRelation.requirements[0].confirmation_reason,'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT');
   assert.deepEqual(matched.requirements[0].confirmed_claim_ids,['c1']);
   assert.equal(matched.requirements[0].confirmation_status,'UNRESOLVED');
   assert.equal(matched.requirements[0].confirmation_reason,'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED');
