@@ -531,3 +531,20 @@ test('Inquiry lane distinguishes Claim confirmation from Requirement satisfactio
   assert.ok(claimOnly.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
   assert.ok(!complete.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
 });
+
+
+test('source-specified disqualifier does not become an externally verified proposition', () => {
+  const { materialEvidenceExecution }=require('../src/runtime/material-requirement-evidence-plan');
+  const specifiedGraph={requests:[{owner_request_id:'R01',nodes:[{
+    slot_id:'R01:MR09',material_kind:'FALSIFICATION_OR_DISQUALIFIER',
+    question:'既存予約データの削除を禁止',status:'SATISFIED',
+    truth_state:'SOURCE_BACKED_RULE_OR_CONTEXT',required:true
+  }]}]};
+  const plan=materialEvidencePlan(task,specifiedGraph,{},base);
+  const result=materialEvidenceExecution(plan,{evidence:[],query_execution:{initial:[],reinforcement:[]}},{state:'INVALID'});
+  const row=result.requirements.find(item=>item.slot_id==='R01:MR09');
+  assert.ok(row,'source-stated disqualifier remains in material plan');
+  assert.equal(row.requirement_specification_state,'SOURCE_SPECIFIED');
+  assert.equal(row.proposition_verification_state,'UNVERIFIED');
+  assert.equal(row.confirmation_status,'UNRESOLVED');
+});
