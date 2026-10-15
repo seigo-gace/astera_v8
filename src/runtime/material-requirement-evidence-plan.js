@@ -168,9 +168,38 @@ function materialTargets(task, graph, domain = {}, { ownsRequest = true } = {}) 
   return out;
 }
 
+function linkDirectSourceClaims(task, targets, plan) {
+  const claims = Array.isArray(plan?.claims) ? plan.claims : [];
+  const allowed = new Set(['OBSERVATION_VALIDATION', 'ASSUMPTION_VALIDATION']);
+  const matches = claims.map(claim => {
+    if (claim.claim_origin !== 'DIRECT_ASSERTION' || !claim.claim_id) return [];
+    return targets.filter(target =>
+      target.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
+      && allowed.has(target.material_kind)
+      && target.owner_request_id === task.request_id
+      && (target.source_ref_texts || []).some(value => clean(value) === clean(claim.raw_text))
+    );
+  });
+  const owners = new Map();
+  for (const found of matches) if (found.length === 1) {
+    const slot = found[0].slot_id;
+    owners.set(slot, (owners.get(slot) || 0) + 1);
+  }
+  let changed = false;
+  const annotated = claims.map((claim, index) => {
+    const found = matches[index];
+    if (found.length !== 1 || owners.get(found[0].slot_id) !== 1
+      || claim.requirement_slot_id || claim.owner_request_id) return claim;
+    changed = true;
+    return { ...claim, requirement_slot_id: found[0].slot_id, owner_request_id: found[0].owner_request_id };
+  });
+  return changed ? { ...plan, claims: annotated } : plan;
+}
+
 function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   const current = existingPlan?.search_plan?.queries || [];
   const targets = materialTargets(task, graph, domain, options);
+  const linkedPlan = linkDirectSourceClaims(task, targets, existingPlan);
   const graphEvidenceRequested = options.ownsRequest !== false && Boolean(
     requestGraphForTask(task, graph)?.nodes?.some(node =>
       node?.required !== false && node?.material_kind === 'EVIDENCE_SUPPORT'
@@ -181,7 +210,7 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   // generic requirement such as decision criteria is not yet resolved.
   if (!searchRequired) {
     return deepFreeze({
-      ...existingPlan,
+      ...linkedPlan,
       material_evidence_plan: {
         schema_version: 'astera.material-evidence-plan.v1',
         search_authorized: false, required_slot_ids: targets.map(t => t.slot_id),
@@ -240,7 +269,7 @@ function materialEvidencePlan(task, graph, domain, existingPlan, options = {}) {
   }
   const roleList = [...new Set(queries.map(q => q.role))].sort();
   return deepFreeze({
-    ...existingPlan,
+    ...linkedPlan,
     search_plan: {
       ...existingPlan.search_plan,
       queries,
