@@ -635,3 +635,31 @@ test('source-backed requirement traces existing exact-text Claim without declari
   assert.deepEqual(wrongTask.requirements[0].source_matched_claim_ids,[],
     'canonical task cannot borrow an identically worded Claim from another Task');
 });
+
+
+test('only unique exact direct assertions acquire requirement ownership', () => {
+  const source='ピーク時の遅延を測定済み';
+  const original={...base,claims:[
+    {claim_id:'c1',claim_origin:'DIRECT_ASSERTION',raw_text:source},
+    {claim_id:'c2',claim_origin:'ATTRIBUTED_ASSERTION',raw_text:source}
+  ]};
+  const requestGraph={requests:[{owner_request_id:'R01',nodes:[{
+    slot_id:'R01:MR01',material_kind:'OBSERVATION_VALIDATION',question:'遅延の観測は真か',
+    status:'UNRESOLVED',required:true,source_refs:[{text:source}]
+  }]}]};
+  const linked=materialEvidencePlan(task,requestGraph,{},original);
+  assert.equal(linked.claims[0].requirement_slot_id,'R01:MR01');
+  assert.equal(linked.claims[0].owner_request_id,'R01');
+  assert.equal(linked.claims[1].requirement_slot_id,undefined);
+  assert.deepEqual(original.claims[0].requirement_slot_id,undefined);
+  const duplicate={...original,claims:[original.claims[0],{...original.claims[0],claim_id:'c3'}]};
+  const ambiguous=materialEvidencePlan(task,requestGraph,{},duplicate);
+  assert.ok(ambiguous.claims.every(claim => !claim.requirement_slot_id));
+  const foreign=materialEvidencePlan({...task,request_id:'R02'},requestGraph,{},original);
+  assert.ok(foreign.claims.every(claim => !claim.requirement_slot_id));
+  const otherKind={requests:[{owner_request_id:'R01',nodes:[{
+    slot_id:'R01:MR02',material_kind:'DECISION_CRITERION',question:'合格条件',
+    status:'UNRESOLVED',required:true,source_refs:[{text:source}]
+  }]}]};
+  assert.ok(materialEvidencePlan(task,otherKind,{},original).claims.every(claim => !claim.requirement_slot_id));
+});
