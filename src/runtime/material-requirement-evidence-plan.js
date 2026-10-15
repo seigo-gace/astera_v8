@@ -392,6 +392,7 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
       && record?.claim?.owner_request_id === row.owner_request_id);
     return { ...row, confirmed_claim_ids: matching.map(record => record.claim.claim_id),
       contradictory_claim_ids: contradictory.map(record => record.claim.claim_id),
+      proposition_verification_state: contradictory.length ? 'CONTRADICTED' : matching.length ? 'DIRECT_CLAIM_CONFIRMED_REQUIREMENT_UNRESOLVED' : 'UNVERIFIED',
       confirmation_status: 'UNRESOLVED',
       confirmation_reason: contradictory.length ? 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' : matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
         : ids.size && !hasDirectClaim ? 'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT'
