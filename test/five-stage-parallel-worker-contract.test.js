@@ -45,7 +45,12 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
     depends_on: [],
     domain
   };
-  const task = { ...baseTask, canonical_plan: buildCanonicalTaskPlan(baseTask, domain) };
+  const task = { ...baseTask, canonical_plan: buildCanonicalTaskPlan(baseTask, domain),
+    material_evidence_execution:{required_count:1,unresolved_count:1,requirements:[{
+      owner_request_id:'R01',slot_id:'R01:MR09',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+      question:'返金条件に反例がないか',planning_status:'PLANNED',confirmation_status:'UNRESOLVED',
+      adopted_evidence_refs:[{candidate_id:'candidate-with-no-claim'}]
+    }]}};
   const executor = new CanonicalTaskExecutor({
     size: 1,
     timeoutMs: 5000,
@@ -58,6 +63,10 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
       task,
       evidenceRaw: rejectedEvidence(task.id)
     });
+    assert.equal(projected.task.material_evidence_execution.missing_direct_claim_count,1,
+      'parallel lane path must reconcile requirements after Claim evaluation');
+    assert.ok(projected.lanes.inquiry.missing_questions.some(q=>q.includes('返金条件に反例がないか')),
+      'reconciled unresolved Requirement reaches Inquiry worker');
     const execution = projected.lane_execution;
     assert.equal(execution.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
     assert.equal(execution.lane_count, 5);
