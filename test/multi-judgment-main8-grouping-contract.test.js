@@ -156,3 +156,16 @@ test('Main8 Fact section uses scoped five-stage verification targets and never p
     'a user-origin premise cannot be included in a confirmed Fact list');
   assert.match(section,/要検証項目/);
 });
+
+
+test('empty five-stage lanes cannot invent operation-specific counterevidence or verification questions', () => {
+  const model=baseModel();
+  const rendered=renderMultiJudgmentMain8(judgmentFor(model),{task_results:[]});
+  const opposition=rendered.sections.find(section=>section.key==='05_opposition').text;
+  const next=rendered.sections.find(section=>section.key==='08_reinstruction').text;
+  assert.match(opposition,/R01/);
+  assert.match(opposition,/5段Logicに反証・失敗条件が未提示/);
+  assert.match(next,/5段Logicから確認対象が供給されていない/);
+  assert.doesNotMatch(opposition,/見直しで必要情報まで隠さないか|支持材料だけでなく反証・例外/);
+  assert.doesNotMatch(next,/現在状態、問題が出る条件|検証対象、再現条件/);
+});
