@@ -10,7 +10,7 @@ const { projectCanonicalFailure } = require('./canonical-task-projection');
 const { executeTaskWaves } = require('./runtime/canonical-wave-executor');
 const { UndeterminedReason } = require('./v4-canonical/confirmation');
 const { parserFailClosedRequest } = require('./deterministic-task-decomposer');
-const { materialEvidencePlan, materialEvidenceExecution, requestGraphForTask, selectRequestMaterialOwners } = require('./runtime/material-requirement-evidence-plan');
+const { materialEvidencePlan, materialEvidenceExecution, reconcileMaterialEvidenceExecution, requestGraphForTask, selectRequestMaterialOwners } = require('./runtime/material-requirement-evidence-plan');
 
 const FIVE_STAGE=Object.freeze(['fact','risk','multi','inquiry','compare']);
 const ORDER=Object.freeze(['01_purpose','02_premise','03_facts','04_crisis','05_opposition','06_comparison','07_evidence_status','08_reinstruction']);
@@ -409,8 +409,12 @@ class CanonicalAsteraEngine extends CanonicalEngineSupport {
       if(entry.result)return entry.result;
       const error=entry.error||Object.assign(new Error('Task skipped because a dependency failed'),{code:'SKIPPED_DEPENDENCY',details:entry.skipped||null});
       const evidenceRaw=evidenceRawByTask.get(String(entry.task.id))||(entry.task.canonical_plan?.search_plan?.queries?.length?notProvidedEvidence(entry.task.id):notRequiredEvidence(entry.task.id));
-      const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))}),projected=projectCanonicalFailure({task:entry.task,error}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
-      return{task:entry.task,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,execution_failure:{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message,skipped:entry.skipped||null}};
+      const normalizedEvidence=normalizeEvidencePacket(evidenceRaw),evidence=Object.freeze({...normalizedEvidence,search_state:String(evidenceRaw?.search_state||(normalizedEvidence.source_status==='NOT_REQUIRED'?'NOT_REQUIRED':'NOT_EXECUTED'))});
+      const failedTask = { ...entry.task, material_evidence_execution: entry.task.material_evidence_execution
+        || materialEvidenceExecution(entry.task.canonical_plan, evidenceRaw, normalizedEvidence) };
+      const projected=projectCanonicalFailure({task:failedTask,error}),canonical=projected.canonical,lanes=projected.lanes,perspectiveExpansion=projected.perspective_expansion;
+      const reconciledTask={...failedTask,material_evidence_execution:reconcileMaterialEvidenceExecution(failedTask.material_evidence_execution,canonical)};
+      return{task:reconciledTask,evidence,evidence_raw:evidenceRaw,canonical,lanes,perspective_expansion:perspectiveExpansion,facts:lanes.fact,risks:lanes.risk,multi:lanes.multi,inquiry:lanes.inquiry,comparison:lanes.compare,execution_failure:{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message,skipped:entry.skipped||null}};
     });
     const executionSummary={mode:'WORKER_THREADS_WAVE_BOUNDED',pool_size:executor.size,waves:execution.waves,timings:execution.timings,failures:Object.fromEntries([...execution.failures].map(([taskId,error])=>[taskId,{code:error.code||'TASK_EXECUTION_FAILURE',message:error.message}])),skipped:Object.fromEntries(execution.skipped)};
     const materialExecutionSummary={...executionSummary,timings:(executionSummary.timings||[]).map(({duration_ms,...timing})=>timing)};
