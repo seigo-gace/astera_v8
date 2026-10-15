@@ -538,7 +538,7 @@ function inquiryLane(claims, results, domain, task = {}) {
   return deepFreeze({
     lane: 'inquiry',
     problem_health: {
-      healthy: missingFields.length === 0 && open.length === 0 && deferredSpecialist.length === 0,
+      healthy: missingFields.length === 0 && open.length === 0 && deferredSpecialist.length === 0 && materialGaps.length === 0,
       reason: deferredSpecialist.length
         ? '専門Lensの適用性が未確定。検索対象に含めるべきか原資料で確認が必要。'
         : missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
