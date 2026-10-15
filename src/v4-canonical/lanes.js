@@ -494,7 +494,7 @@ function inquiryLane(claims, results, domain, task = {}) {
     .filter((entry) => entry.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
       && entry.confirmation_status !== 'SATISFIED');
   const materialGapQuestions = materialGaps.slice(0, 12).map((entry) =>
-    `${entry.planning_status === 'PLANNED' ? '必要根拠が未確認' : '必要根拠が未検索'}: ${entry.question}`
+    `${entry.confirmation_reason === 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' ? '必要根拠に反証あり' : entry.planning_status === 'PLANNED' ? '必要根拠が未確認' : '必要根拠が未検索'}: ${entry.question}`
   );
   if (materialGaps.length > 12) {
     materialGapQuestions.push(`ほか${materialGaps.length - 12}件の必要根拠が未確認です。`);
