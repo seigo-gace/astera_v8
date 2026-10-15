@@ -476,7 +476,7 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
   const ledger={requirements:[{slot_id:'R01:MR01',owner_request_id:'R01',confirmation_status:'UNRESOLVED',
     adopted_evidence_refs:[{candidate_id:'e1'}]}],unresolved_count:1};
   const claim=(owner,slot,id,status='CONFIRMED')=>({claim:{claim_id:'c1',owner_request_id:owner,requirement_slot_id:slot},
-    confirmation:{status,bindings:[{candidate_id:id}]}});
+    confirmation:{status,bindings:[{candidate_id:id,relation:'SUPPORTS',evidence_source:'EXTERNAL_RETRIEVED_EVIDENCE'}]}});
   for(const record of [claim('R02','R01:MR01','e1'),claim('R01','R01:MR02','e1'),
     claim('R01','R01:MR01','different'),claim('R01','R01:MR01','e1','UNDETERMINED')]) {
     const result=reconcileMaterialEvidenceExecution(ledger,{records:[record]});
@@ -490,6 +490,15 @@ test('post-canonical reconciliation requires direct claim owner/slot and bound a
   assert.equal(matched.requirements[0].confirmation_status,'UNRESOLVED');
   assert.equal(matched.requirements[0].confirmation_reason,'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED');
   assert.equal(matched.unresolved_count,1);
+  const contrary={claim:{claim_id:'counter',owner_request_id:'R01',requirement_slot_id:'R01:MR01'},
+    confirmation:{status:'UNDETERMINED',bindings:[{candidate_id:'e1',relation:'CONTRADICTS',evidence_source:'EXTERNAL_RETRIEVED_EVIDENCE'}]}};
+  const conflicted=reconcileMaterialEvidenceExecution(ledger,{records:[claim('R01','R01:MR01','e1'),contrary]});
+  assert.deepEqual(conflicted.requirements[0].contradictory_claim_ids,['counter']);
+  assert.equal(conflicted.requirements[0].confirmation_reason,'ATTRIBUTED_CONTRADICTORY_EVIDENCE');
+  assert.equal(conflicted.requirements[0].confirmation_status,'UNRESOLVED');
+  const local={...claim('R01','R01:MR01','e1'),confirmation:{status:'CONFIRMED',bindings:[{candidate_id:'e1',relation:'SUPPORTS',evidence_source:'LOCAL_INPUT_EVIDENCE'}]}};
+  assert.equal(reconcileMaterialEvidenceExecution(ledger,{records:[local]}).directly_linked_confirmed_claim_count,0);
+
   assert.equal(matched.directly_linked_confirmed_claim_count,1);
   assert.equal(matched.missing_direct_claim_count,0);
   assert.equal(missingRelation.missing_direct_claim_count,1);
