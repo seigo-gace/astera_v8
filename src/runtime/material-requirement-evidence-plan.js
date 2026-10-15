@@ -375,15 +375,24 @@ function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
       && record?.claim?.owner_request_id === row.owner_request_id
       && record?.confirmation?.status === 'CONFIRMED'
       && (record.confirmation.bindings || record.bindings || []).some(binding =>
-        ids.has(String(binding.candidate_id || binding.evidence_id || ''))));
+        binding.relation === 'SUPPORTS'
+        && binding.evidence_source === 'EXTERNAL_RETRIEVED_EVIDENCE'
+        && [binding.candidate_id, binding.canonical_record_id].filter(Boolean).some(id => ids.has(String(id)))));
+    const contradictory = records.filter(record =>
+      record?.claim?.requirement_slot_id === row.slot_id
+      && record?.claim?.owner_request_id === row.owner_request_id
+      && (record.confirmation?.bindings || record.bindings || []).some(binding =>
+        binding.relation === 'CONTRADICTS'
+        && [binding.candidate_id, binding.canonical_record_id].filter(Boolean).some(id => ids.has(String(id)))));
     // A confirmed Claim that shares one source is still not proof that a whole
     // requirement, including its counterconditions, has been verified.
     const hasDirectClaim = records.some(record =>
       record?.claim?.requirement_slot_id === row.slot_id
       && record?.claim?.owner_request_id === row.owner_request_id);
     return { ...row, confirmed_claim_ids: matching.map(record => record.claim.claim_id),
+      contradictory_claim_ids: contradictory.map(record => record.claim.claim_id),
       confirmation_status: 'UNRESOLVED',
-      confirmation_reason: matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
+      confirmation_reason: contradictory.length ? 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' : matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
         : ids.size && !hasDirectClaim ? 'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT'
           : ids.size ? 'ADOPTED_EVIDENCE_NOT_DIRECTLY_CONFIRMED_FOR_REQUIREMENT'
             : 'NO_ATTRIBUTABLE_CONFIRMED_EVIDENCE' };
