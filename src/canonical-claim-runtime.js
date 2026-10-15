@@ -131,17 +131,19 @@ function bindingsWithQueryRole(bindings, rawEvidence, queries, candidateById) {
 }
 
 function evaluateCanonicalTaskPlan(plan, rawEvidence) {
+  const evidence = rawEvidence?.schema_version === 'astera.evidence-search.module-response.v1'
+    ? rawEvidence.result : rawEvidence;
   const records = plan.claims.map((claim) => {
     const policy = plan.policy_by_claim_id[claim.claim_id];
-    const bindingResult = bindClaimEvidence(claim, policy, rawEvidence);
+    const bindingResult = bindClaimEvidence(claim, policy, evidence);
     const queries = plan.search_plan.queries.filter((query) => query.claim_id === claim.claim_id);
     const bindings = bindingsWithQueryRole(
       bindingResult.bindings,
-      rawEvidence,
+      evidence,
       queries,
       bindingResult.candidate_by_id
     );
-    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings, queries, rawEvidence });
+    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings, queries, rawEvidence: evidence });
     const confirmationWithBindings = deepFreeze({ ...confirmation, bindings });
     return deepFreeze({ claim, policy, bindings, confirmation: confirmationWithBindings });
   });
