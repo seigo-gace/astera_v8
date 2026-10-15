@@ -354,4 +354,28 @@ function materialEvidenceExecution(canonicalPlan = {}, rawEvidence = null, norma
   });
 }
 
-module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask, selectRequestMaterialOwners, materialEvidenceExecution };
+// Reconcile only after canonical Claim confirmation, never after search adoption alone.
+function reconcileMaterialEvidenceExecution(ledger = {}, canonical = {}) {
+  const records = Array.isArray(canonical.records) ? canonical.records : [];
+  const requirements = (ledger.requirements || []).map(row => {
+    const ids = new Set((row.adopted_evidence_refs || []).flatMap(ref =>
+      [ref.candidate_id, ref.canonical_record_id].filter(Boolean).map(String)));
+    const matching = records.filter(record =>
+      record?.claim?.requirement_slot_id === row.slot_id
+      && record?.claim?.owner_request_id === row.owner_request_id
+      && record?.confirmation?.status === 'CONFIRMED'
+      && (record.confirmation.bindings || record.bindings || []).some(binding =>
+        ids.has(String(binding.candidate_id || binding.evidence_id || ''))));
+    // A confirmed Claim that shares one source is still not proof that a whole
+    // requirement, including its counterconditions, has been verified.
+    return { ...row, confirmed_claim_ids: matching.map(record => record.claim.claim_id),
+      confirmation_status: 'UNRESOLVED',
+      confirmation_reason: matching.length ? 'CLAIM_CONFIRMED_REQUIREMENT_CRITERIA_NOT_RECONCILED'
+        : ids.size ? 'ADOPTED_EVIDENCE_NOT_DIRECTLY_CONFIRMED_FOR_REQUIREMENT'
+          : 'NO_ATTRIBUTABLE_CONFIRMED_EVIDENCE' };
+  });
+  return deepFreeze({ ...ledger, requirements,
+    unresolved_count: requirements.filter(row => row.confirmation_status !== 'SATISFIED').length });
+}
+
+module.exports = { LIMIT, materialTargets, materialEvidencePlan, requestGraphForTask, selectRequestMaterialOwners, materialEvidenceExecution, reconcileMaterialEvidenceExecution };
