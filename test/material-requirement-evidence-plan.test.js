@@ -548,3 +548,24 @@ test('source-specified disqualifier does not become an externally verified propo
   assert.equal(row.proposition_verification_state,'UNVERIFIED');
   assert.equal(row.confirmation_status,'UNRESOLVED');
 });
+
+
+test('canonical task reconciles Requirement before its Inquiry lane is projected', () => {
+  const { projectCanonicalTask } = require('../src/canonical-task-projection');
+  const taskInput={ ...task,
+    canonical_plan:base,
+    material_evidence_execution:{
+      required_count:1,unresolved_count:1,requirements:[{
+        slot_id:'R01:MR01',owner_request_id:'R01',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+        question:'二重予約防止の根拠を確認する',planning_status:'PLANNED',
+        adopted_evidence_refs:[{candidate_id:'adopted'}],confirmation_status:'UNRESOLVED'
+      }]
+    }
+  };
+  const projected=projectCanonicalTask({task:taskInput,evidenceRaw:{status:'NOT_REQUIRED',evidence:[]}});
+  assert.equal(projected.task.material_evidence_execution.missing_direct_claim_count,1);
+  assert.equal(projected.task.material_evidence_execution.requirements[0].confirmation_reason,
+    'NO_DIRECT_CANONICAL_CLAIM_FOR_REQUIREMENT');
+  assert.ok(projected.lanes.inquiry.missing_questions.some(x=>x.includes('二重予約防止の根拠を確認する')));
+  assert.equal(projected.task.material_evidence_execution.requirements[0].confirmation_status,'UNRESOLVED');
+});
