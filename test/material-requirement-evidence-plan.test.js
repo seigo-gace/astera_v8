@@ -532,7 +532,7 @@ test('Inquiry lane distinguishes Claim confirmation from Requirement satisfactio
   assert.ok(!complete.missing_questions.some(q=>q.includes('公式根拠と反例は十分か')));
   assert.equal(unresolved.problem_health.healthy,false);
   assert.equal(claimOnly.problem_health.healthy,false);
-  assert.match(claimOnly.problem_health.reason,/未完了|未解決|Scope/);
+  assert.equal(claimOnly.problem_health.reason,'必要な判断要件の成立確認が未完了。');
   assert.equal(complete.problem_health.healthy,true);
 });
 
