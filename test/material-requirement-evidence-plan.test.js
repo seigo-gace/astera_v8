@@ -582,3 +582,16 @@ test('canonical task reconciles Requirement before its Inquiry lane is projected
   assert.ok(projected.lanes.inquiry.missing_questions.some(x=>x.includes('二重予約防止の根拠を確認する')));
   assert.equal(projected.task.material_evidence_execution.requirements[0].confirmation_status,'UNRESOLVED');
 });
+
+
+test('Inquiry and five-stage keep directly attributed counterevidence unresolved', () => {
+  const { inquiryLane } = require('../src/v4-canonical/lanes');
+  const row={slot_id:'R01:MR01',owner_request_id:'R01',
+    source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+    question:'二重予約を生む反例',planning_status:'PLANNED',confirmation_status:'UNRESOLVED',
+    confirmation_reason:'ATTRIBUTED_CONTRADICTORY_EVIDENCE',contradictory_claim_ids:['counter']};
+  const inquiry=inquiryLane([],[],{},{id:'T01',request_id:'R01',
+    target:'予約変更の検証',material_evidence_execution:{requirements:[row]}});
+  assert.equal(inquiry.problem_health.healthy,false);
+  assert.ok(inquiry.missing_questions.some(q=>q.includes('必要根拠に反証あり: 二重予約を生む反例')));
+});
