@@ -34,7 +34,7 @@ test('public AsteraEngine carries the Material Requirement Graph from prepareReq
     assert.ok(requirementRows.every(row => row.confirmation_status === 'UNRESOLVED'),
       'no external evidence may make a requirement satisfied');
     assert.ok(requirementRows.every(row => typeof row.confirmation_reason === 'string'),
-      'each requirement receives post-canonical reconciliation diagnostics');
+      'each requirement receives post-canonical reconciliation diagnostics: '+JSON.stringify({missing:requirementRows.filter(row => typeof row.confirmation_reason !== 'string').slice(0,3),failures:out.result?.parallel_execution?.failures,skipped:out.result?.parallel_execution?.skipped}));
     assert.ok((out.result?.five_stage?.tasks || []).length > 0,'five-stage output remains intact');
     assert.equal(out.material?.sections?.length,8,'Main8 remains intact');
   } finally {
