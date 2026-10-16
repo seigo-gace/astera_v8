@@ -3,6 +3,7 @@ const { readFile, lstat } = require("node:fs/promises");
 
 const ACTION_PATH = "/internal/v1/actions/astera-tunnel/materialize";
 const FIXED_ORIGIN = "http://127.0.0.1:8791";
+const EXPECTED_SECRET_NAME = "astera_v8_cloudflare_tunnel_token";
 
 /**
  * Explicit API-first pre-start operation. No Token values in logs, arguments
@@ -14,7 +15,8 @@ async function prepareTunnelSecret({
   fetchImpl = fetch,
 } = {}) {
   if (!authFile || !authFile.startsWith("/") || !targetFile ||
-      !/^\/run\/[a-zA-Z0-9/_-]+$/.test(targetFile)) {
+      !/^\/run\/[a-zA-Z0-9/_-]+$/.test(targetFile) ||
+      targetFile.split("/").at(-1) !== EXPECTED_SECRET_NAME) {
     throw new Error("TUNNEL_SECRET_CONFIG_MISSING_OR_UNSAFE");
   }
   const authStat = await lstat(authFile);
