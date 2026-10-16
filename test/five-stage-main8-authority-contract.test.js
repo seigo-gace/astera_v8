@@ -16,7 +16,13 @@ test('public final path keeps five-stage authority before Main8', () => {
   const engine = source('src/astera-engine.js');
   const renderer = source('src/runtime/five-lane-main8-material-renderer.js');
 
-  assert.doesNotMatch(engine, /normalizeMultiJudgmentPublicMaterial/);
+  // The multi-request presentation runs ONCE in the material phase; citation
+  // attachment is prohibited from re-invoking any semantic renderer.
+  const citation = source('src/runtime/evidence-citation-material.js');
+  assert.match(engine, /normalizeMultiJudgmentPublicMaterial/);
+  assert.match(engine, /renderMultiJudgmentMain8/);
+  assert.doesNotMatch(citation, /renderMultiJudgmentMain8|normalizeMultiJudgmentPublicMaterial/);
+  assert.match(citation, /const baseMaterial = out\.material/);
   assert.doesNotMatch(engine, /observable\.candidates|observable\.risks|observableFactItems/);
   assert.match(engine, /projectFiveLaneMaterialToMain8/);
   assert.match(engine, /renderFiveLaneMain8\(judgment, super\.material\(judgment\)\)/);
@@ -66,4 +72,23 @@ test('renderer only appends five-stage projected fields to already-built Main8',
   assert.match(rendered.text, /EVIDENCE_LANE_SENTINEL/);
   assert.match(rendered.text, /INQUIRY_LANE_SENTINEL/);
   assert.doesNotMatch(rendered.text, /CASE_MODEL_BYPASS_SENTINEL|OBSERVABLE_BYPASS_SENTINEL/);
+});
+
+test('five-stage aggregation keeps Request identity on semantic evidence and comparison items', () => {
+  const { buildPublicFiveStageAggregate } = require('../src/runtime/five-stage-public-aggregate');
+  const make = (id, request) => ({task:{id,request_id:request},public_lanes:{
+    risk:{risks:[{key:'shared-risk',weight:2}],safety_gates:[],hard_constraints:[]},
+    multi:{perspectives:[{key:'shared-view'}],trade_off_map:[{key:'shared-tradeoff'}]},
+    inquiry:{},compare:{dimensions:[],comparison_candidates:[],candidate_materials:[{label:'shared-candidate'}],
+      trade_off_differences:[{key:'diff'}],scope_booleans:[{key:'scope'}],supported_scope:[{key:'supported'}],
+      unsupported_scope:[{key:'unsupported'}],contradiction_map:[{key:'counter'}]}
+  }});
+  const material = buildPublicFiveStageAggregate({},[make('T01','R01'),make('T02','R02')]);
+  for (const items of [material.risks.risks,material.multi.perspectives,material.multi.trade_off_map,
+    material.comparison.candidate_materials,material.comparison.trade_off_differences,
+    material.comparison.scope_booleans,material.comparison.supported_scope,
+    material.comparison.unsupported_scope,material.comparison.contradiction_map]) {
+    assert.deepEqual(items.map(item => [item.task_id,item.request_id]), [['T01','R01'],['T02','R02']]);
+  }
+  assert.equal(material.comparison.selected_candidate,null);
 });

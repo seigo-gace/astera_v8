@@ -3,6 +3,7 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { FiveStageExecutor } = require('./five-stage-executor');
+const { reconcileMaterialEvidenceExecution } = require('./material-requirement-evidence-plan');
 const { getGlobalCanonicalTaskAdmission } = require('./canonical-task-admission');
 
 function positiveInteger(value, fallback) {
@@ -264,11 +265,15 @@ class CanonicalTaskExecutor {
     if (!this.fiveStageExecutor) {
       return this._execSingle('PROJECT_CANONICAL_TASK', payload, options);
     }
+    const task = payload.task?.material_evidence_execution
+      ? { ...payload.task, material_evidence_execution: reconcileMaterialEvidenceExecution(payload.task.material_evidence_execution, evaluated.canonical) }
+      : payload.task;
     const stage = await this.fiveStageExecutor.exec({
-      task: payload.task,
+      task,
       canonical: evaluated.canonical
     }, options);
     return {
+      task,
       canonical: evaluated.canonical,
       lanes: stage.lanes,
       public_lanes: stage.public_lanes,

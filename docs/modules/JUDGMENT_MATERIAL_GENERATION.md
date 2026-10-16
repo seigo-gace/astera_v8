@@ -450,6 +450,8 @@ Material slots are composed from Universal semantics + Judgment operation + orig
 
 A minimum keyword match, a G01-G38 assignment or an eight-heading shape is a smoke/regression signal only; none is final proof of case-specific sufficiency.
 
+**2026-10-14 design-first audit / existing PR #40:** See [Judgment Material Basis Contract §10](../JUDGMENT_MATERIAL_BASIS_CONTRACT.md#10-2026-10-14-root-cause-investigation-restore-one-semantic-owner) for the verified current double-render path, five-stage semantic ownership violation, missing evidence-completeness proof, and stepwise compatibility-safe correction. That section records a required migration design, not a completed Source/Host fix. Public Main8 must be a single projection of one per-Request five-stage semantic material contract; citation attachment must not regenerate it. The current fake two-provider, zero-adopted-Evidence 38-Lens green regression does not prove that a Human/Main AI can make the intended judgment from actual external findings.
+
 ---
 
 ## 12. Full Runtime observability

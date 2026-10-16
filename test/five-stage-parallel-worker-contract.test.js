@@ -45,7 +45,12 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
     depends_on: [],
     domain
   };
-  const task = { ...baseTask, canonical_plan: buildCanonicalTaskPlan(baseTask, domain) };
+  const task = { ...baseTask, canonical_plan: buildCanonicalTaskPlan(baseTask, domain),
+    material_evidence_execution:{required_count:1,unresolved_count:1,requirements:[{
+      owner_request_id:'R01',slot_id:'R01:MR09',source:'DECISION_BACKWARD_MATERIAL_REQUIREMENT',
+      question:'返金条件に反例がないか',planning_status:'PLANNED',confirmation_status:'UNRESOLVED',
+      adopted_evidence_refs:[{candidate_id:'candidate-with-no-claim'}]
+    }]}};
   const executor = new CanonicalTaskExecutor({
     size: 1,
     timeoutMs: 5000,
@@ -58,6 +63,10 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
       task,
       evidenceRaw: rejectedEvidence(task.id)
     });
+    assert.equal(projected.task.material_evidence_execution.missing_direct_claim_count,1,
+      'parallel lane path must reconcile requirements after Claim evaluation');
+    assert.ok(projected.lanes.inquiry.missing_questions.some(q=>q.includes('返金条件に反例がないか')),
+      'reconciled unresolved Requirement reaches Inquiry worker');
     const execution = projected.lane_execution;
     assert.equal(execution.mode, 'FIVE_STAGE_PARALLEL_WORKER_THREADS');
     assert.equal(execution.lane_count, 5);
@@ -78,4 +87,38 @@ test('Fact/Risk/Multi/Inquiry/Compare execute on five distinct overlapping Worke
   } finally {
     await executor.destroy();
   }
+});
+
+
+test('parallel and serial Fact lanes preserve identical source-owned unverified verification targets', async()=>{
+  const sourceText='Task 1 — Establish facts: Audit dated maps, original shipping ledger and archival custody. Identify dates, scope and primary records.';
+  const domain=routeDomainTemplates({question:sourceText,context:''});
+  const taskBase={
+    id:'T01',request_id:'R01',action:'verify',target:'historical claim',
+    purpose:'Verify an archival chronology without inventing facts',
+    objective:'Audit original archival records and unresolved provenance',
+    source_span:{start:0,end:sourceText.length,text:sourceText},raw_text:sourceText,
+    premises:[],constraints:[],prohibitions:[],preserve:[],replace:[],
+    conditions:[],exceptions:[],depends_on:[],domain
+  };
+  const task={...taskBase,canonical_plan:buildCanonicalTaskPlan(taskBase,domain)};
+  const outputs=[];
+  for(const enableFiveStageParallel of [false,true]){
+    const executor=new CanonicalTaskExecutor({size:1,timeoutMs:8000,
+      enableFiveStageParallel,logger:silentLogger});
+    try{
+      outputs.push(await executor.exec('PROJECT_CANONICAL_TASK',{
+        task,evidenceRaw:rejectedEvidence(task.id)
+      }));
+    }finally{await executor.destroy();}
+  }
+  const serial=outputs[0].lanes.fact.verification_targets;
+  const parallel=outputs[1].lanes.fact.verification_targets;
+  assert.equal(serial.length,1);
+  assert.deepEqual(parallel,serial,
+    'the parallel Worker must not silently discard Task source semantics');
+  assert.deepEqual(outputs[1].public_lanes.fact.verification_targets,serial,
+    'public projection must preserve source-owned unverified Fact targets');
+  assert.equal(serial[0].status,'UNVERIFIED');
+  assert.equal(serial[0].request_id,'R01');
 });

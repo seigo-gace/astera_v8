@@ -6,6 +6,7 @@ const {
   projectFiveLanes,
   deterministicPerspectiveExpansion
 } = require('./canonical-claim-runtime');
+const { reconcileMaterialEvidenceExecution } = require('./runtime/material-requirement-evidence-plan');
 const {
   extractComparisonCandidates,
   extractComparisonDimensionsFromText,
@@ -34,9 +35,13 @@ function assertProjectionInput(task) {
 function projectCanonicalTask({ task, evidenceRaw }) {
   assertProjectionInput(task);
   const canonical = evaluateCanonicalTaskPlan(task.canonical_plan, evidenceRaw);
-  const lanes = projectFiveLanes({ task, canonical, domain: task.domain || {} });
-  const perspectiveExpansion = deterministicPerspectiveExpansion({ task, canonical, domain: task.domain || {} });
+  const reconciledTask = task.material_evidence_execution
+    ? { ...task, material_evidence_execution: reconcileMaterialEvidenceExecution(task.material_evidence_execution, canonical) }
+    : task;
+  const lanes = projectFiveLanes({ task: reconciledTask, canonical, domain: task.domain || {} });
+  const perspectiveExpansion = deterministicPerspectiveExpansion({ task: reconciledTask, canonical, domain: task.domain || {} });
   return {
+    task: reconciledTask,
     canonical,
     lanes,
     perspective_expansion: perspectiveExpansion

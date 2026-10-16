@@ -10,6 +10,7 @@ const { planQueriesForClaim, planTaskQueries } = require('./v4-canonical/query-p
 const { bindClaimEvidence } = require('./v4-canonical/evidence-binding');
 const { ClaimStatus, evaluateClaimConfirmation } = require('./v4-canonical/confirmation');
 const { buildFiveLanes } = require('./v4-canonical/lanes');
+const { materialEvidencePlan } = require('./runtime/material-requirement-evidence-plan');
 
 const CONFIRMED = ClaimStatus.CONFIRMED;
 const UNDETERMINED = ClaimStatus.UNDETERMINED;
@@ -73,7 +74,7 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
   const policyByClaim = {};
   for (const claim of extraction.claims) policyByClaim[claim.claim_id] = policyForClaim(claim);
   const searchPlan = planTaskQueries(extraction.claims, policyByClaim, domain);
-  return deepFreeze({
+  const basePlan = {
     schema_version: 'astera.canonical-task-plan.v2',
     task_id: task.id,
     fragments: extraction.fragments,
@@ -86,7 +87,9 @@ function buildCanonicalTaskPlan(task, domain = {}, options = {}) {
       task_id: task.id,
       planned_query_roles: unique(searchPlan.queries.map((query) => query.role)).sort()
     }
-  });
+  };
+  if (options.deferMaterialEvidencePlan === true) return deepFreeze(basePlan);
+  return materialEvidencePlan(task, options.material_requirement_graph || null, domain, basePlan, { ownsRequest: options.ownsRequest !== false });
 }
 
 function resolveQueryRoleForBinding(binding, rawEvidence, queries = [], candidateById = new Map()) {
@@ -128,17 +131,19 @@ function bindingsWithQueryRole(bindings, rawEvidence, queries, candidateById) {
 }
 
 function evaluateCanonicalTaskPlan(plan, rawEvidence) {
+  const evidence = rawEvidence?.schema_version === 'astera.evidence-search.module-response.v1'
+    ? rawEvidence.result : rawEvidence;
   const records = plan.claims.map((claim) => {
     const policy = plan.policy_by_claim_id[claim.claim_id];
-    const bindingResult = bindClaimEvidence(claim, policy, rawEvidence);
+    const bindingResult = bindClaimEvidence(claim, policy, evidence);
     const queries = plan.search_plan.queries.filter((query) => query.claim_id === claim.claim_id);
     const bindings = bindingsWithQueryRole(
       bindingResult.bindings,
-      rawEvidence,
+      evidence,
       queries,
       bindingResult.candidate_by_id
     );
-    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings, queries, rawEvidence });
+    const confirmation = evaluateClaimConfirmation({ claim, policy, bindings, queries, rawEvidence: evidence });
     const confirmationWithBindings = deepFreeze({ ...confirmation, bindings });
     return deepFreeze({ claim, policy, bindings, confirmation: confirmationWithBindings });
   });

@@ -94,8 +94,17 @@ function splitEnglishDimensionList(value = '') {
 }
 
 function extractComparisonCandidates(task = {}) {
+  const knownCandidates = uniqueStrings([
+    ...(Array.isArray(task.candidates) ? task.candidates : []),
+    ...(Array.isArray(task.observable_material?.candidates) ? task.observable_material.candidates : [])
+  ].map(value => typeof value === 'string' ? value : value?.label || value?.name || ''));
+  if (knownCandidates.length >= 2) return knownCandidates;
   const text = comparisonTaskText(task);
-  if (!text) return [];
+  if (!text) return knownCandidates;
+  const explicitCandidates = uniqueStrings([...text.matchAll(
+    /(?:候補|選択肢|案)\s*[A-Za-z0-9]+(?:の[^、，。とを;；\n]{1,40})?/gu
+  )].map(match => match[0].trim()));
+  if (explicitCandidates.length >= 2) return explicitCandidates;
   const xyMatch = text.match(/^(.+?)と(.+?)を/u);
   if (xyMatch && /比較/u.test(text)) {
     const left = xyMatch[1].trim();
@@ -215,7 +224,7 @@ function buildTradeOffDifference(dimension, candidateLabels, candidateMaterials,
   };
 }
 
-function factLane(claims, results, domain = {}) {
+function factLane(claims, results, domain = {}, task = {}) {
   const byId = resultMap(results);
   const confirmedClaims = claims.filter((claim) => byId.get(claim.claim_id)?.status === ClaimStatus.CONFIRMED);
   const undeterminedClaims = claims.filter((claim) => byId.get(claim.claim_id)?.status === ClaimStatus.UNDETERMINED);
@@ -225,6 +234,16 @@ function factLane(claims, results, domain = {}) {
     source: 'LENS_PLAN',
     lens_sources: entry.sources
   }));
+  // Source-stated Fact verification targets belong to the Fact lane, NOT
+  // to an eight-section renderer interpreting the raw Request after the fact.
+  // Target != independent Fact: a source Request can be displayed only as an
+  // unverified investigation need until its Claims have acceptable bindings.
+  const source = String(task.source_span?.text || task.raw_text || '');
+  const explicitFactTask = /^(?:Task|Request)\s+\d+\s*[—–:-]\s*(?:Establish facts|Audit|Verify facts|Fact check|Inspect records|Measure baseline)/iu.test(source);
+  const verificationTargets = explicitFactTask
+    ? [{ text:source,source:'TASK_SOURCE_UNVERIFIED',request_id:task.request_id || null,
+       source_span:task.source_span || null,status:'UNVERIFIED' }]
+    : [];
   const unresolvedEvidence = undeterminedClaims.map((claim) => ({
     item: claim.raw_text,
     reason: reasonsFor(byId.get(claim.claim_id)).join(' / '),
@@ -241,6 +260,7 @@ function factLane(claims, results, domain = {}) {
       supported_scope: byId.get(claim.claim_id).supported_scope,
       bindings: byId.get(claim.claim_id).support_binding_ids || []
     })),
+    verification_targets: verificationTargets,
     unconfirmed: undeterminedClaims.map((claim) => ({
       claim_id: claim.claim_id,
       text: claim.raw_text,
@@ -259,6 +279,25 @@ function riskLane(claims, results, task, domain) {
   const targets = claims.filter((claim) => criticalIds.has(claim.claim_id));
   const signalText = taskSignalText(task, claims);
   const riskItems = [];
+  // A source-named risk is an investigation target, not a confirmed incident.
+  const riskSource = String(task.source_span?.text || task.raw_text || '');
+  const riskHeading = /^(?:(?:Task|Request)\s+\d+\s*[—–:-]\s*)?[^.!?\n]{0,55}\b(?:risk|hazard|failure|counterevidence)\b[^:]{0,40}:\s*(?:Investigate|Examine|Review|Check|Evaluate)\s+([^.!?\n]+)/iu.exec(riskSource);
+  const statedRisks = uniqueStrings([
+    ...(riskHeading ? [riskHeading[1].trim()] : []),
+    ...(task.local_context?.risk_signals || []),
+    ...(task.risk_signals || [])
+  ]);
+  for (const [index, describedRisk] of statedRisks.entries()) {
+    riskItems.push({
+      rule_id: 'RISK-SOURCE-UNVERIFIED',
+      key: 'source-risk:' + (index + 1),
+      impact: describedRisk,
+      failure_condition: 'The source requested investigation; independent evidence has not established an occurrence.',
+      weight: 26,
+      source: 'TASK_SOURCE_UNVERIFIED',
+      claim_ids: []
+    });
+  }
 
   for (const rule of RISK_RULES) {
     const match = signalText.match(rule.re);
@@ -449,6 +488,31 @@ function inquiryLane(claims, results, domain, task = {}) {
   const evidenceNeeds = lensPlanValues(domain, 'evidence');
   const inquiryPrompts = lensPlanValues(domain, 'inquiry');
   const primaryId = domain.primary?.id || null;
+  // Requirements are not satisfied merely because the Search API was called.
+  // Preserve unmet decision-backward evidence needs inside the Inquiry lane.
+  const materialGaps = (task.material_evidence_execution?.requirements || [])
+    .filter((entry) => entry.source === 'DECISION_BACKWARD_MATERIAL_REQUIREMENT'
+      && entry.confirmation_status !== 'SATISFIED');
+  const materialGapQuestions = materialGaps.slice(0, 12).map((entry) =>
+    `${entry.confirmation_reason === 'ATTRIBUTED_CONTRADICTORY_EVIDENCE' ? '必要根拠に反証あり' : entry.planning_status === 'PLANNED' ? '必要根拠が未確認' : '必要根拠が未検索'}: ${entry.question}`
+  );
+  if (materialGaps.length > 12) {
+    materialGapQuestions.push(`ほか${materialGaps.length - 12}件の必要根拠が未確認です。`);
+  }
+  // A deferred specialist rule is NOT an inapplicable rule. The original
+  // slot-level audit remains complete, while public Main8 receives a
+  // concise, lane-owned applicability gap rather than hundreds of phrases.
+  const deferredSpecialist = (task.material_evidence_execution?.requirements || [])
+    .filter(entry => entry.source === 'ADDITIVE_SPECIALIST_LENS'
+      && entry.planning_status === 'DEFERRED_APPLICABILITY_UNKNOWN');
+  const specialistKinds = [...new Set(deferredSpecialist.map(entry =>
+    String(entry.material_kind || '').replace(/^LENS_/u, '')).filter(Boolean))].sort();
+  const specialistApplicability = {
+    state: deferredSpecialist.length ? 'DEFERRED_APPLICABILITY_UNKNOWN' : 'NO_DEFERRED_SPECIALIST_LENS',
+    deferred_count: deferredSpecialist.length,
+    material_kinds: specialistKinds,
+    slot_ids: deferredSpecialist.map(entry => entry.slot_id)
+  };
   const weakTarget = /^(?:どう|これ|それ|あれ|ここ|そこ|this|that|it|what|how)$/i.test(String(task.target || '').trim());
   const missingTarget = !String(task.target || '').trim() || weakTarget || (task.unresolved || []).some((item) => /:target$/.test(String(item)));
   const actionNeedsCompletion = ['implement', 'improve', 'migrate', 'integrate', 'remove', 'replace', 'change', 'update'].includes(String(task.action || '').toLowerCase());
@@ -466,6 +530,7 @@ function inquiryLane(claims, results, domain, task = {}) {
     ...open.flatMap((item) => item.reasons),
     ...domainQuestions,
     ...evidenceNeeds,
+    ...materialGapQuestions,
     ...(missingTarget ? ['判断対象・変更対象を一意に確定する。'] : []),
     ...(missingCompletion ? [`Task ${task.id || '-'} の完了・合格条件を明示する。`] : []),
     ...(task.hard_blockers || []).map((item) => `Hard Blockerを解消する: ${item}`)
@@ -473,12 +538,15 @@ function inquiryLane(claims, results, domain, task = {}) {
   return deepFreeze({
     lane: 'inquiry',
     problem_health: {
-      healthy: missingFields.length === 0 && open.length === 0,
-      reason: missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
+      healthy: missingFields.length === 0 && open.length === 0 && deferredSpecialist.length === 0 && materialGaps.length === 0,
+      reason: deferredSpecialist.length
+        ? '専門Lensの適用性が未確定。検索対象に含めるべきか原資料で確認が必要。'
+        : materialGaps.length ? '必要な判断要件の成立確認が未完了。' : missingFields.length || open.length ? 'Canonical Claim / Task Scopeに未解決項目が残る。' : 'Canonical Claims and Task Scope are traceable.'
     },
     open_items: open,
     missing_fields: missingFields,
     missing_questions: missingQuestions,
+    specialist_applicability: specialistApplicability,
     inquiry_lens: inquiryPrompts,
     evidence_need: evidenceNeeds,
     assumptions: [
@@ -612,7 +680,7 @@ function buildFiveLanes({ claims, results, policyByClaimId, task = {}, domain = 
   const effectiveDomain = { ...domain, lens_plan: lensPlan };
   return deepFreeze({
     lens_plan: lensPlan,
-    fact: factLane(claims, results, effectiveDomain),
+    fact: factLane(claims, results, effectiveDomain, task),
     risk: riskLane(claims, results, task, effectiveDomain),
     multi: multiLane(claims, results, effectiveDomain, task, searchPlan),
     inquiry: inquiryLane(claims, results, effectiveDomain, task),

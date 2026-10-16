@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { normalizeMultiJudgmentCase } = require('../src/runtime/multi-judgment-case-normalizer');
 const { normalizeMultiJudgmentPublicMaterial } = require('../src/runtime/multi-judgment-public-material-normalizer');
 const { attachEvidenceCitations } = require('../src/runtime/evidence-citation-material');
+const { renderMultiJudgmentMain8 } = require('../src/runtime/multi-judgment-main8-renderer');
 
 test('small parser subtask is folded into its source-backed judgment request without enabling external evidence', () => {
   const prepared = {
@@ -126,7 +127,12 @@ test('evidence citation boundary preserves normalized multi-judgment public mate
       taskResult('T03', 'R03', internalEvidenceFailure)
     ]
   };
-  const out = attachEvidenceCitations({ result, material: { text: 'pre-citation material' } });
+  const finalMain8 = normalizeMultiJudgmentPublicMaterial(
+    renderMultiJudgmentMain8(judgment, result), judgment
+  );
+  const out = attachEvidenceCitations({ result, material: finalMain8 });
+  assert.equal(out.material.main8_text, finalMain8.text,
+    'the citation layer must annotate rather than re-render the fully normalized Main8');
   const evidenceSection = String(out.material.main8_text || '').split('\n---\n')[6] || '';
 
   assert.match(out.material.main8_text, /1件ではなく、3件の判断要求/);

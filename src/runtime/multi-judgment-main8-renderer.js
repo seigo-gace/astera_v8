@@ -4,7 +4,7 @@ const ORDER = Object.freeze([
   '01_purpose','02_premise','03_facts','04_crisis',
   '05_opposition','06_comparison','07_evidence_status','08_reinstruction'
 ]);
-const INTERNAL = /PARSER_|TASK_GRAPH|MATERIAL_ONLY|INSUFFICIENT_|RETRIEVAL_FAILED|VERIFICATION_TARGET|NO_EXECUTABLE_ACTION|claim_id|candidate_id|binding_id|SearchExecution|EvidenceQuality/iu;
+const INTERNAL = /\b(?:PARSE|PARSER|TASK_GRAPH|SCOPE)_[A-Z0-9_]+\b|MATERIAL_ONLY|INSUFFICIENT_|RETRIEVAL_FAILED|VERIFICATION_TARGET|NO_EXECUTABLE_ACTION|claim_id|candidate_id|binding_id|SearchExecution|EvidenceQuality/iu;
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -179,10 +179,9 @@ function publicLane(taskResult = {}, lane) {
   return fallback[lane] || {};
 }
 function groupFacts(taskResults = []) {
-  return publicValues(taskResults.flatMap((taskResult) => [
-    ...(publicLane(taskResult, 'fact')?.confirmed || []).map(itemText),
-    ...(taskResult?.task?.premises || []).map(itemText)
-  ])).slice(0, 12);
+  return publicValues(taskResults.flatMap((taskResult) =>
+    (publicLane(taskResult, 'fact')?.confirmed || []).map(itemText)
+  )).slice(0, 12);
 }
 function groupRisks(taskResults = []) {
   return publicValues(taskResults.flatMap((taskResult) => (publicLane(taskResult, 'risk')?.risks || []).map((risk) => itemText(risk)))).slice(0, 10);
@@ -301,7 +300,8 @@ function section01(model, lang) {
   const requests = model.judgment_requests || [];
   const lines = [`- ${lang === 'ja' ? `今回の入力には${requests.length}件の判断要求がある。` : `This input contains ${requests.length} judgment requests.`}`];
   for (const request of requests) lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]: ${sanitizePublicValue(request.request_text)}`);
-  lines.push(`- ${lang === 'ja' ? '処理原則: 判断要求R##を一つに潰さず保持し、各R##に必要な実行Taskを1件以上紐付ける。実行Taskが複数でも、それだけで判断要求を水増ししない。' : 'Processing rule: preserve each R## judgment request and map one or more execution tasks to it. Multiple execution tasks do not create extra judgment requests by themselves.'}`);
+  // Request/Task cardinality is already machine-enforced; do not present
+  // the internal control-plane invariant as a user-domain decision material.
   return lines.join('\n');
 }
 function section02(judgment, model, lang) {
@@ -325,7 +325,16 @@ function section03(model, groups, lang) {
   for (const item of model.observations || []) lines.push(`  - ${item.id}: ${sanitizePublicValue(item.text)} (${lang === 'ja' ? '利用者報告・外部未検証' : 'user-reported, externally unverified'})`);
   for (const request of model.judgment_requests || []) {
     const facts = groupFacts(groups.get(request.id) || []);
-    lines.push(`  - ${request.id}: ${facts.length ? facts.join(' / ') : (lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.')}`);
+    const verificationTargets = publicValues((groups.get(request.id) || []).flatMap(taskResult =>
+      (publicLane(taskResult, 'fact')?.verification_targets || [])
+        .filter(item => item?.status === 'UNVERIFIED' && item?.source === 'TASK_SOURCE_UNVERIFIED')
+        .map(item => itemText(item))
+    ));
+    if (verificationTargets.length) {
+      lines.push(`  - ${request.id} ${lang === 'ja' ? 'Fact段階で抽出された要検証項目（確認済み事実ではない）' : 'Five-stage Fact verification targets (not established facts)'}: ${verificationTargets.join(' / ')}`);
+    }
+    if (facts.length) lines.push(`  - ${request.id}: ${facts.join(' / ')}`);
+    else if (!verificationTargets.length) lines.push(`  - ${request.id}: ${lang === 'ja' ? '確認済み事実として追加できる材料はまだない。' : 'No additional confirmed factual material is available yet.'}`);
   }
   lines.push(`- ${lang === 'ja' ? '区別: 利用者が要求したこと／利用者が観測したこと／コードや外部根拠で確認済みの事実を混ぜない。' : 'Boundary: keep requested behavior, user-observed state, and code/external-evidence-confirmed facts separate.'}`);
   return lines.join('\n');
@@ -341,60 +350,120 @@ function section04(model, groups, lang) {
     lines.push(`- ${lang === 'ja' ? '入力条件・未確定事項から直接保持するRisk' : 'Risks preserved directly from input constraints and unresolved items'}:`);
     lines.push(...sourceRisks.map((risk) => `  - ${risk}`));
   }
-  lines.push(`- ${lang === 'ja' ? '共通Risk: 複数要求を1件に潰すと、一部要求の消失、条件混同、別要求の根拠流用が起きる。利用者報告の現象は原因確認前なので、原因を推測で確定しない。' : 'Common risk: collapsing requests can drop requirements, mix constraints, or reuse evidence across requests. User-reported symptoms do not establish their cause.'}`);
+  // Task collapse and cross-request evidence leakage are enforcement invariants,
+  // not the customer's case-specific Risk; do not duplicate them in Main8.
   return lines.join('\n');
 }
 function section05(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '各判断要求について反証・失敗側の材料を別々に保持する' : 'Keep counter-evidence and failure-side material separate for each judgment request'}:`];
+  // Public 05 is a concise view of the scoped Counter lane. Retain meaningful
+  // source-specific counter-claims and evidence, not every repeated template.
+  // Full lane provenance remains in result.task_results.
+  const lines = [`- ${lang === 'ja' ? '判断要求ごとの反証・失敗条件' : 'Request-local counterevidence and failure conditions'}:`];
   for (const request of model.judgment_requests || []) {
-    const counter = groupCounterMaterial(groups.get(request.id) || []);
-    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
-    lines.push(`  - ${request.id}: ${sanitizePublicValue(request.request_text)}`);
-    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${counter.length ? counter.join(' / ') : operationCounterMaterial(request.action, lang)}`);
-    if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告' : 'User report'}: ${observations.join(' / ')}`);
+    const results = groups.get(request.id) || [];
+    const counter = groupCounterMaterial(results);
+    const sourceRisks = publicValues(results.flatMap(result =>
+      (publicLane(result, 'risk')?.risks || [])
+        .filter(item => item?.source === 'TASK_SOURCE_UNVERIFIED')
+        .map(item => item.impact)));
+    const requestText = sanitizePublicValue(request.request_text);
+    const sourceCounter = unique([
+      ...(sourceRisks.length ? sourceRisks : []),
+      ...counter.filter(v => !/^(?:MAINLINE|OPPOSITION|THIRD_WAY|HUMAN_FIT)$/iu.test(v))
+    ]);
+    const checked = sourceCounter.slice(0, 2);
+    const operation = lang === 'ja' ? '5段Logicに反証・失敗条件が未提示' : 'No counterevidence or failure condition provided by the five-stage lanes';
+    // Preserve established migration-specific compatibility criteria until the
+    // owning five-stage Risk lane has equivalent typed output.
+    const softwareMigration = String(request.action || '') === 'migrate'
+      && /(?:Node\.js|API|Client|software|server|database|service|system)/iu.test(requestText);
+    const migrationChecks = softwareMigration
+      ? 'software migration check: rollback, data/contract compatibility, security regression'
+      : '';
+    if (String(request.action || '') === 'compare') {
+      const explicitOptions = /^(?:Task|Request)\s+\d+\s*[—–-]\s*Compare options:\s*(?:Evaluate\s+)?([^.!?\n]+)/iu.exec(requestText);
+      lines.push(`  - ${request.id}: ${explicitOptions ? explicitOptions[1] : requestText}`);
+    }
+    else lines.push(`  - ${request.id}: [${actionLabel(request.action,lang)}]`);
+    lines.push(`    - ${lang === 'ja' ? '反証・失敗条件' : 'Counter/failure material'}: ${unique([...(checked.length ? checked : [operation]), migrationChecks]).join(' / ')}`);
+    const evidence = [];
+    for (const result of results) for (const perspective of publicLane(result,'multi')?.perspectives || []) {
+      for (const ref of perspective.counter_evidence_refs || []) {
+        const locator = ref.canonical_locator?.url || ref.url || ref.candidate_id || ref.evidence_id;
+        if (locator) evidence.push(String(locator));
+      }
+    }
+    if (evidence.length) lines.push(`    - ${lang === 'ja' ? '反証根拠候補' : 'Counterevidence references'}: ${unique(evidence).join(' / ')}`);
   }
   return lines.join('\n');
 }
+
 function section06(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? 'A/B候補がない場合も「比較候補なし」で終わらせず、判断要求ごとに現在分かること・まだ言えないこと・追加で必要な材料を分ける' : 'Even without A/B candidates, separate what is known, what cannot yet be concluded, and what additional material is required for each judgment request'}:`];
+  const lines = [
+    `- ${lang === 'ja' ? '各要求の選択肢・比較可能性・不足根拠' : 'Alternatives, comparability and evidence gaps for each request'}:`,
+    `- ${lang === 'ja' ? 'まだ言えないこと' : 'Not yet justified'}: ${lang === 'ja'
+      ? '同一条件で採用可能な根拠が揃うまで、どの案が有利か、必要な変更が完了したかを確定しない。'
+      : 'No option is selected and completion cannot be confirmed until the required comparable evidence is accepted.'}`
+  ];
   for (const request of model.judgment_requests || []) {
-    const taskResults = groups.get(request.id) || [];
-    const observations = observationsFor(model, request).map((item) => sanitizePublicValue(item.text)).filter(Boolean);
-    const facts = groupFacts(taskResults);
-    const missing = groupMissing(taskResults);
-    const comparison = groupComparisonMaterial(taskResults);
-    const localContext = requestContextLines(request, lang);
-    const available = unique([...observations, ...facts]);
-    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]`);
-    lines.push(`    - ${lang === 'ja' ? '要求' : 'Request'}: ${sanitizePublicValue(request.request_text)}`);
-    if (localContext.length) lines.push(`    - ${lang === 'ja' ? '要求固有条件' : 'Request-specific conditions'}: ${localContext.join(' / ')}`);
-    lines.push(`    - ${lang === 'ja' ? '現在分かること' : 'What is currently known'}: ${available.join(' / ') || (lang === 'ja' ? '要求本文と明示条件は保持しているが、現在実装・発生条件・原因は未確認。' : 'The request and explicit conditions are preserved, but current implementation, trigger conditions, and causes remain unverified.')}`);
+    const results = groups.get(request.id) || [];
+    const comparison = groupComparisonMaterial(results);
+    const facts = groupFacts(results);
+    const observations = publicValues(observationsFor(model, request).map(item=>item.text));
+    const gaps = groupMissing(results);
+    lines.push(`  - ${request.id} [${actionLabel(request.action, lang)}]:`);
+    const local = requestContextLines(request, lang);
+    const originalRequests = model.judgment_requests || [];
+    const longMultiRequest = originalRequests.reduce((n, item) =>
+      n + String(item.request_text || '').length, 0) > 400;
+    if (local.length) {
+      lines.push(`    - ${lang === 'ja' ? '要求固有の条件' : 'Request-local conditions'}: ${longMultiRequest
+        ? (lang === 'ja' ? '02節の同じ要求IDで原文どおり保持' : 'Preserved under the same request ID in Section02')
+        : local.join(' / ')}`);
+    }
+    if (/(?:オプション.*OFF|\\bON\\b|\\bOFF\\b|toggle|無停止|互換性)/iu.test(String(request.request_text || ''))
+      && String(request.action || '') !== 'compare')
+      lines.push(`    - ${lang === 'ja' ? '入力で固定された条件' : 'Source-stated fixed condition'}: ${sanitizePublicValue(request.request_text)}`);
+    if (String(request.action || '') === 'compare') {
+      // The original alternatives can be embedded in a prose request rather
+      // than normalized into explicit candidates. They remain judgment inputs,
+      // NOT observations verified as external fact.
+      lines.push(`    - ${lang === 'ja' ? '原文指定の比較案' : 'Source-specified alternatives (unverified)'}: ${sanitizePublicValue(request.request_text)}`);
+    }
     if (comparison.candidates.length) lines.push(`    - ${lang === 'ja' ? '候補' : 'Candidates'}: ${comparison.candidates.join(' / ')}`);
     if (comparison.dimensions.length) lines.push(`    - ${lang === 'ja' ? '比較観点' : 'Dimensions'}: ${comparison.dimensions.join(' / ')}`);
+    if (facts.length) lines.push(`    - ${lang === 'ja' ? '確認済みFact段階の材料' : 'Confirmed Fact-lane material'}: ${facts.join(' / ')}`);
+    if (observations.length) lines.push(`    - ${lang === 'ja' ? '利用者報告の観測（外部未検証）' : 'User-reported observations (not externally verified)'}: ${observations.join(' / ')}`);
+    // The common unknown-vs-confirmed boundary is stated once above.
     if (String(request.action || '') === 'compare') {
-      const dimensions = comparison.dimensions.length ? comparison.dimensions : [];
-      const unknown = lang === 'ja'
-        ? `${dimensions.length ? dimensions.join('・') : '各比較軸'}について、入力中の件数・数量差だけでは候補の優劣、品質、安全性、法務上の妥当性をまだ確定できない。`
-        : `For ${dimensions.length ? dimensions.join(', ') : 'the comparison dimensions'}, input counts or quantities alone cannot establish superiority, quality, safety, or legal validity.`;
-      const required = dimensions.length
-        ? dimensions.map((dimension) => comparisonMissingForDimension(dimension, lang))
-        : [operationMissingMaterial(request.action, lang)];
-      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${unknown}`);
-      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${unique([...missing, ...required]).join(' / ')}`);
+      const needed = comparison.dimensions.map(dim=>comparisonMissingForDimension(dim,lang));
+      if (needed.length) lines.push(`    - ${lang === 'ja' ? '追加で必要な材料（比較根拠）' : 'Additional material required (comparison evidence)'}: ${unique(needed).join(' / ')}`);
     } else {
-      lines.push(`    - ${lang === 'ja' ? 'まだ言えないこと' : 'What cannot yet be concluded'}: ${lang === 'ja' ? '現在状態・原因・実装経路・完了条件を確認していないため、要求を満たしているか、どの変更が必要かはまだ確定できない。' : 'Current state, causes, implementation path, and completion conditions have not been verified, so compliance and required changes cannot yet be concluded.'}`);
-      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料' : 'Additional material required'}: ${missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang)}`);
+      const required = operationMissingMaterial(request.action, lang);
+      lines.push(`    - ${lang === 'ja' ? '追加で必要な材料（判断用）' : 'Additional material required for judgment'}: ${required}`);
+      if (gaps.length) lines.push(`    - ${lang === 'ja' ? '未解決の必要材料' : 'Unresolved material needs'}: ${gaps.length} ${lang === 'ja' ? '項目（08に確認事項を記載）' : 'items; see request-local verification steps in Section08'}`);
     }
   }
   return lines.join('\n');
 }
+
 function section07(model, groups, lang) {
-  const lines = [`- ${lang === 'ja' ? '根拠成立状態も判断要求ごとに分離する' : 'Keep evidence status separate by judgment request'}:`];
+  const lines = [`- ${lang === 'ja' ? '要求ごとに根拠状態を分離' : 'Evidence status by request'}:`];
   for (const request of model.judgment_requests || []) {
-    const states = groupEvidence(groups.get(request.id) || [], request, lang);
+    const results = groups.get(request.id) || [];
+    const states = groupEvidence(results, request, lang);
     lines.push(`  - ${request.id}: ${states.join(' / ')}`);
+    const pending = results.map(result =>
+      publicLane(result,'inquiry')?.specialist_applicability).filter(item =>
+        item?.state === 'DEFERRED_APPLICABILITY_UNKNOWN');
+    const count = pending.reduce((n, item) => n + Number(item.deferred_count || 0), 0);
+    if (count) {
+      const kinds = unique(pending.flatMap(item => item.material_kinds || []));
+      lines.push(`    - ${lang === 'ja' ? '専門Lensの適用性が未確認' : 'Specialist Lens applicability unresolved'}: ${count} ${lang === 'ja' ? '項目' : 'candidate slots'} (${kinds.join(' / ')})`);
+    }
   }
-  lines.push(`- ${lang === 'ja' ? '利用者入力は要求・観測の根拠にはなるが、コード実装や原因の確認済み根拠には自動昇格しない。別R##のEvidenceを流用しない。' : 'User input supports what was requested or observed but does not verify implementation facts or causes. Evidence from one R## must not be silently reused for another.'}`);
+  // Source/Fact and cross-Request Evidence boundaries are enforced by lanes and
+  // evidence scopes; do not repeat generic implementation rules in user material.
   return lines.join('\n');
 }
 function section08(model, groups, lang) {
@@ -402,8 +471,8 @@ function section08(model, groups, lang) {
   for (const request of model.judgment_requests || []) {
     const missing = groupMissing(groups.get(request.id) || []);
     const localContext = requestContextLines(request, lang);
-    const next = missing.length ? missing.join(' / ') : operationMissingMaterial(request.action, lang);
-    lines.push(`  - ${request.id}: ${lang === 'ja' ? `「${sanitizePublicValue(request.request_text)}」について、${next}を確認する。` : `For “${sanitizePublicValue(request.request_text)}”, verify ${next}.`}`);
+    const next = missing.length ? missing.join(' / ') : (lang === 'ja' ? '5段Logicから確認対象が供給されていない（必要判断材料は未立証）' : 'No verification targets supplied by the five-stage lanes (material sufficiency unverified)');
+    lines.push(`  - ${request.id}: ${lang === 'ja' ? `01の該当要求について、${next}を確認する。` : `For the original request in Section01, verify ${next}.`}`);
     if (localContext.length) lines.push(`    - ${lang === 'ja' ? '固定して保持する要求固有条件' : 'Request-specific conditions to preserve'}: ${localContext.join(' / ')}`);
   }
   lines.push(`- ${lang === 'ja' ? 'ある判断要求が未確認でも、別要求の材料で穴埋めしない。未確認はそのR##に残す。' : 'If one judgment request remains unresolved, do not fill the gap with material from another request; keep the uncertainty on that R##.'}`);

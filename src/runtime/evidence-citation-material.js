@@ -1,8 +1,5 @@
 'use strict';
 
-const { renderMultiJudgmentMain8 } = require('./multi-judgment-main8-renderer');
-const { normalizeMultiJudgmentPublicMaterial } = require('./multi-judgment-public-material-normalizer');
-
 const SECTION_KEYS = Object.freeze([
   '01_purpose','02_premise','03_facts','04_crisis',
   '05_opposition','06_comparison','07_evidence_status','08_reinstruction'
@@ -181,11 +178,10 @@ function renderEvidenceTrailer(citationMaterial) {
 function attachEvidenceCitations(out = {}) {
   if (!out?.result?.judgment || !out?.material?.text) return out;
   const lang = String(out.result.judgment.output_language || 'ja').split('-')[0] === 'ja' ? 'ja' : 'en';
-  const renderedMultiMaterial = renderMultiJudgmentMain8(out.result.judgment, out.result);
-  const multiMaterial = renderedMultiMaterial
-    ? normalizeMultiJudgmentPublicMaterial(renderedMultiMaterial, out.result.judgment)
-    : null;
-  const baseMaterial = multiMaterial || out.material;
+  // This boundary may only annotate the already-final Main8. Rebuilding
+  // multi-request sections from Case Graph and operation templates here
+  // silently replaced scoped five-stage judgment material.
+  const baseMaterial = out.material;
   const evidenceCitations = buildEvidenceCitationMaterial(out.result);
   const main8Text = annotateMain8Text(baseMaterial.text, evidenceCitations, lang);
   const evidenceText = renderEvidenceTrailer(evidenceCitations);
@@ -199,7 +195,6 @@ function attachEvidenceCitations(out = {}) {
     result: { ...out.result, judgment, evidence_citations: evidenceCitations },
     material: {
       ...out.material,
-      ...(multiMaterial || {}),
       text: textWithEvidence,
       main8_text: main8Text,
       evidence_text: evidenceText,

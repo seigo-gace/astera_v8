@@ -165,7 +165,7 @@ test('partial Japanese parser projection recovers source-backed Case Graph mater
     assert.match(sections[5], /作業時間/);
     assert.match(sections[5], /法務リスク/);
     assert.match(sections[5], /利用者理解/);
-    assert.match(sections[5], /現在分かること/);
+    assert.match(sections[5], /利用者報告の観測（外部未検証）/);
     assert.match(sections[5], /まだ言えないこと/);
     assert.match(sections[5], /追加で必要な材料/);
     assert.match(sections[5], /1件あたり作業時間/);

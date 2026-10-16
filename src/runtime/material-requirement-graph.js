@@ -171,14 +171,22 @@ function buildRequestGraph(request = {}, index = 0, options = {}) {
     }));
   }
 
+  // An explicit rule/exception is source-backed as a decision boundary.
+  // A source-stated risk signal is not proof of an incident or actual
+  // disqualifying condition; its applicability must remain unresolved.
   const disqualifiers = unique([
     ...(ctx.prohibitions || []), ...(global.prohibitions || []),
-    ...(ctx.exceptions || []), ...(global.exceptions || []),
-    ...(ctx.risk_signals || []), ...(global.risk_signals || [])
+    ...(ctx.exceptions || []), ...(global.exceptions || [])
   ]);
+  const riskSignals = unique([...(ctx.risk_signals || []), ...(global.risk_signals || [])]);
   if (disqualifiers.length) {
-    addSourceBacked(nodes, makeNode, 'FALSIFICATION_OR_DISQUALIFIER', disqualifiers, 'Known condition that can invalidate or disqualify the judgment');
-  } else {
+    addSourceBacked(nodes, makeNode, 'FALSIFICATION_OR_DISQUALIFIER', disqualifiers, 'Known decision rule or explicit disqualifying condition');
+  }
+  if (riskSignals.length) {
+    addNeedsValidation(nodes, makeNode, 'FALSIFICATION_OR_DISQUALIFIER', riskSignals,
+      'Potential failure/disqualifier whose occurrence and applicability need verification');
+  }
+  if (!disqualifiers.length && !riskSignals.length) {
     nodes.push(makeNode({
       material_kind: 'FALSIFICATION_OR_DISQUALIFIER',
       question: 'What condition, counterexample, failure mode, or exception would make the intended judgment invalid?',
